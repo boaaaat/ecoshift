@@ -106,6 +106,10 @@ local function destroyNode(nodeModel: Model, player: Player?)
 	if player then
 		local roleMult = tonumber(player:GetAttribute("Role_Gather")) or 1.0
 		count = math.max(1, math.floor(count * roleMult))
+		-- Apply night resource multiplier
+		local nightMult = (_G.Ecoshift and _G.Ecoshift.DayNightService and _G.Ecoshift.DayNightService.GetResourceMultiplier)
+			and _G.Ecoshift.DayNightService:GetResourceMultiplier() or 1
+		count = math.max(1, math.floor(count * nightMult))
 	end
 	local pos = nodeModel:GetPivot().Position
 	ItemDropService:SpawnDrop(itemId, count, pos + Vector3.new(0, 2, 0))

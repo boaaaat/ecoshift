@@ -26,6 +26,7 @@ Config.RemoteNames = {
 	RoleSelect = "RoleSelect",
 	GameStateUpdate = "GameStateUpdate",
 	DropItem = "DropItem",
+	TimeUpdate = "TimeUpdate",
 }
 
 Config.BIOME_DEFAULT = "Forest"
@@ -33,6 +34,14 @@ Config.BIOME_SHIFT = {
 	MinSeconds = 300, -- 5 minutes
 	MaxSeconds = 480, -- 8 minutes
 	TimeScaleSeconds = 900,
+}
+
+Config.DAY_NIGHT = {
+	CycleDurationSeconds = 600, -- 10 real minutes = 1 full in-game day
+	StartTime = 6, -- Start at 6 AM
+	EnemyNightMultiplier = 1.5, -- Enemies 50% stronger at night
+	ResourceNightMultiplier = 0.7, -- 30% fewer resources at night
+	NightVisionRequired = true, -- Future: require torches/night vision
 }
 
 Config.DATASTORE = {

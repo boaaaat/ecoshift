@@ -26,6 +26,7 @@ local DropItemService = require(script.Parent.Services.DropItemService)
 local InventoryActionService = require(script.Parent.Services.InventoryActionService)
 local ToolService = require(script.Parent.Services.ToolService)
 local ArmorService = require(script.Parent.Services.ArmorService)
+local DayNightService = require(script.Parent.Services.DayNightService)
 
 -- Init / bind
 ObjectiveService:Init()
@@ -45,6 +46,7 @@ DropItemService:Init()
 InventoryActionService:Init()
 ToolService:Init()
 ArmorService:Init()
+DayNightService:Init()
 --	WorldBuilder:Init()
 
 -- Relay biome changes to BuildService for global Decay pass

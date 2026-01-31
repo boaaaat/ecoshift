@@ -99,6 +99,9 @@ local function spawnWave(enemyIds, spawnPoints)
 		if healthValue and humanoid then
 			local baseHp = humanoid.MaxHealth 
 			local scaledHp = baseHp * (1 + (playerCount - 1) * 0.25)
+			-- Apply night multiplier if available
+			local nightMult = (_G.Ecoshift and _G.Ecoshift.GetEnemyMultiplier) and _G.Ecoshift.GetEnemyMultiplier() or 1
+			scaledHp = scaledHp * nightMult
 			healthValue.Value = scaledHp
 			humanoid.Health = scaledHp
 		end
