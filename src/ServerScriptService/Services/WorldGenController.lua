@@ -69,14 +69,14 @@ function WorldGenController:GenerateBiome(biomeName)
 			task.defer(function()
 				ResourceNodeService:BindGeneratedWorld()
 				if LootService and LootService.RescanChests then
-				LootService:RescanChests()
-			else
-				warn("[WorldGenController] LootService missing RescanChests")
-			end
-			if LootService and LootService.RescanMonsters then
-				LootService:RescanMonsters()
-			end
-		end)
+					LootService:RescanChests()
+				else
+					warn("[WorldGenController] LootService missing RescanChests")
+				end
+				if LootService and LootService.RescanMonsters then
+					LootService:RescanMonsters()
+				end
+			end)
 		end
 		
 		local folderName = WorldGenConfig.spawn_folder_name or "GeneratedWorld"

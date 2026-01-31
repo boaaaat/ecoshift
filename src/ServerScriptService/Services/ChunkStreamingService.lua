@@ -3,10 +3,20 @@
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ServerStorage = game:GetService("ServerStorage")
+local CollectionService = game:GetService("CollectionService")
 
 local WorldGenConfig = require(script.Parent.Parent.WorldGen.BiomeConfig)
 local BiomeService = require(script.Parent.BiomeService)
 local ResourceNodeService = require(script.Parent.ResourceNodeService)
+
+-- Lazy-load LootService to avoid circular dependency
+local LootService = nil
+local function getLootService()
+	if not LootService then
+		LootService = require(script.Parent.LootService)
+	end
+	return LootService
+end
 
 local ChunkStreamingService = {}
 ChunkStreamingService._loadedChunks = {} -- [chunkKey] = { folder, lastAccess, objects }
@@ -281,6 +291,32 @@ function ChunkStreamingService:_loadChunk(cx, cz)
 		-- Bind resource nodes in this chunk
 		task.defer(function()
 			ResourceNodeService:BindFolder(chunkFolder)
+			
+			-- Bind chests and monsters for loot system
+			local loot = getLootService()
+			if loot then
+				-- Scan chunk folder for tagged chests and monsters
+				for _, descendant in ipairs(chunkFolder:GetDescendants()) do
+					-- Check chest tags
+					if CollectionService:HasTag(descendant, "Common_Chest") or
+					   CollectionService:HasTag(descendant, "Rare_Chest") or
+					   CollectionService:HasTag(descendant, "Legendary_Chest") or
+					   CollectionService:HasTag(descendant, "Celestial_Chest") then
+						if loot._bindChest then
+							loot:_bindChest(descendant)
+						end
+					end
+					-- Check monster tags
+					if CollectionService:HasTag(descendant, "Common_Monster") or
+					   CollectionService:HasTag(descendant, "Rare_Monster") or
+					   CollectionService:HasTag(descendant, "Legendary_Monster") or
+					   CollectionService:HasTag(descendant, "Celestial_Monster") then
+						if loot._bindMonster then
+							loot:_bindMonster(descendant)
+						end
+					end
+				end
+			end
 		end)
 	end)
 end
@@ -329,6 +365,12 @@ function ChunkStreamingService:_generateChunkContent(cx, cz, chunkCenter, chunkF
 	local structureCount = randomInRange(rng, biome.structure_count or biome.structureCount) or 0
 	if rng:NextNumber() <= (structureCount > 0 and 1 or 0.05) then
 		self:_placeStructure(biomeName, chunkCenter, biome.structures, subfolders.Structures, rng)
+	end
+	
+	-- Chests (spawn with proper tags for LootService)
+	local chestChance = tonumber(biome.chest_count or biome.chestCount) or 0.08
+	if biome.chests and rng:NextNumber() <= chestChance then
+		self:_placeChest(biomeName, chunkCenter, biome.chests, subfolders.Structures, rng)
 	end
 	
 	-- Objectives
@@ -401,6 +443,62 @@ function ChunkStreamingService:_placeStructure(biomeName, chunkCenter, names, pa
 		local z = chunkCenter.Z + rng:NextNumber(-half, half)
 		local position = Vector3.new(x, BASE_Y, z)
 		self:_placePrefab(prefab, position, parent)
+	end
+end
+
+function ChunkStreamingService:_placeChest(biomeName, chunkCenter, chestNames, parent, rng)
+	if not chestNames or (type(chestNames) == "table" and #chestNames == 0) then return end
+	
+	-- Try StructurePrefabs first for chest prefabs
+	local prefabs = self:_resolvePrefabsWeighted("StructurePrefabs", biomeName, chestNames)
+	if #prefabs == 0 then
+		-- Try PropPrefabs as fallback
+		prefabs = self:_resolvePrefabsWeighted("PropPrefabs", biomeName, chestNames)
+	end
+	if #prefabs == 0 then return end
+	
+	local prefab = self:_chooseWeighted(prefabs, rng)
+	if prefab then
+		local half = CHUNK_SIZE * 0.35
+		local x = chunkCenter.X + rng:NextNumber(-half, half)
+		local z = chunkCenter.Z + rng:NextNumber(-half, half)
+		local position = Vector3.new(x, BASE_Y, z)
+		
+		-- Place the chest
+		local clone = prefab:Clone()
+		local yOffset = getOffsetValue(clone)
+		local targetCf = CFrame.new(position.X, BASE_Y + yOffset, position.Z)
+		
+		if clone:IsA("Model") then
+			clone:PivotTo(targetCf)
+		elseif clone:IsA("BasePart") then
+			clone.CFrame = targetCf
+		end
+		
+		-- Ensure chest has proper tag for LootService (tag should already be on prefab)
+		-- If not tagged, add Common_Chest as default
+		local hasChestTag = false
+		for _, tag in ipairs({"Common_Chest", "Rare_Chest", "Legendary_Chest", "Celestial_Chest"}) do
+			if CollectionService:HasTag(clone, tag) then
+				hasChestTag = true
+				break
+			end
+		end
+		if not hasChestTag then
+			-- Determine tier from name or default to Common
+			local chestName = clone.Name:lower()
+			if chestName:find("celestial") then
+				CollectionService:AddTag(clone, "Celestial_Chest")
+			elseif chestName:find("legendary") then
+				CollectionService:AddTag(clone, "Legendary_Chest")
+			elseif chestName:find("rare") then
+				CollectionService:AddTag(clone, "Rare_Chest")
+			else
+				CollectionService:AddTag(clone, "Common_Chest")
+			end
+		end
+		
+		clone.Parent = parent
 	end
 end
 

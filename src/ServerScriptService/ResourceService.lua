@@ -201,24 +201,42 @@ local function findNearbyNode(player: Player, range: number)
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
 	if not hrp then return nil end
 	local generated = game:GetService("Workspace"):FindFirstChild("GeneratedWorld")
-	local resources = generated and generated:FindFirstChild("Resources")
-	if not resources then return nil end
+	if not generated then return nil end
+	
 	local best = nil
 	local bestDist = range
-	for _, model in ipairs(resources:GetDescendants()) do
-		if model:IsA("Model") then
-			local health = getAttr(model, "Health")
-			local duration = getAttr(model, "Duration") or getAttr(model, "HarvestDuration")
-			if typeof(health) == "number" or typeof(duration) == "number" then
-				local pos = model:GetPivot().Position
-				local dist = (pos - hrp.Position).Magnitude
-				if dist <= bestDist then
-					best = model
-					bestDist = dist
+	
+	-- Helper to check a folder for resource nodes
+	local function searchFolder(folder)
+		if not folder then return end
+		for _, model in ipairs(folder:GetDescendants()) do
+			if model:IsA("Model") then
+				local health = getAttr(model, "Health")
+				local duration = getAttr(model, "Duration") or getAttr(model, "HarvestDuration")
+				if typeof(health) == "number" or typeof(duration) == "number" then
+					local pos = model:GetPivot().Position
+					local dist = (pos - hrp.Position).Magnitude
+					if dist <= bestDist then
+						best = model
+						bestDist = dist
+					end
 				end
 			end
 		end
 	end
+	
+	-- Search top-level Resources folder (legacy/non-streaming)
+	local resources = generated:FindFirstChild("Resources")
+	searchFolder(resources)
+	
+	-- Search chunk folders (streaming mode: GeneratedWorld/Chunk_X,Z/Resources)
+	for _, child in ipairs(generated:GetChildren()) do
+		if child:IsA("Folder") and child.Name:match("^Chunk_") then
+			local chunkResources = child:FindFirstChild("Resources")
+			searchFolder(chunkResources)
+		end
+	end
+	
 	return best
 end
 

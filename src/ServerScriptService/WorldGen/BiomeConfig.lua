@@ -55,6 +55,9 @@ Config.biomes = {
 		structure_count = 0.05, -- probability per chunk (0-1)
 		objectives = {  },
 		objective_count = 0.025, -- probability per chunk (0-1)
+		-- Chest spawning config (chests need Common_Chest/Rare_Chest/etc tags in prefabs)
+		chests = { "Common_Chest", "Rare_Chest" }, -- prefab names in StructurePrefabs/Forest
+		chest_count = 0.08, -- probability per chunk (0-1)
 	},
 	--Desert = {
 	--	weight = 0.7,
