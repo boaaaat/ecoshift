@@ -79,21 +79,12 @@ local function getCooldown(tool)
 end
 
 local function harvestOnce(tool)
-	print("[HarvesterClient] Activated Harvester")
 	local range = getRange(tool)
 	local hit = raycastTarget(range, false)
 	local node = findNode(hit)
 	if not node then
 		hit = raycastTarget(range, true)
 		node = findNode(hit)
-	end
-	if hit then
-		print(string.format("[HarvesterClient] Hit %s", hit:GetFullName()))
-	end
-	if node then
-		print(string.format("[HarvesterClient] Harvesting %s", node.Name))
-	else
-		print("[HarvesterClient] No harvestable target in range, sending fallback request")
 	end
 	InteractRE:FireServer("Harvest", node)
 end
