@@ -44,9 +44,9 @@ Config.biomes = {
 			},
 		},
 		structures = { "Cabin", "Watchtower" },
-		structure_count = { min = 0, max = 1 },
+		structure_count = 0.12, -- probability per chunk (0-1)
 		objectives = { "AncientTotem" },
-		objective_count = { min = 0, max = 1 },
+		objective_count = 0.06, -- probability per chunk (0-1)
 	},
 	Desert = {
 		weight = 0.7,
@@ -65,9 +65,9 @@ Config.biomes = {
 			},
 		},
 		structures = { "Ruins", "Outpost" },
-		structure_count = { min = 0, max = 1 },
+		structure_count = 0.10,
 		objectives = { "DesertObelisk" },
-		objective_count = { min = 0, max = 1 },
+		objective_count = 0.05,
 	},
 	FrozenTundra = {
 		weight = 0.35,
@@ -86,9 +86,9 @@ Config.biomes = {
 			},
 		},
 		structures = { "FrozenCamp" },
-		structure_count = { min = 0, max = 1 },
+		structure_count = 0.08,
 		objectives = { "IceCore" },
-		objective_count = { min = 0, max = 1 },
+		objective_count = 0.04,
 	},
 	Swamp = {
 		weight = 0.5,
@@ -107,9 +107,9 @@ Config.biomes = {
 			},
 		},
 		structures = { "SwampHut" },
-		structure_count = { min = 0, max = 1 },
+		structure_count = 0.10,
 		objectives = { "SwampRelic" },
-		objective_count = { min = 0, max = 1 },
+		objective_count = 0.05,
 	},
 	Volcanic = {
 		weight = 0.3,
@@ -128,9 +128,9 @@ Config.biomes = {
 			},
 		},
 		structures = { "LavaForge" },
-		structure_count = { min = 0, max = 1 },
+		structure_count = 0.07,
 		objectives = { "VolcanicCore" },
-		objective_count = { min = 0, max = 1 },
+		objective_count = 0.03,
 	},
 	CrystalWastes = {
 		weight = 0.25,
@@ -149,9 +149,9 @@ Config.biomes = {
 			},
 		},
 		structures = { "CrystalAltar" },
-		structure_count = { min = 0, max = 1 },
+		structure_count = 0.06,
 		objectives = { "PrismCore" },
-		objective_count = { min = 0, max = 1 },
+		objective_count = 0.03,
 	},
 }
 

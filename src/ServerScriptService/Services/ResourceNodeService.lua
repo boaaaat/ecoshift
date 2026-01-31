@@ -3,6 +3,7 @@
 local Workspace = game:GetService("Workspace")
 
 local InventoryService = require(script.Parent.InventoryService)
+local PromptQueueService = require(script.Parent.PromptQueueService)
 
 local ResourceNodeService = {}
 ResourceNodeService._bound = setmetatable({}, { __mode = "k" }) -- [Instance] = true
@@ -57,6 +58,7 @@ local function parseDropCount(instance)
 end
 
 local function attachDurationPrompt(instance)
+	if not instance or not instance.Parent then return end
 	local part = getPrimary(instance)
 	if not part then return end
 	if instance:IsA("Model") then
@@ -96,19 +98,27 @@ function ResourceNodeService:BindFolder(folder)
 	for _, child in ipairs(folder:GetDescendants()) do
 		if child:IsA("Model") and not self._bound[child] then
 			self._bound[child] = true
-			attachDurationPrompt(child)
+			PromptQueueService:Enqueue(function()
+				attachDurationPrompt(child)
+			end)
 		elseif child:IsA("BasePart") and not child:FindFirstAncestorOfClass("Model") and not self._bound[child] then
 			self._bound[child] = true
-			attachDurationPrompt(child)
+			PromptQueueService:Enqueue(function()
+				attachDurationPrompt(child)
+			end)
 		end
 	end
 	folder.DescendantAdded:Connect(function(desc)
 		if desc:IsA("Model") and not self._bound[desc] then
 			self._bound[desc] = true
-			attachDurationPrompt(desc)
+			PromptQueueService:Enqueue(function()
+				attachDurationPrompt(desc)
+			end)
 		elseif desc:IsA("BasePart") and not desc:FindFirstAncestorOfClass("Model") and not self._bound[desc] then
 			self._bound[desc] = true
-			attachDurationPrompt(desc)
+			PromptQueueService:Enqueue(function()
+				attachDurationPrompt(desc)
+			end)
 		end
 	end)
 end

@@ -23,6 +23,19 @@ local function random_in_range(rng, range, fallback)
 	return fallback or 0
 end
 
+local function resolve_probability(rng, value)
+	local chance = 0
+	if type(value) == "table" and value.min and value.max then
+		chance = rng:NextNumber(value.min, value.max)
+	elseif type(value) == "number" then
+		chance = value
+	end
+	chance = tonumber(chance) or 0
+	if chance < 0 then chance = 0 end
+	if chance > 1 then chance = 1 end
+	return chance
+end
+
 local function get_offset_value(instance)
 	local offset = instance:FindFirstChild("Offset", true)
 	if offset and offset:IsA("NumberValue") then
@@ -575,33 +588,39 @@ function BiomeGenerator:_generate(override_biome)
 			self:_step()
 		end
 
-		local structure_count = random_in_range(self.random, biome.structure_count or biome.structureCount)
-		self:_place_large_objects(
-			biome_name,
-			{
-				type_name = "StructurePrefabs",
-				names = biome.structures,
-				chunk_center = chunk_center,
-				placement_tries = biome.structure_placement_tries or biome.structurePlacementTries,
-			},
-			structure_count,
-			self.structure_padding,
-			self.spawn_subfolders.Structures
-		)
+		local structure_chance = resolve_probability(self.random, biome.structure_count or biome.structureCount)
+		local structure_count = (self.random:NextNumber() <= structure_chance) and 1 or 0
+		if structure_count > 0 then
+			self:_place_large_objects(
+				biome_name,
+				{
+					type_name = "StructurePrefabs",
+					names = biome.structures,
+					chunk_center = chunk_center,
+					placement_tries = biome.structure_placement_tries or biome.structurePlacementTries,
+				},
+				structure_count,
+				self.structure_padding,
+				self.spawn_subfolders.Structures
+			)
+		end
 
-		local objective_count = random_in_range(self.random, biome.objective_count or biome.objectiveCount)
-		self:_place_large_objects(
-			biome_name,
-			{
-				type_name = "ObjectivePrefabs",
-				names = biome.objectives,
-				chunk_center = chunk_center,
-				placement_tries = biome.objective_placement_tries or biome.objectivePlacementTries,
-			},
-			objective_count,
-			self.objective_padding,
-			self.spawn_subfolders.Objectives
-		)
+		local objective_chance = resolve_probability(self.random, biome.objective_count or biome.objectiveCount)
+		local objective_count = (self.random:NextNumber() <= objective_chance) and 1 or 0
+		if objective_count > 0 then
+			self:_place_large_objects(
+				biome_name,
+				{
+					type_name = "ObjectivePrefabs",
+					names = biome.objectives,
+					chunk_center = chunk_center,
+					placement_tries = biome.objective_placement_tries or biome.objectivePlacementTries,
+				},
+				objective_count,
+				self.objective_padding,
+				self.spawn_subfolders.Objectives
+			)
+		end
 
 		self:_step()
 	end

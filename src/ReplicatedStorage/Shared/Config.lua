@@ -78,6 +78,10 @@ Config.UI = {
 	PlaceholderIcon = "rbxasset://textures/ui/GuiImagePlaceholder.png",
 }
 
+Config.PROMPTS = {
+	MaxPerSecond = 250,
+}
+
 Config.ROLES = {
 	Default = "Generalist",
 	Definitions = {

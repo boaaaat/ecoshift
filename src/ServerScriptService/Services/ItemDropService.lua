@@ -4,6 +4,7 @@ local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 
 local InventoryService = require(script.Parent.InventoryService)
+local PromptQueueService = require(script.Parent.PromptQueueService)
 
 local ItemDropService = {}
 
@@ -26,6 +27,7 @@ local function getPrimary(model)
 end
 
 local function attachPrompt(model)
+	if not model or not model.Parent then return end
 	local part = model.PrimaryPart or getPrimary(model)
 	if not part then return end
 	model.PrimaryPart = part
@@ -74,7 +76,9 @@ function ItemDropService:SpawnDrop(itemId, count, position)
 		model.CFrame = CFrame.new(position)
 	end
 	model.Parent = ensureFolder()
-	attachPrompt(model)
+	PromptQueueService:Enqueue(function()
+		attachPrompt(model)
+	end)
 	return model
 end
 

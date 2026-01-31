@@ -3,6 +3,7 @@
 local Workspace = game:GetService("Workspace")
 
 local ObjectiveService = require(script.Parent.ObjectiveService)
+local PromptQueueService = require(script.Parent.PromptQueueService)
 
 local ObjectiveRuntimeService = {}
 ObjectiveRuntimeService._activePrompts = {}
@@ -23,6 +24,7 @@ local function findAnchors(objectiveId)
 end
 
 local function attachPrompt(part, objectiveId)
+	if not part or not part.Parent then return nil end
 	local prompt = part:FindFirstChildOfClass("ProximityPrompt")
 	if not prompt then
 		prompt = Instance.new("ProximityPrompt")
@@ -44,8 +46,12 @@ function ObjectiveRuntimeService:OnStart(objectiveId)
 	local anchors = findAnchors(objectiveId)
 	self._activePrompts[objectiveId] = self._activePrompts[objectiveId] or {}
 	for _, part in ipairs(anchors) do
-		local prompt = attachPrompt(part, objectiveId)
-		table.insert(self._activePrompts[objectiveId], prompt)
+		PromptQueueService:Enqueue(function()
+			local prompt = attachPrompt(part, objectiveId)
+			if prompt then
+				table.insert(self._activePrompts[objectiveId], prompt)
+			end
+		end)
 	end
 end
 
