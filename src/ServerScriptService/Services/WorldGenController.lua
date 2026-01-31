@@ -9,6 +9,7 @@ local BiomeService = require(script.Parent.BiomeService)
 local GridService = require(script.Parent.GridService)
 local TerrainService = require(script.Parent.TerrainService)
 local ResourceNodeService = require(script.Parent.ResourceNodeService)
+local LootService = require(script.Parent.LootService)
 
 local WorldGenController = {}
 WorldGenController._busy = false
@@ -64,6 +65,14 @@ function WorldGenController:GenerateBiome(biomeName)
 		-- Bind resource nodes after generation
 		task.defer(function()
 			ResourceNodeService:BindGeneratedWorld()
+			if LootService and LootService.RescanChests then
+				LootService:RescanChests()
+			else
+				warn("[WorldGenController] LootService missing RescanChests")
+			end
+			if LootService and LootService.RescanMonsters then
+				LootService:RescanMonsters()
+			end
 		end)
 		
 		local folderName = WorldGenConfig.spawn_folder_name or "GeneratedWorld"

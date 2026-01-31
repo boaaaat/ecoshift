@@ -82,7 +82,7 @@ Config.UI = {
 
 -- OPTIMIZED: Increased prompt rate for faster resource binding
 Config.PROMPTS = {
-	MaxPerSecond = 500,
+	MaxPerSecond = 2000,
 }
 
 Config.LOOT = {
