@@ -246,6 +246,9 @@ local function createSlot(parent, x, y, slotType, index)
 	slot.Name = slotType .. "_" .. index
 	slot:SetAttribute("SlotType", slotType)
 	slot:SetAttribute("SlotIndex", index)
+	slot:SetAttribute("HasItem", false)
+	slot:SetAttribute("ItemId", "")
+	slot:SetAttribute("Count", 0)
 	slot.Size = UDim2.new(0, SLOT_SIZE, 0, SLOT_SIZE)
 	slot.Position = UDim2.new(0, x, 0, y)
 	slot.BackgroundColor3 = COLORS.SlotEmpty
@@ -504,6 +507,9 @@ local function renderSlot(slot)
 		slot.ItemText.Text = ""
 		slot.QtyBadge.Visible = false
 		slot.Frame.BackgroundColor3 = COLORS.SlotEmpty
+		slot.Frame:SetAttribute("HasItem", false)
+		slot.Frame:SetAttribute("ItemId", "")
+		slot.Frame:SetAttribute("Count", 0)
 		return
 	end
 	
@@ -535,6 +541,9 @@ local function renderSlot(slot)
 	end
 	
 	slot.Frame.BackgroundColor3 = COLORS.SlotFilled
+	slot.Frame:SetAttribute("HasItem", true)
+	slot.Frame:SetAttribute("ItemId", data.Id)
+	slot.Frame:SetAttribute("Count", data.N)
 end
 
 local function renderAll()
@@ -543,6 +552,189 @@ local function renderAll()
 		setSlotSelected(slot, selectedSlot == slot)
 	end
 	updateCapacity()
+end
+
+local function isShiftDown()
+	return UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
+end
+
+local function findEmptySlot(slotType)
+	if not inventorySnapshot then return nil end
+	if slotType == "Hotbar" and inventorySnapshot.Hotbar then
+		for i = 1, HOTBAR_SLOTS do
+			if not inventorySnapshot.Hotbar[i] then
+				return i
+			end
+		end
+	elseif slotType == "Storage" and inventorySnapshot.Storage then
+		for i = 1, STORAGE_COLS * STORAGE_ROWS do
+			if not inventorySnapshot.Storage[i] then
+				return i
+			end
+		end
+	end
+	return nil
+end
+
+local function shiftMove(slot)
+	local data = getSlotData(slot.Type, slot.Index)
+	if not data or not rInventoryAction then return end
+	local targetType = nil
+	if slot.Type == "Hotbar" then
+		targetType = "Storage"
+	elseif slot.Type == "Storage" then
+		targetType = "Hotbar"
+	else
+		targetType = "Storage"
+	end
+	local targetIndex = findEmptySlot(targetType)
+	if not targetIndex then
+		-- fallback to other container
+		targetType = (targetType == "Hotbar") and "Storage" or "Hotbar"
+		targetIndex = findEmptySlot(targetType)
+	end
+	if not targetIndex then return end
+	rInventoryAction:FireServer("Move", {
+		FromType = slot.Type,
+		FromIndex = slot.Index,
+		ToType = targetType,
+		ToIndex = targetIndex,
+	})
+	swapLocalSlots(slot, { Type = targetType, Index = targetIndex })
+end
+
+-- Context menu
+local contextMenu = Instance.new("Frame")
+contextMenu.Name = "ContextMenu"
+contextMenu.Size = UDim2.new(0, 120, 0, 64)
+contextMenu.BackgroundColor3 = COLORS.Background
+contextMenu.BorderSizePixel = 0
+contextMenu.Visible = false
+contextMenu.ZIndex = 200
+contextMenu.Parent = gui
+
+local contextCorner = Instance.new("UICorner")
+contextCorner.CornerRadius = UDim.new(0, 6)
+contextCorner.Parent = contextMenu
+
+local contextStroke = Instance.new("UIStroke")
+contextStroke.Color = COLORS.Border
+contextStroke.Thickness = 1
+contextStroke.Parent = contextMenu
+
+local function makeMenuButton(text, order)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1, -8, 0, 24)
+	btn.Position = UDim2.new(0, 4, 0, 4 + (order - 1) * 28)
+	btn.BackgroundColor3 = COLORS.Panel
+	btn.BorderSizePixel = 0
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 12
+	btn.TextColor3 = COLORS.Text
+	btn.Text = text
+	btn.ZIndex = 201
+	btn.Parent = contextMenu
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 4)
+	corner.Parent = btn
+	return btn
+end
+
+local contextDrop = makeMenuButton("Drop", 1)
+local contextSplit = makeMenuButton("Split", 2)
+local contextSlot = nil
+
+local function showContextMenu(slot, position)
+	contextSlot = slot
+	contextMenu.Position = UDim2.fromOffset(position.X + 6, position.Y + 6)
+	contextMenu.Visible = true
+end
+
+local function hideContextMenu()
+	contextSlot = nil
+	contextMenu.Visible = false
+end
+
+contextDrop.MouseButton1Click:Connect(function()
+	if not contextSlot then return end
+	local data = getSlotData(contextSlot.Type, contextSlot.Index)
+	if not data or not rDrop then return end
+	rDrop:FireServer({
+		SlotType = contextSlot.Type,
+		SlotIndex = contextSlot.Index,
+		Amount = data.N,
+	})
+	hideContextMenu()
+end)
+
+contextSplit.MouseButton1Click:Connect(function()
+	if not contextSlot then return end
+	local data = getSlotData(contextSlot.Type, contextSlot.Index)
+	if not data or not rInventoryAction then return end
+	if data.N < 2 then return end
+	rInventoryAction:FireServer("Split", {
+		FromType = contextSlot.Type,
+		FromIndex = contextSlot.Index,
+	})
+	hideContextMenu()
+end)
+
+local function getLocalSlot(slotType, index)
+	if not inventorySnapshot then return nil end
+	if slotType == "Hotbar" then
+		inventorySnapshot.Hotbar = inventorySnapshot.Hotbar or {}
+		return inventorySnapshot.Hotbar[index]
+	elseif slotType == "Storage" then
+		inventorySnapshot.Storage = inventorySnapshot.Storage or {}
+		return inventorySnapshot.Storage[index]
+	elseif slotType == "Armor" then
+		return inventorySnapshot.Armor
+	end
+	return nil
+end
+
+local function setLocalSlot(slotType, index, value)
+	if not inventorySnapshot then return end
+	if slotType == "Hotbar" then
+		inventorySnapshot.Hotbar = inventorySnapshot.Hotbar or {}
+		inventorySnapshot.Hotbar[index] = value
+	elseif slotType == "Storage" then
+		inventorySnapshot.Storage = inventorySnapshot.Storage or {}
+		inventorySnapshot.Storage[index] = value
+	elseif slotType == "Armor" then
+		inventorySnapshot.Armor = value
+	end
+end
+
+local function swapLocalSlots(from, to)
+	if not inventorySnapshot then return end
+	local a = getLocalSlot(from.Type, from.Index)
+	local b = getLocalSlot(to.Type, to.Index)
+	setLocalSlot(from.Type, from.Index, b)
+	setLocalSlot(to.Type, to.Index, a)
+	renderAll()
+end
+
+local function mergeLocalSlots(from, to)
+	if not inventorySnapshot then return false end
+	local a = getLocalSlot(from.Type, from.Index)
+	local b = getLocalSlot(to.Type, to.Index)
+	if not a or not b or a.Id ~= b.Id then return false end
+	local item = ItemDatabase:Get(a.Id)
+	local maxStack = (item and item.StackSize) or 99
+	local space = math.max(0, maxStack - b.N)
+	if space <= 0 then return false end
+	local move = math.min(space, a.N)
+	b.N += move
+	a.N -= move
+	if a.N <= 0 then
+		setLocalSlot(from.Type, from.Index, nil)
+	else
+		setLocalSlot(from.Type, from.Index, a)
+	end
+	setLocalSlot(to.Type, to.Index, b)
+	renderAll()
+	return true
 end
 
 -- Drag and drop
@@ -624,6 +816,10 @@ local function endDrag(targetSlot)
 		ToType = targetSlot.Type,
 		ToIndex = targetSlot.Index,
 	})
+	-- Optimistic UI update
+	if not mergeLocalSlots(from, targetSlot) then
+		swapLocalSlots(from, targetSlot)
+	end
 end
 
 local function slotAtPoint(point)
@@ -688,10 +884,32 @@ UserInputService.InputEnded:Connect(function(input)
 	end
 end)
 
+UserInputService.InputBegan:Connect(function(input, processed)
+	if processed then return end
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		-- Hide context menu when clicking elsewhere
+		if contextMenu.Visible then
+			hideContextMenu()
+		end
+	end
+end)
+
 -- Slot interactions
 for _, slot in ipairs(slots) do
 	slot.Button.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton2 then
+			local data = getSlotData(slot.Type, slot.Index)
+			if data then
+				showContextMenu(slot, input.Position)
+			end
+			return
+		end
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			hideContextMenu()
+			if isShiftDown() then
+				shiftMove(slot)
+				return
+			end
 			dragging.Pending = true
 			dragging.Active = false
 			dragging.From = slot

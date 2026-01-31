@@ -9,6 +9,7 @@ local raw = {
 	{ Id = "Wood", Name = "Wood", StackSize = 99, Tags = { "Resource", "Organic" } },
 	{ Id = "Stone", Name = "Stone", StackSize = 99, Tags = { "Resource", "Mineral" } },
 	{ Id = "Reed", Name = "Reed", StackSize = 99, Tags = { "Resource", "Plant" } },
+	{ Id = "Mushroom", Name = "Mushroom", StackSize = 10, Tags = {"Resource", "Plant"}},
 	{ Id = "Arrow", Name = "Arrow", StackSize = 99, Tags = { "Ammo" } },
 	{ Id = "Harvester", Name = "Harvester", StackSize = 1, Tags = { "Tool" } },
 	{ Id = "StoneHatchet", Name = "Stone Hatchet", StackSize = 1, Tags = { "Tool" } },

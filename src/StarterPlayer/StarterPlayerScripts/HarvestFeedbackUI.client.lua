@@ -40,8 +40,8 @@ local activeHealthBars = {} -- [node] = {BillboardGui, lastUpdate}
 local function createDamageNumber(position, damage, destroyed)
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "DamageNumber"
-	billboard.Size = UDim2.new(0, 100, 0, 50)
-	billboard.StudsOffset = Vector3.new(math.random(-10, 10) / 10, 2, math.random(-10, 10) / 10)
+	billboard.Size = UDim2.new(0, 140, 0, 70)
+	billboard.StudsOffset = Vector3.new(math.random(-10, 10) / 10, 2.2, math.random(-10, 10) / 10)
 	billboard.AlwaysOnTop = true
 	billboard.MaxDistance = 50
 	billboard.Parent = gui
@@ -57,7 +57,7 @@ local function createDamageNumber(position, damage, destroyed)
 	label.BackgroundTransparency = 1
 	label.Text = "-" .. tostring(damage)
 	label.TextColor3 = destroyed and COLORS.DamageCrit or COLORS.DamageText
-	label.TextSize = destroyed and 28 or 22
+	label.TextSize = destroyed and 44 or 36
 	label.Font = Enum.Font.GothamBold
 	label.TextStrokeColor3 = Color3.new(0, 0, 0)
 	label.TextStrokeTransparency = 0.3
@@ -74,10 +74,10 @@ local function createDamageNumber(position, damage, destroyed)
 		TextStrokeTransparency = 1
 	}):Play()
 	
-	-- Scale pop effect
-	label.TextSize = destroyed and 14 or 12
-	TweenService:Create(label, TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-		TextSize = destroyed and 28 or 22
+	-- Scale pop effect (larger, smoother)
+	label.TextSize = destroyed and 32 or 26
+	TweenService:Create(label, TweenInfo.new(0.12, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		TextSize = destroyed and 44 or 36
 	}):Play()
 	
 	-- Clean up
@@ -104,8 +104,8 @@ local function updateHealthBar(node, position, currentHealth, maxHealth, destroy
 	if not activeHealthBars[node] then
 		local billboard = Instance.new("BillboardGui")
 		billboard.Name = "HealthBar"
-		billboard.Size = UDim2.new(0, 80, 0, 20)
-		billboard.StudsOffset = Vector3.new(0, 3, 0)
+		billboard.Size = UDim2.new(0, 140, 0, 28)
+		billboard.StudsOffset = Vector3.new(0, 3.4, 0)
 		billboard.AlwaysOnTop = true
 		billboard.MaxDistance = 40
 		billboard.Parent = gui
@@ -133,8 +133,8 @@ local function updateHealthBar(node, position, currentHealth, maxHealth, destroy
 		-- Background
 		local bg = Instance.new("Frame")
 		bg.Name = "Background"
-		bg.Size = UDim2.new(1, 0, 0, 8)
-		bg.Position = UDim2.new(0, 0, 0.5, -4)
+		bg.Size = UDim2.new(1, 0, 0, 12)
+		bg.Position = UDim2.new(0, 0, 0.5, -6)
 		bg.BackgroundColor3 = COLORS.HealthBarBg
 		bg.BorderSizePixel = 0
 		bg.Parent = billboard
@@ -158,12 +158,12 @@ local function updateHealthBar(node, position, currentHealth, maxHealth, destroy
 		-- Name label
 		local nameLabel = Instance.new("TextLabel")
 		nameLabel.Name = "Name"
-		nameLabel.Size = UDim2.new(1, 0, 0, 14)
-		nameLabel.Position = UDim2.new(0, 0, 0, -2)
+		nameLabel.Size = UDim2.new(1, 0, 0, 16)
+		nameLabel.Position = UDim2.new(0, 0, 0, -4)
 		nameLabel.BackgroundTransparency = 1
 		nameLabel.Text = node.Name
 		nameLabel.TextColor3 = COLORS.Text
-		nameLabel.TextSize = 11
+		nameLabel.TextSize = 12
 		nameLabel.Font = Enum.Font.GothamBold
 		nameLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
 		nameLabel.TextStrokeTransparency = 0.5
@@ -182,18 +182,10 @@ local function updateHealthBar(node, position, currentHealth, maxHealth, destroy
 	
 	-- Animate health change
 	local targetColor = healthPercent > 0.3 and COLORS.HealthBar or COLORS.HealthBarLow
-	TweenService:Create(data.Fill, TweenInfo.new(0.15), {
+	TweenService:Create(data.Fill, TweenInfo.new(0.1, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {
 		Size = UDim2.new(healthPercent, 0, 1, 0),
 		BackgroundColor3 = targetColor
 	}):Play()
-	
-	-- Flash effect on hit
-	data.Fill.BackgroundColor3 = Color3.new(1, 1, 1)
-	task.delay(0.05, function()
-		if data.Fill and data.Fill.Parent then
-			TweenService:Create(data.Fill, TweenInfo.new(0.1), {BackgroundColor3 = targetColor}):Play()
-		end
-	end)
 end
 
 -- Clean up old health bars

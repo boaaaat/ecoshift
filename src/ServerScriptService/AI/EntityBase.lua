@@ -1,0 +1,266 @@
+-- EntityBase.lua
+-- Base class for AI-controlled entities (monsters/animals).
+local Players = game:GetService("Players")
+local PathfindingService = game:GetService("PathfindingService")
+
+local EntityBase = {}
+EntityBase.__index = EntityBase
+
+local function findRoot(model)
+	if model.PrimaryPart then return model.PrimaryPart end
+	local hrp = model:FindFirstChild("HumanoidRootPart")
+	if hrp then return hrp end
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			return d
+		end
+	end
+	return nil
+end
+
+function EntityBase.new(model, config)
+	local self = setmetatable({}, EntityBase)
+	self.Model = model
+	self.Config = config or {}
+	self.Humanoid = model:FindFirstChildOfClass("Humanoid")
+	self.Root = findRoot(model)
+	self.Target = nil
+	self.NextAttack = 0
+	self.NextRepath = 0
+	self.Waypoints = nil
+	self.WaypointIndex = 0
+	self.LastHealth = self.Humanoid and self.Humanoid.Health or nil
+	self.LastPos = self.Root and self.Root.Position or nil
+	self.StuckTime = 0
+	self:SetSpeed(self.Config.Speed)
+	return self
+end
+
+function EntityBase:IsAlive()
+	if not self.Model or not self.Model.Parent then return false end
+	if self.Humanoid then
+		return self.Humanoid.Health > 0
+	end
+	return true
+end
+
+function EntityBase:SetSpeed(speed)
+	if self.Humanoid and speed and speed > 0 then
+		self.Humanoid.WalkSpeed = speed
+	end
+end
+
+function EntityBase:GetDetection()
+	return self.Config.DetectionAngle or 120,
+		self.Config.DetectionDistance or 80,
+		self.Config.AutoDetectRadius or 10
+end
+
+function EntityBase:CanDetectTarget(targetChar)
+	if not self.Root or not targetChar then return false end
+	local hrp = targetChar:FindFirstChild("HumanoidRootPart")
+	local hum = targetChar:FindFirstChildOfClass("Humanoid")
+	if not hrp or not hum or hum.Health <= 0 then return false end
+	local angle, distMax, autoRadius = self:GetDetection()
+	angle = math.clamp(tonumber(angle) or 0, 0, 180)
+	distMax = math.max(0, tonumber(distMax) or 0)
+	autoRadius = math.max(0, tonumber(autoRadius) or 0)
+	local dir = hrp.Position - self.Root.Position
+	local dist = dir.Magnitude
+	if dist <= autoRadius then
+		return true, dist
+	end
+	if distMax > 0 and dist <= distMax then
+		if dist == 0 then
+			return true, dist
+		end
+		if angle >= 180 then
+			return true, dist
+		end
+		local look = self.Root.CFrame.LookVector
+		local dot = look:Dot(dir.Unit)
+		local deg = math.deg(math.acos(math.clamp(dot, -1, 1)))
+		if deg <= angle * 0.5 then
+			return true, dist
+		end
+	end
+	return false, dist
+end
+
+local function weaponPower(plr)
+	if not plr or not plr.Character then return 0 end
+	local tool = plr.Character:FindFirstChildOfClass("Tool")
+	if not tool then
+		local backpack = plr:FindFirstChildOfClass("Backpack")
+		tool = backpack and backpack:FindFirstChildOfClass("Tool") or nil
+	end
+	if not tool then return 0 end
+	local dmg = tool:GetAttribute("Damage") or tool:GetAttribute("HarvestDamage")
+	if typeof(dmg) == "number" then return dmg end
+	local child = tool:FindFirstChild("Damage") or tool:FindFirstChild("HarvestDamage")
+	if child and child:IsA("ValueBase") and typeof(child.Value) == "number" then
+		return child.Value
+	end
+	return 0
+end
+
+function EntityBase:ScoreTarget(plr, dist)
+	local priority = self.Config.PlayerPriority or "LowHealth"
+	if type(priority) ~= "string" then priority = "LowHealth" end
+	local role = plr:GetAttribute("Role")
+	local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+	local hpPct = (hum and hum.MaxHealth > 0) and (hum.Health / hum.MaxHealth) or 1
+
+	local base = 0
+	local priorityLower = string.lower(priority)
+	if priorityLower == "lowhealth" then
+		base = 1 - hpPct
+	elseif priorityLower == "highhealth" then
+		base = hpPct
+	elseif priorityLower == "strongestweapon" then
+		base = weaponPower(plr)
+	elseif priorityLower == "weakestweapon" then
+		base = -weaponPower(plr)
+	elseif priorityLower == "closest" then
+		base = 0
+	elseif string.find(priorityLower, "role") then
+		local roleName = self.Config.TargetRole or priority:match("[Rr]ole:?%s*(.+)")
+		if roleName and role == roleName then
+			base = 1
+		else
+			base = 0
+		end
+	else
+		-- Treat unknown strings as role names
+		if role and role == priority then
+			base = 1
+		end
+	end
+
+	local score = base * 1000 - (dist or 0)
+	return score
+end
+
+function EntityBase:AcquireTarget()
+	local best, bestScore = nil, -1e9
+	for _, plr in ipairs(Players:GetPlayers()) do
+		local char = plr.Character
+		if char and char.Parent then
+			local canSee, dist = self:CanDetectTarget(char)
+			if canSee then
+				local score = self:ScoreTarget(plr, dist)
+				if score > bestScore then
+					bestScore = score
+					best = plr
+				end
+			end
+		end
+	end
+	self.Target = best
+	return best
+end
+
+function EntityBase:IsTargetValid()
+	local plr = self.Target
+	if not plr or not plr.Character then return false end
+	local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+	return hum and hum.Health > 0
+end
+
+function EntityBase:InAttackRange()
+	if not self.Target or not self.Root then return false end
+	local hrp = self.Target.Character and self.Target.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return false end
+	local range = self.Config.AttackRange or 4
+	return (hrp.Position - self.Root.Position).Magnitude <= range
+end
+
+function EntityBase:AttackTarget()
+	local now = os.clock()
+	if now < (self.NextAttack or 0) then return end
+	self.NextAttack = now + (self.Config.AttackCooldown or 1.2)
+	local dmg = math.max(0, tonumber(self.Config.Damage) or 0)
+	if dmg <= 0 then return end
+	local hum = self.Target and self.Target.Character and self.Target.Character:FindFirstChildOfClass("Humanoid")
+	if hum and hum.Health > 0 then
+		hum:TakeDamage(dmg)
+	end
+end
+
+function EntityBase:MoveTo(position)
+	if not self.Humanoid or not self.Root then return end
+	self.Humanoid:MoveTo(position)
+end
+
+function EntityBase:UpdatePath(targetPos)
+	if not self.Root or not self.Humanoid then return end
+	local now = os.clock()
+	local repathInterval = self.Config.RepathInterval or 1.0
+	local usePath = self.Config.UsePathfinding
+	if usePath == nil then usePath = true end
+	if not usePath then
+		self:MoveTo(targetPos)
+		return
+	end
+	if now < (self.NextRepath or 0) and self.Waypoints and self.WaypointIndex > 0 then
+		return
+	end
+	self.NextRepath = now + repathInterval
+	local path = PathfindingService:CreatePath({
+		AgentRadius = self.Config.AgentRadius or 2,
+		AgentHeight = self.Config.AgentHeight or 5,
+		AgentCanJump = self.Config.AgentCanJump ~= false,
+	})
+	local ok = pcall(function()
+		path:ComputeAsync(self.Root.Position, targetPos)
+	end)
+	if not ok or path.Status ~= Enum.PathStatus.Success then
+		self.Waypoints = nil
+		self.WaypointIndex = 0
+		self:MoveTo(targetPos)
+		return
+	end
+	self.Waypoints = path:GetWaypoints()
+	self.WaypointIndex = 1
+end
+
+function EntityBase:FollowPath()
+	if not self.Waypoints or not self.Root or not self.Humanoid then return end
+	local wp = self.Waypoints[self.WaypointIndex]
+	if not wp then
+		self.Waypoints = nil
+		self.WaypointIndex = 0
+		return
+	end
+	if wp.Action == Enum.PathWaypointAction.Jump then
+		self.Humanoid.Jump = true
+	end
+	self:MoveTo(wp.Position)
+	if (wp.Position - self.Root.Position).Magnitude <= 2 then
+		self.WaypointIndex += 1
+	end
+end
+
+function EntityBase:Step(dt)
+	if not self:IsAlive() then return end
+	if not self.Root then return end
+	self:SetSpeed(self.Config.Speed)
+
+	if not self:IsTargetValid() then
+		self:AcquireTarget()
+	end
+
+	if self.Target and self.Target.Character then
+		local targetPos = self.Target.Character:FindFirstChild("HumanoidRootPart") and self.Target.Character.HumanoidRootPart.Position
+		if targetPos then
+			if self:InAttackRange() then
+				self:AttackTarget()
+			else
+				self:UpdatePath(targetPos)
+				self:FollowPath()
+			end
+		end
+	end
+end
+
+return EntityBase

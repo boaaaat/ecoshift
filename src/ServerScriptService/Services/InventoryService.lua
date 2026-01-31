@@ -350,6 +350,24 @@ function InventoryService:Move(plr, fromType, fromIndex, toType, toIndex)
 		warn("[InventoryService] Cannot swap non-armor into armor slot")
 		return false
 	end
+
+	-- Stack if same item
+	if toSlot and toSlot.Id == fromSlot.Id then
+		local stackMax = maxStack(fromSlot.Id)
+		local space = math.max(0, stackMax - toSlot.N)
+		if space <= 0 then
+			warn("[InventoryService] Target stack full, no move")
+			return false
+		end
+		local move = math.min(space, fromSlot.N)
+		toSlot.N += move
+		fromSlot.N -= move
+		if fromSlot.N <= 0 then
+			setSlot(inv, fromType, fromIndex, nil)
+		end
+		self:Sync(plr)
+		return true
+	end
 	
 	-- Clone slots to avoid reference issues
 	local fromClone = cloneSlot(fromSlot)
@@ -362,6 +380,69 @@ function InventoryService:Move(plr, fromType, fromIndex, toType, toIndex)
 		toClone and (toClone.Id .. " x" .. toClone.N) or "empty",
 		fromClone and (fromClone.Id .. " x" .. fromClone.N) or "empty"))
 	
+	self:Sync(plr)
+	return true
+end
+
+local function findEmptySlot(inv, slotType)
+	if slotType == "Hotbar" then
+		for i = 1, HOTBAR_SLOTS do
+			if not inv.Hotbar[i] then return i end
+		end
+	elseif slotType == "Storage" then
+		for i = 1, STORAGE_SLOTS do
+			if not inv.Storage[i] then return i end
+		end
+	elseif slotType == "Armor" then
+		if not inv.Armor then return 1 end
+	end
+	return nil
+end
+
+function InventoryService:Split(plr, fromType, fromIndex, toType, toIndex, amount)
+	if not validSlot(fromType, fromIndex) then return false end
+	local inv = getInv(plr)
+	local fromSlot = getSlot(inv, fromType, fromIndex)
+	if not fromSlot or fromSlot.N < 2 then return false end
+	local split = math.floor(tonumber(amount) or math.floor(fromSlot.N / 2))
+	if split <= 0 or split >= fromSlot.N then
+		split = math.floor(fromSlot.N / 2)
+	end
+	if split <= 0 then return false end
+
+	local targetType = toType
+	local targetIndex = toIndex
+	if not targetType or not targetIndex or not validSlot(targetType, targetIndex) then
+		if fromType == "Hotbar" then
+			targetType = "Storage"
+			targetIndex = findEmptySlot(inv, targetType)
+			if not targetIndex then
+				targetType = "Hotbar"
+				targetIndex = findEmptySlot(inv, targetType)
+			end
+		elseif fromType == "Storage" then
+			targetType = "Hotbar"
+			targetIndex = findEmptySlot(inv, targetType)
+			if not targetIndex then
+				targetType = "Storage"
+				targetIndex = findEmptySlot(inv, targetType)
+			end
+		else
+			targetType = "Storage"
+			targetIndex = findEmptySlot(inv, targetType) or findEmptySlot(inv, "Hotbar")
+		end
+	end
+
+	if not targetType or not targetIndex or not validSlot(targetType, targetIndex) then return false end
+	if targetType == "Armor" and not isArmor(fromSlot.Id) then return false end
+	local targetSlot = getSlot(inv, targetType, targetIndex)
+	if targetSlot then return false end
+
+	setSlot(inv, targetType, targetIndex, { Id = fromSlot.Id, N = split })
+	fromSlot.N -= split
+	if fromSlot.N <= 0 then
+		setSlot(inv, fromType, fromIndex, nil)
+	end
 	self:Sync(plr)
 	return true
 end

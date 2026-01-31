@@ -15,6 +15,7 @@ Config.region_padding = 8
 Config.structure_padding = 6
 Config.objective_padding = 6
 Config.avoid_regions_for_structures = true
+Config.use_entity_config_enemies = true
 Config.spawn_folder_name = "GeneratedWorld"
 
 Config.biomes = {

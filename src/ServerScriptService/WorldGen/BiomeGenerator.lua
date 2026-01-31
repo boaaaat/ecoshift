@@ -1,7 +1,9 @@
 local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
+local CollectionService = game:GetService("CollectionService")
 
 local SpatialHash = require(script.Parent.SpatialHash)
+local EntityConfig = require(script.Parent.Parent.AI.EntityConfig)
 
 local BiomeGenerator = {}
 BiomeGenerator.__index = BiomeGenerator
@@ -130,6 +132,7 @@ function BiomeGenerator.new(config)
 	self.objective_padding = config_value(self.config, "objective_padding", "objectivePadding", 6)
 	self.avoid_regions_for_structures = config_value(self.config, "avoid_regions_for_structures", "avoidRegionsForStructures", true)
 	self.spawn_folder_name = config_value(self.config, "spawn_folder_name", "spawnFolderName", "GeneratedWorld")
+	self.use_entity_config_enemies = config_value(self.config, "use_entity_config_enemies", "useEntityConfigEnemies", false)
 
 	self.biomes = normalize_biomes(self.config.biomes or {})
 	self.weight_cache = {}
@@ -158,6 +161,52 @@ function BiomeGenerator.new(config)
 	}
 
 	return self
+end
+
+function BiomeGenerator:_entity_weight(spawn_def)
+	if not spawn_def then return 0 end
+	local elapsed = os.clock() - self.start_time
+	local base = tonumber(spawn_def.Weight) or 1
+	local scaled = tonumber(spawn_def.TimeScaledWeight) or 0
+	local weight = base + (scaled * (elapsed / self.time_scale_seconds))
+	return clamp_non_negative(weight)
+end
+
+function BiomeGenerator:_resolve_entity_enemy_list(biome_name, region_def)
+	local entities = EntityConfig.Entities or {}
+	local type_weights = EntityConfig.TypeWeights or {}
+	local lookup = self:_get_prefab_lookup("EnemyPrefabs", biome_name)
+	local list = {}
+	for id, def in pairs(entities) do
+		local spawn = def.Spawn
+		local biomes = spawn and spawn.Biomes
+		local biome_def = biomes and biomes[biome_name]
+		if spawn and biome_def then
+			local prefab = lookup[id]
+			if prefab then
+				local base_weight = self:_entity_weight(spawn)
+				local biome_weight = tonumber(biome_def.Weight) or 1
+				local region_weight = 1
+				if biome_def.Regions and region_def and region_def.name then
+					region_weight = tonumber(biome_def.Regions[region_def.name]) or 1
+				end
+				local type_weight = tonumber(type_weights[def.Type or def.EntityType or "Monster"]) or 1
+				local weight = base_weight * biome_weight * region_weight * type_weight
+				if weight > 0 then
+					list[#list + 1] = {
+						Prefab = prefab,
+						Weight = weight,
+						Id = id,
+						GroupSize = spawn.GroupSize,
+						GroupRadius = spawn.GroupRadius,
+						MaxGroupsPerRegion = spawn.MaxGroupsPerRegion,
+						MaxCountPerRegion = spawn.MaxCountPerRegion,
+					}
+				end
+			end
+		end
+	end
+	return list
 end
 
 function BiomeGenerator:_reset_stats()
@@ -351,6 +400,22 @@ function BiomeGenerator:_choose_weighted(list)
 	return list[#list].Prefab
 end
 
+function BiomeGenerator:_choose_weighted_entry(list)
+	local total = 0
+	for _, entry in ipairs(list) do
+		total += (entry.Weight or 1)
+	end
+	if total <= 0 then return nil end
+	local roll = self.random:NextNumber(0, total)
+	for _, entry in ipairs(list) do
+		roll -= (entry.Weight or 1)
+		if roll <= 0 then
+			return entry
+		end
+	end
+	return list[#list]
+end
+
 function BiomeGenerator:_place_prefab(prefab, position, parent)
 	if not prefab then
 		return
@@ -358,6 +423,18 @@ function BiomeGenerator:_place_prefab(prefab, position, parent)
 	-- OPTIMIZED: Use task.defer for non-blocking clone operations
 	task.defer(function()
 		local clone = prefab:Clone()
+		if parent and parent.Name == "Enemies" then
+			local entity_id = clone:GetAttribute("EntityId") or prefab:GetAttribute("EntityId") or prefab.Name
+			local def = EntityConfig.Entities and EntityConfig.Entities[entity_id]
+			local entity_type = clone:GetAttribute("EntityType") or prefab:GetAttribute("EntityType") or (def and def.Type) or "Monster"
+			clone:SetAttribute("EntityId", entity_id)
+			clone:SetAttribute("EntityType", entity_type)
+			if entity_type == "Animal" then
+				CollectionService:AddTag(clone, "Animal")
+			else
+				CollectionService:AddTag(clone, "Monster")
+			end
+		end
 		if parent and parent.Name == "Resources" then
 			if clone:IsA("BasePart") then
 				clone.CanQuery = true
@@ -459,7 +536,13 @@ end
 function BiomeGenerator:_scatter_in_region(biome_name, region_center, region_def)
 	local resource_prefabs = self:_resolve_prefabs_weighted("ResourcePrefabs", biome_name, region_def.resources)
 	local prop_prefabs = self:_resolve_prefabs_weighted("PropPrefabs", biome_name, region_def.props)
-	local enemy_prefabs = self:_resolve_prefabs_weighted("EnemyPrefabs", biome_name, region_def.enemies)
+	local enemy_prefabs = nil
+	if self.use_entity_config_enemies then
+		enemy_prefabs = self:_resolve_entity_enemy_list(biome_name, region_def)
+	end
+	if not enemy_prefabs or #enemy_prefabs == 0 then
+		enemy_prefabs = self:_resolve_prefabs_weighted("EnemyPrefabs", biome_name, region_def.enemies)
+	end
 
 	local resource_count = random_in_range(self.random, region_def.resource_count or region_def.resourceCount)
 	local prop_count = random_in_range(self.random, region_def.prop_count or region_def.propCount)
@@ -485,13 +568,42 @@ function BiomeGenerator:_scatter_in_region(biome_name, region_center, region_def
 		self:_step()
 	end
 
+	local group_counts = {}
+	local member_counts = {}
 	for _ = 1, enemy_count do
-		local prefab = self:_choose_weighted(enemy_prefabs)
-		if prefab then
+		local entry = self:_choose_weighted_entry(enemy_prefabs)
+		if entry then
+			local id = entry.Id or (entry.Prefab and entry.Prefab.Name) or "Enemy"
+			local max_groups = tonumber(entry.MaxGroupsPerRegion)
+			if max_groups and (group_counts[id] or 0) >= max_groups then
+				self:_step()
+				goto continue_enemy
+			end
+			local max_members = tonumber(entry.MaxCountPerRegion)
+			if max_members and (member_counts[id] or 0) >= max_members then
+				self:_step()
+				goto continue_enemy
+			end
+
 			local position = self:_random_point_in_region(region_center, region_def.size)
-			self:_place_prefab(prefab, position, self.spawn_subfolders.Enemies)
-			self.stats.enemies += 1
+			local group_size = random_in_range(self.random, entry.GroupSize, 1)
+			local radius = tonumber(entry.GroupRadius) or 6
+			group_counts[id] = (group_counts[id] or 0) + 1
+			for i = 1, group_size do
+				if max_members and (member_counts[id] or 0) >= max_members then
+					break
+				end
+				local offset = Vector3.new(
+					self.random:NextNumber(-radius, radius),
+					0,
+					self.random:NextNumber(-radius, radius)
+				)
+				self:_place_prefab(entry.Prefab, position + offset, self.spawn_subfolders.Enemies)
+				self.stats.enemies += 1
+				member_counts[id] = (member_counts[id] or 0) + 1
+			end
 		end
+		::continue_enemy::
 		self:_step()
 	end
 end

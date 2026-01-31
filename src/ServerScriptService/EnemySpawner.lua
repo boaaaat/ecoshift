@@ -5,6 +5,7 @@ local ServerStorage = game:GetService("ServerStorage")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
+local CollectionService = game:GetService("CollectionService")
 
 local Config = require(ReplicatedStorage.Shared.Config) 
 local EnemyPrefabs = ServerStorage:FindFirstChild("Enemies")
@@ -74,6 +75,14 @@ local function spawnWave(enemyIds, spawnPoints)
 		local spawnPoint = spawnPoints[math.random(1, #spawnPoints)]
 		local newEnemy = prefab:Clone() :: Model
 		newEnemy.Name = id .. "_" .. math.random(1000, 9999)
+		newEnemy:SetAttribute("EntityId", id)
+		local entityType = newEnemy:GetAttribute("EntityType") or prefab:GetAttribute("EntityType") or "Monster"
+		newEnemy:SetAttribute("EntityType", entityType)
+		if entityType == "Animal" then
+			CollectionService:AddTag(newEnemy, "Animal")
+		else
+			CollectionService:AddTag(newEnemy, "Monster")
+		end
 
 		for _, part in ipairs(newEnemy:GetDescendants()) do
 			if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
@@ -116,6 +125,14 @@ _G.Ecoshift.SpawnEnemyById = function(id, anchor)
 	local anchorPos = anchor:IsA("Attachment") and anchor.WorldPosition or anchor.Position
 	local newEnemy = prefab:Clone()
 	newEnemy.Name = id .. "_" .. math.random(1000, 9999)
+	newEnemy:SetAttribute("EntityId", id)
+	local entityType = newEnemy:GetAttribute("EntityType") or prefab:GetAttribute("EntityType") or "Monster"
+	newEnemy:SetAttribute("EntityType", entityType)
+	if entityType == "Animal" then
+		CollectionService:AddTag(newEnemy, "Animal")
+	else
+		CollectionService:AddTag(newEnemy, "Monster")
+	end
 	local safeCFrame = getSafeSpawnPosition(anchorPos)
 	newEnemy:PivotTo(safeCFrame)
 	local enemiesFolder = Workspace:FindFirstChild("Enemies") or Instance.new("Folder")

@@ -95,6 +95,7 @@ function LootService:_ensureChestData(chest)
 		Table = tableName,
 		Slots = compressSlots(items),
 	}
+	print(string.format("[LootService] Chest %s -> table %s tier %d items %d", chest.Name, tableName, tier, #data.Slots))
 	self._chests[chest] = data
 	self._chestById[id] = chest
 	return data
@@ -106,6 +107,7 @@ function LootService:_sendChest(plr, chest)
 	local remote = Util.GetRemote(remotesFolder, Config.RemoteNames.ChestEvent)
 	if not remote then return end
 	self._openByPlayer[plr] = data.Id
+	print(string.format("[LootService] Open chest %s for %s (items %d)", chest.Name, plr.Name, #data.Slots))
 	remote:FireClient(plr, "Open", {
 		ChestId = data.Id,
 		Tier = data.Tier,
@@ -194,6 +196,7 @@ function LootService:Init()
 	local remote = Util.GetRemote(remotesFolder, Config.RemoteNames.ChestEvent)
 	if remote then
 		remote.OnServerEvent:Connect(function(plr, action, payload)
+			print(string.format("[LootService] ChestEvent %s from %s", tostring(action), plr.Name))
 			if action == "Close" then
 				self._openByPlayer[plr] = nil
 				return
@@ -221,12 +224,16 @@ function LootService:Init()
 				if added <= 0 then
 					added = InventoryService:Give(plr, slot.Id, take, true)
 				end
-				if added <= 0 then return end
+				if added <= 0 then
+					print("[LootService] Take failed (inventory full or invalid)")
+					return
+				end
 				slot.N -= added
 				if slot.N <= 0 then
 					data.Slots[fromIndex] = nil
 				end
 				data.Slots = compactSlots(data.Slots)
+				print(string.format("[LootService] Took %s x%d (remaining %d)", slot.Id, added, #data.Slots))
 				self:_updateChest(plr, data)
 				return
 			end

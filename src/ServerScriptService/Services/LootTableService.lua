@@ -135,6 +135,13 @@ local function getRollCount(tbl, rng)
 	if type(tbl.Rolls) == "number" then
 		return math.max(1, math.floor(tbl.Rolls))
 	end
+	if type(tbl.Rolls) == "table" then
+		local min = tbl.Rolls.min or tbl.Rolls.Min or tbl.Rolls[1] or 1
+		local max = tbl.Rolls.max or tbl.Rolls.Max or tbl.Rolls[2] or min
+		min = math.max(1, math.floor(tonumber(min) or 1))
+		max = math.max(min, math.floor(tonumber(max) or min))
+		return rng:NextInteger(min, max)
+	end
 	local min = tbl.MinRolls or tbl.MinRoll or 1
 	local max = tbl.MaxRolls or tbl.MaxRoll or min
 	min = math.max(1, math.floor(tonumber(min) or 1))

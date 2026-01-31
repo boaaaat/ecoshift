@@ -40,6 +40,7 @@ local tier2Services = {
 	{ name = "ToolService", method = "Init" },
 	{ name = "ArmorService", method = "Init" },
 	{ name = "DayNightService", method = "Init" },
+	{ name = "EntityAIService", method = "Init" },
 }
 
 -- TIER 3: Deferred/heavy services (world gen, etc.)

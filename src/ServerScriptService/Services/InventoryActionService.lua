@@ -20,6 +20,11 @@ function InventoryActionService:Init()
 			InventoryService:Move(plr, payload.FromType, payload.FromIndex, payload.ToType, payload.ToIndex)
 			return
 		end
+		if action == "Split" and type(payload) == "table" then
+			print(string.format("[InventoryAction] Split %s: %s[%s]", plr.Name, tostring(payload.FromType), tostring(payload.FromIndex)))
+			InventoryService:Split(plr, payload.FromType, payload.FromIndex, payload.ToType, payload.ToIndex, payload.Amount)
+			return
+		end
 		if action == "Equip" and type(payload) == "table" then
 			local slotType = payload.SlotType
 			local slotIndex = payload.SlotIndex
