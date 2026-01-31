@@ -98,6 +98,13 @@ function BiomeGenerator.new(config)
 	self.center_exclusion_radius_sq = self.center_exclusion_radius * self.center_exclusion_radius
 	self.base_y = config_value(self.config, "base_y", "baseY", 0)
 	self.chunk_size = config_value(self.config, "chunk_size", "chunkSize", 240)
+	self.max_chunks = config_value(self.config, "max_chunks", "maxChunks", nil)
+	if self.max_chunks ~= nil then
+		self.max_chunks = math.floor(tonumber(self.max_chunks) or 0)
+		if self.max_chunks <= 0 then
+			self.max_chunks = nil
+		end
+	end
 	self.biome_noise_scale = config_value(self.config, "biome_noise_scale", "biomeNoiseScale", 0.0016)
 	self.time_scale_seconds = config_value(self.config, "time_scale_seconds", "timeScaleSeconds", 900)
 	if self.time_scale_seconds <= 0 then
@@ -268,6 +275,71 @@ function BiomeGenerator:_resolve_prefabs(type_name, biome_name, names)
 	return list
 end
 
+function BiomeGenerator:_resolve_prefabs_weighted(type_name, biome_name, names)
+	local lookup = self:_get_prefab_lookup(type_name, biome_name)
+	local list = {}
+	if names == true or names == "*" then
+		for _, prefab in pairs(lookup) do
+			list[#list + 1] = { Prefab = prefab, Weight = 1 }
+		end
+		return list
+	end
+
+	if type(names) == "table" then
+		if #names > 0 then
+			for _, entry in ipairs(names) do
+				if type(entry) == "string" then
+					local prefab = lookup[entry]
+					if prefab then
+						list[#list + 1] = { Prefab = prefab, Weight = 1 }
+					end
+				elseif type(entry) == "table" then
+					local name = entry.Name or entry.Id or entry.Prefab or entry[1]
+					local weight = tonumber(entry.Weight or entry.weight) or 1
+					if type(name) == "string" then
+						local prefab = lookup[name]
+						if prefab and weight > 0 then
+							list[#list + 1] = { Prefab = prefab, Weight = weight }
+						end
+					end
+				end
+			end
+		else
+			for key, value in pairs(names) do
+				if type(key) == "string" then
+					local prefab = lookup[key]
+					local weight = 1
+					if type(value) == "number" then
+						weight = value
+					elseif type(value) == "table" then
+						weight = tonumber(value.Weight or value.weight) or 1
+					end
+					if prefab and weight > 0 then
+						list[#list + 1] = { Prefab = prefab, Weight = weight }
+					end
+				end
+			end
+		end
+	end
+	return list
+end
+
+function BiomeGenerator:_choose_weighted(list)
+	local total = 0
+	for _, entry in ipairs(list) do
+		total += (entry.Weight or 1)
+	end
+	if total <= 0 then return nil end
+	local roll = self.random:NextNumber(0, total)
+	for _, entry in ipairs(list) do
+		roll -= (entry.Weight or 1)
+		if roll <= 0 then
+			return entry.Prefab
+		end
+	end
+	return list[#list].Prefab
+end
+
 function BiomeGenerator:_place_prefab(prefab, position, parent)
 	if not prefab then
 		return
@@ -368,16 +440,16 @@ function BiomeGenerator:_try_place_region(chunk_center, region_def)
 end
 
 function BiomeGenerator:_scatter_in_region(biome_name, region_center, region_def)
-	local resource_prefabs = self:_resolve_prefabs("ResourcePrefabs", biome_name, region_def.resources)
-	local prop_prefabs = self:_resolve_prefabs("PropPrefabs", biome_name, region_def.props)
-	local enemy_prefabs = self:_resolve_prefabs("EnemyPrefabs", biome_name, region_def.enemies)
+	local resource_prefabs = self:_resolve_prefabs_weighted("ResourcePrefabs", biome_name, region_def.resources)
+	local prop_prefabs = self:_resolve_prefabs_weighted("PropPrefabs", biome_name, region_def.props)
+	local enemy_prefabs = self:_resolve_prefabs_weighted("EnemyPrefabs", biome_name, region_def.enemies)
 
 	local resource_count = random_in_range(self.random, region_def.resource_count or region_def.resourceCount)
 	local prop_count = random_in_range(self.random, region_def.prop_count or region_def.propCount)
 	local enemy_count = random_in_range(self.random, region_def.enemy_count or region_def.enemyCount)
 
 	for _ = 1, resource_count do
-		local prefab = resource_prefabs[self.random:NextInteger(1, math.max(1, #resource_prefabs))]
+		local prefab = self:_choose_weighted(resource_prefabs)
 		if prefab then
 			local position = self:_random_point_in_region(region_center, region_def.size)
 			self:_place_prefab(prefab, position, self.spawn_subfolders.Resources)
@@ -387,7 +459,7 @@ function BiomeGenerator:_scatter_in_region(biome_name, region_center, region_def
 	end
 
 	for _ = 1, prop_count do
-		local prefab = prop_prefabs[self.random:NextInteger(1, math.max(1, #prop_prefabs))]
+		local prefab = self:_choose_weighted(prop_prefabs)
 		if prefab then
 			local position = self:_random_point_in_region(region_center, region_def.size)
 			self:_place_prefab(prefab, position, self.spawn_subfolders.Props)
@@ -397,7 +469,7 @@ function BiomeGenerator:_scatter_in_region(biome_name, region_center, region_def
 	end
 
 	for _ = 1, enemy_count do
-		local prefab = enemy_prefabs[self.random:NextInteger(1, math.max(1, #enemy_prefabs))]
+		local prefab = self:_choose_weighted(enemy_prefabs)
 		if prefab then
 			local position = self:_random_point_in_region(region_center, region_def.size)
 			self:_place_prefab(prefab, position, self.spawn_subfolders.Enemies)
@@ -411,7 +483,7 @@ function BiomeGenerator:_place_large_objects(biome_name, list, count, padding, p
 	if count <= 0 then
 		return
 	end
-	local prefabs = self:_resolve_prefabs(list.type_name, biome_name, list.names)
+	local prefabs = self:_resolve_prefabs_weighted(list.type_name, biome_name, list.names)
 	if #prefabs == 0 then
 		return
 	end
@@ -421,7 +493,8 @@ function BiomeGenerator:_place_large_objects(biome_name, list, count, padding, p
 		local placed = false
 		for _ = 1, tries do
 			local position = self:_random_point_in_chunk(list.chunk_center)
-			local prefab = prefabs[self.random:NextInteger(1, #prefabs)]
+			local prefab = self:_choose_weighted(prefabs)
+			if not prefab then break end
 			local size = get_prefab_size(prefab)
 			local rect = rect_from_size(position.X, position.Z, size.X, size.Z, padding)
 			local intersects_region = self.avoid_regions_for_structures and self.region_hash:intersects(rect)
@@ -470,6 +543,13 @@ function BiomeGenerator:_generate(override_biome)
 	table.sort(centers, function(a, b)
 		return (a.X * a.X + a.Y * a.Y) < (b.X * b.X + b.Y * b.Y)
 	end)
+	if self.max_chunks and #centers > self.max_chunks then
+		local trimmed = {}
+		for i = 1, self.max_chunks do
+			trimmed[i] = centers[i]
+		end
+		centers = trimmed
+	end
 
 	local forced_biome = override_biome and self:_find_biome(override_biome) or nil
 

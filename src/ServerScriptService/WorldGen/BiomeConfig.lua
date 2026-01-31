@@ -5,6 +5,7 @@ Config.world_radius = 2200
 Config.center_exclusion_radius = 260
 Config.base_y = 0
 Config.chunk_size = 240
+Config.max_chunks = nil -- set to a number to cap how many chunks generate
 Config.biome_noise_scale = 0.0016
 Config.time_scale_seconds = 900
 Config.ops_per_yield = 40

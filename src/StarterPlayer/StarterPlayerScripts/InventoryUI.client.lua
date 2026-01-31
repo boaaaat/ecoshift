@@ -4,6 +4,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local GuiService = game:GetService("GuiService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
@@ -268,6 +269,22 @@ local function createSlot(parent, x, y, slotType, index)
 	icon.ScaleType = Enum.ScaleType.Fit
 	icon.Parent = slot
 
+	-- Text label for items without icons
+	local itemText = Instance.new("TextLabel")
+	itemText.Name = "ItemText"
+	itemText.Size = UDim2.new(1, -8, 0, 32)
+	itemText.Position = UDim2.new(0.5, 0, 0.5, -2)
+	itemText.AnchorPoint = Vector2.new(0.5, 0.5)
+	itemText.BackgroundTransparency = 1
+	itemText.TextColor3 = COLORS.Text
+	itemText.TextSize = 10
+	itemText.Font = Enum.Font.GothamBold
+	itemText.TextWrapped = true
+	itemText.Text = ""
+	itemText.Visible = false
+	itemText.ZIndex = 3
+	itemText.Parent = slot
+
 	-- Quantity badge
 	local qtyBadge = Instance.new("Frame")
 	qtyBadge.Name = "QtyBadge"
@@ -352,6 +369,7 @@ local function createSlot(parent, x, y, slotType, index)
 	return {
 		Frame = slot,
 		Icon = icon,
+		ItemText = itemText,
 		QtyBadge = qtyBadge,
 		QtyLabel = qtyLabel,
 		Stroke = stroke,
@@ -477,6 +495,9 @@ local function renderSlot(slot)
 	
 	if not data then
 		slot.Icon.Image = ""
+		slot.Icon.Visible = false
+		slot.ItemText.Visible = false
+		slot.ItemText.Text = ""
 		slot.QtyBadge.Visible = false
 		slot.Frame.BackgroundColor3 = COLORS.SlotEmpty
 		return
@@ -485,14 +506,21 @@ local function renderSlot(slot)
 	local item = ItemDatabase:Get(data.Id)
 	local icon = item and item.Icon
 	local iconColor = item and item.IconColor
+	local name = item and item.Name or data.Id
 	
 	if icon and icon ~= "" then
+		-- Has icon - show image, hide text
 		slot.Icon.Image = icon
 		slot.Icon.ImageColor3 = Color3.new(1, 1, 1)
+		slot.Icon.Visible = true
+		slot.ItemText.Visible = false
 	else
-		local placeholder = (Config.UI and Config.UI.PlaceholderIcon) or ""
-		slot.Icon.Image = placeholder
-		slot.Icon.ImageColor3 = iconColor or hashColor(data.Id)
+		-- No icon - show text label instead
+		slot.Icon.Image = ""
+		slot.Icon.Visible = false
+		slot.ItemText.Text = name
+		slot.ItemText.TextColor3 = iconColor or hashColor(data.Id)
+		slot.ItemText.Visible = true
 	end
 	
 	if data.N > 1 then
@@ -595,10 +623,15 @@ local function endDrag(targetSlot)
 end
 
 local function slotAtPoint(point)
+	-- GetMouseLocation includes GUI inset, AbsolutePosition doesn't
+	-- Subtract the inset to align coordinate systems
+	local inset = GuiService:GetGuiInset()
+	local adjustedPoint = Vector2.new(point.X - inset.X, point.Y - inset.Y)
+	
 	for _, slot in ipairs(slots) do
 		local pos = slot.Frame.AbsolutePosition
 		local size = slot.Frame.AbsoluteSize
-		if point.X >= pos.X and point.X <= pos.X + size.X and point.Y >= pos.Y and point.Y <= pos.Y + size.Y then
+		if adjustedPoint.X >= pos.X and adjustedPoint.X <= pos.X + size.X and adjustedPoint.Y >= pos.Y and adjustedPoint.Y <= pos.Y + size.Y then
 			return slot
 		end
 	end
@@ -708,6 +741,30 @@ end)
 if rInventory then
 	rInventory.OnClientEvent:Connect(function(kind, payload)
 		if kind ~= "Snapshot" or type(payload) ~= "table" then return end
+		
+		-- Fix: Roblox RemoteEvents can convert numeric keys to strings
+		-- Normalize keys to be numeric for consistent indexing
+		if payload.Storage then
+			local normalized = {}
+			for k, v in pairs(payload.Storage) do
+				local numKey = tonumber(k)
+				if numKey and v then
+					normalized[numKey] = v
+				end
+			end
+			payload.Storage = normalized
+		end
+		if payload.Hotbar then
+			local normalized = {}
+			for k, v in pairs(payload.Hotbar) do
+				local numKey = tonumber(k)
+				if numKey and v then
+					normalized[numKey] = v
+				end
+			end
+			payload.Hotbar = normalized
+		end
+		
 		inventorySnapshot = payload
 		
 		-- Debug: Log storage contents
