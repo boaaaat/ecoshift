@@ -251,6 +251,31 @@ function InventoryService:TakeFromSlot(plr, slotType, slotIndex, amount)
 	return itemId
 end
 
+function InventoryService:TryAddToSlot(plr, slotType, slotIndex, itemId, amount)
+	amount = math.floor(tonumber(amount) or 0)
+	if amount <= 0 or not itemId then return 0 end
+	if not validSlot(slotType, slotIndex) then return 0 end
+	local inv = getInv(plr)
+	if slotType == "Armor" and not isArmor(itemId) then
+		return 0
+	end
+	local slot = getSlot(inv, slotType, slotIndex)
+	local stackMax = maxStack(itemId)
+	if slot then
+		if slot.Id ~= itemId then return 0 end
+		local canAdd = math.max(0, stackMax - slot.N)
+		local add = math.min(canAdd, amount)
+		if add <= 0 then return 0 end
+		slot.N += add
+		self:Sync(plr)
+		return add
+	end
+	local add = math.min(stackMax, amount)
+	setSlot(inv, slotType, slotIndex, { Id = itemId, N = add })
+	self:Sync(plr)
+	return add
+end
+
 function InventoryService:CanAfford(plr, costList)
 	for _, cost in ipairs(costList or {}) do
 		if not self:Has(plr, cost.Id, cost.N) then

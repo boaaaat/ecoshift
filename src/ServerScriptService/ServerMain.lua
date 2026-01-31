@@ -26,6 +26,7 @@ local DropItemService = require(script.Parent.Services.DropItemService)
 local InventoryActionService = require(script.Parent.Services.InventoryActionService)
 local ToolService = require(script.Parent.Services.ToolService)
 local ArmorService = require(script.Parent.Services.ArmorService)
+local LootService = require(script.Parent.Services.LootService)
 local DayNightService = require(script.Parent.Services.DayNightService)
 
 -- Init / bind
@@ -46,6 +47,7 @@ DropItemService:Init()
 InventoryActionService:Init()
 ToolService:Init()
 ArmorService:Init()
+LootService:Init()
 DayNightService:Init()
 --	WorldBuilder:Init()
 
