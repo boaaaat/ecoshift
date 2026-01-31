@@ -17,6 +17,13 @@ Config.objective_padding = 6
 Config.avoid_regions_for_structures = true
 Config.spawn_folder_name = "GeneratedWorld"
 
+-- STREAMING CONFIG: Dynamic chunk loading around players
+Config.use_streaming = true -- Set to false to use legacy full-world generation
+Config.stream_load_radius = 3 -- Load chunks within this radius (in chunks)
+Config.stream_unload_radius = 5 -- Unload chunks beyond this radius
+Config.stream_update_interval = 0.5 -- How often to check player positions
+Config.stream_unload_delay = 10 -- Seconds before unloading unused chunk
+
 Config.biomes = {
 	Forest = {
 		weight = 1.0,

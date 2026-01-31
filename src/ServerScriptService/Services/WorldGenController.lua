@@ -1,29 +1,28 @@
 -- WorldGenController.lua
--- Regenerates the entire world when biome changes.
+-- Now uses ChunkStreamingService for dynamic chunk loading instead of generating entire world at once.
 local Workspace = game:GetService("Workspace")
 local ServerStorage = game:GetService("ServerStorage")
 
-local BiomeGenerator = require(script.Parent.Parent.WorldGen.BiomeGenerator)
 local WorldGenConfig = require(script.Parent.Parent.WorldGen.BiomeConfig)
 local BiomeService = require(script.Parent.BiomeService)
 local GridService = require(script.Parent.GridService)
 local TerrainService = require(script.Parent.TerrainService)
-local ResourceNodeService = require(script.Parent.ResourceNodeService)
+local ChunkStreamingService = require(script.Parent.ChunkStreamingService)
 
 local WorldGenController = {}
 WorldGenController._busy = false
 WorldGenController._initialized = false
 
+-- Use streaming from config (set Config.use_streaming = false in BiomeConfig to revert)
+local USE_STREAMING = WorldGenConfig.use_streaming ~= false
+
 local function clearFolder(folder)
 	if not folder then return end
-	-- OPTIMIZED: Batch destroy with defer
 	local children = folder:GetChildren()
 	for i = 1, #children do
-		task.defer(function()
-			if children[i] and children[i].Parent then
-				children[i]:Destroy()
-			end
-		end)
+		if children[i] and children[i].Parent then
+			children[i]:Destroy()
+		end
 	end
 end
 
@@ -47,24 +46,29 @@ function WorldGenController:GenerateBiome(biomeName)
 	if self._busy then return end
 	self._busy = true
 	
-	-- OPTIMIZED: Run heavy operations in a spawned thread
 	task.spawn(function()
 		clearGeneratedWorld()
 		clearEnemies()
 		GridService:Clear()
 		
-		-- Terrain generation (relatively fast)
+		-- Terrain generation (still generates full terrain - Roblox terrain can't easily stream)
 		TerrainService:GenerateFlat(biomeName)
-		task.wait() -- Yield once after terrain
+		task.wait()
 		
-		-- World generation (heavy - already yields internally)
-		local generator = BiomeGenerator.new(WorldGenConfig)
-		generator:GenerateBiome(biomeName)
-		
-		-- Bind resource nodes after generation
-		task.defer(function()
-			ResourceNodeService:BindGeneratedWorld()
-		end)
+		if USE_STREAMING then
+			-- Use dynamic chunk streaming - chunks load around players
+			ChunkStreamingService:SetBiome(biomeName)
+			print("[WorldGenController] Streaming mode - chunks will load around players")
+		else
+			-- Legacy: Generate entire world at once
+			local BiomeGenerator = require(script.Parent.Parent.WorldGen.BiomeGenerator)
+			local ResourceNodeService = require(script.Parent.ResourceNodeService)
+			local generator = BiomeGenerator.new(WorldGenConfig)
+			generator:GenerateBiome(biomeName)
+			task.defer(function()
+				ResourceNodeService:BindGeneratedWorld()
+			end)
+		end
 		
 		local folderName = WorldGenConfig.spawn_folder_name or "GeneratedWorld"
 		local created = Workspace:FindFirstChild(folderName)
@@ -78,8 +82,15 @@ end
 function WorldGenController:Init()
 	if self._initialized then return end
 	self._initialized = true
+	
+	-- Initialize ChunkStreamingService if using streaming
+	if USE_STREAMING then
+		ChunkStreamingService:Init()
+	end
+	
 	local initial = BiomeService:GetCurrent()
 	self:GenerateBiome(initial)
+	
 	_G.Ecoshift = _G.Ecoshift or {}
 	task.spawn(function()
 		for _ = 1, 50 do
