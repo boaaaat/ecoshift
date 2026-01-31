@@ -1,0 +1,246 @@
+-- Config.lua
+-- Central game tuning values. Edit freely.
+
+local Config = {}
+
+Config.Paths = {
+	Remotes = "ReplicatedStorage/Remotes",
+	EnemySpawnsFolder = "Workspace/EnemySpawns",
+	ResourceNodesFolder = "Workspace/ResourceNodes",
+	ObjectivesFolder = "Workspace/Objectives",
+}
+
+Config.RemoteNames = {
+	Build = "Build",
+	Damage = "Damage",
+	Interact = "Interact",
+	EventBroadcast = "EventBroadcast",
+	ObjectiveUpdate = "ObjectiveUpdate",
+	BiomeChanged = "BiomeChanged",
+	Craft = "Craft",
+	Ping = "Ping",
+	InventoryUpdate = "InventoryUpdate",
+	InventoryAction = "InventoryAction",
+	ProfileUpdate = "ProfileUpdate",
+	RoleUpdate = "RoleUpdate",
+	RoleSelect = "RoleSelect",
+	GameStateUpdate = "GameStateUpdate",
+	DropItem = "DropItem",
+}
+
+Config.BIOME_DEFAULT = "Forest"
+Config.BIOME_SHIFT = {
+	MinSeconds = 300, -- 5 minutes
+	MaxSeconds = 480, -- 8 minutes
+	TimeScaleSeconds = 900,
+}
+
+Config.DATASTORE = {
+	ProfileStore = "EcoshiftProfile_v1",
+	AutosaveInterval = 60,
+}
+
+Config.WORLD = {
+	WorldRadius = 2200,
+	CenterExclusionRadius = 260,
+	BaseY = 0,
+}
+
+Config.TERRAIN = {
+	Thickness = 24,
+	MaterialByBiome = {
+		Forest = "Grass",
+		Desert = "Sand",
+		Swamp = "Mud",
+		FrozenTundra = "Snow",
+		Volcanic = "Basalt",
+		CrystalWastes = "Rock",
+	},
+}
+
+Config.GRID = {
+	Size = 6,
+	BuildMaxDistance = 45,
+}
+
+Config.STARTER_ITEMS = {}
+
+Config.UI = {
+	PlaceholderIcon = "rbxasset://textures/ui/GuiImagePlaceholder.png",
+}
+
+Config.ROLES = {
+	Default = "Generalist",
+	Definitions = {
+		Generalist = { Name = "Generalist", Gather = 1.0, Build = 1.0, Combat = 1.0, Heal = 1.0, Craft = 1.0 },
+		Builder = { Name = "Builder", Gather = 0.9, Build = 1.3, Combat = 0.9, Heal = 0.9, Craft = 1.1 },
+		Hunter = { Name = "Hunter", Gather = 1.0, Build = 0.9, Combat = 1.25, Heal = 0.9, Craft = 1.0 },
+		Gatherer = { Name = "Gatherer", Gather = 1.3, Build = 0.9, Combat = 0.9, Heal = 0.9, Craft = 1.0 },
+		Engineer = { Name = "Engineer", Gather = 1.0, Build = 1.1, Combat = 0.9, Heal = 0.9, Craft = 1.25 },
+		Medic = { Name = "Medic", Gather = 0.9, Build = 0.9, Combat = 0.9, Heal = 1.4, Craft = 1.0 },
+	},
+}
+
+Config.THREAT = {
+	Clamp = { 0, 10 },
+	BasePerMinute = 0.35,
+	BossKill = 2.5,
+	FailedObjective = 1.5,
+}
+
+Config.EVENTS = {
+	MinorCadence = { 180, 300 },
+	MajorCadence = { 420, 540 },
+	PoolMinor = {
+		"MeteorShower",
+		"ToxicFog",
+		"ResourceBoom",
+		"MonsoonFlood",
+	},
+	PoolMajor = {
+		"MonsterSiege",
+		"WormholeRift",
+		"BiomeQuake",
+	},
+}
+
+Config.OBJECTIVES = {
+	MaxConcurrent = 2,
+	DurationSeconds = { 140, 240 },
+	Pool = {
+		{ Id = "RelayRepair", MinMinute = 0 },
+		{ Id = "InfectionPurge", MinMinute = 2 },
+		{ Id = "CrystalHarvest", MinMinute = 3 },
+		{ Id = "LostResearcher", MinMinute = 4 },
+		{ Id = "CommsUplink", MinMinute = 5 },
+		{ Id = "BeastCull", MinMinute = 6 },
+		{ Id = "SupplyHeist", MinMinute = 7 },
+		{ Id = "DamSluice", MinMinute = 8 },
+	},
+}
+
+Config.ENEMIES = {
+	BaseCount = 2,
+	MaxCount = 24,
+	PlayerScale = 1.0,
+	Tables = {
+		ForestCommon = {
+			{ Id = "Wolf", Weight = 1.0 },
+			{ Id = "MutantPlant", Weight = 0.6 },
+			{ Id = "ScavengerBird", Weight = 0.4 },
+		},
+		DesertCommon = {
+			{ Id = "Scorpion", Weight = 1.0 },
+			{ Id = "SandCrawler", Weight = 0.7 },
+			{ Id = "ScavengerBird", Weight = 0.3 },
+		},
+		SwampCommon = {
+			{ Id = "SwampStalker", Weight = 0.8 },
+			{ Id = "MutantPlant", Weight = 0.7 },
+			{ Id = "SwarmLeech", Weight = 0.5 },
+		},
+		TundraCommon = {
+			{ Id = "FrostWolf", Weight = 0.9 },
+			{ Id = "IceCrawler", Weight = 0.6 },
+		},
+		VolcanicCommon = {
+			{ Id = "MagmaHound", Weight = 0.8 },
+			{ Id = "LavaSpitter", Weight = 0.7 },
+		},
+		CrystalCommon = {
+			{ Id = "CrystalBeast", Weight = 0.9 },
+			{ Id = "Shardling", Weight = 0.6 },
+		},
+	},
+}
+
+Config.BIOMES = {
+	Forest = {
+		Weight = 1.0,
+		TimeScaledWeight = -0.2,
+		env = { Temp = 0, Toxin = 0, Wet = 0 },
+		resourceTags = { "Wood", "Plants", "Stone" },
+		enemyTables = { "ForestCommon" },
+	},
+	Desert = {
+		Weight = 0.8,
+		TimeScaledWeight = -0.1,
+		env = { Temp = 1, Toxin = 0, Wet = -1 },
+		resourceTags = { "Stone", "Ore", "Cactus" },
+		enemyTables = { "DesertCommon" },
+	},
+	Swamp = {
+		Weight = 0.7,
+		TimeScaledWeight = 0.15,
+		env = { Temp = 0, Toxin = 1, Wet = 2 },
+		resourceTags = { "Herb", "Reed", "Mud" },
+		enemyTables = { "SwampCommon" },
+	},
+	FrozenTundra = {
+		Weight = 0.6,
+		TimeScaledWeight = 0.25,
+		env = { Temp = -2, Toxin = 0, Wet = 0 },
+		resourceTags = { "Ice", "Stone", "Fur" },
+		enemyTables = { "TundraCommon" },
+	},
+	Volcanic = {
+		Weight = 0.4,
+		TimeScaledWeight = 0.35,
+		env = { Temp = 2, Toxin = 0, Wet = -1 },
+		resourceTags = { "Ore", "Sulfur", "Obsidian" },
+		enemyTables = { "VolcanicCommon" },
+	},
+	CrystalWastes = {
+		Weight = 0.3,
+		TimeScaledWeight = 0.4,
+		env = { Temp = 0, Toxin = 0, Wet = 0 },
+		resourceTags = { "Crystal", "Void", "Alloy" },
+		enemyTables = { "CrystalCommon" },
+	},
+}
+
+Config.RECIPES = {
+	StoneHatchet = {
+		{ Id = "Wood", N = 2 },
+		{ Id = "Stone", N = 1 },
+	},
+	Bow = {
+		{ Id = "Wood", N = 3 },
+		{ Id = "Fiber", N = 2 },
+	},
+	Arrow = {
+		{ Id = "Wood", N = 1 },
+		{ Id = "Stone", N = 1 },
+	},
+	Campfire = {
+		{ Id = "Wood", N = 4 },
+		{ Id = "Stone", N = 2 },
+	},
+}
+
+Config.BUILD = {
+	AllowedTypes = {
+		Wall = true,
+		Floor = true,
+		Ramp = true,
+		Gate = true,
+		Tower = true,
+		Trap = true,
+		Machine = true,
+	},
+	Costs = {
+		Wall = { { Id = "Wood", N = 2 } },
+		Floor = { { Id = "Wood", N = 2 } },
+		Ramp = { { Id = "Wood", N = 3 } },
+		Gate = { { Id = "Wood", N = 4 }, { Id = "Stone", N = 2 } },
+		Tower = { { Id = "Wood", N = 6 }, { Id = "Stone", N = 4 } },
+		Trap = { { Id = "Stone", N = 2 } },
+		Machine = { { Id = "Stone", N = 6 } },
+	},
+}
+
+Config.UI = {
+	UpdateInterval = 0.25,
+}
+
+return Config
