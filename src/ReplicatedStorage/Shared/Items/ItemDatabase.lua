@@ -13,6 +13,7 @@ local raw = {
 	{ Id = "Arrow", Name = "Arrow", StackSize = 99, Tags = { "Ammo" } },
 	{ Id = "Harvester", Name = "Harvester", StackSize = 1, Tags = { "Tool" } },
 	{ Id = "StoneHatchet", Name = "Stone Hatchet", StackSize = 1, Tags = { "Tool" } },
+	{ Id = "StonePickaxe", Name = "Stone Pickaxe", StackSize = 1, Tags = { "Tool" } },
 	{ Id = "Bow", Name = "Bow", StackSize = 1, Tags = { "Weapon" } },
 	{ Id = "Campfire", Name = "Campfire", StackSize = 1, Tags = { "Placeable", "Utility" } },
 	{ Id = "ClothSet", Name = "Cloth Set", StackSize = 1, Tags = { "Armor" } },

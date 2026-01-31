@@ -40,6 +40,8 @@ local tier2Services = {
 	{ name = "ToolService", method = "Init" },
 	{ name = "ArmorService", method = "Init" },
 	{ name = "DayNightService", method = "Init" },
+	{ name = "CraftingService", method = "Init" },
+	{ name = "LootService", method = "Init" },
 	{ name = "EntityAIService", method = "Init" },
 }
 

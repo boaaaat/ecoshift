@@ -18,6 +18,13 @@ Config.avoid_regions_for_structures = true
 Config.use_entity_config_enemies = true
 Config.spawn_folder_name = "GeneratedWorld"
 
+-- STREAMING CONFIG: Dynamic chunk loading around players
+Config.use_streaming = true -- Set to false to use legacy full-world generation
+Config.stream_load_radius = 3 -- Load chunks within this radius (in chunks)
+Config.stream_unload_radius = 5 -- Unload chunks beyond this radius
+Config.stream_update_interval = 0.5 -- How often to check player positions
+Config.stream_unload_delay = 10 -- Seconds before unloading unused chunk
+
 Config.biomes = {
 	Forest = {
 		weight = 1.0,
@@ -49,6 +56,9 @@ Config.biomes = {
 		structure_count = 0.05, -- probability per chunk (0-1)
 		objectives = {  },
 		objective_count = 0.025, -- probability per chunk (0-1)
+		-- Chest spawning config (chests need Common_Chest/Rare_Chest/etc tags in prefabs)
+		chests = { "Common_Chest", "Rare_Chest" }, -- prefab names in StructurePrefabs/Forest
+		chest_count = 0.08, -- probability per chunk (0-1)
 	},
 	--Desert = {
 	--	weight = 0.7,

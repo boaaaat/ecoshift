@@ -137,7 +137,13 @@ local function serverApplyHarvest(player: Player, nodeModel: Model, toolOrNil: T
 
 	-- Read current values
 	local health = getAttr(nodeModel, "Health") or 1
-	local maxH = getAttr(nodeModel, "MaxHealth") or health
+	-- MaxHealth: check attribute first, then use stored _MaxHealth, then default to 100
+	local maxH = getAttr(nodeModel, "MaxHealth") or getAttr(nodeModel, "_MaxHealth")
+	if not maxH then
+		-- First hit - store the initial health as max
+		maxH = health
+		setAttr(nodeModel, "_MaxHealth", maxH)
+	end
 	local weakness = getAttr(nodeModel, "Weakness") or ""
 
 	-- Determine tool data
@@ -145,10 +151,10 @@ local function serverApplyHarvest(player: Player, nodeModel: Model, toolOrNil: T
 	if toolOrNil and toolOrNil:IsA("Tool") then
 		cfg = ToolConfig.Read(toolOrNil)
 	else
-		cfg = { ToolType = "", HarvestDamage = 0, Range = 6, Cooldown = 0.5 }
+		cfg = { ToolType = "", Damage = 0, Range = 6, Cooldown = 0.5, Multiplier = 1 }
 	end
 	cfg.Range = math.max(cfg.Range or 0, 8)
-	cfg.HarvestDamage = math.max(cfg.HarvestDamage or 0, 0)
+	cfg.Damage = math.max(cfg.Damage or 0, 0)
 
 	-- Range and cooldown checks
 	if not withinRange(player, prim, cfg.Range or 6) then return end
@@ -158,21 +164,31 @@ local function serverApplyHarvest(player: Player, nodeModel: Model, toolOrNil: T
 	if t < nextTime then return end
 	lastUse[cdKey] = t + (cfg.Cooldown or 0.5)
 
-	-- If health > 1 then a tool is required (per spec)
+	-- If health > 1 then a tool with damage is required
 	if health > 1 then
-		if weakness ~= "" and cfg.ToolType ~= weakness then
-			return -- wrong tool type
-		end
-		if (cfg.HarvestDamage or 0) <= 0 then
-			return -- tool has no harvest power
+		if (cfg.Damage or 0) <= 0 then
+			return -- tool has no damage
 		end
 	end
 
-	-- Apply damage (hits)
-	local hit = cfg.HarvestDamage
+	-- Apply damage (use universal Damage value)
+	local hit = cfg.Damage
 	if not hit or hit <= 0 then
 		hit = 1
 	end
+	
+	-- DEBUG: Log what we're working with
+	print(string.format("[ResourceService] DEBUG: ToolType='%s', Weakness='%s', Damage=%d, Multiplier=%s", 
+		tostring(cfg.ToolType), tostring(weakness), cfg.Damage or 0, tostring(cfg.Multiplier)))
+	
+	-- Bonus multiplier if tool matches weakness (e.g., Axe vs Tree)
+	-- Any tool can harvest, but matching tools get bonus damage!
+	if weakness ~= "" and cfg.ToolType == weakness then
+		local multiplier = cfg.Multiplier or 1.5
+		print(string.format("[ResourceService] DEBUG: Weakness MATCHED! Applying multiplier %s", tostring(multiplier)))
+		hit = math.floor(hit * multiplier)
+	end
+	
 	local oldHealth = health
 	health = math.max(health - hit, 0)
 	setAttr(nodeModel, "Health", health)
@@ -201,24 +217,42 @@ local function findNearbyNode(player: Player, range: number)
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
 	if not hrp then return nil end
 	local generated = game:GetService("Workspace"):FindFirstChild("GeneratedWorld")
-	local resources = generated and generated:FindFirstChild("Resources")
-	if not resources then return nil end
+	if not generated then return nil end
+	
 	local best = nil
 	local bestDist = range
-	for _, model in ipairs(resources:GetDescendants()) do
-		if model:IsA("Model") then
-			local health = getAttr(model, "Health")
-			local duration = getAttr(model, "Duration") or getAttr(model, "HarvestDuration")
-			if typeof(health) == "number" or typeof(duration) == "number" then
-				local pos = model:GetPivot().Position
-				local dist = (pos - hrp.Position).Magnitude
-				if dist <= bestDist then
-					best = model
-					bestDist = dist
+	
+	-- Helper to check a folder for resource nodes
+	local function searchFolder(folder)
+		if not folder then return end
+		for _, model in ipairs(folder:GetDescendants()) do
+			if model:IsA("Model") then
+				local health = getAttr(model, "Health")
+				local duration = getAttr(model, "Duration") or getAttr(model, "HarvestDuration")
+				if typeof(health) == "number" or typeof(duration) == "number" then
+					local pos = model:GetPivot().Position
+					local dist = (pos - hrp.Position).Magnitude
+					if dist <= bestDist then
+						best = model
+						bestDist = dist
+					end
 				end
 			end
 		end
 	end
+	
+	-- Search top-level Resources folder (legacy/non-streaming)
+	local resources = generated:FindFirstChild("Resources")
+	searchFolder(resources)
+	
+	-- Search chunk folders (streaming mode: GeneratedWorld/Chunk_X,Z/Resources)
+	for _, child in ipairs(generated:GetChildren()) do
+		if child:IsA("Folder") and child.Name:match("^Chunk_") then
+			local chunkResources = child:FindFirstChild("Resources")
+			searchFolder(chunkResources)
+		end
+	end
+	
 	return best
 end
 
