@@ -27,6 +27,7 @@ Config.RemoteNames = {
 	GameStateUpdate = "GameStateUpdate",
 	DropItem = "DropItem",
 	TimeUpdate = "TimeUpdate",
+	HarvestFeedback = "HarvestFeedback",
 }
 
 Config.BIOME_DEFAULT = "Forest"
@@ -219,7 +220,7 @@ Config.RECIPES = {
 	},
 	Bow = {
 		{ Id = "Wood", N = 3 },
-		{ Id = "Fiber", N = 2 },
+		{ Id = "Reed", N = 2 },
 	},
 	Arrow = {
 		{ Id = "Wood", N = 1 },

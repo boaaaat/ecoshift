@@ -7,6 +7,14 @@ local Remotes = ReplicatedStorage:WaitForChild("Remotes")
 local InteractRE = Remotes:WaitForChild("ResourceInteract")
 local CarryRE = Remotes:WaitForChild("ResourceCarry")
 
+-- HarvestFeedback remote for damage numbers/health bars
+local HarvestFeedbackRE = Remotes:FindFirstChild("HarvestFeedback")
+if not HarvestFeedbackRE then
+	HarvestFeedbackRE = Instance.new("RemoteEvent")
+	HarvestFeedbackRE.Name = "HarvestFeedback"
+	HarvestFeedbackRE.Parent = Remotes
+end
+
 local ToolConfig = require(ReplicatedStorage.Modules.ToolConfig)
 local ItemDropService = require(script.Parent.Services.ItemDropService)
 
@@ -165,8 +173,22 @@ local function serverApplyHarvest(player: Player, nodeModel: Model, toolOrNil: T
 	if not hit or hit <= 0 then
 		hit = 1
 	end
+	local oldHealth = health
 	health = math.max(health - hit, 0)
 	setAttr(nodeModel, "Health", health)
+
+	-- Send feedback to client for damage numbers/health bar
+	local feedbackPosition = prim and prim.Position or nodeModel:GetPivot().Position
+	print(string.format("[ResourceService] Sending HarvestFeedback: damage=%d health=%d/%d destroyed=%s", 
+		hit, health, maxH, tostring(health <= 0)))
+	HarvestFeedbackRE:FireClient(player, {
+		Node = nodeModel,
+		Position = feedbackPosition,
+		Damage = hit,
+		Health = health,
+		MaxHealth = maxH,
+		Destroyed = health <= 0,
+	})
 
 	-- Destroy if depleted
 	if health <= 0 then

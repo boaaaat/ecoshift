@@ -7,6 +7,8 @@ local PromptQueueService = require(script.Parent.PromptQueueService)
 
 local ResourceNodeService = {}
 ResourceNodeService._bound = setmetatable({}, { __mode = "k" }) -- [Instance] = true
+ResourceNodeService._attachedCount = 0
+ResourceNodeService._lastReport = 0
 
 local function getPrimary(instance)
 	if instance:IsA("BasePart") then return instance end
@@ -76,7 +78,15 @@ local function attachDurationPrompt(instance)
 	end
 	prompt.MaxActivationDistance = 10
 	prompt.HoldDuration = duration
-	print(string.format("[ResourceNodeService] Prompt attached to %s (duration %.2fs)", instance.Name, duration))
+	ResourceNodeService._attachedCount += 1
+	local now = os.clock()
+	if (now - ResourceNodeService._lastReport) >= 1 then
+		if ResourceNodeService._attachedCount > 0 then
+			print(string.format("[ResourceNodeService] Prompt attached (x%d)", ResourceNodeService._attachedCount))
+			ResourceNodeService._attachedCount = 0
+		end
+		ResourceNodeService._lastReport = now
+	end
 	prompt.Triggered:Connect(function(plr)
 		print(string.format("[ResourceNodeService] Prompt triggered by %s on %s", plr.Name, instance.Name))
 		local itemId = getAttr(instance, "DropItemId") or getAttr(instance, "ItemId") or instance.Name
