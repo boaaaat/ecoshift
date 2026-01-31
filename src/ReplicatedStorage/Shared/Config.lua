@@ -26,6 +26,7 @@ Config.RemoteNames = {
 	RoleSelect = "RoleSelect",
 	GameStateUpdate = "GameStateUpdate",
 	DropItem = "DropItem",
+	ChestEvent = "ChestEvent",
 	TimeUpdate = "TimeUpdate",
 	HarvestFeedback = "HarvestFeedback",
 }
@@ -82,6 +83,18 @@ Config.UI = {
 -- OPTIMIZED: Increased prompt rate for faster resource binding
 Config.PROMPTS = {
 	MaxPerSecond = 500,
+}
+
+Config.LOOT = {
+	DefaultTable = "Default",
+	DropSpread = 4,
+	DropHeight = 2,
+	TierWeightMult = {
+		[1] = 1.0,
+		[2] = 1.35,
+		[3] = 1.75,
+		[4] = 2.2,
+	},
 }
 
 Config.ROLES = {

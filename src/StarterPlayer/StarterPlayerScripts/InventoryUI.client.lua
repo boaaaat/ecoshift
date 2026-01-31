@@ -244,6 +244,8 @@ tooltipHint.Parent = tooltip
 local function createSlot(parent, x, y, slotType, index)
 	local slot = Instance.new("Frame")
 	slot.Name = slotType .. "_" .. index
+	slot:SetAttribute("SlotType", slotType)
+	slot:SetAttribute("SlotIndex", index)
 	slot.Size = UDim2.new(0, SLOT_SIZE, 0, SLOT_SIZE)
 	slot.Position = UDim2.new(0, x, 0, y)
 	slot.BackgroundColor3 = COLORS.SlotEmpty

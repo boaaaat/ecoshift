@@ -8,10 +8,9 @@ Config.chunk_size = 240
 Config.max_chunks = nil -- set to a number to cap how many chunks generate
 Config.biome_noise_scale = 0.0016
 Config.time_scale_seconds = 900
--- OPTIMIZED: Increased ops_per_yield for faster generation (was 40)
-Config.ops_per_yield = 200
+Config.ops_per_yield = 100
 -- OPTIMIZED: Reduced step delay
-Config.step_delay = 0
+Config.step_delay = .1
 Config.region_padding = 8
 Config.structure_padding = 6
 Config.objective_padding = 6
@@ -26,135 +25,135 @@ Config.biomes = {
 		regions = {
 			{
 				name = "ForestClearing",
-				size = Vector2.new(220, 220),
-				resources = { "Tree", "Rock" },
+				size = Vector2.new(100, 100),
+				resources = { Tree = 1, Mushroom = 2, Reed = 3 },
 				resource_count = { min = 16, max = 28 },
-				props = { "Bush", "Flower" },
+				props = { "Bush", "FallenLog" },
 				prop_count = { min = 10, max = 18 },
-				enemies = { "Slime" },
+				enemies = { "Wolf" },
 				enemy_count = { min = 0, max = 2 },
 			},
 			{
 				name = "ThickGrove",
-				size = Vector2.new(260, 200),
-				resources = { "Tree", "Rock" },
+				size = Vector2.new(80, 80),
+				resources = { Mud = 3, Stone = 1, Mushroom = 2 },
 				resource_count = { min = 22, max = 36 },
-				props = { "Mushroom", "Bush" },
+				props = { "RockSmall", "Stump" },
 				prop_count = { min = 8, max = 14 },
-				enemies = { "Slime" },
+				enemies = { "Wolf" },
 				enemy_count = { min = 0, max = 2 },
 			},
 		},
-		structures = { "Cabin", "Watchtower" },
-		structure_count = 0.12, -- probability per chunk (0-1)
-		objectives = { "AncientTotem" },
-		objective_count = 0.06, -- probability per chunk (0-1)
+		structures = { "CabinRuin", "WatchTower" },
+		structure_count = 0.05, -- probability per chunk (0-1)
+		objectives = {  },
+		objective_count = 0.025, -- probability per chunk (0-1)
 	},
-	Desert = {
-		weight = 0.7,
-		timeScaledWeight = -0.15,
-		region_count = { min = 1, max = 2 },
-		regions = {
-			{
-				name = "Dunes",
-				size = Vector2.new(240, 240),
-				resources = { "Cactus", "Stone" },
-				resource_count = { min = 10, max = 18 },
-				props = { "Bone", "Shrub" },
-				prop_count = { min = 6, max = 12 },
-				enemies = { "Scorpion" },
-				enemy_count = { min = 0, max = 2 },
-			},
-		},
-		structures = { "Ruins", "Outpost" },
-		structure_count = 0.10,
-		objectives = { "DesertObelisk" },
-		objective_count = 0.05,
-	},
-	FrozenTundra = {
-		weight = 0.35,
-		timeScaledWeight = 0.45,
-		region_count = { min = 1, max = 2 },
-		regions = {
-			{
-				name = "FrozenField",
-				size = Vector2.new(230, 230),
-				resources = { "IceCrystal", "Stone" },
-				resource_count = { min = 12, max = 20 },
-				props = { "IceShard" },
-				prop_count = { min = 6, max = 12 },
-				enemies = { "FrostSpirit" },
-				enemy_count = { min = 0, max = 2 },
-			},
-		},
-		structures = { "FrozenCamp" },
-		structure_count = 0.08,
-		objectives = { "IceCore" },
-		objective_count = 0.04,
-	},
-	Swamp = {
-		weight = 0.5,
-		timeScaledWeight = 0.2,
-		region_count = { min = 1, max = 2 },
-		regions = {
-			{
-				name = "Bog",
-				size = Vector2.new(230, 230),
-				resources = { "Reed", "Mushroom" },
-				resource_count = { min = 12, max = 20 },
-				props = { "Stump", "Vine" },
-				prop_count = { min = 6, max = 12 },
-				enemies = { "SwarmLeech" },
-				enemy_count = { min = 0, max = 2 },
-			},
-		},
-		structures = { "SwampHut" },
-		structure_count = 0.10,
-		objectives = { "SwampRelic" },
-		objective_count = 0.05,
-	},
-	Volcanic = {
-		weight = 0.3,
-		timeScaledWeight = 0.4,
-		region_count = { min = 1, max = 2 },
-		regions = {
-			{
-				name = "LavaField",
-				size = Vector2.new(240, 220),
-				resources = { "Obsidian", "Sulfur" },
-				resource_count = { min = 10, max = 18 },
-				props = { "Basalt", "Ash" },
-				prop_count = { min = 6, max = 12 },
-				enemies = { "MagmaHound" },
-				enemy_count = { min = 0, max = 2 },
-			},
-		},
-		structures = { "LavaForge" },
-		structure_count = 0.07,
-		objectives = { "VolcanicCore" },
-		objective_count = 0.03,
-	},
-	CrystalWastes = {
-		weight = 0.25,
-		timeScaledWeight = 0.5,
-		region_count = { min = 1, max = 2 },
-		regions = {
-			{
-				name = "CrystalField",
-				size = Vector2.new(230, 230),
-				resources = { "CrystalShard", "VoidQuartz" },
-				resource_count = { min = 10, max = 18 },
-				props = { "Prism", "Spire" },
-				prop_count = { min = 6, max = 12 },
-				enemies = { "Shardling" },
-				enemy_count = { min = 0, max = 2 },
-			},
-		},
-		structures = { "CrystalAltar" },
-		structure_count = 0.06,
-		objectives = { "PrismCore" },
-		objective_count = 0.03,
-	},
+	--Desert = {
+	--	weight = 0.7,
+	--	timeScaledWeight = -0.15,
+	--	region_count = { min = 1, max = 2 },
+	--	regions = {
+	--		{
+	--			name = "Dunes",
+	--			size = Vector2.new(240, 240),
+	--			resources = { "Cactus", "Stone" },
+	--			resource_count = { min = 10, max = 18 },
+	--			props = { "Bone", "Shrub" },
+	--			prop_count = { min = 6, max = 12 },
+	--			enemies = { "Scorpion" },
+	--			enemy_count = { min = 0, max = 2 },
+	--		},
+	--	},
+	--	structures = { "Ruins", "Outpost" },
+	--	structure_count = 0.10,
+	--	objectives = { "DesertObelisk" },
+	--	objective_count = 0.05,
+	--},
+	--FrozenTundra = {
+	--	weight = 0.35,
+	--	timeScaledWeight = 0.45,
+	--	region_count = { min = 1, max = 2 },
+	--	regions = {
+	--		{
+	--			name = "FrozenField",
+	--			size = Vector2.new(230, 230),
+	--			resources = { "IceCrystal", "Stone" },
+	--			resource_count = { min = 12, max = 20 },
+	--			props = { "IceShard" },
+	--			prop_count = { min = 6, max = 12 },
+	--			enemies = { "FrostSpirit" },
+	--			enemy_count = { min = 0, max = 2 },
+	--		},
+	--	},
+	--	structures = { "FrozenCamp" },
+	--	structure_count = 0.08,
+	--	objectives = { "IceCore" },
+	--	objective_count = 0.04,
+	--},
+	--Swamp = {
+	--	weight = 0.5,
+	--	timeScaledWeight = 0.2,
+	--	region_count = { min = 1, max = 2 },
+	--	regions = {
+	--		{
+	--			name = "Bog",
+	--			size = Vector2.new(230, 230),
+	--			resources = { "Reed", "Mushroom" },
+	--			resource_count = { min = 12, max = 20 },
+	--			props = { "Stump", "Vine" },
+	--			prop_count = { min = 6, max = 12 },
+	--			enemies = { "SwarmLeech" },
+	--			enemy_count = { min = 0, max = 2 },
+	--		},
+	--	},
+	--	structures = { "SwampHut" },
+	--	structure_count = 0.10,
+	--	objectives = { "SwampRelic" },
+	--	objective_count = 0.05,
+	--},
+	--Volcanic = {
+	--	weight = 0.3,
+	--	timeScaledWeight = 0.4,
+	--	region_count = { min = 1, max = 2 },
+	--	regions = {
+	--		{
+	--			name = "LavaField",
+	--			size = Vector2.new(240, 220),
+	--			resources = { "Obsidian", "Sulfur" },
+	--			resource_count = { min = 10, max = 18 },
+	--			props = { "Basalt", "Ash" },
+	--			prop_count = { min = 6, max = 12 },
+	--			enemies = { "MagmaHound" },
+	--			enemy_count = { min = 0, max = 2 },
+	--		},
+	--	},
+	--	structures = { "LavaForge" },
+	--	structure_count = 0.07,
+	--	objectives = { "VolcanicCore" },
+	--	objective_count = 0.03,
+	--},
+	--CrystalWastes = {
+	--	weight = 0.25,
+	--	timeScaledWeight = 0.5,
+	--	region_count = { min = 1, max = 2 },
+	--	regions = {
+	--		{
+	--			name = "CrystalField",
+	--			size = Vector2.new(230, 230),
+	--			resources = { "CrystalShard", "VoidQuartz" },
+	--			resource_count = { min = 10, max = 18 },
+	--			props = { "Prism", "Spire" },
+	--			prop_count = { min = 6, max = 12 },
+	--			enemies = { "Shardling" },
+	--			enemy_count = { min = 0, max = 2 },
+	--		},
+	--	},
+	--	structures = { "CrystalAltar" },
+	--	structure_count = 0.06,
+	--	objectives = { "PrismCore" },
+	--	objective_count = 0.03,
+	--},
 }
 
 return Config
