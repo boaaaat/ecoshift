@@ -3,6 +3,23 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local StarterGui = game:GetService("StarterGui")
+
+-- Disable default Roblox backpack/toolbar (we use custom inventory UI)
+local function disableDefaultUI()
+	local success, err = pcall(function()
+		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
+	end)
+	if not success then
+		-- Retry after a short delay (sometimes fails on first frame)
+		task.delay(0.5, function()
+			pcall(function()
+				StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
+			end)
+		end)
+	end
+end
+disableDefaultUI()
 
 -- OPTIMIZED: Defer config loading to not block script start
 local Config, Util

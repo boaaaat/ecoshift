@@ -232,6 +232,10 @@ Config.RECIPES = {
 		{ Id = "Wood", N = 2 },
 		{ Id = "Stone", N = 1 },
 	},
+	StonePickaxe = {
+		{ Id = "Wood", N = 2 },
+		{ Id = "Stone", N = 2 },
+	},
 	Bow = {
 		{ Id = "Wood", N = 3 },
 		{ Id = "Reed", N = 2 },
