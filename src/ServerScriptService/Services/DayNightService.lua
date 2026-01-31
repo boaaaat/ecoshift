@@ -230,9 +230,9 @@ function DayNightService:Init()
 	RunService.Heartbeat:Connect(function(dt)
 		self:_tick(dt)
 		
-		-- Broadcast time update every 5 seconds
+		-- Broadcast time update every 1 second for smooth display
 		lastBroadcast = lastBroadcast + dt
-		if lastBroadcast >= 5 then
+		if lastBroadcast >= 1 then
 			lastBroadcast = 0
 			self:_broadcast()
 		end

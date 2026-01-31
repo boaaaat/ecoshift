@@ -115,11 +115,11 @@ _G.Ecoshift.SpawnEnemyById = function(id, anchor)
 	if not prefab then return end
 	local anchorPos = anchor:IsA("Attachment") and anchor.WorldPosition or anchor.Position
 	local newEnemy = prefab:Clone()
-	newEnemy.Name = id .. \"_\" .. math.random(1000, 9999)
+	newEnemy.Name = id .. "_" .. math.random(1000, 9999)
 	local safeCFrame = getSafeSpawnPosition(anchorPos)
 	newEnemy:PivotTo(safeCFrame)
-	local enemiesFolder = Workspace:FindFirstChild(\"Enemies\") or Instance.new(\"Folder\")
-	enemiesFolder.Name = \"Enemies\"
+	local enemiesFolder = Workspace:FindFirstChild("Enemies") or Instance.new("Folder")
+	enemiesFolder.Name = "Enemies"
 	enemiesFolder.Parent = Workspace
 	newEnemy.Parent = enemiesFolder
 	local rootPart = newEnemy.PrimaryPart

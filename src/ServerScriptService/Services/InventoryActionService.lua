@@ -25,24 +25,31 @@ function InventoryActionService:Init()
 			local slotIndex = payload.SlotIndex
 			print(string.format("[InventoryAction] Equip request %s slot %s[%s]", plr.Name, tostring(slotType), tostring(slotIndex)))
 			if slotType ~= "Hotbar" or typeof(slotIndex) ~= "number" then return end
-			local inv = InventoryService:GetAll(plr)
-			local slot = inv and inv.Hotbar and inv.Hotbar[slotIndex]
-			if not slot then
-				warn(string.format("[InventoryAction] No hotbar slot %s for %s", tostring(slotIndex), plr.Name))
-				return
-			end
-			if not slot then return end
-			local item = ItemDatabase:Get(slot.Id)
-			if not item or not item:HasTag("Tool") then
-				warn(string.format("[InventoryAction] Slot %s is not a tool for %s", tostring(slotIndex), plr.Name))
-				return
-			end
+			
 			local char = plr.Character
 			local hum = char and char:FindFirstChildOfClass("Humanoid")
 			if not hum then
 				warn(string.format("[InventoryAction] No Humanoid for %s", plr.Name))
 				return
 			end
+			
+			local inv = InventoryService:GetAll(plr)
+			local slot = inv and inv.Hotbar and inv.Hotbar[slotIndex]
+			
+			-- If clicking an empty slot or non-tool slot, unequip current tool
+			if not slot then
+				print(string.format("[InventoryAction] Empty slot %s clicked, unequipping for %s", tostring(slotIndex), plr.Name))
+				hum:UnequipTools()
+				return
+			end
+			
+			local item = ItemDatabase:Get(slot.Id)
+			if not item or not item:HasTag("Tool") then
+				print(string.format("[InventoryAction] Slot %s is not a tool, unequipping for %s", tostring(slotIndex), plr.Name))
+				hum:UnequipTools()
+				return
+			end
+			
 			local backpack = plr:FindFirstChildOfClass("Backpack")
 			local tool = (char and char:FindFirstChild(slot.Id)) or (backpack and backpack:FindFirstChild(slot.Id))
 			if not tool then

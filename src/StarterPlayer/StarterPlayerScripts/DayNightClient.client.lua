@@ -60,11 +60,13 @@ local function createTimeUI()
 	
 	local frame = Instance.new("Frame")
 	frame.Name = "TimeDisplay"
-	frame.Size = UDim2.new(0, 120, 0, 40)
-	frame.Position = UDim2.new(0, 10, 0, 10)
+	frame.Size = UDim2.new(0, 140, 0, 60)
+	frame.Position = UDim2.new(0.5, -70, 0, 10)
+	frame.AnchorPoint = Vector2.new(0, 0)
 	frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 	frame.BackgroundTransparency = 0.4
 	frame.BorderSizePixel = 0
+	frame.ClipsDescendants = false
 	frame.Parent = screenGui
 	
 	local corner = Instance.new("UICorner")
@@ -74,7 +76,8 @@ local function createTimeUI()
 	local icon = Instance.new("ImageLabel")
 	icon.Name = "Icon"
 	icon.Size = UDim2.new(0, 24, 0, 24)
-	icon.Position = UDim2.new(0, 8, 0.5, -12)
+	icon.Position = UDim2.new(0.5, 0, 0, 6)
+	icon.AnchorPoint = Vector2.new(0.5, 0)
 	icon.BackgroundTransparency = 1
 	icon.Image = "rbxassetid://6031079158" -- Sun icon
 	icon.ImageColor3 = Color3.fromRGB(255, 220, 100)
@@ -82,26 +85,28 @@ local function createTimeUI()
 	
 	local timeLabel = Instance.new("TextLabel")
 	timeLabel.Name = "TimeLabel"
-	timeLabel.Size = UDim2.new(1, -40, 1, 0)
-	timeLabel.Position = UDim2.new(0, 36, 0, 0)
+	timeLabel.Size = UDim2.new(1, -10, 0, 18)
+	timeLabel.Position = UDim2.new(0.5, 0, 0, 32)
+	timeLabel.AnchorPoint = Vector2.new(0.5, 0)
 	timeLabel.BackgroundTransparency = 1
 	timeLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	timeLabel.TextSize = 18
+	timeLabel.TextSize = 14
 	timeLabel.Font = Enum.Font.GothamBold
 	timeLabel.Text = "6:00 AM"
-	timeLabel.TextXAlignment = Enum.TextXAlignment.Left
+	timeLabel.TextXAlignment = Enum.TextXAlignment.Center
 	timeLabel.Parent = frame
 	
 	local phaseLabel = Instance.new("TextLabel")
 	phaseLabel.Name = "PhaseLabel"
-	phaseLabel.Size = UDim2.new(1, -40, 0, 14)
-	phaseLabel.Position = UDim2.new(0, 36, 1, -16)
+	phaseLabel.Size = UDim2.new(1, -10, 0, 12)
+	phaseLabel.Position = UDim2.new(0.5, 0, 0, 46)
+	phaseLabel.AnchorPoint = Vector2.new(0.5, 0)
 	phaseLabel.BackgroundTransparency = 1
 	phaseLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-	phaseLabel.TextSize = 12
+	phaseLabel.TextSize = 10
 	phaseLabel.Font = Enum.Font.Gotham
 	phaseLabel.Text = "Day"
-	phaseLabel.TextXAlignment = Enum.TextXAlignment.Left
+	phaseLabel.TextXAlignment = Enum.TextXAlignment.Center
 	phaseLabel.Parent = frame
 	
 	screenGui.Parent = playerGui

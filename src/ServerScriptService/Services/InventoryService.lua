@@ -284,18 +284,49 @@ function InventoryService:OnChanged(callback)
 end
 
 function InventoryService:Move(plr, fromType, fromIndex, toType, toIndex)
-	if not validSlot(fromType, fromIndex) or not validSlot(toType, toIndex) then return false end
+	print(string.format("[InventoryService] Move request: %s[%s] -> %s[%s]", tostring(fromType), tostring(fromIndex), tostring(toType), tostring(toIndex)))
+	
+	if not validSlot(fromType, fromIndex) then
+		warn("[InventoryService] Invalid fromSlot:", fromType, fromIndex)
+		return false
+	end
+	if not validSlot(toType, toIndex) then
+		warn("[InventoryService] Invalid toSlot:", toType, toIndex)
+		return false
+	end
+	
 	local inv = getInv(plr)
 	local fromSlot = getSlot(inv, fromType, fromIndex)
-	if not fromSlot then return false end
-	if toType == "Armor" and not isArmor(fromSlot.Id) then return false end
+	if not fromSlot then
+		warn("[InventoryService] fromSlot is empty")
+		return false
+	end
+	
+	print(string.format("[InventoryService] Moving item: %s x%d", fromSlot.Id, fromSlot.N))
+	
+	if toType == "Armor" and not isArmor(fromSlot.Id) then
+		warn("[InventoryService] Cannot move non-armor to armor slot")
+		return false
+	end
+	
 	local toSlot = getSlot(inv, toType, toIndex)
 	-- If swapping into armor, ensure target is armor or empty
 	if fromType == "Armor" and toSlot and not isArmor(toSlot.Id) then
+		warn("[InventoryService] Cannot swap non-armor into armor slot")
 		return false
 	end
-	setSlot(inv, fromType, fromIndex, toSlot)
-	setSlot(inv, toType, toIndex, fromSlot)
+	
+	-- Clone slots to avoid reference issues
+	local fromClone = cloneSlot(fromSlot)
+	local toClone = cloneSlot(toSlot)
+	
+	setSlot(inv, fromType, fromIndex, toClone)
+	setSlot(inv, toType, toIndex, fromClone)
+	
+	print(string.format("[InventoryService] Move complete. From now has: %s, To now has: %s",
+		toClone and (toClone.Id .. " x" .. toClone.N) or "empty",
+		fromClone and (fromClone.Id .. " x" .. fromClone.N) or "empty"))
+	
 	self:Sync(plr)
 	return true
 end
