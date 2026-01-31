@@ -387,6 +387,12 @@ function ChunkStreamingService:_scatterInChunk(biomeName, chunkCenter, regionDef
 	local resourcePrefabs = self:_resolvePrefabsWeighted("ResourcePrefabs", biomeName, regionDef.resources)
 	local resourceCount = randomInRange(rng, regionDef.resource_count or regionDef.resourceCount) or 5
 	
+	-- DEBUG: Log what resources are being resolved
+	print("[ChunkStreaming] Resources for", biomeName, ":", #resourcePrefabs, "prefabs found")
+	for i, entry in ipairs(resourcePrefabs) do
+		print("  ->", entry.Prefab.Name, "weight:", entry.Weight)
+	end
+	
 	for _ = 1, resourceCount do
 		local prefab = self:_chooseWeighted(resourcePrefabs, rng)
 		if prefab then
