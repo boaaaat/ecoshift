@@ -252,4 +252,20 @@ function LootService:Init()
 	end
 end
 
+function LootService:RescanChests()
+	for tag in pairs(CHEST_TAGS) do
+		for _, inst in ipairs(CollectionService:GetTagged(tag)) do
+			self:_bindChest(inst)
+		end
+	end
+end
+
+function LootService:RescanMonsters()
+	for tag in pairs(MONSTER_TAGS) do
+		for _, inst in ipairs(CollectionService:GetTagged(tag)) do
+			self:_bindMonster(inst)
+		end
+	end
+end
+
 return LootService
