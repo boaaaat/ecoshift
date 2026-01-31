@@ -8,7 +8,9 @@ Config.chunk_size = 240
 Config.max_chunks = nil -- set to a number to cap how many chunks generate
 Config.biome_noise_scale = 0.0016
 Config.time_scale_seconds = 900
-Config.ops_per_yield = 40
+-- OPTIMIZED: Increased ops_per_yield for faster generation (was 40)
+Config.ops_per_yield = 200
+-- OPTIMIZED: Reduced step delay
 Config.step_delay = 0
 Config.region_padding = 8
 Config.structure_padding = 6

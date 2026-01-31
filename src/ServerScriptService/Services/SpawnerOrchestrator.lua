@@ -23,21 +23,27 @@ end
 
 function SpawnerOrchestrator:Bind()
 	self._nextTime = os.clock() + self._period
-	RunService.Heartbeat:Connect(function()
-		local now = os.clock()
-		if now < self._nextTime then return end
-		self._nextTime = now + self._period
+	-- OPTIMIZED: Use task.spawn with sleep instead of Heartbeat
+	task.spawn(function()
+		while true do
+			local now = os.clock()
+			if now >= self._nextTime then
+				self._nextTime = now + self._period
 
-		local cb = getCallback()
-		if not cb then return end
-
-		local wave = SpawnService:ComputeEnemyWave()
-		if #wave == 0 then return end
-		local points = SpawnService:GetSpawnPoints()
-		if #points == 0 then return end
-
-		-- fire user callback (safe pcall)
-		pcall(function() cb(wave, points) end)
+				local cb = getCallback()
+				if cb then
+					local wave = SpawnService:ComputeEnemyWave()
+					if #wave > 0 then
+						local points = SpawnService:GetSpawnPoints()
+						if #points > 0 then
+							-- fire user callback (safe pcall)
+							pcall(function() cb(wave, points) end)
+						end
+					end
+				end
+			end
+			task.wait(1) -- Check once per second instead of every frame
+		end
 	end)
 end
 

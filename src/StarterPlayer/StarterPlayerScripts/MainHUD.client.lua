@@ -8,13 +8,15 @@ local Util = require(ReplicatedStorage.Shared.Util)
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
-local rProfile = Util.GetRemote(remotesFolder, Config.RemoteNames.ProfileUpdate)
-local rRole = Util.GetRemote(remotesFolder, Config.RemoteNames.RoleUpdate)
-local rRoleSelect = Util.GetRemote(remotesFolder, Config.RemoteNames.RoleSelect)
-local rGame = Util.GetRemote(remotesFolder, Config.RemoteNames.GameStateUpdate)
-local rEvent = Util.GetRemote(remotesFolder, Config.RemoteNames.EventBroadcast)
-local rObjective = Util.GetRemote(remotesFolder, Config.RemoteNames.ObjectiveUpdate)
+-- OPTIMIZED: Try immediate lookup first, use shorter timeout
+local remotesFolder = Util.GetDescendant(Config.Paths.Remotes) 
+	or Util.WaitForDescendant(Config.Paths.Remotes, 5)
+local rProfile = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.ProfileUpdate)
+local rRole = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.RoleUpdate)
+local rRoleSelect = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.RoleSelect)
+local rGame = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.GameStateUpdate)
+local rEvent = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.EventBroadcast)
+local rObjective = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.ObjectiveUpdate)
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "EcoshiftHUD"

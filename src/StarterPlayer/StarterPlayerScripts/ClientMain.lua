@@ -1,16 +1,31 @@
 -- ClientMain.client.lua
+-- OPTIMIZED: Non-blocking initialization
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
-local Config = require(ReplicatedStorage.Shared.Config)
-local Util = require(ReplicatedStorage.Shared.Util)
+-- OPTIMIZED: Defer config loading to not block script start
+local Config, Util
+task.spawn(function()
+	Config = require(ReplicatedStorage.Shared.Config)
+	Util = require(ReplicatedStorage.Shared.Util)
+end)
 
-local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
-local rBiome = Util.GetRemote(remotesFolder, Config.RemoteNames.BiomeChanged)
-local rEvent = Util.GetRemote(remotesFolder, Config.RemoteNames.EventBroadcast)
-local rObjective = Util.GetRemote(remotesFolder, Config.RemoteNames.ObjectiveUpdate)
-local rPing = Util.GetRemote(remotesFolder, Config.RemoteNames.Ping)
+-- Wait for modules to load (usually instant)
+while not Config or not Util do
+	task.wait()
+end
+
+-- OPTIMIZED: Try immediate lookup before waiting
+local remotesFolder = Util.GetDescendant(Config.Paths.Remotes)
+if not remotesFolder then
+	remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 5)
+end
+
+local rBiome = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.BiomeChanged)
+local rEvent = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.EventBroadcast)
+local rObjective = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.ObjectiveUpdate)
+local rPing = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.Ping)
 
 -- SAFE HOOKS: we don't create UI; we just call hooks if present
 local Hooks = {
@@ -49,8 +64,9 @@ end
 
 -- latency keepalive (optional)
 if rPing then
-	task.spawn(function()
-		while task.wait(10) do
+	task.defer(function()
+		while true do
+			task.wait(10)
 			pcall(function() rPing:FireServer(workspace:GetServerTimeNow()) end)
 		end
 	end)

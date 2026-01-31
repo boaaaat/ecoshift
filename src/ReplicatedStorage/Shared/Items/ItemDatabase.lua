@@ -18,13 +18,27 @@ local raw = {
 	{ Id = "Meal_Stew", Name = "Stew", StackSize = 20, Tags = { "Consumable" } },
 }
 
+-- OPTIMIZED: Pre-build lookup table for O(1) access
+local rawLookup = {}
+for _, def in ipairs(raw) do
+	rawLookup[def.Id] = def
+end
+
 local cache = {}
+-- OPTIMIZED: Cache ItemIcons folder reference
+local _itemIconsFolder = nil
+local function getItemIconsFolder()
+	if _itemIconsFolder == nil then
+		_itemIconsFolder = ReplicatedStorage:FindFirstChild("ItemIcons") or false
+	end
+	return _itemIconsFolder
+end
 
 local function resolveIcon(def)
 	if def.Icon and def.Icon ~= "" then
 		return def.Icon
 	end
-	local folder = ReplicatedStorage:FindFirstChild("ItemIcons")
+	local folder = getItemIconsFolder()
 	if not folder then return nil end
 	local node = folder:FindFirstChild(def.Id)
 	if not node then return nil end
@@ -47,20 +61,20 @@ end
 function ItemDatabase:Get(id)
 	if not id then return nil end
 	if cache[id] then return cache[id] end
-	for _, def in ipairs(raw) do
-		if def.Id == id then
-			local icon = resolveIcon(def)
-			local item = Item.new({
-				Id = def.Id,
-				Name = def.Name,
-				StackSize = def.StackSize,
-				Tags = def.Tags,
-				Icon = icon,
-				IconColor = def.IconColor,
-			})
-			cache[id] = item
-			return item
-		end
+	-- OPTIMIZED: O(1) lookup instead of O(n) iteration
+	local def = rawLookup[id]
+	if def then
+		local icon = resolveIcon(def)
+		local item = Item.new({
+			Id = def.Id,
+			Name = def.Name,
+			StackSize = def.StackSize,
+			Tags = def.Tags,
+			Icon = icon,
+			IconColor = def.IconColor,
+		})
+		cache[id] = item
+		return item
 	end
 	return nil
 end
@@ -83,6 +97,7 @@ end
 function ItemDatabase:Define(def)
 	if type(def) ~= "table" or not def.Id then return end
 	raw[#raw + 1] = def
+	rawLookup[def.Id] = def -- OPTIMIZED: Update lookup table
 	cache[def.Id] = nil
 end
 

@@ -128,11 +128,15 @@ function BiomeService:Init()
 			table.insert(_G.Ecoshift.BiomeChangedCallbacks, cb)
 		end
 	end
-	RunService.Heartbeat:Connect(function()
-		if os.clock() >= self._nextShift then
-			local nextBiome = self:_pickNext()
-			self:SetCurrent(nextBiome, "Timer")
-			self:_scheduleNext()
+	-- OPTIMIZED: Use task.spawn with sleep instead of Heartbeat to reduce per-frame overhead
+	task.spawn(function()
+		while true do
+			if os.clock() >= self._nextShift then
+				local nextBiome = self:_pickNext()
+				self:SetCurrent(nextBiome, "Timer")
+				self:_scheduleNext()
+			end
+			task.wait(1) -- Check once per second instead of every frame
 		end
 	end)
 end

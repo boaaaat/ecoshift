@@ -11,8 +11,10 @@ local Util = require(ReplicatedStorage.Shared.Util)
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
-local rFeedback = Util.GetRemote(remotesFolder, Config.RemoteNames.HarvestFeedback)
+-- OPTIMIZED: Try immediate lookup first, use shorter timeout
+local remotesFolder = Util.GetDescendant(Config.Paths.Remotes) 
+	or Util.WaitForDescendant(Config.Paths.Remotes, 5)
+local rFeedback = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.HarvestFeedback)
 
 -- UI Constants
 local COLORS = {

@@ -1,69 +1,124 @@
 -- ServerMain.server.lua
+-- OPTIMIZED: Parallel initialization with priority tiers
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
-local ThreatService = require(script.Parent.Services.ThreatService)
-local EventService = require(script.Parent.Services.EventService)
-local ObjectiveService = require(script.Parent.Services.ObjectiveService)
-local SpawnService = require(script.Parent.Services.SpawnService)
-local CombatService = require(script.Parent.Services.CombatService)
-local BuildService = require(script.Parent.Services.BuildService)
-local InteractService = require(script.Parent.Services.InteractService)
-local SpawnerOrchestrator = require(script.Parent.Services.SpawnerOrchestrator)
-local StatusService = require(script.Parent.Services.StatusService)
-local RewardsObserver = require(script.Parent.Services.RewardsObserver)
-local RoundService = require(script.Parent.Services.RoundService)
-local WorldBuilder = require(script.Parent.Services.WorldBuilder)
-local BiomeService = require(script.Parent.Services.BiomeService)
-local WorldGenController = require(script.Parent.Services.WorldGenController)
-local RoleService = require(script.Parent.Services.RoleService)
-local ProfileService = require(script.Parent.Services.ProfileService)
-local GameStateService = require(script.Parent.Services.GameStateService)
-local EventEffectsService = require(script.Parent.Services.EventEffectsService)
-local GameLoopService = require(script.Parent.Services.GameLoopService)
-local ObjectiveRuntimeService = require(script.Parent.Services.ObjectiveRuntimeService)
-local DropItemService = require(script.Parent.Services.DropItemService)
-local InventoryActionService = require(script.Parent.Services.InventoryActionService)
-local ToolService = require(script.Parent.Services.ToolService)
-local ArmorService = require(script.Parent.Services.ArmorService)
-local DayNightService = require(script.Parent.Services.DayNightService)
+-- Lazy-load services to avoid blocking at require time
+local Services = script.Parent.Services
+local function lazyRequire(name)
+	return function()
+		return require(Services:FindFirstChild(name))
+	end
+end
 
--- Init / bind
-ObjectiveService:Init()
-BiomeService:Init()
-CombatService:Bind()
-BuildService:Bind()
-InteractService:Bind()
-SpawnerOrchestrator:Bind()
-StatusService:Bind()
-RoundService:Bind()
-GameStateService:Init()
-WorldGenController:Init()
-RoleService:Init()
-GameLoopService:Init()
-ObjectiveRuntimeService:Init()
-DropItemService:Init()
-InventoryActionService:Init()
-ToolService:Init()
-ArmorService:Init()
-DayNightService:Init()
---	WorldBuilder:Init()
+-- Service references (loaded on-demand)
+local _services = {}
+local function getService(name)
+	if not _services[name] then
+		_services[name] = require(Services:FindFirstChild(name))
+	end
+	return _services[name]
+end
+
+-- TIER 1: Critical services needed immediately (parallel load)
+local tier1Services = {
+	"BiomeService",
+	"GameStateService",
+	"RoleService",
+}
+
+-- TIER 2: Services needed for gameplay but can load after tier 1
+local tier2Services = {
+	{ name = "ObjectiveService", method = "Init" },
+	{ name = "CombatService", method = "Bind" },
+	{ name = "BuildService", method = "Bind" },
+	{ name = "InteractService", method = "Bind" },
+	{ name = "StatusService", method = "Bind" },
+	{ name = "RoundService", method = "Bind" },
+	{ name = "DropItemService", method = "Init" },
+	{ name = "InventoryActionService", method = "Init" },
+	{ name = "ToolService", method = "Init" },
+	{ name = "ArmorService", method = "Init" },
+	{ name = "DayNightService", method = "Init" },
+}
+
+-- TIER 3: Deferred/heavy services (world gen, etc.)
+local tier3Services = {
+	{ name = "WorldGenController", method = "Init" },
+	{ name = "SpawnerOrchestrator", method = "Bind" },
+	{ name = "GameLoopService", method = "Init" },
+	{ name = "ObjectiveRuntimeService", method = "Init" },
+}
+
+-- Initialize services in parallel batches
+local function initTier(services, initMethod)
+	local threads = {}
+	for _, entry in ipairs(services) do
+		local name = type(entry) == "string" and entry or entry.name
+		local method = type(entry) == "table" and entry.method or initMethod
+		threads[#threads + 1] = task.spawn(function()
+			local ok, err = pcall(function()
+				local svc = getService(name)
+				if svc and method and svc[method] then
+					svc[method](svc)
+				end
+			end)
+			if not ok then
+				warn("[ServerMain] Failed to init " .. name .. ": " .. tostring(err))
+			end
+		end)
+	end
+	-- Wait for all tier threads
+	for _, t in ipairs(threads) do
+		if coroutine.status(t) ~= "dead" then
+			task.wait()
+		end
+	end
+end
+
+-- TIER 1: Critical (parallel)
+initTier(tier1Services, "Init")
+
+-- TIER 2: Gameplay services (parallel, after tier 1)
+task.defer(function()
+	initTier(tier2Services)
+end)
+
+-- TIER 3: Heavy/deferred (run after a short delay to let client connect)
+task.delay(0.1, function()
+	initTier(tier3Services)
+end)
 
 -- Relay biome changes to BuildService for global Decay pass
 Players.PlayerAdded:Connect(function(plr)
-	BiomeService:SendToPlayer(plr)
-	-- You can also send snapshots of EventService/Objectives via their remotes
+	task.defer(function()
+		local BiomeService = getService("BiomeService")
+		BiomeService:SendToPlayer(plr)
+	end)
 end)
 
--- Biome change hook for Decay
-if _G.Ecoshift and type(_G.Ecoshift.OnBiomeChangedAdd) == "function" then
-	_G.Ecoshift.OnBiomeChangedAdd(function(cur)
-		pcall(function() BuildService:OnBiomeChanged(cur) end)
-	end)
-end
+-- Biome change hook for Decay (deferred setup)
+task.defer(function()
+	if _G.Ecoshift and type(_G.Ecoshift.OnBiomeChangedAdd) == "function" then
+		_G.Ecoshift.OnBiomeChangedAdd(function(cur)
+			pcall(function() 
+				local BuildService = getService("BuildService")
+				BuildService:OnBiomeChanged(cur) 
+			end)
+		end)
+	end
+end)
 
--- Example: expose a function other systems can call to compute wave composition
+-- Expose global API (lazy)
 _G.Ecoshift = _G.Ecoshift or {}
-_G.Ecoshift.ComputeEnemyWave = function() return SpawnService:ComputeEnemyWave() end
-_G.Ecoshift.GetActiveResourceTags = function() return SpawnService:GetActiveResourceTags() end
-_G.Ecoshift.AIService = require(script.Parent.Services.AIService)
+_G.Ecoshift.ComputeEnemyWave = function() 
+	return getService("SpawnService"):ComputeEnemyWave() 
+end
+_G.Ecoshift.GetActiveResourceTags = function() 
+	return getService("SpawnService"):GetActiveResourceTags() 
+end
+_G.Ecoshift.AIService = setmetatable({}, {
+	__index = function(_, k)
+		return getService("AIService")[k]
+	end
+})

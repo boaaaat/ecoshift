@@ -86,11 +86,15 @@ end
 local function snapshot(inv)
 	local hotbar = {}
 	local storage = {}
+	-- FIXED: Use explicit false for empty slots instead of nil
+	-- This prevents Roblox RemoteEvent from dropping sparse array entries
 	for i = 1, HOTBAR_SLOTS do
-		hotbar[i] = cloneSlot(inv.Hotbar[i])
+		local slot = inv.Hotbar[i]
+		hotbar[i] = slot and cloneSlot(slot) or false
 	end
 	for i = 1, STORAGE_SLOTS do
-		storage[i] = cloneSlot(inv.Storage[i])
+		local slot = inv.Storage[i]
+		storage[i] = slot and cloneSlot(slot) or false
 	end
 	local armor = cloneSlot(inv.Armor)
 	return { Hotbar = hotbar, Storage = storage, Armor = armor }
@@ -98,8 +102,14 @@ end
 
 function InventoryService:Init()
 	if self._remote then return end
-	local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
-	self._remote = Util.GetRemote(remotesFolder, Config.RemoteNames.InventoryUpdate)
+	-- OPTIMIZED: Try immediate lookup first
+	local remotesFolder = Util.GetDescendant(Config.Paths.Remotes)
+	if not remotesFolder then
+		remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 5)
+	end
+	if remotesFolder then
+		self._remote = Util.GetRemote(remotesFolder, Config.RemoteNames.InventoryUpdate)
+	end
 end
 
 function InventoryService:Reset(plr)

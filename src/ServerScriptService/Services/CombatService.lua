@@ -6,8 +6,18 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 
 local CombatService = {}
-CombatService._remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
-CombatService._remoteDamage = Util.GetRemote(CombatService._remotesFolder, Config.RemoteNames.Damage)
+-- OPTIMIZED: Lazy-load remotes instead of blocking at module load
+CombatService._remotesFolder = nil
+CombatService._remoteDamage = nil
+
+local function ensureRemotes(self)
+	if self._remoteDamage then return end
+	self._remotesFolder = Util.GetDescendant(Config.Paths.Remotes) 
+		or Util.WaitForDescendant(Config.Paths.Remotes, 5)
+	if self._remotesFolder then
+		self._remoteDamage = Util.GetRemote(self._remotesFolder, Config.RemoteNames.Damage)
+	end
+end
 
 -- rate limit per attacker (id -> lastTime)
 local _lastHit = setmetatable({}, {__mode="k"}) -- weak keys by player instance
@@ -77,6 +87,7 @@ function CombatService:OnDamageRequest(attacker, target, amount, dmgType)
 end
 
 function CombatService:Bind()
+	ensureRemotes(self)
 	if not self._remoteDamage then return end
 	self._remoteDamage.OnServerEvent:Connect(function(plr, target, amount, dmgType)
 		local ok = pcall(function()

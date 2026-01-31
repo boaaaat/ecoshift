@@ -79,8 +79,9 @@ Config.UI = {
 	PlaceholderIcon = "rbxasset://textures/ui/GuiImagePlaceholder.png",
 }
 
+-- OPTIMIZED: Increased prompt rate for faster resource binding
 Config.PROMPTS = {
-	MaxPerSecond = 250,
+	MaxPerSecond = 500,
 }
 
 Config.ROLES = {

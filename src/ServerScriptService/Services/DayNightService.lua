@@ -123,7 +123,11 @@ end
 
 function DayNightService:_ensureRemote()
 	if self._remote then return end
-	self._remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
+	-- OPTIMIZED: Try immediate lookup first
+	self._remotesFolder = Util.GetDescendant(Config.Paths.Remotes)
+	if not self._remotesFolder then
+		self._remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 5)
+	end
 	if self._remotesFolder then
 		self._remote = self._remotesFolder:FindFirstChild(Config.RemoteNames.TimeUpdate)
 		if not self._remote then
@@ -225,23 +229,37 @@ function DayNightService:Init()
 	self._currentTime = getConfig().StartTime or 6
 	self:_updateLighting()
 	
-	-- Main update loop
-	local lastBroadcast = 0
-	RunService.Heartbeat:Connect(function(dt)
-		self:_tick(dt)
+	-- OPTIMIZED: Use task.spawn with controlled loop instead of Heartbeat
+	-- This reduces per-frame overhead while maintaining smooth updates
+	task.spawn(function()
+		local lastTime = os.clock()
+		local lastBroadcast = 0
 		
-		-- Broadcast time update every 1 second for smooth display
-		lastBroadcast = lastBroadcast + dt
-		if lastBroadcast >= 1 then
-			lastBroadcast = 0
-			self:_broadcast()
+		while true do
+			local now = os.clock()
+			local dt = now - lastTime
+			lastTime = now
+			
+			self:_tick(dt)
+			
+			-- Broadcast time update every 1 second for smooth display
+			lastBroadcast = lastBroadcast + dt
+			if lastBroadcast >= 1 then
+				lastBroadcast = 0
+				self:_broadcast()
+			end
+			
+			-- OPTIMIZED: Update less frequently (30 fps is plenty for day/night)
+			task.wait(1/30)
 		end
 	end)
 	
 	-- Send time to new players
 	Players.PlayerAdded:Connect(function(plr)
-		task.wait(1) -- Wait for client to load
-		self:SendToPlayer(plr)
+		task.defer(function()
+			task.wait(0.5) -- Shorter wait
+			self:SendToPlayer(plr)
+		end)
 	end)
 	
 	-- Expose to global

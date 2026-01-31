@@ -1,6 +1,5 @@
 -- ThreatService.lua
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
@@ -33,9 +32,13 @@ function ThreatService:Heartbeat()
 	self:Add(Config.THREAT.BasePerMinute * minutes)
 end
 
-RunService.Heartbeat:Connect(function()
-	local ok = pcall(function() ThreatService:Heartbeat() end)
-	if not ok then end
+-- OPTIMIZED: Use task.spawn with controlled loop - threat doesn't need per-frame updates
+task.spawn(function()
+	while true do
+		local ok = pcall(function() ThreatService:Heartbeat() end)
+		if not ok then end
+		task.wait(1) -- Update once per second instead of every frame
+	end
 end)
 
 return ThreatService

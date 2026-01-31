@@ -37,12 +37,19 @@ function Util.GetDescendant(folderPath)
 	return node
 end
 
+-- OPTIMIZED: Try immediate lookup first, then fall back to waiting
 function Util.WaitForDescendant(folderPath, timeout)
+	-- Fast path: check if it exists immediately
+	local immediate = Util.GetDescendant(folderPath)
+	if immediate then return immediate end
+	
+	-- Slow path: wait for it
 	local t0 = os.clock()
-	while os.clock()-t0 < (timeout or 10) do
+	timeout = timeout or 10
+	while os.clock() - t0 < timeout do
 		local n = Util.GetDescendant(folderPath)
 		if n then return n end
-		RunService.Heartbeat:Wait()
+		task.wait(0.03) -- OPTIMIZED: Less aggressive polling (was Heartbeat:Wait)
 	end
 	return Util.GetDescendant(folderPath)
 end

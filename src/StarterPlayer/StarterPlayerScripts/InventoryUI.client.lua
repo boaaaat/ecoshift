@@ -13,10 +13,12 @@ local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
-local rInventory = Util.GetRemote(remotesFolder, Config.RemoteNames.InventoryUpdate)
-local rInventoryAction = Util.GetRemote(remotesFolder, Config.RemoteNames.InventoryAction)
-local rDrop = Util.GetRemote(remotesFolder, Config.RemoteNames.DropItem)
+-- OPTIMIZED: Try immediate lookup first, use shorter timeout
+local remotesFolder = Util.GetDescendant(Config.Paths.Remotes) 
+	or Util.WaitForDescendant(Config.Paths.Remotes, 5)
+local rInventory = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.InventoryUpdate)
+local rInventoryAction = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.InventoryAction)
+local rDrop = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.DropItem)
 
 -- UI Constants
 local COLORS = {
@@ -742,27 +744,37 @@ if rInventory then
 	rInventory.OnClientEvent:Connect(function(kind, payload)
 		if kind ~= "Snapshot" or type(payload) ~= "table" then return end
 		
-		-- Fix: Roblox RemoteEvents can convert numeric keys to strings
-		-- Normalize keys to be numeric for consistent indexing
+		-- FIXED: Server now sends false for empty slots to preserve array structure
+		-- Convert false back to nil for consistent local handling
 		if payload.Storage then
 			local normalized = {}
-			for k, v in pairs(payload.Storage) do
-				local numKey = tonumber(k)
-				if numKey and v then
-					normalized[numKey] = v
+			for i = 1, 10 do -- STORAGE_SLOTS
+				local slot = payload.Storage[i]
+				-- Treat false as nil (empty slot)
+				if slot and slot ~= false and type(slot) == "table" then
+					normalized[i] = slot
+				else
+					normalized[i] = nil
 				end
 			end
 			payload.Storage = normalized
 		end
 		if payload.Hotbar then
 			local normalized = {}
-			for k, v in pairs(payload.Hotbar) do
-				local numKey = tonumber(k)
-				if numKey and v then
-					normalized[numKey] = v
+			for i = 1, 4 do -- HOTBAR_SLOTS
+				local slot = payload.Hotbar[i]
+				-- Treat false as nil (empty slot)
+				if slot and slot ~= false and type(slot) == "table" then
+					normalized[i] = slot
+				else
+					normalized[i] = nil
 				end
 			end
 			payload.Hotbar = normalized
+		end
+		-- Handle Armor (can be false for empty)
+		if payload.Armor == false then
+			payload.Armor = nil
 		end
 		
 		inventorySnapshot = payload
@@ -770,14 +782,16 @@ if rInventory then
 		-- Debug: Log storage contents
 		print("[InventoryUI] Snapshot received:")
 		if payload.Storage then
-			for i, slot in pairs(payload.Storage) do
+			for i = 1, 10 do
+				local slot = payload.Storage[i]
 				if slot then
 					print(string.format("  Storage[%d]: %s x%d", i, slot.Id, slot.N))
 				end
 			end
 		end
 		if payload.Hotbar then
-			for i, slot in pairs(payload.Hotbar) do
+			for i = 1, 4 do
+				local slot = payload.Hotbar[i]
 				if slot then
 					print(string.format("  Hotbar[%d]: %s x%d", i, slot.Id, slot.N))
 				end

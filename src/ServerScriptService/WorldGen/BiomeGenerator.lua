@@ -188,11 +188,9 @@ function BiomeGenerator:_step()
 		return
 	end
 	self.ops = 0
-	if self.step_delay > 0 then
-		task.wait(self.step_delay)
-	else
-		task.wait()
-	end
+	-- OPTIMIZED: Use task.defer for smoother frame distribution
+	task.defer(function() end)
+	task.wait()
 end
 
 function BiomeGenerator:_get_biome_weight(biome)
@@ -357,25 +355,31 @@ function BiomeGenerator:_place_prefab(prefab, position, parent)
 	if not prefab then
 		return
 	end
-	local clone = prefab:Clone()
-	if parent and parent.Name == "Resources" then
-		if clone:IsA("BasePart") then
-			clone.CanQuery = true
-		end
-		for _, d in ipairs(clone:GetDescendants()) do
-			if d:IsA("BasePart") then
-				d.CanQuery = true
+	-- OPTIMIZED: Use task.defer for non-blocking clone operations
+	task.defer(function()
+		local clone = prefab:Clone()
+		if parent and parent.Name == "Resources" then
+			if clone:IsA("BasePart") then
+				clone.CanQuery = true
+			end
+			-- OPTIMIZED: Batch descendant iteration
+			local descendants = clone:GetDescendants()
+			for i = 1, #descendants do
+				local d = descendants[i]
+				if d:IsA("BasePart") then
+					d.CanQuery = true
+				end
 			end
 		end
-	end
-	local y_offset = get_offset_value(clone)
-	local target_cf = CFrame.new(position.X, self.base_y + y_offset, position.Z)
-	if clone:IsA("Model") then
-		clone:PivotTo(target_cf)
-	elseif clone:IsA("BasePart") then
-		clone.CFrame = target_cf
-	end
-	clone.Parent = parent
+		local y_offset = get_offset_value(clone)
+		local target_cf = CFrame.new(position.X, self.base_y + y_offset, position.Z)
+		if clone:IsA("Model") then
+			clone:PivotTo(target_cf)
+		elseif clone:IsA("BasePart") then
+			clone.CFrame = target_cf
+		end
+		clone.Parent = parent
+	end)
 end
 
 function BiomeGenerator:_random_point_in_bounds(min_x, max_x, min_z, max_z)

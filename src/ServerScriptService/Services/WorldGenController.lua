@@ -16,8 +16,14 @@ WorldGenController._initialized = false
 
 local function clearFolder(folder)
 	if not folder then return end
-	for _, child in ipairs(folder:GetChildren()) do
-		child:Destroy()
+	-- OPTIMIZED: Batch destroy with defer
+	local children = folder:GetChildren()
+	for i = 1, #children do
+		task.defer(function()
+			if children[i] and children[i].Parent then
+				children[i]:Destroy()
+			end
+		end)
 	end
 end
 
@@ -40,19 +46,33 @@ end
 function WorldGenController:GenerateBiome(biomeName)
 	if self._busy then return end
 	self._busy = true
-	clearGeneratedWorld()
-	clearEnemies()
-	GridService:Clear()
-	TerrainService:GenerateFlat(biomeName)
-	local generator = BiomeGenerator.new(WorldGenConfig)
-	generator:GenerateBiome(biomeName)
-	ResourceNodeService:BindGeneratedWorld()
-	local folderName = WorldGenConfig.spawn_folder_name or "GeneratedWorld"
-	local created = Workspace:FindFirstChild(folderName)
-	if created then
-		created:SetAttribute("Generated", true)
-	end
-	self._busy = false
+	
+	-- OPTIMIZED: Run heavy operations in a spawned thread
+	task.spawn(function()
+		clearGeneratedWorld()
+		clearEnemies()
+		GridService:Clear()
+		
+		-- Terrain generation (relatively fast)
+		TerrainService:GenerateFlat(biomeName)
+		task.wait() -- Yield once after terrain
+		
+		-- World generation (heavy - already yields internally)
+		local generator = BiomeGenerator.new(WorldGenConfig)
+		generator:GenerateBiome(biomeName)
+		
+		-- Bind resource nodes after generation
+		task.defer(function()
+			ResourceNodeService:BindGeneratedWorld()
+		end)
+		
+		local folderName = WorldGenConfig.spawn_folder_name or "GeneratedWorld"
+		local created = Workspace:FindFirstChild(folderName)
+		if created then
+			created:SetAttribute("Generated", true)
+		end
+		self._busy = false
+	end)
 end
 
 function WorldGenController:Init()

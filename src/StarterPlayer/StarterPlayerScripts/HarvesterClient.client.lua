@@ -4,8 +4,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 
-local Remotes = ReplicatedStorage:WaitForChild("Remotes")
-local InteractRE = Remotes:WaitForChild("ResourceInteract")
+-- OPTIMIZED: Try immediate lookup first
+local Remotes = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage:WaitForChild("Remotes", 5)
+local InteractRE = Remotes and (Remotes:FindFirstChild("ResourceInteract") or Remotes:WaitForChild("ResourceInteract", 3))
 local ToolConfig = require(ReplicatedStorage.Modules.ToolConfig)
 
 local player = Players.LocalPlayer

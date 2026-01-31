@@ -12,9 +12,11 @@ local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
-local rCraft = Util.GetRemote(remotesFolder, Config.RemoteNames.Craft)
-local rInventory = Util.GetRemote(remotesFolder, Config.RemoteNames.InventoryUpdate)
+-- OPTIMIZED: Try immediate lookup first, use shorter timeout
+local remotesFolder = Util.GetDescendant(Config.Paths.Remotes) 
+	or Util.WaitForDescendant(Config.Paths.Remotes, 5)
+local rCraft = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.Craft)
+local rInventory = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.InventoryUpdate)
 
 -- UI Constants (matching inventory style)
 local COLORS = {
