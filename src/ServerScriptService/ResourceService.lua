@@ -177,15 +177,10 @@ local function serverApplyHarvest(player: Player, nodeModel: Model, toolOrNil: T
 		hit = 1
 	end
 	
-	-- DEBUG: Log what we're working with
-	print(string.format("[ResourceService] DEBUG: ToolType='%s', Weakness='%s', Damage=%d, Multiplier=%s", 
-		tostring(cfg.ToolType), tostring(weakness), cfg.Damage or 0, tostring(cfg.Multiplier)))
-	
 	-- Bonus multiplier if tool matches weakness (e.g., Axe vs Tree)
 	-- Any tool can harvest, but matching tools get bonus damage!
 	if weakness ~= "" and cfg.ToolType == weakness then
 		local multiplier = cfg.Multiplier or 1.5
-		print(string.format("[ResourceService] DEBUG: Weakness MATCHED! Applying multiplier %s", tostring(multiplier)))
 		hit = math.floor(hit * multiplier)
 	end
 	

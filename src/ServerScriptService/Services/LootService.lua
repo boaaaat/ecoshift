@@ -74,8 +74,8 @@ end
 
 local function compactSlots(slots)
 	local out = {}
-	for _, slot in ipairs(slots) do
-		if slot and slot.Id and slot.N and slot.N > 0 then
+	for _, slot in pairs(slots) do
+		if slot and type(slot) == "table" and slot.Id and slot.N and slot.N > 0 then
 			out[#out + 1] = { Id = slot.Id, N = slot.N }
 		end
 	end
