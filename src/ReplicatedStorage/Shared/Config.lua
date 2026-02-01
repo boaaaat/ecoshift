@@ -147,41 +147,6 @@ Config.OBJECTIVES = {
 	},
 }
 
-Config.ENEMIES = {
-	BaseCount = 2,
-	MaxCount = 24,
-	PlayerScale = 1.0,
-	Tables = {
-		ForestCommon = {
-			{ Id = "Wolf", Weight = 1.0 },
-			{ Id = "MutantPlant", Weight = 0.6 },
-			{ Id = "ScavengerBird", Weight = 0.4 },
-		},
-		DesertCommon = {
-			{ Id = "Scorpion", Weight = 1.0 },
-			{ Id = "SandCrawler", Weight = 0.7 },
-			{ Id = "ScavengerBird", Weight = 0.3 },
-		},
-		SwampCommon = {
-			{ Id = "SwampStalker", Weight = 0.8 },
-			{ Id = "MutantPlant", Weight = 0.7 },
-			{ Id = "SwarmLeech", Weight = 0.5 },
-		},
-		TundraCommon = {
-			{ Id = "FrostWolf", Weight = 0.9 },
-			{ Id = "IceCrawler", Weight = 0.6 },
-		},
-		VolcanicCommon = {
-			{ Id = "MagmaHound", Weight = 0.8 },
-			{ Id = "LavaSpitter", Weight = 0.7 },
-		},
-		CrystalCommon = {
-			{ Id = "CrystalBeast", Weight = 0.9 },
-			{ Id = "Shardling", Weight = 0.6 },
-		},
-	},
-}
-
 Config.BIOMES = {
 	Forest = {
 		Weight = 1.0,
@@ -195,35 +160,35 @@ Config.BIOMES = {
 		TimeScaledWeight = -0.1,
 		env = { Temp = 1, Toxin = 0, Wet = -1 },
 		resourceTags = { "Stone", "Ore", "Cactus" },
-		enemyTables = { "DesertCommon" },
+		enemyTables = {},
 	},
 	Swamp = {
 		Weight = 0.7,
 		TimeScaledWeight = 0.15,
 		env = { Temp = 0, Toxin = 1, Wet = 2 },
 		resourceTags = { "Herb", "Reed", "Mud" },
-		enemyTables = { "SwampCommon" },
+		enemyTables = {},
 	},
 	FrozenTundra = {
 		Weight = 0.6,
 		TimeScaledWeight = 0.25,
 		env = { Temp = -2, Toxin = 0, Wet = 0 },
 		resourceTags = { "Ice", "Stone", "Fur" },
-		enemyTables = { "TundraCommon" },
+		enemyTables = {},
 	},
 	Volcanic = {
 		Weight = 0.4,
 		TimeScaledWeight = 0.35,
 		env = { Temp = 2, Toxin = 0, Wet = -1 },
 		resourceTags = { "Ore", "Sulfur", "Obsidian" },
-		enemyTables = { "VolcanicCommon" },
+		enemyTables = {},
 	},
 	CrystalWastes = {
 		Weight = 0.3,
 		TimeScaledWeight = 0.4,
 		env = { Temp = 0, Toxin = 0, Wet = 0 },
 		resourceTags = { "Crystal", "Void", "Alloy" },
-		enemyTables = { "CrystalCommon" },
+		enemyTables = {},
 	},
 }
 
