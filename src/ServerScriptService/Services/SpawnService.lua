@@ -14,6 +14,42 @@ local SpawnService = {}
 SpawnService._enemySpawns = Util.WaitForDescendant(Config.Paths.EnemySpawnsFolder, 5)
 SpawnService._resourceFolder = Util.WaitForDescendant(Config.Paths.ResourceNodesFolder, 5)
 
+local function ensureSpawnPoints(folder)
+	if not folder then return end
+	if #folder:GetChildren() > 0 then return end
+
+	local cfg = EntityConfig.SpawnPoints or {}
+	local world = Config.WORLD or {}
+	local count = math.max(1, tonumber(cfg.Count) or 24)
+	local minPad = tonumber(cfg.MinRadiusPadding) or 40
+	local maxPad = tonumber(cfg.MaxRadiusPadding) or 40
+	local minR = tonumber(cfg.MinRadius) or ((world.CenterExclusionRadius or 0) + minPad)
+	local maxR = tonumber(cfg.MaxRadius) or ((world.WorldRadius or 2000) - maxPad)
+	if maxR <= minR then
+		maxR = minR + 10
+	end
+	local baseY = tonumber(world.BaseY) or 0
+	local rng = Random.new()
+
+	for i = 1, count do
+		local angle = rng:NextNumber(0, math.pi * 2)
+		local radius = rng:NextNumber(minR, maxR)
+		local x = math.cos(angle) * radius
+		local z = math.sin(angle) * radius
+		local part = Instance.new("Part")
+		part.Name = "SpawnPoint_" .. tostring(i)
+		part.Size = Vector3.new(1, 1, 1)
+		part.Transparency = 1
+		part.Anchored = true
+		part.CanCollide = false
+		part.CanTouch = false
+		part.CanQuery = false
+		part.CastShadow = false
+		part.CFrame = CFrame.new(x, baseY + 2, z)
+		part.Parent = folder
+	end
+end
+
 -- Public: returns a table of "what" to spawn at a given moment
 function SpawnService:ComputeEnemyWave()
 	local biome = BiomeService:GetCurrent()
@@ -67,6 +103,7 @@ end
 function SpawnService:GetSpawnPoints()
 	local folder = self._enemySpawns
 	if not folder then return {} end
+	ensureSpawnPoints(folder)
 	local points = {}
 	for _,child in ipairs(folder:GetChildren()) do
 		if child:IsA("BasePart") or child:IsA("Attachment") then

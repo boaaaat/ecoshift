@@ -121,6 +121,17 @@ local function loadConfigModule(model)
 	return nil
 end
 
+local function findHumanoid(model)
+	local hum = model:FindFirstChildOfClass("Humanoid")
+	if hum then return hum end
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("Humanoid") then
+			return d
+		end
+	end
+	return nil
+end
+
 function EntityAIService:_buildConfig(model, entityType)
 	local defaults = (EntityConfig.Defaults and EntityConfig.Defaults[entityType]) or {}
 	local entityId = getEntityId(model)
@@ -168,8 +179,11 @@ function EntityAIService:BindEntity(model, forcedType)
 	if self._entities[model] then return end
 	if model:GetAttribute("NoAI") then return end
 	if Players:GetPlayerFromCharacter(model) then return end
-	local hum = model:FindFirstChildOfClass("Humanoid")
-	if not hum then return end
+	local hum = findHumanoid(model)
+	if not hum then
+		warn("[EntityAIService] No Humanoid found for model:", model:GetFullName())
+		return
+	end
 
 	local entityType = forcedType or getEntityType(model)
 	local entityId = getEntityId(model)

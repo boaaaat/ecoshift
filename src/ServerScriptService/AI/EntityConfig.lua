@@ -99,4 +99,10 @@ EntityConfig.EnemyWaves = {
 	},
 }
 
+EntityConfig.SpawnPoints = {
+	Count = 24,
+	MinRadiusPadding = 60,
+	MaxRadiusPadding = 80,
+}
+
 return EntityConfig

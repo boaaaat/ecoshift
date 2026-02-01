@@ -57,6 +57,7 @@ Config.WORLD = {
 	BaseY = 0,
 }
 
+
 Config.TERRAIN = {
 	Thickness = 24,
 	MaterialByBiome = {

@@ -37,6 +37,7 @@ local UNLOAD_DELAY = WorldGenConfig.stream_unload_delay or 10 -- Seconds before 
 local BASE_Y = WorldGenConfig.base_y or 0
 local WORLD_RADIUS = WorldGenConfig.world_radius or 2200
 local CENTER_EXCLUSION = WorldGenConfig.center_exclusion_radius or 260
+local SPAWN_ENEMIES = WorldGenConfig.spawn_enemies ~= false
 
 local function chunkKey(cx, cz)
 	return cx .. "," .. cz
@@ -361,21 +362,21 @@ function ChunkStreamingService:_generateChunkContent(cx, cz, chunkCenter, chunkF
 		end
 	end
 	
-	-- Structures
-	local structureCount = randomInRange(rng, biome.structure_count or biome.structureCount) or 0
-	if rng:NextNumber() <= (structureCount > 0 and 1 or 0.05) then
+	-- Structures (probability per chunk)
+	local structureChance = tonumber(biome.structure_count or biome.structureCount) or 0
+	if rng:NextNumber() <= math.clamp(structureChance, 0, 1) then
 		self:_placeStructure(biomeName, chunkCenter, biome.structures, subfolders.Structures, rng)
 	end
 	
-	-- Chests (spawn with proper tags for LootService)
-	local chestChance = tonumber(biome.chest_count or biome.chestCount) or 0.08
-	if biome.chests and rng:NextNumber() <= chestChance then
+	-- Chests (probability per chunk)
+	local chestChance = tonumber(biome.chest_count or biome.chestCount) or 0
+	if biome.chests and rng:NextNumber() <= math.clamp(chestChance, 0, 1) then
 		self:_placeChest(biomeName, chunkCenter, biome.chests, subfolders.Structures, rng)
 	end
 	
-	-- Objectives
-	local objectiveCount = randomInRange(rng, biome.objective_count or biome.objectiveCount) or 0
-	if rng:NextNumber() <= (objectiveCount > 0 and 1 or 0.025) then
+	-- Objectives (probability per chunk)
+	local objectiveChance = tonumber(biome.objective_count or biome.objectiveCount) or 0
+	if rng:NextNumber() <= math.clamp(objectiveChance, 0, 1) then
 		self:_placeStructure(biomeName, chunkCenter, biome.objectives, subfolders.Objectives, rng)
 	end
 end
@@ -417,17 +418,19 @@ function ChunkStreamingService:_scatterInChunk(biomeName, chunkCenter, regionDef
 		end
 	end
 	
-	-- Enemies
-	local enemyPrefabs = self:_resolvePrefabsWeighted("EnemyPrefabs", biomeName, regionDef.enemies)
-	local enemyCount = randomInRange(rng, regionDef.enemy_count or regionDef.enemyCount) or 0
-	
-	for _ = 1, enemyCount do
-		local prefab = self:_chooseWeighted(enemyPrefabs, rng)
-		if prefab then
-			local x = chunkCenter.X + rng:NextNumber(-half, half)
-			local z = chunkCenter.Z + rng:NextNumber(-half, half)
-			local position = Vector3.new(x, BASE_Y, z)
-			self:_placePrefab(prefab, position, subfolders.Enemies)
+	if SPAWN_ENEMIES then
+		-- Enemies
+		local enemyPrefabs = self:_resolvePrefabsWeighted("EnemyPrefabs", biomeName, regionDef.enemies)
+		local enemyCount = randomInRange(rng, regionDef.enemy_count or regionDef.enemyCount) or 0
+		
+		for _ = 1, enemyCount do
+			local prefab = self:_chooseWeighted(enemyPrefabs, rng)
+			if prefab then
+				local x = chunkCenter.X + rng:NextNumber(-half, half)
+				local z = chunkCenter.Z + rng:NextNumber(-half, half)
+				local position = Vector3.new(x, BASE_Y, z)
+				self:_placePrefab(prefab, position, subfolders.Enemies)
+			end
 		end
 	end
 end
@@ -512,7 +515,7 @@ function ChunkStreamingService:_placePrefab(prefab, position, parent)
 	if not prefab then return end
 	
 	local clone = prefab:Clone()
-	
+
 	-- Set CanQuery for resources
 	if parent.Name == "Resources" then
 		if clone:IsA("BasePart") then

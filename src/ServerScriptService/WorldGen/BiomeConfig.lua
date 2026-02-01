@@ -16,6 +16,7 @@ Config.structure_padding = 6
 Config.objective_padding = 6
 Config.avoid_regions_for_structures = true
 Config.use_entity_config_enemies = true
+Config.spawn_enemies = false -- set true to place enemies during worldgen (otherwise use SpawnOrchestrator)
 Config.spawn_folder_name = "GeneratedWorld"
 
 -- STREAMING CONFIG: Dynamic chunk loading around players

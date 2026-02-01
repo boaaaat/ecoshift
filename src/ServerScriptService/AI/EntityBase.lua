@@ -18,11 +18,22 @@ local function findRoot(model)
 	return nil
 end
 
+local function findHumanoid(model)
+	local hum = model:FindFirstChildOfClass("Humanoid")
+	if hum then return hum end
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("Humanoid") then
+			return d
+		end
+	end
+	return nil
+end
+
 function EntityBase.new(model, config)
 	local self = setmetatable({}, EntityBase)
 	self.Model = model
 	self.Config = config or {}
-	self.Humanoid = model:FindFirstChildOfClass("Humanoid")
+	self.Humanoid = findHumanoid(model)
 	self.Root = findRoot(model)
 	self.Target = nil
 	self.NextAttack = 0

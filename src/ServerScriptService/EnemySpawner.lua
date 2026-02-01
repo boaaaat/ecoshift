@@ -113,6 +113,11 @@ local function spawnWave(enemyIds, spawnPoints)
 		enemiesFolder.Name = "Enemies"
 		enemiesFolder.Parent = Workspace
 		newEnemy.Parent = enemiesFolder
+		if entityType == "Animal" then
+			CollectionService:AddTag(newEnemy, "Animal")
+		else
+			CollectionService:AddTag(newEnemy, "Monster")
+		end
 
 		local rootPart = newEnemy.PrimaryPart
 		if rootPart then
@@ -154,6 +159,11 @@ _G.Ecoshift.SpawnEnemyById = function(id, anchor)
 	enemiesFolder.Name = "Enemies"
 	enemiesFolder.Parent = Workspace
 	newEnemy.Parent = enemiesFolder
+	if entityType == "Animal" then
+		CollectionService:AddTag(newEnemy, "Animal")
+	else
+		CollectionService:AddTag(newEnemy, "Monster")
+	end
 	local rootPart = newEnemy.PrimaryPart
 	if rootPart then rootPart:SetNetworkOwner(nil) end
 end

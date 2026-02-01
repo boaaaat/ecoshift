@@ -132,6 +132,7 @@ function BiomeGenerator.new(config)
 	self.objective_padding = config_value(self.config, "objective_padding", "objectivePadding", 6)
 	self.avoid_regions_for_structures = config_value(self.config, "avoid_regions_for_structures", "avoidRegionsForStructures", true)
 	self.spawn_folder_name = config_value(self.config, "spawn_folder_name", "spawnFolderName", "GeneratedWorld")
+	self.spawn_enemies = config_value(self.config, "spawn_enemies", "spawnEnemies", true) ~= false
 	self.use_entity_config_enemies = config_value(self.config, "use_entity_config_enemies", "useEntityConfigEnemies", false)
 
 	self.biomes = normalize_biomes(self.config.biomes or {})
@@ -537,16 +538,18 @@ function BiomeGenerator:_scatter_in_region(biome_name, region_center, region_def
 	local resource_prefabs = self:_resolve_prefabs_weighted("ResourcePrefabs", biome_name, region_def.resources)
 	local prop_prefabs = self:_resolve_prefabs_weighted("PropPrefabs", biome_name, region_def.props)
 	local enemy_prefabs = nil
-	if self.use_entity_config_enemies then
-		enemy_prefabs = self:_resolve_entity_enemy_list(biome_name, region_def)
-	end
-	if not enemy_prefabs or #enemy_prefabs == 0 then
-		enemy_prefabs = self:_resolve_prefabs_weighted("EnemyPrefabs", biome_name, region_def.enemies)
+	if self.spawn_enemies then
+		if self.use_entity_config_enemies then
+			enemy_prefabs = self:_resolve_entity_enemy_list(biome_name, region_def)
+		end
+		if not enemy_prefabs or #enemy_prefabs == 0 then
+			enemy_prefabs = self:_resolve_prefabs_weighted("EnemyPrefabs", biome_name, region_def.enemies)
+		end
 	end
 
 	local resource_count = random_in_range(self.random, region_def.resource_count or region_def.resourceCount)
 	local prop_count = random_in_range(self.random, region_def.prop_count or region_def.propCount)
-	local enemy_count = random_in_range(self.random, region_def.enemy_count or region_def.enemyCount)
+	local enemy_count = self.spawn_enemies and random_in_range(self.random, region_def.enemy_count or region_def.enemyCount) or 0
 
 	for _ = 1, resource_count do
 		local prefab = self:_choose_weighted(resource_prefabs)
@@ -568,43 +571,45 @@ function BiomeGenerator:_scatter_in_region(biome_name, region_center, region_def
 		self:_step()
 	end
 
-	local group_counts = {}
-	local member_counts = {}
-	for _ = 1, enemy_count do
-		local entry = self:_choose_weighted_entry(enemy_prefabs)
-		if entry then
-			local id = entry.Id or (entry.Prefab and entry.Prefab.Name) or "Enemy"
-			local max_groups = tonumber(entry.MaxGroupsPerRegion)
-			if max_groups and (group_counts[id] or 0) >= max_groups then
-				self:_step()
-				goto continue_enemy
-			end
-			local max_members = tonumber(entry.MaxCountPerRegion)
-			if max_members and (member_counts[id] or 0) >= max_members then
-				self:_step()
-				goto continue_enemy
-			end
-
-			local position = self:_random_point_in_region(region_center, region_def.size)
-			local group_size = random_in_range(self.random, entry.GroupSize, 1)
-			local radius = tonumber(entry.GroupRadius) or 6
-			group_counts[id] = (group_counts[id] or 0) + 1
-			for i = 1, group_size do
-				if max_members and (member_counts[id] or 0) >= max_members then
-					break
+	if self.spawn_enemies and enemy_count > 0 then
+		local group_counts = {}
+		local member_counts = {}
+		for _ = 1, enemy_count do
+			local entry = self:_choose_weighted_entry(enemy_prefabs)
+			if entry then
+				local id = entry.Id or (entry.Prefab and entry.Prefab.Name) or "Enemy"
+				local max_groups = tonumber(entry.MaxGroupsPerRegion)
+				if max_groups and (group_counts[id] or 0) >= max_groups then
+					self:_step()
+					goto continue_enemy
 				end
-				local offset = Vector3.new(
-					self.random:NextNumber(-radius, radius),
-					0,
-					self.random:NextNumber(-radius, radius)
-				)
-				self:_place_prefab(entry.Prefab, position + offset, self.spawn_subfolders.Enemies)
-				self.stats.enemies += 1
-				member_counts[id] = (member_counts[id] or 0) + 1
+				local max_members = tonumber(entry.MaxCountPerRegion)
+				if max_members and (member_counts[id] or 0) >= max_members then
+					self:_step()
+					goto continue_enemy
+				end
+
+				local position = self:_random_point_in_region(region_center, region_def.size)
+				local group_size = random_in_range(self.random, entry.GroupSize, 1)
+				local radius = tonumber(entry.GroupRadius) or 6
+				group_counts[id] = (group_counts[id] or 0) + 1
+				for i = 1, group_size do
+					if max_members and (member_counts[id] or 0) >= max_members then
+						break
+					end
+					local offset = Vector3.new(
+						self.random:NextNumber(-radius, radius),
+						0,
+						self.random:NextNumber(-radius, radius)
+					)
+					self:_place_prefab(entry.Prefab, position + offset, self.spawn_subfolders.Enemies)
+					self.stats.enemies += 1
+					member_counts[id] = (member_counts[id] or 0) + 1
+				end
 			end
+			::continue_enemy::
+			self:_step()
 		end
-		::continue_enemy::
-		self:_step()
 	end
 end
 

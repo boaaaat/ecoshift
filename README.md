@@ -32,6 +32,7 @@ This README explains **every system** in the project and how to use/extend it. I
 **How to use:**
 - Edit `WorldGen/BiomeConfig.lua`:
   - `world_radius`, `chunk_size`, `max_chunks`, `center_exclusion_radius`.
+  - `spawn_enemies = false` to rely on the Spawn Orchestrator instead of worldgen enemy placement.
   - `biomes` table: regions, resources, props, structure/objective probability.
 - Set `use_entity_config_enemies = true` to use `AI/EntityConfig.lua` for enemy spawning.
 - Each region definition controls resource/prop/enemy counts and sizes.
@@ -291,6 +292,8 @@ This README explains **every system** in the project and how to use/extend it. I
 - Edit `EntityConfig.EnemyWaves` in `AI/EntityConfig.lua`.
 - `Config.BIOMES[biome].enemyTables` decides which table(s) are active per biome.
 - Currently only Wolf spawns in Forest.
+
+**Spawn points:**\n- If `Workspace/EnemySpawns` is empty, SpawnService auto-creates invisible spawn points.\n- Tune count/radius in `EntityConfig.SpawnPoints` in `AI/EntityConfig.lua`.
 
 ### EnemySpawner
 **Files:**
