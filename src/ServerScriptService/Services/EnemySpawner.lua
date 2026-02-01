@@ -107,6 +107,13 @@ local function applyEntityTags(model, entityType)
 	end
 end
 
+local function copyTags(fromInst, toInst)
+	if not fromInst or not toInst then return end
+	for _, tag in ipairs(CollectionService:GetTags(fromInst)) do
+		CollectionService:AddTag(toInst, tag)
+	end
+end
+
 local function applyHealthScaling(model, playerCount)
 	local healthValue = model:FindFirstChild("Health")
 	local humanoid = model:FindFirstChildOfClass("Humanoid")
@@ -160,6 +167,8 @@ local function spawnEnemyById(id, anchor, playerCount)
 	newEnemy:SetAttribute("EntityId", id)
 	local entityType = newEnemy:GetAttribute("EntityType") or prefab:GetAttribute("EntityType") or "Monster"
 	newEnemy:SetAttribute("EntityType", entityType)
+
+	copyTags(prefab, newEnemy)
 
 	for _, part in ipairs(newEnemy:GetDescendants()) do
 		if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then

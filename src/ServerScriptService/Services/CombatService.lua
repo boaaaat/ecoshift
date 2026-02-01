@@ -2,6 +2,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
+local CollectionService = game:GetService("CollectionService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
@@ -68,12 +69,28 @@ local function distanceOK(plr, target, maxDist)
 	return (hrp.Position - tp.Position).Magnitude <= maxDist
 end
 
-local function getHumanoidOrHealth(target)
+local function getHealthValue(target)
 	if not target or not target.Parent then return nil end
-	if target:FindFirstChild("Health") and target.Health:IsA("NumberValue") then
-		return target.Health
+	local health = target:FindFirstChild("Health", true)
+	if health and health:IsA("ValueBase") and typeof(health.Value) == "number" then
+		return health
 	end
+	return nil
+end
+
+local function isTaggedCombatTarget(target)
+	if not target or not target.Parent then return false end
+	return CollectionService:HasTag(target, "Monster") or CollectionService:HasTag(target, "Animal")
+end
+
+local function getHumanoidOrHealth(target, isPlayerTarget)
+	if not target or not target.Parent then return nil end
 	local hum = target:FindFirstChildWhichIsA("Humanoid")
+	if hum and (isPlayerTarget or isTaggedCombatTarget(target)) then
+		return hum
+	end
+	local health = getHealthValue(target)
+	if health then return health end
 	if hum then return hum end
 	return nil
 end
@@ -131,7 +148,7 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 	-- Health component contract:
 	--  - Either a NumberValue "Health" under the target Model
 	--  - Or a Humanoid if target is a character
-	local healthValue = getHumanoidOrHealth(target)
+	local healthValue = getHumanoidOrHealth(target, tgtPlr ~= nil)
 	if not healthValue then return end
 	local oldHealth = healthValue:IsA("NumberValue") and healthValue.Value or healthValue.Health
 

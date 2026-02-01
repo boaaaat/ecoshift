@@ -189,13 +189,22 @@ local function dropLoot(model, tier, tableName, destroyModel)
 	end
 end
 
+local function findHealthValue(model)
+	if not model or not model.Parent then return nil end
+	local health = model:FindFirstChild("Health", true)
+	if health and health:IsA("ValueBase") and typeof(health.Value) == "number" then
+		return health
+	end
+	return nil
+end
+
 function LootService:_bindMonster(monster, opts)
 	if not monster or not monster.Parent then return end
 	local tier = (opts and opts.Tier) or getTierFromTags(monster, MONSTER_TAGS)
 	local requireExplicit = opts and opts.RequireExplicit or false
 	if self._monsterConns[monster] then return end
 	local hum = monster:FindFirstChildOfClass("Humanoid")
-	local health = monster:FindFirstChild("Health")
+	local health = findHealthValue(monster)
 	local function handleDeath()
 		local tableName = requireExplicit and getExplicitLootTableName(monster) or getLootTableName(monster)
 		if requireExplicit and not tableName then
