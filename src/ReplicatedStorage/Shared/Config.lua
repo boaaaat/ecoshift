@@ -89,12 +89,6 @@ Config.BIOMES = {
 	},
 	--]]
 }
-	CycleDurationSeconds = 600, -- 10 real minutes = 1 full in-game day
-	StartTime = 6, -- Start at 6 AM
-	EnemyNightMultiplier = 1.5, -- Enemies 50% stronger at night
-	ResourceNightMultiplier = 0.7, -- 30% fewer resources at night
-	NightVisionRequired = true, -- Future: require torches/night vision
-}
 
 Config.DATASTORE = {
 	ProfileStore = "EcoshiftProfile_v1",

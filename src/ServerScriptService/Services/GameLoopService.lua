@@ -20,7 +20,7 @@ function GameLoopService:ResetRound()
 	WorldGenController:GenerateBiome(BiomeService:GetCurrent())
 	-- respawn everyone
 	for _, plr in ipairs(Players:GetPlayers()) do
-		plr:LoadCharacter()
+		plr:LoadCharacterAsync()
 	end
 end
 

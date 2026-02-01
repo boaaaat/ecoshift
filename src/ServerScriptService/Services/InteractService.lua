@@ -181,7 +181,7 @@ ACTIONS.Revive = function(plr, payload)
 	if hum.Health > 0 then return end -- already alive or not downed (you can adapt to your downed logic)
 	-- if you use a "Downed" Attribute instead of death, update here. For now, simple respawn:
 	local targetPlr = Players:GetPlayerFromCharacter(targetChar)
-	if targetPlr then targetPlr:LoadCharacter() end
+	if targetPlr then targetPlr:LoadCharacterAsync() end
 end
 
 function InteractService:Bind()
