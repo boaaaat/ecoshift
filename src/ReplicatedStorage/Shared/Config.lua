@@ -13,6 +13,7 @@ Config.Paths = {
 Config.RemoteNames = {
 	Build = "Build",
 	Damage = "Damage",
+	CombatAction = "CombatAction",
 	Interact = "Interact",
 	EventBroadcast = "EventBroadcast",
 	ObjectiveUpdate = "ObjectiveUpdate",

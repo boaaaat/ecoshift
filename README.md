@@ -373,7 +373,23 @@ This README explains **every system** in the project and how to use/extend it. I
 ### CombatService
 **File:** `src/ServerScriptService/Services/CombatService.lua`
 
-**Purpose:** Handles damage events and combat remotes.
+**Purpose:** Handles weapon actions, damage validation, and shield blocking.
+
+**Weapon System (new):**
+- Weapons are **Tools** with **ValueBase children** (NumberValue/IntValue/StringValue).  
+- Required child values by type:
+  - **Sword**: `WeaponType = "Sword"`, `Damage`, `Range`, `AttackSpeed`
+  - **Bow**: `WeaponType = "Bow"`, `Damage`, `ProjectileSpeed`, `ChargeTime`
+  - **Gun**: `WeaponType = "Gun"`, `Damage`, `FireRate`, `Ammo`, `MaxAmmo`
+  - **Shield**: `WeaponType = "Shield"`, `Durability`, `BlockPercent`
+  - **Throwable**: `WeaponType = "Throwable"`, `Damage`, `ThrowSpeed`, `ThrowTime`
+
+**Base classes (extendable):**
+- `ReplicatedStorage/Shared/Weapons/Sword.lua`
+- `ReplicatedStorage/Shared/Weapons/Bow.lua`
+- `ReplicatedStorage/Shared/Weapons/Gun.lua`
+- `ReplicatedStorage/Shared/Weapons/Shield.lua`
+- `ReplicatedStorage/Shared/Weapons/Throwable.lua`
 
 ### StatusService
 **File:** `src/ServerScriptService/Services/StatusService.lua`

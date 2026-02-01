@@ -246,7 +246,11 @@ function EntityBase:AttackTarget()
 	if dmg <= 0 then return end
 	local hum = self.Target and self.Target.Character and self.Target.Character:FindFirstChildOfClass("Humanoid")
 	if hum and hum.Health > 0 then
-		hum:TakeDamage(dmg)
+		if _G.Ecoshift and type(_G.Ecoshift.ApplyDamage) == "function" then
+			_G.Ecoshift.ApplyDamage(self.Model, self.Target.Character, dmg, "Melee")
+		else
+			hum:TakeDamage(dmg)
+		end
 	end
 end
 
