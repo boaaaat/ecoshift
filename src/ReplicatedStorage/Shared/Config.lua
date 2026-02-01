@@ -192,17 +192,8 @@ Config.OBJECTIVES = {
 	},
 }
 
--- NOTE: Full biome configuration is now in BiomeConfig.lua (ServerScriptService/WorldGen)
--- This minimal table is kept for client-side services that need basic biome info
-Config.BIOMES = {
-	Forest = {
-		env = { Temp = 0, Toxin = 0, Wet = 0 },
-	},
-	Desert = {
-		env = { Temp = 1, Toxin = 0, Wet = -1 },
-	},
-	-- Other biomes commented out until assets are ready (see BiomeConfig.lua)
-}
+-- NOTE: Full biome configuration is now in BiomeConfig.lua (ServerScriptService/WorldGen).
+-- Config.BIOMES (defined earlier) is still used by BiomeService/SpawnService and replicated to clients.
 
 Config.RECIPES = {
 	StoneHatchet = {
