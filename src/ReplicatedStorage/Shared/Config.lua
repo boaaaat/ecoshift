@@ -38,7 +38,56 @@ Config.BIOME_SHIFT = {
 	TimeScaleSeconds = 900,
 }
 
-Config.DAY_NIGHT = {
+-- NOTE: Biome metadata is now in BiomeConfig.lua (ServerScriptService/WorldGen/BiomeConfig.lua)
+-- This table is kept for backward compatibility with BiomeService and SpawnService
+-- Only include biomes that are currently active (Forest & Desert for testing)
+Config.BIOMES = {
+	Forest = {
+		Weight = 1.0,
+		TimeScaledWeight = -0.2,
+		env = { Temp = 0, Toxin = 0, Wet = 0 },
+		resourceTags = { "Wood", "Plants", "Stone" },
+		enemyTables = { "ForestCommon" },
+	},
+	Desert = {
+		Weight = 0.8,
+		TimeScaledWeight = -0.1,
+		env = { Temp = 1, Toxin = 0, Wet = -1 },
+		resourceTags = { "Stone", "Ore", "Cactus" },
+		enemyTables = { "DesertCommon" },
+	},
+	-- Uncomment these when assets are ready:
+	--[[
+	Swamp = {
+		Weight = 0.7,
+		TimeScaledWeight = 0.15,
+		env = { Temp = 0, Toxin = 1, Wet = 2 },
+		resourceTags = { "Herb", "Reed", "Mud" },
+		enemyTables = { "SwampCommon" },
+	},
+	FrozenTundra = {
+		Weight = 0.6,
+		TimeScaledWeight = 0.25,
+		env = { Temp = -2, Toxin = 0, Wet = 0 },
+		resourceTags = { "Ice", "Stone", "Fur" },
+		enemyTables = { "TundraCommon" },
+	},
+	Volcanic = {
+		Weight = 0.4,
+		TimeScaledWeight = 0.35,
+		env = { Temp = 2, Toxin = 0, Wet = -1 },
+		resourceTags = { "Ore", "Sulfur", "Obsidian" },
+		enemyTables = { "VolcanicCommon" },
+	},
+	CrystalWastes = {
+		Weight = 0.3,
+		TimeScaledWeight = 0.4,
+		env = { Temp = 0, Toxin = 0, Wet = 0 },
+		resourceTags = { "Crystal", "Void", "Alloy" },
+		enemyTables = { "CrystalCommon" },
+	},
+	--]]
+}
 	CycleDurationSeconds = 600, -- 10 real minutes = 1 full in-game day
 	StartTime = 6, -- Start at 6 AM
 	EnemyNightMultiplier = 1.5, -- Enemies 50% stronger at night
@@ -148,49 +197,16 @@ Config.OBJECTIVES = {
 	},
 }
 
+-- NOTE: Full biome configuration is now in BiomeConfig.lua (ServerScriptService/WorldGen)
+-- This minimal table is kept for client-side services that need basic biome info
 Config.BIOMES = {
 	Forest = {
-		Weight = 1.0,
-		TimeScaledWeight = -0.2,
 		env = { Temp = 0, Toxin = 0, Wet = 0 },
-		resourceTags = { "Wood", "Plants", "Stone" },
-		enemyTables = { "ForestCommon" },
 	},
 	Desert = {
-		Weight = 0.8,
-		TimeScaledWeight = -0.1,
 		env = { Temp = 1, Toxin = 0, Wet = -1 },
-		resourceTags = { "Stone", "Ore", "Cactus" },
-		enemyTables = {},
 	},
-	Swamp = {
-		Weight = 0.7,
-		TimeScaledWeight = 0.15,
-		env = { Temp = 0, Toxin = 1, Wet = 2 },
-		resourceTags = { "Herb", "Reed", "Mud" },
-		enemyTables = {},
-	},
-	FrozenTundra = {
-		Weight = 0.6,
-		TimeScaledWeight = 0.25,
-		env = { Temp = -2, Toxin = 0, Wet = 0 },
-		resourceTags = { "Ice", "Stone", "Fur" },
-		enemyTables = {},
-	},
-	Volcanic = {
-		Weight = 0.4,
-		TimeScaledWeight = 0.35,
-		env = { Temp = 2, Toxin = 0, Wet = -1 },
-		resourceTags = { "Ore", "Sulfur", "Obsidian" },
-		enemyTables = {},
-	},
-	CrystalWastes = {
-		Weight = 0.3,
-		TimeScaledWeight = 0.4,
-		env = { Temp = 0, Toxin = 0, Wet = 0 },
-		resourceTags = { "Crystal", "Void", "Alloy" },
-		enemyTables = {},
-	},
+	-- Other biomes commented out until assets are ready (see BiomeConfig.lua)
 }
 
 Config.RECIPES = {
