@@ -61,6 +61,36 @@ local function getAttr(modelOrPart: Instance, name: string)
 	return nil
 end
 
+local function getToolType(tool: Instance?)
+	if not tool or not tool:IsA("Tool") then return nil end
+	local attr = tool:GetAttribute("ToolType")
+	if typeof(attr) == "string" and attr ~= "" then
+		return attr
+	end
+	local child = tool:FindFirstChild("ToolType")
+	if child then
+		if child:IsA("StringValue") and child.Value ~= "" then
+			return child.Value
+		elseif child:IsA("ValueBase") and tostring(child.Value) ~= "" then
+			return tostring(child.Value)
+		end
+	end
+	return nil
+end
+
+local function getWeaponType(tool: Instance?)
+	if not tool or not tool:IsA("Tool") then return nil end
+	local attr = tool:GetAttribute("WeaponType")
+	if typeof(attr) == "string" and attr ~= "" then
+		return attr
+	end
+	local child = tool:FindFirstChild("WeaponType")
+	if child and child:IsA("StringValue") and child.Value ~= "" then
+		return child.Value
+	end
+	return nil
+end
+
 local function setAttr(modelOrPart: Instance, name: string, value: any)
 	local function setValueObject(instance)
 		local obj = instance:FindFirstChild(name, true)
@@ -271,9 +301,19 @@ InteractRE.OnServerEvent:Connect(function(player: Player, action: string, nodeRe
 		tool = backpack and backpack:FindFirstChildOfClass("Tool") or nil
 	end
 	if tool then
-		print(string.format("[ResourceService] Using tool %s", tool.Name))
+		local toolType = getToolType(tool)
+		if not toolType then
+			-- If it's a weapon, ignore silently to avoid spam.
+			if getWeaponType(tool) then
+				return
+			end
+			warn("[ResourceService] Tool missing ToolType, harvest rejected")
+			return
+		end
+		print(string.format("[ResourceService] Using tool %s (ToolType=%s)", tool.Name, tostring(toolType)))
 	else
 		print("[ResourceService] No tool equipped")
+		return
 	end
 
 	local model = nil

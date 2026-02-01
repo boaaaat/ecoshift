@@ -61,10 +61,28 @@ local inputEndedConn = nil
 
 local function isHarvestTool(tool)
 	if not tool or not tool:IsA("Tool") then return false end
-	local dmg = tool:GetAttribute("Damage") or tool:GetAttribute("HarvestDamage")
-	if typeof(dmg) == "number" then return true end
-	local child = tool:FindFirstChild("Damage") or tool:FindFirstChild("HarvestDamage")
-	return child and child:IsA("ValueBase") and typeof(child.Value) == "number"
+	-- If it's a weapon, do not treat as a harvest tool
+	local wAttr = tool:GetAttribute("WeaponType")
+	if typeof(wAttr) == "string" and wAttr ~= "" then
+		return false
+	end
+	local wChild = tool:FindFirstChild("WeaponType")
+	if wChild and wChild:IsA("StringValue") and wChild.Value ~= "" then
+		return false
+	end
+	local t = tool:GetAttribute("ToolType")
+	if typeof(t) == "string" and t ~= "" then
+		return true
+	end
+	local child = tool:FindFirstChild("ToolType")
+	if child then
+		if child:IsA("StringValue") then
+			return child.Value ~= ""
+		elseif child:IsA("ValueBase") then
+			return tostring(child.Value or "") ~= ""
+		end
+	end
+	return false
 end
 
 local function getRange(tool)
@@ -95,6 +113,10 @@ local function startLoop(tool)
 	loopRunning = true
 	task.spawn(function()
 		while holding and activeTool == tool do
+			-- Ensure tool is still equipped
+			if not tool.Parent or tool.Parent ~= player.Character then
+				break
+			end
 			harvestOnce(tool)
 			task.wait(getCooldown(tool))
 		end
@@ -122,7 +144,7 @@ end
 inputBeganConn = UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 	if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
-	if not activeTool then return end
+	if not activeTool or activeTool.Parent ~= player.Character then return end
 	holding = true
 	startLoop(activeTool)
 end)
@@ -134,6 +156,12 @@ end)
 
 local function onCharacter(char)
 	local backpack = player:WaitForChild("Backpack")
+	char.ChildRemoved:Connect(function(child)
+		if child == activeTool then
+			holding = false
+			activeTool = nil
+		end
+	end)
 	backpack.ChildAdded:Connect(function(child)
 		if child:IsA("Tool") then
 			bindTool(child)
