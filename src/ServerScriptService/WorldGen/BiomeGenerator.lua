@@ -548,12 +548,27 @@ function BiomeGenerator:_scatter_in_region(biome_name, region_center, region_def
 	local prop_count = random_in_range(self.random, region_def.prop_count or region_def.propCount)
 	local enemy_count = random_in_range(self.random, region_def.enemy_count or region_def.enemyCount)
 
+	-- Helper to check if a position is inside a structure
+	local function isInsideStructure(pos, prefab)
+		local size = get_prefab_size(prefab)
+		local rect = rect_from_size(pos.X, pos.Z, size.X, size.Z, 2) -- 2 stud padding
+		return self.structure_hash:intersects(rect)
+	end
+
 	for _ = 1, resource_count do
 		local prefab = self:_choose_weighted(resource_prefabs)
 		if prefab then
-			local position = self:_random_point_in_region(region_center, region_def.size)
-			self:_place_prefab(prefab, position, self.spawn_subfolders.Resources)
-			self.stats.resources += 1
+			-- Try multiple positions to avoid structures
+			local placed = false
+			for _ = 1, 3 do
+				local position = self:_random_point_in_region(region_center, region_def.size)
+				if not isInsideStructure(position, prefab) then
+					self:_place_prefab(prefab, position, self.spawn_subfolders.Resources)
+					self.stats.resources += 1
+					placed = true
+					break
+				end
+			end
 		end
 		self:_step()
 	end
@@ -561,9 +576,17 @@ function BiomeGenerator:_scatter_in_region(biome_name, region_center, region_def
 	for _ = 1, prop_count do
 		local prefab = self:_choose_weighted(prop_prefabs)
 		if prefab then
-			local position = self:_random_point_in_region(region_center, region_def.size)
-			self:_place_prefab(prefab, position, self.spawn_subfolders.Props)
-			self.stats.props += 1
+			-- Try multiple positions to avoid structures
+			local placed = false
+			for _ = 1, 3 do
+				local position = self:_random_point_in_region(region_center, region_def.size)
+				if not isInsideStructure(position, prefab) then
+					self:_place_prefab(prefab, position, self.spawn_subfolders.Props)
+					self.stats.props += 1
+					placed = true
+					break
+				end
+			end
 		end
 		self:_step()
 	end
@@ -585,7 +608,21 @@ function BiomeGenerator:_scatter_in_region(biome_name, region_center, region_def
 				goto continue_enemy
 			end
 
-			local position = self:_random_point_in_region(region_center, region_def.size)
+			-- Try to find a position outside structures for the group
+			local position = nil
+			for _ = 1, 3 do
+				local testPos = self:_random_point_in_region(region_center, region_def.size)
+				local testRect = rect_from_size(testPos.X, testPos.Z, 4, 4, 2)
+				if not self.structure_hash:intersects(testRect) then
+					position = testPos
+					break
+				end
+			end
+			if not position then
+				self:_step()
+				goto continue_enemy
+			end
+
 			local group_size = random_in_range(self.random, entry.GroupSize, 1)
 			local radius = tonumber(entry.GroupRadius) or 6
 			group_counts[id] = (group_counts[id] or 0) + 1
@@ -689,21 +726,7 @@ function BiomeGenerator:_generate(override_biome)
 
 		self.stats.chunks += 1
 
-		local region_count = random_in_range(self.random, biome.region_count or biome.regionCount, 1)
-		for _ = 1, region_count do
-			local region_def = nil
-			if biome.regions and #biome.regions > 0 then
-				region_def = biome.regions[self.random:NextInteger(1, #biome.regions)]
-			end
-			if region_def then
-				local region_center = self:_try_place_region(chunk_center, region_def)
-				if region_center then
-					self:_scatter_in_region(biome_name, region_center, region_def)
-				end
-			end
-			self:_step()
-		end
-
+		-- Place structures FIRST so resources can avoid them
 		local structure_chance = resolve_probability(self.random, biome.structure_count or biome.structureCount)
 		local structure_count = (self.random:NextNumber() <= structure_chance) and 1 or 0
 		if structure_count > 0 then
@@ -736,6 +759,22 @@ function BiomeGenerator:_generate(override_biome)
 				self.objective_padding,
 				self.spawn_subfolders.Objectives
 			)
+		end
+
+		-- Now place regions and scatter resources (they will avoid structures)
+		local region_count = random_in_range(self.random, biome.region_count or biome.regionCount, 1)
+		for _ = 1, region_count do
+			local region_def = nil
+			if biome.regions and #biome.regions > 0 then
+				region_def = biome.regions[self.random:NextInteger(1, #biome.regions)]
+			end
+			if region_def then
+				local region_center = self:_try_place_region(chunk_center, region_def)
+				if region_center then
+					self:_scatter_in_region(biome_name, region_center, region_def)
+				end
+			end
+			self:_step()
 		end
 
 		self:_step()

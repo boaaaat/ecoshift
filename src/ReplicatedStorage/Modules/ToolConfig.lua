@@ -31,13 +31,6 @@ function ToolConfig.Read(tool: Tool)
 	local multiplier = getNumber(tool, "Multiplier", 1)
 	local toolType = getString(tool, "ToolType", "")
 	
-	-- DEBUG: Log raw attribute values
-	print(string.format("[ToolConfig] Reading %s: ToolType attr=%s, Damage=%s, Multiplier=%s", 
-		tool.Name, 
-		tostring(tool:GetAttribute("ToolType")),
-		tostring(tool:GetAttribute("Damage")),
-		tostring(tool:GetAttribute("Multiplier"))))
-	
 	return {
 		ToolType = toolType,
 		Damage = math.floor(tonumber(damage) or 0),
