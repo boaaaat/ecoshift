@@ -8,6 +8,7 @@ local Workspace = game:GetService("Workspace")
 local CollectionService = game:GetService("CollectionService")
 
 local Config = require(ReplicatedStorage.Shared.Config) 
+local BiomeService = require(script.Parent.Services.BiomeService)
 local EnemyPrefabs = ServerStorage:FindFirstChild("Enemies")
 local BiomeEnemyPrefabs = ServerStorage:FindFirstChild("EnemyPrefabs")
 
@@ -19,15 +20,30 @@ local function getEnemyFolder()
 	return EnemyPrefabs
 end
 
-local function getBiomeEnemyPrefab(id)
-	if not BiomeEnemyPrefabs then return nil end
-	for _, biomeFolder in ipairs(BiomeEnemyPrefabs:GetChildren()) do
-		local prefab = biomeFolder:FindFirstChild(id)
-		if prefab then
-			return prefab
+local function findPrefabInFolder(root, biomeName, id)
+	if not root then return nil end
+	if biomeName then
+		local biomeFolder = root:FindFirstChild(biomeName)
+		local prefab = biomeFolder and biomeFolder:FindFirstChild(id)
+		if prefab then return prefab end
+	end
+	-- Search all biome folders
+	for _, biomeFolder in ipairs(root:GetChildren()) do
+		if biomeFolder:IsA("Folder") then
+			local prefab = biomeFolder:FindFirstChild(id)
+			if prefab then return prefab end
 		end
 	end
-	return nil
+	-- Fallback to direct child
+	return root:FindFirstChild(id)
+end
+
+local function getEnemyPrefab(id)
+	local biomeName = BiomeService:GetCurrent()
+	local prefab = findPrefabInFolder(BiomeEnemyPrefabs, biomeName, id)
+	if prefab then return prefab end
+	prefab = findPrefabInFolder(EnemyPrefabs, biomeName, id)
+	return prefab
 end
 
 -- This function finds a safe spawn position above the ground
@@ -66,7 +82,7 @@ local function spawnWave(enemyIds, spawnPoints)
 	local playerCount = math.max(1, #Players:GetPlayers())
 
 	for _, id in ipairs(enemyIds) do
-		local prefab = prefabFolder and prefabFolder:FindFirstChild(id) or getBiomeEnemyPrefab(id)
+		local prefab = getEnemyPrefab(id)
 		if not prefab then 
 			warn("[EnemySpawner] SKIPPED: Cannot find enemy prefab named '", id, "'")
 			continue 
@@ -119,8 +135,7 @@ end
 
 _G.Ecoshift = _G.Ecoshift or {}
 _G.Ecoshift.SpawnEnemyById = function(id, anchor)
-	local prefabFolder = getEnemyFolder()
-	local prefab = prefabFolder and prefabFolder:FindFirstChild(id) or getBiomeEnemyPrefab(id)
+	local prefab = getEnemyPrefab(id)
 	if not prefab then return end
 	local anchorPos = anchor:IsA("Attachment") and anchor.WorldPosition or anchor.Position
 	local newEnemy = prefab:Clone()
