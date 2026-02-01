@@ -81,12 +81,18 @@ end
 local function getWeaponType(tool: Instance?)
 	if not tool or not tool:IsA("Tool") then return nil end
 	local attr = tool:GetAttribute("WeaponType")
-	if typeof(attr) == "string" and attr ~= "" then
-		return attr
+	if attr ~= nil then
+		if typeof(attr) == "string" then
+			return attr ~= "" and attr or nil
+		end
+		return tostring(attr) ~= "" and tostring(attr) or nil
 	end
 	local child = tool:FindFirstChild("WeaponType")
-	if child and child:IsA("StringValue") and child.Value ~= "" then
-		return child.Value
+	if child and child:IsA("ValueBase") then
+		if typeof(child.Value) == "string" then
+			return child.Value ~= "" and child.Value or nil
+		end
+		return tostring(child.Value) ~= "" and tostring(child.Value) or nil
 	end
 	return nil
 end

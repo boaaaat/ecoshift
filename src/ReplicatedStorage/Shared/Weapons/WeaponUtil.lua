@@ -1,7 +1,11 @@
 local WeaponUtil = {}
 
 local function readValue(tool, name)
-	local child = tool:FindFirstChild(name)
+	local attr = tool and tool:GetAttribute(name)
+	if attr ~= nil then
+		return attr
+	end
+	local child = tool and tool:FindFirstChild(name)
 	if child and child:IsA("ValueBase") then
 		return child.Value
 	end

@@ -55,6 +55,18 @@ local function getLootTableName(instance)
 	return cfg.DefaultTable or "Default"
 end
 
+local function getExplicitLootTableName(instance)
+	local attr = instance:GetAttribute("LootTable") or instance:GetAttribute("LootTableName")
+	if type(attr) == "string" and attr ~= "" then
+		return attr
+	end
+	local val = instance:FindFirstChild("LootTable") or instance:FindFirstChild("LootTableName")
+	if val and val:IsA("StringValue") and val.Value ~= "" then
+		return val.Value
+	end
+	return nil
+end
+
 local function getPrimary(model)
 	if model:IsA("BasePart") then return model end
 	if model.PrimaryPart then return model.PrimaryPart end
@@ -152,11 +164,13 @@ function LootService:_bindChest(chest)
 	end)
 end
 
-local function dropLoot(model, tier)
+local function dropLoot(model, tier, tableName, destroyModel)
 	if not model or model:GetAttribute("LootDropped") then return end
+	if tableName ~= nil and tableName == "" then return end
 	model:SetAttribute("LootDropped", true)
-	local tableName = getLootTableName(model)
-	local items = LootTableService:Roll(tableName, tier)
+	local tName = tableName or getLootTableName(model)
+	if not tName or tName == "" then return end
+	local items = LootTableService:Roll(tName, tier)
 	local root = getPrimary(model)
 	local pos = root and root.Position or model:GetPivot().Position
 	local cfg = Config.LOOT or {}
@@ -170,22 +184,36 @@ local function dropLoot(model, tier)
 		)
 		ItemDropService:SpawnDrop(item.Id, item.N, pos + offset)
 	end
+	if destroyModel and model and model.Parent then
+		model:Destroy()
+	end
 end
 
-function LootService:_bindMonster(monster)
+function LootService:_bindMonster(monster, opts)
 	if not monster or not monster.Parent then return end
-	local tier = getTierFromTags(monster, MONSTER_TAGS)
+	local tier = (opts and opts.Tier) or getTierFromTags(monster, MONSTER_TAGS)
+	local requireExplicit = opts and opts.RequireExplicit or false
 	if self._monsterConns[monster] then return end
 	local hum = monster:FindFirstChildOfClass("Humanoid")
 	local health = monster:FindFirstChild("Health")
+	local function handleDeath()
+		local tableName = requireExplicit and getExplicitLootTableName(monster) or getLootTableName(monster)
+		if requireExplicit and not tableName then
+			if monster and monster.Parent then
+				monster:Destroy()
+			end
+			return
+		end
+		dropLoot(monster, tier, tableName, true)
+	end
 	if hum then
 		self._monsterConns[monster] = hum.Died:Connect(function()
-			dropLoot(monster, tier)
+			handleDeath()
 		end)
 	elseif health and health:IsA("NumberValue") then
 		self._monsterConns[monster] = health.Changed:Connect(function()
 			if health.Value <= 0 then
-				dropLoot(monster, tier)
+				handleDeath()
 			end
 		end)
 	end
@@ -257,6 +285,14 @@ function LootService:Init()
 			self:_bindMonster(inst)
 		end)
 	end
+
+	-- Generic monsters (uses explicit LootTable/LootTableName if present)
+	for _, inst in ipairs(CollectionService:GetTagged("Monster")) do
+		self:_bindMonster(inst, { Tier = 1, RequireExplicit = true })
+	end
+	CollectionService:GetInstanceAddedSignal("Monster"):Connect(function(inst)
+		self:_bindMonster(inst, { Tier = 1, RequireExplicit = true })
+	end)
 end
 
 function LootService:RescanChests()
@@ -272,6 +308,9 @@ function LootService:RescanMonsters()
 		for _, inst in ipairs(CollectionService:GetTagged(tag)) do
 			self:_bindMonster(inst)
 		end
+	end
+	for _, inst in ipairs(CollectionService:GetTagged("Monster")) do
+		self:_bindMonster(inst, { Tier = 1, RequireExplicit = true })
 	end
 end
 

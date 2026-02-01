@@ -59,15 +59,29 @@ local loopRunning = false
 local inputBeganConn = nil
 local inputEndedConn = nil
 
+local function hasWeaponType(tool)
+	if not tool or not tool:IsA("Tool") then return false end
+	local wAttr = tool:GetAttribute("WeaponType")
+	if wAttr ~= nil then
+		if typeof(wAttr) == "string" then
+			return wAttr ~= ""
+		end
+		return tostring(wAttr) ~= ""
+	end
+	local wChild = tool:FindFirstChild("WeaponType")
+	if wChild and wChild:IsA("ValueBase") then
+		if typeof(wChild.Value) == "string" then
+			return wChild.Value ~= ""
+		end
+		return tostring(wChild.Value or "") ~= ""
+	end
+	return false
+end
+
 local function isHarvestTool(tool)
 	if not tool or not tool:IsA("Tool") then return false end
 	-- If it's a weapon, do not treat as a harvest tool
-	local wAttr = tool:GetAttribute("WeaponType")
-	if typeof(wAttr) == "string" and wAttr ~= "" then
-		return false
-	end
-	local wChild = tool:FindFirstChild("WeaponType")
-	if wChild and wChild:IsA("StringValue") and wChild.Value ~= "" then
+	if hasWeaponType(tool) then
 		return false
 	end
 	local t = tool:GetAttribute("ToolType")
@@ -175,13 +189,17 @@ local function onCharacter(char)
 	char.ChildAdded:Connect(function(child)
 		if child:IsA("Tool") then
 			bindTool(child)
-			activeTool = child
+			if isHarvestTool(child) then
+				activeTool = child
+			end
 		end
 	end)
 	for _, child in ipairs(char:GetChildren()) do
 		if child:IsA("Tool") then
 			bindTool(child)
-			activeTool = child
+			if isHarvestTool(child) then
+				activeTool = child
+			end
 		end
 	end
 end

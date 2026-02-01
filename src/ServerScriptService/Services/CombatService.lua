@@ -27,18 +27,25 @@ local CombatService = {}
 CombatService._remotesFolder = nil
 CombatService._remoteDamage = nil
 CombatService._remoteAction = nil
+CombatService._remoteFeedback = nil
 
 CombatService._lastUse = setmetatable({}, { __mode = "k" }) -- [tool] = time
 CombatService._chargeStart = setmetatable({}, { __mode = "k" }) -- [player] = time
 CombatService._blocking = setmetatable({}, { __mode = "k" }) -- [player] = tool
 
 local function ensureRemotes(self)
-	if self._remoteDamage and self._remoteAction then return end
+	if self._remoteDamage and self._remoteAction and self._remoteFeedback then return end
 	self._remotesFolder = Util.GetDescendant(Config.Paths.Remotes) 
 		or Util.WaitForDescendant(Config.Paths.Remotes, 5)
 	if self._remotesFolder then
 		self._remoteDamage = Util.GetRemote(self._remotesFolder, Config.RemoteNames.Damage)
 		self._remoteAction = Util.GetRemote(self._remotesFolder, Config.RemoteNames.CombatAction)
+		self._remoteFeedback = Util.GetRemote(self._remotesFolder, Config.RemoteNames.HarvestFeedback)
+		if not self._remoteFeedback then
+			self._remoteFeedback = Instance.new("RemoteEvent")
+			self._remoteFeedback.Name = Config.RemoteNames.HarvestFeedback
+			self._remoteFeedback.Parent = self._remotesFolder
+		end
 	end
 end
 
@@ -71,6 +78,32 @@ local function getHumanoidOrHealth(target)
 	return nil
 end
 
+local function getTargetPosition(target)
+	if not target then return nil end
+	if target:IsA("BasePart") then
+		return target.Position
+	end
+	if target:IsA("Model") then
+		local root = target.PrimaryPart or target:FindFirstChild("HumanoidRootPart") or target:FindFirstChildWhichIsA("BasePart")
+		if root then return root.Position end
+		return target:GetPivot().Position
+	end
+	return nil
+end
+
+local function getMaxHealthFromTarget(target, fallback)
+	if not target or not target:IsA("Model") then
+		return fallback
+	end
+	local maxAttr = target:GetAttribute("MaxHealth") or target:GetAttribute("_MaxHealth")
+	if typeof(maxAttr) == "number" then return maxAttr end
+	local child = target:FindFirstChild("MaxHealth") or target:FindFirstChild("_MaxHealth")
+	if child and child:IsA("ValueBase") and typeof(child.Value) == "number" then
+		return child.Value
+	end
+	return fallback
+end
+
 function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 	amount = tonumber(amount) or 0
 	if amount <= 0 or amount > 2000 then return end
@@ -100,6 +133,7 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 	--  - Or a Humanoid if target is a character
 	local healthValue = getHumanoidOrHealth(target)
 	if not healthValue then return end
+	local oldHealth = healthValue:IsA("NumberValue") and healthValue.Value or healthValue.Health
 
 	-- Shield block check for player targets
 	if tgtPlr and self._blocking[tgtPlr] then
@@ -141,6 +175,28 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 	else
 		-- Humanoid - DeathService hooks HealthChanged and handles death automatically
 		healthValue:TakeDamage(amount)
+	end
+
+	-- Combat feedback (damage numbers + health bar) for non-player targets
+	if not tgtPlr then
+		ensureRemotes(self)
+		if self._remoteFeedback then
+			local pos = getTargetPosition(target)
+			if pos then
+				local newHealth = healthValue:IsA("NumberValue") and healthValue.Value or math.max(0, oldHealth - amount)
+				local maxHealth = healthValue:IsA("NumberValue")
+					and getMaxHealthFromTarget(target, math.max(oldHealth, newHealth))
+					or (healthValue.MaxHealth or math.max(oldHealth, newHealth))
+				self._remoteFeedback:FireAllClients({
+					Node = target,
+					Position = pos,
+					Damage = math.floor(amount),
+					Health = newHealth,
+					MaxHealth = maxHealth,
+					Destroyed = newHealth <= 0,
+				})
+			end
+		end
 	end
 end
 

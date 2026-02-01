@@ -119,7 +119,7 @@ Config.GRID = {
 	BuildMaxDistance = 45,
 }
 
-Config.STARTER_ITEMS = {}
+Config.STARTER_ITEMS = {{Id = "Sword", N = 1}}
 
 Config.UI = {
 	PlaceholderIcon = "rbxasset://textures/ui/GuiImagePlaceholder.png",
