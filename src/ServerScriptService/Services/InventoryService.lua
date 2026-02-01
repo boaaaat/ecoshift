@@ -447,6 +447,16 @@ function InventoryService:Split(plr, fromType, fromIndex, toType, toIndex, amoun
 	return true
 end
 
+-- Alias for Has (BuildService compatibility)
+function InventoryService:HasItem(plr, itemId, amount)
+	return self:Has(plr, itemId, amount)
+end
+
+-- Alias for Consume (BuildService compatibility)  
+function InventoryService:Take(plr, itemId, amount)
+	return self:Consume(plr, itemId, amount)
+end
+
 Players.PlayerAdded:Connect(function(plr)
 	InventoryService:Reset(plr)
 end)

@@ -1,10 +1,11 @@
--- CraftingUI.client.lua
--- Inventory crafting interface (Hand crafting only - basic recipes)
--- For advanced crafting, place and interact with workbenches
+-- WorkbenchUI.client.lua
+-- Crafting interface for placed workbenches and crafting stations
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local ProximityPromptService = game:GetService("ProximityPromptService")
+local CollectionService = game:GetService("CollectionService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
@@ -14,13 +15,12 @@ local WorkbenchConfig = require(ReplicatedStorage.Shared.WorkbenchConfig)
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- OPTIMIZED: Try immediate lookup first, use shorter timeout
 local remotesFolder = Util.GetDescendant(Config.Paths.Remotes) 
 	or Util.WaitForDescendant(Config.Paths.Remotes, 5)
 local rCraft = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.Craft)
 local rInventory = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.InventoryUpdate)
 
--- UI Constants (matching inventory style)
+-- UI Constants
 local COLORS = {
 	Background = Color3.fromRGB(18, 18, 22),
 	Panel = Color3.fromRGB(28, 28, 35),
@@ -35,24 +35,30 @@ local COLORS = {
 	Success = Color3.fromRGB(80, 200, 120),
 	Warning = Color3.fromRGB(255, 180, 80),
 	Danger = Color3.fromRGB(220, 80, 80),
+	Tier1 = Color3.fromRGB(150, 150, 150),  -- Basic workbench
+	Tier2 = Color3.fromRGB(100, 180, 255),  -- Advanced
+	Tier3 = Color3.fromRGB(255, 200, 80),   -- Master
+	Special = Color3.fromRGB(180, 100, 255), -- Furnace, Anvil, etc.
 }
 
 local MARGIN = 16
-local RECIPE_HEIGHT = 70
+local RECIPE_HEIGHT = 80
 
 -- State
 local isOpen = false
 local inventorySnapshot = nil
 local selectedRecipe = nil
+local currentStation = nil
+local currentStationType = nil
 
 -- Create main GUI
 local gui = Instance.new("ScreenGui")
-gui.Name = "CraftingUI"
+gui.Name = "WorkbenchUI"
 gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = playerGui
 
--- Backdrop (dims screen when open)
+-- Backdrop
 local backdrop = Instance.new("Frame")
 backdrop.Name = "Backdrop"
 backdrop.Size = UDim2.new(1, 0, 1, 0)
@@ -63,10 +69,10 @@ backdrop.Visible = false
 backdrop.ZIndex = 1
 backdrop.Parent = gui
 
--- Main panel (CanvasGroup for GroupTransparency animation)
+-- Main panel
 local mainPanel = Instance.new("CanvasGroup")
 mainPanel.Name = "MainPanel"
-mainPanel.Size = UDim2.new(0, 420, 0, 480)
+mainPanel.Size = UDim2.new(0, 500, 0, 550)
 mainPanel.AnchorPoint = Vector2.new(0.5, 0.5)
 mainPanel.Position = UDim2.new(0.5, 0, 0.5, 0)
 mainPanel.BackgroundColor3 = COLORS.Panel
@@ -102,17 +108,30 @@ shadow.Parent = mainPanel
 -- Header
 local header = Instance.new("Frame")
 header.Name = "Header"
-header.Size = UDim2.new(1, 0, 0, 50)
+header.Size = UDim2.new(1, 0, 0, 60)
 header.BackgroundTransparency = 1
 header.ZIndex = 11
 header.Parent = mainPanel
 
+local stationIcon = Instance.new("TextLabel")
+stationIcon.Name = "Icon"
+stationIcon.Size = UDim2.new(0, 40, 0, 40)
+stationIcon.Position = UDim2.new(0, MARGIN, 0.5, 0)
+stationIcon.AnchorPoint = Vector2.new(0, 0.5)
+stationIcon.BackgroundTransparency = 1
+stationIcon.Text = "🔨"
+stationIcon.TextColor3 = COLORS.Text
+stationIcon.TextSize = 28
+stationIcon.Font = Enum.Font.GothamBold
+stationIcon.ZIndex = 11
+stationIcon.Parent = header
+
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Name = "Title"
-titleLabel.Size = UDim2.new(1, -80, 1, 0)
-titleLabel.Position = UDim2.new(0, MARGIN, 0, 0)
+titleLabel.Size = UDim2.new(1, -120, 0, 24)
+titleLabel.Position = UDim2.new(0, MARGIN + 48, 0, 10)
 titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "🤲 Hand Crafting"
+titleLabel.Text = "Workbench"
 titleLabel.TextColor3 = COLORS.Text
 titleLabel.TextSize = 20
 titleLabel.Font = Enum.Font.GothamBold
@@ -120,17 +139,30 @@ titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 titleLabel.ZIndex = 11
 titleLabel.Parent = header
 
+local subtitleLabel = Instance.new("TextLabel")
+subtitleLabel.Name = "Subtitle"
+subtitleLabel.Size = UDim2.new(1, -120, 0, 18)
+subtitleLabel.Position = UDim2.new(0, MARGIN + 48, 0, 34)
+subtitleLabel.BackgroundTransparency = 1
+subtitleLabel.Text = "Craft tools and equipment"
+subtitleLabel.TextColor3 = COLORS.TextMuted
+subtitleLabel.TextSize = 12
+subtitleLabel.Font = Enum.Font.Gotham
+subtitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+subtitleLabel.ZIndex = 11
+subtitleLabel.Parent = header
+
 -- Close button
 local closeBtn = Instance.new("TextButton")
 closeBtn.Name = "CloseButton"
-closeBtn.Size = UDim2.new(0, 32, 0, 32)
+closeBtn.Size = UDim2.new(0, 36, 0, 36)
 closeBtn.AnchorPoint = Vector2.new(1, 0.5)
 closeBtn.Position = UDim2.new(1, -MARGIN, 0.5, 0)
 closeBtn.BackgroundColor3 = COLORS.SlotEmpty
 closeBtn.BorderSizePixel = 0
 closeBtn.Text = "✕"
 closeBtn.TextColor3 = COLORS.TextMuted
-closeBtn.TextSize = 16
+closeBtn.TextSize = 18
 closeBtn.Font = Enum.Font.GothamBold
 closeBtn.ZIndex = 12
 closeBtn.Parent = header
@@ -139,11 +171,29 @@ local closeBtnCorner = Instance.new("UICorner")
 closeBtnCorner.CornerRadius = UDim.new(0, 8)
 closeBtnCorner.Parent = closeBtn
 
+-- Category tabs
+local categoryBar = Instance.new("Frame")
+categoryBar.Name = "CategoryBar"
+categoryBar.Size = UDim2.new(1, -MARGIN * 2, 0, 32)
+categoryBar.Position = UDim2.new(0, MARGIN, 0, 65)
+categoryBar.BackgroundTransparency = 1
+categoryBar.ZIndex = 11
+categoryBar.Parent = mainPanel
+
+local categoryLayout = Instance.new("UIListLayout")
+categoryLayout.FillDirection = Enum.FillDirection.Horizontal
+categoryLayout.SortOrder = Enum.SortOrder.LayoutOrder
+categoryLayout.Padding = UDim.new(0, 4)
+categoryLayout.Parent = categoryBar
+
+local selectedCategory = "All"
+local categoryButtons = {}
+
 -- Recipe list container
 local recipeContainer = Instance.new("ScrollingFrame")
 recipeContainer.Name = "RecipeList"
-recipeContainer.Size = UDim2.new(1, -MARGIN * 2, 1, -130)
-recipeContainer.Position = UDim2.new(0, MARGIN, 0, 55)
+recipeContainer.Size = UDim2.new(1, -MARGIN * 2, 1, -180)
+recipeContainer.Position = UDim2.new(0, MARGIN, 0, 105)
 recipeContainer.BackgroundColor3 = COLORS.Background
 recipeContainer.BackgroundTransparency = 0.5
 recipeContainer.BorderSizePixel = 0
@@ -169,12 +219,11 @@ recipePadding.PaddingLeft = UDim.new(0, 6)
 recipePadding.PaddingRight = UDim.new(0, 6)
 recipePadding.Parent = recipeContainer
 
--- Craft button at bottom
+-- Craft button
 local craftBtn = Instance.new("TextButton")
 craftBtn.Name = "CraftButton"
 craftBtn.Size = UDim2.new(1, -MARGIN * 2, 0, 50)
 craftBtn.Position = UDim2.new(0, MARGIN, 1, -65)
-craftBtn.AnchorPoint = Vector2.new(0, 0)
 craftBtn.BackgroundColor3 = COLORS.SlotEmpty
 craftBtn.BorderSizePixel = 0
 craftBtn.Text = "Select a Recipe"
@@ -196,14 +245,6 @@ craftBtnStroke.Thickness = 1
 craftBtnStroke.Parent = craftBtn
 
 -- Helper functions
-local function hashColor(id)
-	local hash = 0
-	for i = 1, #id do
-		hash = (hash * 33 + string.byte(id, i)) % 360
-	end
-	return Color3.fromHSV(hash / 360, 0.55, 0.85)
-end
-
 local function getItemCount(itemId)
 	if not inventorySnapshot then return 0 end
 	local count = 0
@@ -225,27 +266,13 @@ local function getItemCount(itemId)
 end
 
 local function canCraftRecipe(recipeId)
-	-- Check WorkbenchConfig first for new recipes
 	local recipe = WorkbenchConfig.RECIPES[recipeId]
-	if recipe then
-		local craftMult = tonumber(player:GetAttribute("Role_Craft")) or 1.0
-		for _, ingredient in ipairs(recipe.Ingredients or {}) do
-			local needed = math.max(1, math.floor((ingredient.N or 1) / math.max(craftMult, 0.1)))
-			local have = getItemCount(ingredient.Id)
-			if have < needed then
-				return false
-			end
-		end
-		return true
-	end
-	
-	-- Fallback to old Config.RECIPES for backwards compatibility
-	local oldRecipe = Config.RECIPES[recipeId]
-	if not oldRecipe then return false end
+	if not recipe then return false end
 	
 	local craftMult = tonumber(player:GetAttribute("Role_Craft")) or 1.0
+	local ingredients = recipe.Ingredients or {}
 	
-	for _, ingredient in ipairs(oldRecipe) do
+	for _, ingredient in ipairs(ingredients) do
 		local needed = math.max(1, math.floor((ingredient.N or 1) / math.max(craftMult, 0.1)))
 		local have = getItemCount(ingredient.Id)
 		if have < needed then
@@ -253,6 +280,17 @@ local function canCraftRecipe(recipeId)
 		end
 	end
 	return true
+end
+
+local function getTierColor(recipe)
+	if recipe.StationType then
+		return COLORS.Special
+	end
+	local tier = recipe.StationTier or 0
+	if tier <= 0 then return COLORS.TextMuted end
+	if tier == 1 then return COLORS.Tier1 end
+	if tier == 2 then return COLORS.Tier2 end
+	return COLORS.Tier3
 end
 
 local function createIngredientDisplay(ingredient, parent, craftMult)
@@ -263,9 +301,9 @@ local function createIngredientDisplay(ingredient, parent, craftMult)
 	local canAfford = have >= needed
 	
 	local frame = Instance.new("Frame")
-	frame.Size = UDim2.new(0, 80, 0, 44)
+	frame.Size = UDim2.new(0, 85, 0, 50)
 	frame.BackgroundColor3 = COLORS.SlotEmpty
-	frame.BackgroundTransparency = 0.5
+	frame.BackgroundTransparency = 0.3
 	frame.BorderSizePixel = 0
 	frame.ZIndex = 13
 	frame.Parent = parent
@@ -274,27 +312,25 @@ local function createIngredientDisplay(ingredient, parent, craftMult)
 	corner.CornerRadius = UDim.new(0, 6)
 	corner.Parent = frame
 	
-	-- Item name/icon
 	local itemLabel = Instance.new("TextLabel")
-	itemLabel.Size = UDim2.new(1, -4, 0, 20)
-	itemLabel.Position = UDim2.new(0, 2, 0, 3)
+	itemLabel.Size = UDim2.new(1, -6, 0, 20)
+	itemLabel.Position = UDim2.new(0, 3, 0, 4)
 	itemLabel.BackgroundTransparency = 1
 	itemLabel.Text = name
 	itemLabel.TextColor3 = canAfford and COLORS.Text or COLORS.Danger
-	itemLabel.TextSize = 10
+	itemLabel.TextSize = 11
 	itemLabel.Font = Enum.Font.GothamBold
 	itemLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	itemLabel.ZIndex = 14
 	itemLabel.Parent = frame
 	
-	-- Count display
 	local countLabel = Instance.new("TextLabel")
-	countLabel.Size = UDim2.new(1, -4, 0, 18)
-	countLabel.Position = UDim2.new(0, 2, 0, 22)
+	countLabel.Size = UDim2.new(1, -6, 0, 18)
+	countLabel.Position = UDim2.new(0, 3, 0, 26)
 	countLabel.BackgroundTransparency = 1
-	countLabel.Text = string.format("%d/%d", have, needed)
+	countLabel.Text = string.format("%d / %d", have, needed)
 	countLabel.TextColor3 = canAfford and COLORS.Success or COLORS.Warning
-	countLabel.TextSize = 11
+	countLabel.TextSize = 12
 	countLabel.Font = Enum.Font.Gotham
 	countLabel.ZIndex = 14
 	countLabel.Parent = frame
@@ -304,20 +340,8 @@ end
 
 local recipeCards = {}
 
-local function createRecipeCard(recipeId, recipeData)
-	-- Handle both old format (array) and new format (table with Ingredients)
-	local ingredients, output, category
-	if recipeData.Ingredients then
-		-- New WorkbenchConfig format
-		ingredients = recipeData.Ingredients
-		output = recipeData.Output or { Id = recipeId, N = 1 }
-		category = recipeData.Category
-	else
-		-- Old Config.RECIPES format
-		ingredients = recipeData
-		output = { Id = recipeId, N = 1 }
-	end
-	
+local function createRecipeCard(recipeId, recipe)
+	local output = recipe.Output or { Id = recipeId, N = 1 }
 	local item = ItemDatabase:Get(output.Id)
 	local name = item and item.Name or output.Id
 	local canCraft = canCraftRecipe(recipeId)
@@ -345,11 +369,11 @@ local function createRecipeCard(recipeId, recipeData)
 	cardStroke.Transparency = 0.5
 	cardStroke.Parent = card
 	
-	-- Result item name (with output count if > 1)
+	-- Output item name
 	local nameLabel = Instance.new("TextLabel")
 	nameLabel.Name = "Name"
-	nameLabel.Size = UDim2.new(1, -10, 0, 22)
-	nameLabel.Position = UDim2.new(0, 10, 0, 6)
+	nameLabel.Size = UDim2.new(0.6, 0, 0, 22)
+	nameLabel.Position = UDim2.new(0, 12, 0, 8)
 	nameLabel.BackgroundTransparency = 1
 	nameLabel.Text = outputCount > 1 and string.format("%s x%d", name, outputCount) or name
 	nameLabel.TextColor3 = COLORS.Text
@@ -359,16 +383,30 @@ local function createRecipeCard(recipeId, recipeData)
 	nameLabel.ZIndex = 13
 	nameLabel.Parent = card
 	
-	-- Craftable indicator
+	-- Category tag
+	local categoryTag = Instance.new("TextLabel")
+	categoryTag.Name = "Category"
+	categoryTag.Size = UDim2.new(0, 80, 0, 16)
+	categoryTag.Position = UDim2.new(0, 12, 0, 28)
+	categoryTag.BackgroundTransparency = 1
+	categoryTag.Text = recipe.Category or "Misc"
+	categoryTag.TextColor3 = getTierColor(recipe)
+	categoryTag.TextSize = 10
+	categoryTag.Font = Enum.Font.Gotham
+	categoryTag.TextXAlignment = Enum.TextXAlignment.Left
+	categoryTag.ZIndex = 13
+	categoryTag.Parent = card
+	
+	-- Status indicator
 	local statusLabel = Instance.new("TextLabel")
 	statusLabel.Name = "Status"
-	statusLabel.Size = UDim2.new(0, 80, 0, 18)
+	statusLabel.Size = UDim2.new(0, 90, 0, 20)
 	statusLabel.AnchorPoint = Vector2.new(1, 0)
-	statusLabel.Position = UDim2.new(1, -10, 0, 8)
+	statusLabel.Position = UDim2.new(1, -12, 0, 10)
 	statusLabel.BackgroundTransparency = 1
 	statusLabel.Text = canCraft and "✓ Ready" or "✗ Missing"
 	statusLabel.TextColor3 = canCraft and COLORS.Success or COLORS.Danger
-	statusLabel.TextSize = 11
+	statusLabel.TextSize = 12
 	statusLabel.Font = Enum.Font.GothamBold
 	statusLabel.TextXAlignment = Enum.TextXAlignment.Right
 	statusLabel.ZIndex = 13
@@ -377,8 +415,8 @@ local function createRecipeCard(recipeId, recipeData)
 	-- Ingredients container
 	local ingredientsFrame = Instance.new("Frame")
 	ingredientsFrame.Name = "Ingredients"
-	ingredientsFrame.Size = UDim2.new(1, -20, 0, 44)
-	ingredientsFrame.Position = UDim2.new(0, 10, 0, 28)
+	ingredientsFrame.Size = UDim2.new(1, -24, 0, 50)
+	ingredientsFrame.Position = UDim2.new(0, 12, 0, 46)
 	ingredientsFrame.BackgroundTransparency = 1
 	ingredientsFrame.ZIndex = 13
 	ingredientsFrame.Parent = card
@@ -389,8 +427,7 @@ local function createRecipeCard(recipeId, recipeData)
 	ingredientLayout.Padding = UDim.new(0, 6)
 	ingredientLayout.Parent = ingredientsFrame
 	
-	-- Add ingredient displays
-	for _, ingredient in ipairs(ingredients) do
+	for _, ingredient in ipairs(recipe.Ingredients or {}) do
 		createIngredientDisplay(ingredient, ingredientsFrame, craftMult)
 	end
 	
@@ -401,12 +438,12 @@ local function createRecipeCard(recipeId, recipeData)
 	
 	card.MouseLeave:Connect(function()
 		local isSelected = selectedRecipe == recipeId
-		local targetColor = isSelected and COLORS.SlotSelected or COLORS.SlotFilled
-		TweenService:Create(card, TweenInfo.new(0.12), {BackgroundColor3 = targetColor}):Play()
+		TweenService:Create(card, TweenInfo.new(0.12), {
+			BackgroundColor3 = isSelected and COLORS.SlotSelected or COLORS.SlotFilled
+		}):Play()
 	end)
 	
 	card.MouseButton1Click:Connect(function()
-		-- Deselect previous
 		if selectedRecipe and recipeCards[selectedRecipe] then
 			local prevCard = recipeCards[selectedRecipe]
 			prevCard.Stroke.Color = COLORS.Border
@@ -414,18 +451,59 @@ local function createRecipeCard(recipeId, recipeData)
 			prevCard.BackgroundColor3 = COLORS.SlotFilled
 		end
 		
-		-- Select this one
 		selectedRecipe = recipeId
 		cardStroke.Color = COLORS.SlotSelected
 		cardStroke.Thickness = 2
 		card.BackgroundColor3 = COLORS.SlotSelected
 		
-		-- Update craft button
 		updateCraftButton()
 	end)
 	
 	recipeCards[recipeId] = card
 	return card
+end
+
+local function createCategoryButton(category, layoutOrder)
+	local isAll = category == "All"
+	local isSelected = selectedCategory == category
+	
+	local btn = Instance.new("TextButton")
+	btn.Name = category
+	btn.Size = UDim2.new(0, isAll and 50 or 70, 1, 0)
+	btn.LayoutOrder = layoutOrder
+	btn.BackgroundColor3 = isSelected and COLORS.Accent or COLORS.SlotEmpty
+	btn.BorderSizePixel = 0
+	btn.Text = category
+	btn.TextColor3 = isSelected and COLORS.Text or COLORS.TextMuted
+	btn.TextSize = 11
+	btn.Font = Enum.Font.GothamBold
+	btn.AutoButtonColor = false
+	btn.ZIndex = 12
+	btn.Parent = categoryBar
+	
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = btn
+	
+	btn.MouseButton1Click:Connect(function()
+		if selectedCategory == category then return end
+		
+		-- Deselect previous
+		if categoryButtons[selectedCategory] then
+			local prev = categoryButtons[selectedCategory]
+			prev.BackgroundColor3 = COLORS.SlotEmpty
+			prev.TextColor3 = COLORS.TextMuted
+		end
+		
+		selectedCategory = category
+		btn.BackgroundColor3 = COLORS.Accent
+		btn.TextColor3 = COLORS.Text
+		
+		refreshRecipes()
+	end)
+	
+	categoryButtons[category] = btn
+	return btn
 end
 
 function updateCraftButton()
@@ -437,11 +515,12 @@ function updateCraftButton()
 		return
 	end
 	
-	-- Get recipe from WorkbenchConfig
 	local recipe = WorkbenchConfig.RECIPES[selectedRecipe]
-	local output = recipe and recipe.Output or { Id = selectedRecipe, N = 1 }
-	local item = ItemDatabase:Get(output.Id or selectedRecipe)
-	local name = item and item.Name or (output.Id or selectedRecipe)
+	if not recipe then return end
+	
+	local output = recipe.Output or { Id = selectedRecipe, N = 1 }
+	local item = ItemDatabase:Get(output.Id)
+	local name = item and item.Name or output.Id
 	local canCraft = canCraftRecipe(selectedRecipe)
 	
 	if canCraft then
@@ -457,45 +536,70 @@ function updateCraftButton()
 	end
 end
 
-local function refreshRecipes()
+function refreshRecipes()
 	-- Clear existing cards
 	for _, card in pairs(recipeCards) do
 		card:Destroy()
 	end
 	recipeCards = {}
 	
-	-- Debug: Check if recipes exist
-	print("[CraftingUI] Refreshing hand-crafting recipes...")
-	local recipeCount = 0
+	if not currentStationType then return end
 	
-	-- Get hand-craftable recipes from WorkbenchConfig (tier 0 only)
-	local handRecipes = WorkbenchConfig:GetHandRecipes()
-	for recipeId, recipe in pairs(handRecipes) do
-		recipeCount = recipeCount + 1
-		print(string.format("[CraftingUI] Found hand recipe: %s", recipeId))
-		createRecipeCard(recipeId, recipe)
+	-- Get recipes for this station
+	local recipes = WorkbenchConfig:GetRecipesForStation(currentStationType)
+	
+	-- Filter by category
+	for recipeId, recipe in pairs(recipes) do
+		local matchesCategory = selectedCategory == "All" or recipe.Category == selectedCategory
+		if matchesCategory then
+			createRecipeCard(recipeId, recipe)
+		end
 	end
 	
-	print(string.format("[CraftingUI] Total hand recipes: %d", recipeCount))
-	print("[CraftingUI] Tip: Build a Workbench for more recipes!")
-	
-	-- Update canvas size after a frame to let layout calculate
 	task.defer(function()
 		recipeContainer.CanvasSize = UDim2.new(0, 0, 0, recipeLayout.AbsoluteContentSize.Y + 12)
 	end)
 	
-	-- Update craft button
 	updateCraftButton()
 end
 
-local function openCrafting()
+local function setupCategories()
+	-- Clear existing
+	for _, btn in pairs(categoryButtons) do
+		btn:Destroy()
+	end
+	categoryButtons = {}
+	
+	-- Add "All" category
+	createCategoryButton("All", 0)
+	
+	-- Add other categories
+	for i, category in ipairs(WorkbenchConfig.CATEGORIES) do
+		createCategoryButton(category, i)
+	end
+end
+
+local function openWorkbench(station, stationType)
 	if isOpen then return end
+	
+	currentStation = station
+	currentStationType = stationType
+	
+	local stationDef = WorkbenchConfig.STATIONS[stationType]
+	if stationDef then
+		stationIcon.Text = stationDef.Icon or "🔨"
+		titleLabel.Text = stationDef.Name or stationType
+		subtitleLabel.Text = stationDef.Description or "Craft items"
+		mainStroke.Color = getTierColor({ StationTier = stationDef.Tier, StationType = stationDef.Tier >= 10 and stationType or nil })
+	end
+	
 	isOpen = true
+	selectedRecipe = nil
+	selectedCategory = "All"
 	
 	backdrop.Visible = true
 	mainPanel.Visible = true
 	
-	-- Animate in
 	backdrop.BackgroundTransparency = 1
 	mainPanel.Position = UDim2.new(0.5, 0, 0.5, 30)
 	mainPanel.GroupTransparency = 1
@@ -506,15 +610,17 @@ local function openCrafting()
 		GroupTransparency = 0
 	}):Play()
 	
+	setupCategories()
 	refreshRecipes()
 end
 
-local function closeCrafting()
+local function closeWorkbench()
 	if not isOpen then return end
 	isOpen = false
 	selectedRecipe = nil
+	currentStation = nil
+	currentStationType = nil
 	
-	-- Animate out
 	TweenService:Create(backdrop, TweenInfo.new(0.15), {BackgroundTransparency = 1}):Play()
 	local closeTween = TweenService:Create(mainPanel, TweenInfo.new(0.15), {
 		Position = UDim2.new(0.5, 0, 0.5, 20),
@@ -530,10 +636,10 @@ local function closeCrafting()
 end
 
 -- Button events
-closeBtn.MouseButton1Click:Connect(closeCrafting)
+closeBtn.MouseButton1Click:Connect(closeWorkbench)
 backdrop.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		closeCrafting()
+		closeWorkbench()
 	end
 end)
 
@@ -542,11 +648,10 @@ craftBtn.MouseButton1Click:Connect(function()
 	if not canCraftRecipe(selectedRecipe) then return end
 	if not rCraft then return end
 	
-	-- Send craft request (Hand crafting)
-	rCraft:FireServer(selectedRecipe, "Hand")
+	-- Send craft request with station type
+	rCraft:FireServer(selectedRecipe, currentStationType)
 	
 	-- Visual feedback
-	local originalColor = craftBtn.BackgroundColor3
 	craftBtn.BackgroundColor3 = COLORS.Accent
 	task.delay(0.15, function()
 		if canCraftRecipe(selectedRecipe) then
@@ -557,26 +662,35 @@ craftBtn.MouseButton1Click:Connect(function()
 	end)
 end)
 
--- Keyboard toggle (C key)
+-- Escape to close
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
-	if input.KeyCode == Enum.KeyCode.C then
-		if isOpen then
-			closeCrafting()
-		else
-			openCrafting()
-		end
-	elseif input.KeyCode == Enum.KeyCode.Escape and isOpen then
-		closeCrafting()
+	if input.KeyCode == Enum.KeyCode.Escape and isOpen then
+		closeWorkbench()
 	end
 end)
 
--- Inventory sync - MUST be set up early to catch initial snapshot
+-- Handle proximity prompts for workbenches
+ProximityPromptService.PromptTriggered:Connect(function(prompt, playerWhoTriggered)
+	if playerWhoTriggered ~= player then return end
+	
+	local parent = prompt.Parent
+	if not parent then return end
+	
+	-- Check if this is a crafting station
+	local model = parent:FindFirstAncestorOfClass("Model") or parent
+	local stationType = model:GetAttribute("StationType") or parent:GetAttribute("StationType")
+	
+	if stationType and WorkbenchConfig.STATIONS[stationType] then
+		openWorkbench(model, stationType)
+	end
+end)
+
+-- Inventory sync
 if rInventory then
 	rInventory.OnClientEvent:Connect(function(kind, payload)
 		if kind ~= "Snapshot" or type(payload) ~= "table" then return end
 		
-		-- Normalize keys (Roblox can convert numeric keys to strings)
 		if payload.Storage then
 			local normalized = {}
 			for k, v in pairs(payload.Storage) do
@@ -599,14 +713,11 @@ if rInventory then
 		end
 		
 		inventorySnapshot = payload
-		print("[CraftingUI] Inventory snapshot received")
 		
 		if isOpen then
 			refreshRecipes()
 		end
 	end)
-	print("[CraftingUI] Listening for inventory updates")
 end
 
-print("[CraftingUI] Ready - Press C for hand crafting (basic items)")
-print("[CraftingUI] Place workbenches for advanced recipes!")
+print("[WorkbenchUI] Ready - interact with placed workbenches to craft")

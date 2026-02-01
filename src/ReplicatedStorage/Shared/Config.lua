@@ -227,6 +227,15 @@ Config.BUILD = {
 		Tower = true,
 		Trap = true,
 		Machine = true,
+		-- Crafting Stations (placeable from inventory)
+		Workbench = true,
+		AdvancedWorkbench = true,
+		MasterWorkbench = true,
+		Furnace = true,
+		Anvil = true,
+		Loom = true,
+		Campfire = true,
+		Chest = true,
 	},
 	Costs = {
 		Wall = { { Id = "Wood", N = 2 } },
@@ -236,6 +245,19 @@ Config.BUILD = {
 		Tower = { { Id = "Wood", N = 6 }, { Id = "Stone", N = 4 } },
 		Trap = { { Id = "Stone", N = 2 } },
 		Machine = { { Id = "Stone", N = 6 } },
+		-- Crafting stations are placed from inventory items, no direct cost
+		-- (player must craft the item first, then place it)
+	},
+	-- Items that can be placed as structures (consume the item when placed)
+	PlaceableItems = {
+		Workbench = true,
+		AdvancedWorkbench = true,
+		MasterWorkbench = true,
+		Furnace = true,
+		Anvil = true,
+		Loom = true,
+		Campfire = true,
+		Chest = true,
 	},
 }
 
