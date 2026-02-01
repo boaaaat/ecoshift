@@ -8,6 +8,20 @@ local Util = require(ReplicatedStorage.Shared.Util)
 local WeaponFactory = require(ReplicatedStorage.Shared.Weapons.WeaponFactory)
 local WeaponUtil = require(ReplicatedStorage.Shared.Weapons.WeaponUtil)
 
+-- Lazy-loaded to avoid circular dependency
+local DeathService = nil
+local function getDeathService()
+	if not DeathService then
+		local success, result = pcall(function()
+			return require(script.Parent.DeathService)
+		end)
+		if success then
+			DeathService = result
+		end
+	end
+	return DeathService
+end
+
 local CombatService = {}
 -- OPTIMIZED: Lazy-load remotes instead of blocking at module load
 CombatService._remotesFolder = nil
@@ -125,7 +139,7 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 	if healthValue:IsA("NumberValue") then
 		healthValue.Value = math.max(0, healthValue.Value - amount)
 	else
-		-- Humanoid
+		-- Humanoid - DeathService hooks HealthChanged and handles death automatically
 		healthValue:TakeDamage(amount)
 	end
 end

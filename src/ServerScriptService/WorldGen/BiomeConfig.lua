@@ -19,6 +19,34 @@ Config.use_entity_config_enemies = true
 Config.spawn_enemies = false -- set true to place enemies during worldgen (otherwise use SpawnOrchestrator)
 Config.spawn_folder_name = "GeneratedWorld"
 
+-- ASSET SIZE & OFFSET OVERRIDES: Applied when spawning prefabs
+-- scale = multiplier (1 = original size), yOffset = vertical position above base_y
+Config.asset_overrides = {
+	-- FOREST RESOURCES
+	Tree = { scale = 1.0, yOffset = 4 },
+	Mushroom = { scale = 1.0, yOffset = 0.5 },
+	Reed = { scale = 1.0, yOffset = 1 },
+	Stone = { scale = 1.0, yOffset = 2 },
+	Mud = { scale = 1.0, yOffset = 0.5 },
+	-- FOREST PROPS
+	Bush = { scale = 1.0, yOffset = 1 },
+	FallenLog = { scale = 1.0, yOffset = 1 },
+	RockSmall = { scale = 1.0, yOffset = 1 },
+	Stump = { scale = 1.0, yOffset = 1 },
+	
+	-- DESERT RESOURCES
+	Cactus = { scale = 1.2, yOffset = 3 },
+	Sandstone = { scale = 1.5, yOffset = 4 },
+	DriedBone = { scale = 0.8, yOffset = 1 },
+	-- DESERT PROPS
+	Skull = { scale = 0.6, yOffset = 0.5 },
+	DeadShrub = { scale = 1.0, yOffset = 1 },
+	SandDune = { scale = 2.0, yOffset = 0 },
+	-- DESERT STRUCTURES
+	AncientRuins = { scale = 1.0, yOffset = 4 },
+	DesertOutpost = { scale = 1.0, yOffset = 4 },
+}
+
 -- STREAMING CONFIG: Dynamic chunk loading around players
 Config.use_streaming = true -- Set to false to use legacy full-world generation
 Config.stream_load_radius = 3 -- Load chunks within this radius (in chunks)

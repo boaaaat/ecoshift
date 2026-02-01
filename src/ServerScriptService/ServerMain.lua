@@ -31,6 +31,7 @@ local tier1Services = {
 local tier2Services = {
 	{ name = "ObjectiveService", method = "Init" },
 	{ name = "CombatService", method = "Bind" },
+	{ name = "DeathService", method = "Init" },
 	{ name = "BuildService", method = "Bind" },
 	{ name = "InteractService", method = "Bind" },
 	{ name = "StatusService", method = "Bind" },
@@ -61,9 +62,13 @@ local function initTier(services, initMethod)
 		local method = type(entry) == "table" and entry.method or initMethod
 		threads[#threads + 1] = task.spawn(function()
 			local ok, err = pcall(function()
+				print("[ServerMain] Loading service:", name)
 				local svc = getService(name)
 				if svc and method and svc[method] then
+					print("[ServerMain] Calling", name .. ":" .. method .. "()")
 					svc[method](svc)
+				else
+					warn("[ServerMain] Service", name, "missing or no method", method)
 				end
 			end)
 			if not ok then
