@@ -9,16 +9,16 @@ local ItemDatabase = require(game:GetService("ReplicatedStorage").Shared.Items.I
 local ToolService = {}
 local HOTBAR_SLOTS = 4
 
-local function isTool(itemId)
+local function isHoldable(itemId)
 	local item = ItemDatabase:Get(itemId)
-	return item and item:HasTag("Tool") or false
+	return item and item:HasTag("Holdable") or false
 end
 
-local function collectToolIds(inv)
+local function collectHoldableIds(inv)
 	local set = {}
 	for i = 1, HOTBAR_SLOTS do
 		local slot = inv.Hotbar and inv.Hotbar[i]
-		if slot and isTool(slot.Id) then
+		if slot and isHoldable(slot.Id) then
 			set[slot.Id] = true
 		end
 	end
@@ -57,8 +57,8 @@ end
 function ToolService:Sync(plr)
 	local inv = InventoryService:GetAll(plr)
 	if not inv then return end
-	local desired = collectToolIds(inv)
-	print(string.format("[ToolService] Sync %s tools: %s", plr.Name, table.concat((function()
+	local desired = collectHoldableIds(inv)
+	print(string.format("[ToolService] Sync %s holdables: %s", plr.Name, table.concat((function()
 		local list = {}
 		for id in pairs(desired) do list[#list + 1] = id end
 		return list
