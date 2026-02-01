@@ -40,7 +40,7 @@ local function createHealthBar(model)
 	bg.Parent = billboard
 	
 	local bgCorner = Instance.new("UICorner")
-	bgCorner.CornerRadius = UDim.new(0.5, 0)ff
+	bgCorner.CornerRadius = UDim.new(0.5, 0)
 	bgCorner.Parent = bg
 	
 	-- Health fill
