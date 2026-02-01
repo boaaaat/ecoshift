@@ -87,4 +87,16 @@ EntityConfig.Entities = {
 	},
 }
 
+-- Enemy wave configuration (used by SpawnService)
+EntityConfig.EnemyWaves = {
+	BaseCount = 2,
+	MaxCount = 24,
+	PlayerScale = 1.0,
+	Tables = {
+		ForestCommon = {
+			{ Id = "Wolf", Weight = 1.0 },
+		},
+	},
+}
+
 return EntityConfig

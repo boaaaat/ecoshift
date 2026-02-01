@@ -5,6 +5,7 @@ local ServerStorage = game:GetService("ServerStorage")
 local Players = game:GetService("Players")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local EntityConfig = require(script.Parent.Parent.AI.EntityConfig)
 local Util = require(ReplicatedStorage.Shared.Util)
 local BiomeService = require(script.Parent.BiomeService)
 local ThreatService = require(script.Parent.ThreatService)
@@ -22,7 +23,7 @@ function SpawnService:ComputeEnemyWave()
 	-- choose table(s)
 	local tables = {}
 	for _,tName in ipairs(data.enemyTables or {}) do
-		local t = Config.ENEMIES.Tables[tName]
+		local t = EntityConfig.EnemyWaves and EntityConfig.EnemyWaves.Tables and EntityConfig.EnemyWaves.Tables[tName]
 		if t then table.insert(tables, t) end
 	end
 
@@ -35,10 +36,15 @@ function SpawnService:ComputeEnemyWave()
 
 	local threat = ThreatService:Get() -- 0..10
 	local plrCount = #Players:GetPlayers()
-	local baseCount = math.clamp(math.floor((Config.ENEMIES.BaseCount or 2) + threat + (plrCount * (Config.ENEMIES.PlayerScale or 1))), Config.ENEMIES.BaseCount or 2, Config.ENEMIES.MaxCount or 24)
+	local waves = EntityConfig.EnemyWaves or {}
+	local baseCount = math.clamp(
+		math.floor((waves.BaseCount or 2) + threat + (plrCount * (waves.PlayerScale or 1))),
+		waves.BaseCount or 2,
+		waves.MaxCount or 24
+	)
 	local mods = (_G.Ecoshift and _G.Ecoshift.Mods) or {}
 	local mult = mods.EnemyMultiplier or 1.0
-	baseCount = math.clamp(math.floor(baseCount * mult), Config.ENEMIES.BaseCount or 2, Config.ENEMIES.MaxCount or 24)
+	baseCount = math.clamp(math.floor(baseCount * mult), waves.BaseCount or 2, waves.MaxCount or 24)
 
 	local result = {}
 	for i=1, baseCount do
