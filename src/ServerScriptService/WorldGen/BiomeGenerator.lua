@@ -436,7 +436,7 @@ function BiomeGenerator:_place_prefab(prefab, position, parent)
 				CollectionService:AddTag(clone, "Monster")
 			end
 		end
-		if parent and parent.Name == "Resources" then
+		if parent and (parent.Name == "Resources" or parent.Name == "Props" or parent.Name == "Structures" or parent.Name == "Objectives") then
 			if clone:IsA("BasePart") then
 				clone.CanQuery = true
 			end

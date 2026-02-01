@@ -23,12 +23,15 @@ local NUM_KEYS = {
 	"AttackRange",
 	"AttackCooldown",
 	"RepathInterval",
+	"RepathDistance",
 	"AgentRadius",
 	"AgentHeight",
 	"WanderRadius",
 	"WanderInterval",
 	"FleeDistance",
 	"FleeSpeed",
+	"StuckMinMove",
+	"StuckJumpTime",
 }
 local BOOL_KEYS = {
 	"UsePathfinding",

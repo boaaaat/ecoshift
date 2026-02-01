@@ -8,6 +8,7 @@ local RunService = game:GetService("RunService")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local SpawnService = require(script.Parent.SpawnService)
+local EntityConfig = require(script.Parent.Parent.AI.EntityConfig)
 
 local SpawnerOrchestrator = {}
 SpawnerOrchestrator._nextTime = 0
@@ -22,6 +23,10 @@ function SpawnerOrchestrator:SetPeriod(seconds)
 end
 
 function SpawnerOrchestrator:Bind()
+	local waves = EntityConfig.EnemyWaves or {}
+	if tonumber(waves.PeriodSeconds) then
+		self._period = math.max(4, tonumber(waves.PeriodSeconds))
+	end
 	self._nextTime = os.clock() + self._period
 	-- OPTIMIZED: Use task.spawn with sleep instead of Heartbeat
 	task.spawn(function()

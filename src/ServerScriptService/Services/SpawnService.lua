@@ -14,6 +14,22 @@ local SpawnService = {}
 SpawnService._enemySpawns = Util.WaitForDescendant(Config.Paths.EnemySpawnsFolder, 5)
 SpawnService._resourceFolder = Util.WaitForDescendant(Config.Paths.ResourceNodesFolder, 5)
 
+local function lerp(a, b, t)
+	return a + (b - a) * t
+end
+
+local function distFactor(dist, cfg)
+	local minR = tonumber(cfg.MinRadius) or 0
+	local maxR = tonumber(cfg.MaxRadius) or 0
+	if maxR <= minR then return 0 end
+	local t = math.clamp((dist - minR) / (maxR - minR), 0, 1)
+	local exp = tonumber(cfg.Exponent) or 1
+	if exp ~= 1 then
+		t = t ^ exp
+	end
+	return t
+end
+
 local function ensureSpawnPoints(folder)
 	if not folder then return end
 	if #folder:GetChildren() > 0 then return end
@@ -56,6 +72,42 @@ function SpawnService:ComputeEnemyWave()
 	local data = Config.BIOMES[biome]
 	if not data then return {} end
 
+	local waves = EntityConfig.EnemyWaves or {}
+	local distanceCfg = waves.Distance or {}
+	local world = Config.WORLD or {}
+	local sample = tostring(waves.DistanceSample or "Max"):lower()
+	local distValues = {}
+	for _, plr in ipairs(Players:GetPlayers()) do
+		local hrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			local d = Vector3.new(hrp.Position.X, 0, hrp.Position.Z).Magnitude
+			distValues[#distValues + 1] = d
+		end
+	end
+	local dist = 0
+	if #distValues > 0 then
+		if sample == "average" then
+			local sum = 0
+			for _, v in ipairs(distValues) do sum += v end
+			dist = sum / #distValues
+		elseif sample == "min" then
+			dist = math.huge
+			for _, v in ipairs(distValues) do if v < dist then dist = v end end
+			if dist == math.huge then dist = 0 end
+		else
+			dist = 0
+			for _, v in ipairs(distValues) do if v > dist then dist = v end end
+		end
+	end
+	if not distanceCfg.MinRadius then
+		distanceCfg.MinRadius = tonumber(world.CenterExclusionRadius) or 0
+	end
+	if not distanceCfg.MaxRadius then
+		distanceCfg.MaxRadius = tonumber(world.WorldRadius) or 2000
+	end
+	local distT = distFactor(dist, distanceCfg)
+	local globalWeightMult = lerp(tonumber(distanceCfg.WeightMultMin) or 1, tonumber(distanceCfg.WeightMultMax) or 1, distT)
+
 	-- choose table(s)
 	local tables = {}
 	for _,tName in ipairs(data.enemyTables or {}) do
@@ -67,20 +119,45 @@ function SpawnService:ComputeEnemyWave()
 	-- build a bag
 	local bag = {}
 	for _,t in ipairs(tables) do
-		for _,entry in ipairs(t) do table.insert(bag, entry) end
+		for _,entry in ipairs(t) do
+			local weight = tonumber(entry.Weight or entry.weight) or 1
+			weight = weight * globalWeightMult
+			local minD = tonumber(entry.MinDistance)
+			local maxD = tonumber(entry.MaxDistance)
+			if minD and dist < minD then
+				continue
+			end
+			if maxD and dist > maxD then
+				continue
+			end
+			local dW = entry.DistanceWeight or entry.DistanceWeightMult
+			if type(dW) == "table" then
+				local dwMin = tonumber(dW.Min) or tonumber(dW.min) or 1
+				local dwMax = tonumber(dW.Max) or tonumber(dW.max) or 1
+				weight = weight * lerp(dwMin, dwMax, distT)
+			elseif type(dW) == "number" then
+				weight = weight * dW
+			end
+			if weight > 0 then
+				local copy = {}
+				for k, v in pairs(entry) do copy[k] = v end
+				copy.Weight = weight
+				table.insert(bag, copy)
+			end
+		end
 	end
 
 	local threat = ThreatService:Get() -- 0..10
 	local plrCount = #Players:GetPlayers()
-	local waves = EntityConfig.EnemyWaves or {}
 	local baseCount = math.clamp(
 		math.floor((waves.BaseCount or 2) + threat + (plrCount * (waves.PlayerScale or 1))),
-		waves.BaseCount or 2,
+		waves.MinCount or (waves.BaseCount or 2),
 		waves.MaxCount or 24
 	)
 	local mods = (_G.Ecoshift and _G.Ecoshift.Mods) or {}
 	local mult = mods.EnemyMultiplier or 1.0
-	baseCount = math.clamp(math.floor(baseCount * mult), waves.BaseCount or 2, waves.MaxCount or 24)
+	local countMult = lerp(tonumber(distanceCfg.CountMultMin) or 1, tonumber(distanceCfg.CountMultMax) or 1, distT)
+	baseCount = math.clamp(math.floor(baseCount * mult * countMult), waves.MinCount or (waves.BaseCount or 2), waves.MaxCount or 24)
 
 	local result = {}
 	for i=1, baseCount do

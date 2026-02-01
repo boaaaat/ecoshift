@@ -2,6 +2,7 @@
 -- Base class for AI-controlled entities (monsters/animals).
 local Players = game:GetService("Players")
 local PathfindingService = game:GetService("PathfindingService")
+local Workspace = game:GetService("Workspace")
 
 local EntityBase = {}
 EntityBase.__index = EntityBase
@@ -43,6 +44,14 @@ function EntityBase.new(model, config)
 	self.LastHealth = self.Humanoid and self.Humanoid.Health or nil
 	self.LastPos = self.Root and self.Root.Position or nil
 	self.StuckTime = 0
+	self._moveConn = nil
+	self._lastMovePos = nil
+	self._lastMoveTime = 0
+	self._lastDirectPos = nil
+	self._lastDirectTime = 0
+	self._lastPathTarget = nil
+	self._lastPos = self.Root and self.Root.Position or nil
+	self._stuckTime = 0
 	self:SetSpeed(self.Config.Speed)
 	return self
 end
@@ -96,6 +105,49 @@ function EntityBase:CanDetectTarget(targetChar)
 		end
 	end
 	return false, dist
+end
+
+function EntityBase:HasLineOfSight(targetChar)
+	if not self.Root or not targetChar then return false end
+	local hrp = targetChar:FindFirstChild("HumanoidRootPart")
+	local hum = targetChar:FindFirstChildOfClass("Humanoid")
+	if not hrp or not hum or hum.Health <= 0 then return false end
+	local origin = self.Root.Position + Vector3.new(0, 1.5, 0)
+	local dir = hrp.Position - origin
+	if dir.Magnitude <= 0 then return true end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { self.Model }
+	local hit = Workspace:Raycast(origin, dir, params)
+	if not hit then
+		return true
+	end
+	return hit.Instance and hit.Instance:IsDescendantOf(targetChar)
+end
+
+function EntityBase:_directJumpCheck(targetChar)
+	if not self.Root or not self.Humanoid then return end
+	local dist = tonumber(self.Config.DirectJumpCheckDistance) or 3
+	if dist <= 0 then return end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { self.Model }
+	local dir = self.Root.CFrame.LookVector * dist
+
+	local function hitObstacle(origin)
+		local hit = Workspace:Raycast(origin, dir, params)
+		if not hit then return false end
+		if targetChar and hit.Instance and hit.Instance:IsDescendantOf(targetChar) then
+			return false
+		end
+		return true
+	end
+
+	local originLow = self.Root.Position + Vector3.new(0, 0.5, 0)
+	local originMid = self.Root.Position + Vector3.new(0, 1.5, 0)
+	if hitObstacle(originLow) or hitObstacle(originMid) then
+		self.Humanoid.Jump = true
+	end
 end
 
 local function weaponPower(plr)
@@ -203,17 +255,81 @@ function EntityBase:MoveTo(position)
 	self.Humanoid:MoveTo(position)
 end
 
+function EntityBase:_ensureMoveConn()
+	if self._moveConn or not self.Humanoid then return end
+	self._moveConn = self.Humanoid.MoveToFinished:Connect(function(reached)
+		if not self.Waypoints or not self.Humanoid then return end
+		if reached then
+			self.WaypointIndex += 1
+			if not self.Waypoints[self.WaypointIndex] then
+				self.Waypoints = nil
+				self.WaypointIndex = 0
+				self._lastMovePos = nil
+				return
+			end
+		end
+		self:_stepToWaypoint(true)
+	end)
+end
+
+function EntityBase:_stepToWaypoint(force)
+	if not self.Waypoints or not self.Humanoid then return end
+	local wp = self.Waypoints[self.WaypointIndex]
+	if not wp then return end
+	if wp.Action == Enum.PathWaypointAction.Jump then
+		self.Humanoid.Jump = true
+	end
+	local now = os.clock()
+	local shouldMove = force == true
+	if not shouldMove then
+		local last = self._lastMovePos
+		if not last then
+			shouldMove = true
+		elseif (wp.Position - last).Magnitude > 1 then
+			shouldMove = true
+		elseif now - (self._lastMoveTime or 0) > 0.4 then
+			shouldMove = true
+		end
+	end
+	if shouldMove then
+		self._lastMovePos = wp.Position
+		self._lastMoveTime = now
+		self.Humanoid:MoveTo(wp.Position)
+	end
+end
+
+function EntityBase:_directMove(targetPos)
+	if not self.Humanoid then return end
+	local now = os.clock()
+	if self._lastDirectPos then
+		if (targetPos - self._lastDirectPos).Magnitude < 2 and now - (self._lastDirectTime or 0) < 0.5 then
+			return
+		end
+	end
+	self._lastDirectPos = targetPos
+	self._lastDirectTime = now
+	self.Humanoid:MoveTo(targetPos)
+end
+
 function EntityBase:UpdatePath(targetPos)
 	if not self.Root or not self.Humanoid then return end
 	local now = os.clock()
 	local repathInterval = self.Config.RepathInterval or 1.0
+	local repathDistance = self.Config.RepathDistance or 8
 	local usePath = self.Config.UsePathfinding
 	if usePath == nil then usePath = true end
 	if not usePath then
-		self:MoveTo(targetPos)
+		self:_directMove(targetPos)
 		return
 	end
-	if now < (self.NextRepath or 0) and self.Waypoints and self.WaypointIndex > 0 then
+	local targetMoved = false
+	if self._lastPathTarget then
+		targetMoved = (targetPos - self._lastPathTarget).Magnitude >= repathDistance
+	end
+	if not targetMoved and self.Waypoints and self.WaypointIndex > 0 then
+		return
+	end
+	if targetMoved and now < (self.NextRepath or 0) and self.Waypoints and self.WaypointIndex > 0 then
 		return
 	end
 	self.NextRepath = now + repathInterval
@@ -228,34 +344,48 @@ function EntityBase:UpdatePath(targetPos)
 	if not ok or path.Status ~= Enum.PathStatus.Success then
 		self.Waypoints = nil
 		self.WaypointIndex = 0
-		self:MoveTo(targetPos)
+		self:_directMove(targetPos)
 		return
 	end
 	self.Waypoints = path:GetWaypoints()
+	self._lastPathTarget = targetPos
 	self.WaypointIndex = 1
+	if self.Waypoints[1] and self.Waypoints[1].Action ~= Enum.PathWaypointAction.Jump and self.Waypoints[2] then
+		self.WaypointIndex = 2
+	end
+	self._lastMovePos = nil
+	self:_ensureMoveConn()
+	self:_stepToWaypoint(true)
 end
 
 function EntityBase:FollowPath()
 	if not self.Waypoints or not self.Root or not self.Humanoid then return end
-	local wp = self.Waypoints[self.WaypointIndex]
-	if not wp then
-		self.Waypoints = nil
-		self.WaypointIndex = 0
-		return
-	end
-	if wp.Action == Enum.PathWaypointAction.Jump then
-		self.Humanoid.Jump = true
-	end
-	self:MoveTo(wp.Position)
-	if (wp.Position - self.Root.Position).Magnitude <= 2 then
-		self.WaypointIndex += 1
-	end
+	self:_stepToWaypoint(false)
 end
 
 function EntityBase:Step(dt)
 	if not self:IsAlive() then return end
 	if not self.Root then return end
 	self:SetSpeed(self.Config.Speed)
+
+	-- Stuck detection (works for direct + path movement)
+	if self._lastPos then
+		local moved = (self.Root.Position - self._lastPos).Magnitude
+		local minMove = tonumber(self.Config.StuckMinMove) or 0.08
+		local stuckThreshold = tonumber(self.Config.StuckJumpTime) or 0.1
+		if moved <= minMove then
+			self._stuckTime += dt
+			if self._stuckTime >= stuckThreshold then
+				if self.Humanoid then
+					self.Humanoid.Jump = true
+				end
+				self._stuckTime = 0
+			end
+		else
+			self._stuckTime = 0
+		end
+	end
+	self._lastPos = self.Root.Position
 
 	if not self:IsTargetValid() then
 		self:AcquireTarget()
@@ -267,8 +397,15 @@ function EntityBase:Step(dt)
 			if self:InAttackRange() then
 				self:AttackTarget()
 			else
-				self:UpdatePath(targetPos)
-				self:FollowPath()
+				if self:HasLineOfSight(self.Target.Character) then
+					self.Waypoints = nil
+					self.WaypointIndex = 0
+					self:_directMove(targetPos)
+					self:_directJumpCheck(self.Target.Character)
+				else
+					self:UpdatePath(targetPos)
+					self:FollowPath()
+				end
 			end
 		end
 	end

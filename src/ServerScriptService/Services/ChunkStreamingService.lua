@@ -510,8 +510,8 @@ function ChunkStreamingService:_placePrefab(prefab, position, parent)
 	
 	local clone = prefab:Clone()
 
-	-- Set CanQuery for resources
-	if parent.Name == "Resources" then
+	-- Set CanQuery for world obstacles/resources
+	if parent.Name == "Resources" or parent.Name == "Props" or parent.Name == "Structures" or parent.Name == "Objectives" then
 		if clone:IsA("BasePart") then
 			clone.CanQuery = true
 		end
