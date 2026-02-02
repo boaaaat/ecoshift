@@ -405,6 +405,165 @@ WorkbenchConfig.RECIPES = {
 		StationType = "Loom",
 		Category = "Armor",
 	},
+	
+	-- ============================================
+	-- DESERT RECIPES - TIER 0 (Hand Crafting)
+	-- ============================================
+	CactusFlesh = {
+		Ingredients = { { Id = "Cactus", N = 1 } },
+		Output = { Id = "CactusFlesh", N = 2 },
+		StationTier = 0,
+		Category = "Materials",
+	},
+	CactusSpine = {
+		Ingredients = { { Id = "Cactus", N = 1 } },
+		Output = { Id = "CactusSpine", N = 4 },
+		StationTier = 0,
+		Category = "Materials",
+	},
+	BoneMite = {
+		Ingredients = { { Id = "Bone", N = 2 } },
+		Output = { Id = "BoneMite", N = 1 },
+		StationTier = 0,
+		Category = "Materials",
+	},
+	
+	-- ============================================
+	-- DESERT RECIPES - TIER 1 (Basic Workbench)
+	-- ============================================
+	CactusClub = {
+		Ingredients = {
+			{ Id = "Cactus", N = 3 },
+			{ Id = "CactusSpine", N = 4 },
+		},
+		Output = { Id = "CactusClub", N = 1 },
+		StationTier = 1,
+		Category = "Weapons",
+	},
+	BoneSword = {
+		Ingredients = {
+			{ Id = "Bone", N = 4 },
+			{ Id = "Stick", N = 1 },
+		},
+		Output = { Id = "BoneSword", N = 1 },
+		StationTier = 1,
+		Category = "Weapons",
+	},
+	BoneHatchet = {
+		Ingredients = {
+			{ Id = "Bone", N = 3 },
+			{ Id = "Stick", N = 2 },
+		},
+		Output = { Id = "BoneHatchet", N = 1 },
+		StationTier = 1,
+		Category = "Tools",
+	},
+	CactusJuice = {
+		Ingredients = {
+			{ Id = "CactusFlesh", N = 3 },
+		},
+		Output = { Id = "CactusJuice", N = 2 },
+		StationTier = 1,
+		Category = "Food",
+	},
+	
+	-- ============================================
+	-- DESERT RECIPES - TIER 2 (Advanced Workbench)
+	-- ============================================
+	SanditeSword = {
+		Ingredients = {
+			{ Id = "SanditeIngot", N = 2 },
+			{ Id = "Stick", N = 1 },
+		},
+		Output = { Id = "SanditeSword", N = 1 },
+		StationTier = 2,
+		Category = "Weapons",
+	},
+	SanditePickaxe = {
+		Ingredients = {
+			{ Id = "SanditeIngot", N = 3 },
+			{ Id = "Stick", N = 2 },
+		},
+		Output = { Id = "SanditePickaxe", N = 1 },
+		StationTier = 2,
+		Category = "Tools",
+	},
+	ScorpionDagger = {
+		Ingredients = {
+			{ Id = "CactusSpine", N = 6 },
+			{ Id = "SanditeIngot", N = 1 },
+			{ Id = "Bone", N = 2 },
+		},
+		Output = { Id = "ScorpionDagger", N = 1 },
+		StationTier = 2,
+		Category = "Weapons",
+	},
+	BoneArmor = {
+		Ingredients = {
+			{ Id = "Bone", N = 8 },
+			{ Id = "Leather", N = 2 },
+		},
+		Output = { Id = "BoneArmor", N = 1 },
+		StationTier = 2,
+		Category = "Armor",
+	},
+	SanditeArmor = {
+		Ingredients = {
+			{ Id = "SanditeIngot", N = 5 },
+			{ Id = "Cloth", N = 2 },
+		},
+		Output = { Id = "SanditeArmor", N = 1 },
+		StationTier = 2,
+		Category = "Armor",
+	},
+	DesertSalve = {
+		Ingredients = {
+			{ Id = "CactusFlesh", N = 2 },
+			{ Id = "BoneMite", N = 1 },
+			{ Id = "Sulfite", N = 1 },
+		},
+		Output = { Id = "DesertSalve", N = 2 },
+		StationTier = 2,
+		Category = "Food",
+	},
+	
+	-- ============================================
+	-- DESERT FURNACE RECIPES
+	-- ============================================
+	SanditeIngot = {
+		Ingredients = {
+			{ Id = "Sandite", N = 1 },
+			{ Id = "Coal", N = 1 },
+		},
+		Output = { Id = "SanditeIngot", N = 1 },
+		StationType = "Furnace",
+		Category = "Materials",
+		ProcessingTime = 3,
+	},
+	Sandite_Glass = {
+		Ingredients = {
+			{ Id = "Sand", N = 3 },
+			{ Id = "Sandite", N = 1 },
+		},
+		Output = { Id = "Sandite_Glass", N = 2 },
+		StationType = "Furnace",
+		Category = "Materials",
+		ProcessingTime = 4,
+	},
+	
+	-- ============================================
+	-- DESERT LOOM RECIPES
+	-- ============================================
+	DesertCloak = {
+		Ingredients = {
+			{ Id = "Cloth", N = 4 },
+			{ Id = "CactusSpine", N = 2 },
+			{ Id = "Sand", N = 2 },
+		},
+		Output = { Id = "DesertCloak", N = 1 },
+		StationType = "Loom",
+		Category = "Armor",
+	},
 }
 
 -- Category display order
