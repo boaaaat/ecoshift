@@ -105,13 +105,20 @@ end
 function BiomeService:_pickNext()
 	local pool = buildPool(self._startTime)
 	if #pool == 0 then return self._current end
-	local pick = Util.ChooseWeighted(pool, "Weight")
-	if #pool > 1 and pick and pick.Id == self._current then
-		for _ = 1, 4 do
-			pick = Util.ChooseWeighted(pool, "Weight")
-			if pick and pick.Id ~= self._current then break end
+	if #pool == 1 then
+		return pool[1].Id or self._current
+	end
+	-- Never pick the current biome if there's more than one choice
+	local filtered = {}
+	for _, entry in ipairs(pool) do
+		if entry.Id ~= self._current then
+			table.insert(filtered, entry)
 		end
 	end
+	if #filtered == 0 then
+		return self._current
+	end
+	local pick = Util.ChooseWeighted(filtered, "Weight")
 	return (pick and pick.Id) or self._current
 end
 
