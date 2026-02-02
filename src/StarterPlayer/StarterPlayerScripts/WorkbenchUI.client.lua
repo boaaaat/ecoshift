@@ -42,7 +42,7 @@ local COLORS = {
 }
 
 local MARGIN = 16
-local RECIPE_HEIGHT = 80
+local RECIPE_HEIGHT = 90
 
 -- State
 local isOpen = false
@@ -301,7 +301,7 @@ local function createIngredientDisplay(ingredient, parent, craftMult)
 	local canAfford = have >= needed
 	
 	local frame = Instance.new("Frame")
-	frame.Size = UDim2.new(0, 85, 0, 50)
+	frame.Size = UDim2.new(0, 70, 0, 36)
 	frame.BackgroundColor3 = COLORS.SlotEmpty
 	frame.BackgroundTransparency = 0.3
 	frame.BorderSizePixel = 0
@@ -309,28 +309,28 @@ local function createIngredientDisplay(ingredient, parent, craftMult)
 	frame.Parent = parent
 	
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 6)
+	corner.CornerRadius = UDim.new(0, 4)
 	corner.Parent = frame
 	
 	local itemLabel = Instance.new("TextLabel")
-	itemLabel.Size = UDim2.new(1, -6, 0, 20)
-	itemLabel.Position = UDim2.new(0, 3, 0, 4)
+	itemLabel.Size = UDim2.new(1, -4, 0, 16)
+	itemLabel.Position = UDim2.new(0, 2, 0, 2)
 	itemLabel.BackgroundTransparency = 1
 	itemLabel.Text = name
 	itemLabel.TextColor3 = canAfford and COLORS.Text or COLORS.Danger
-	itemLabel.TextSize = 11
+	itemLabel.TextSize = 10
 	itemLabel.Font = Enum.Font.GothamBold
 	itemLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	itemLabel.ZIndex = 14
 	itemLabel.Parent = frame
 	
 	local countLabel = Instance.new("TextLabel")
-	countLabel.Size = UDim2.new(1, -6, 0, 18)
-	countLabel.Position = UDim2.new(0, 3, 0, 26)
+	countLabel.Size = UDim2.new(1, -4, 0, 14)
+	countLabel.Position = UDim2.new(0, 2, 0, 18)
 	countLabel.BackgroundTransparency = 1
 	countLabel.Text = string.format("%d / %d", have, needed)
 	countLabel.TextColor3 = canAfford and COLORS.Success or COLORS.Warning
-	countLabel.TextSize = 12
+	countLabel.TextSize = 10
 	countLabel.Font = Enum.Font.Gotham
 	countLabel.ZIndex = 14
 	countLabel.Parent = frame
@@ -415,16 +415,17 @@ local function createRecipeCard(recipeId, recipe)
 	-- Ingredients container
 	local ingredientsFrame = Instance.new("Frame")
 	ingredientsFrame.Name = "Ingredients"
-	ingredientsFrame.Size = UDim2.new(1, -24, 0, 50)
-	ingredientsFrame.Position = UDim2.new(0, 12, 0, 46)
+	ingredientsFrame.Size = UDim2.new(1, -24, 0, 40)
+	ingredientsFrame.Position = UDim2.new(0, 12, 0, 44)
 	ingredientsFrame.BackgroundTransparency = 1
+	ingredientsFrame.ClipsDescendants = true
 	ingredientsFrame.ZIndex = 13
 	ingredientsFrame.Parent = card
 	
 	local ingredientLayout = Instance.new("UIListLayout")
 	ingredientLayout.FillDirection = Enum.FillDirection.Horizontal
 	ingredientLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	ingredientLayout.Padding = UDim.new(0, 6)
+	ingredientLayout.Padding = UDim.new(0, 4)
 	ingredientLayout.Parent = ingredientsFrame
 	
 	for _, ingredient in ipairs(recipe.Ingredients or {}) do
