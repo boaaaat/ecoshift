@@ -19,6 +19,19 @@ local raw = {
 	{ Id = "RawMeat", Name = "Raw Meat", StackSize = 20, Tags = { "Resource", "Food" } },
 	{ Id = "RawHide", Name = "Raw Hide", StackSize = 50, Tags = { "Resource", "Organic" } },
 	
+	-- Desert Resources
+	{ Id = "Cactus", Name = "Cactus", StackSize = 99, Tags = { "Resource", "Plant", "Desert" } },
+	{ Id = "CactusFlesh", Name = "Cactus Flesh", StackSize = 50, Tags = { "Resource", "Food", "Desert" } },
+	{ Id = "CactusSpine", Name = "Cactus Spine", StackSize = 99, Tags = { "Material", "Desert" } },
+	{ Id = "Sandite", Name = "Sandite", StackSize = 99, Tags = { "Resource", "Ore", "Desert" } },
+	{ Id = "Bone", Name = "Bone", StackSize = 99, Tags = { "Resource", "Organic" } },
+	{ Id = "Sulfite", Name = "Sulfite", StackSize = 99, Tags = { "Resource", "Mineral", "Desert" } },
+	
+	-- Desert Processed Materials
+	{ Id = "SanditeIngot", Name = "Sandite Ingot", StackSize = 99, Tags = { "Material", "Metal", "Desert" } },
+	{ Id = "BoneMite", Name = "Bone Meal", StackSize = 99, Tags = { "Material", "Desert" } },
+	{ Id = "Sandite_Glass", Name = "Desert Glass", StackSize = 99, Tags = { "Material", "Desert" } },
+	
 	-- Processed Materials
 	{ Id = "Stick", Name = "Stick", StackSize = 99, Tags = { "Material" } },
 	{ Id = "Plank", Name = "Plank", StackSize = 99, Tags = { "Material" } },
@@ -56,6 +69,12 @@ local raw = {
 	{ Id = "IronSword", Name = "Iron Sword", StackSize = 1, Tags = { "Weapon", "Holdable" } },
 	{ Id = "Shield", Name = "Shield", StackSize = 1, Tags = { "Weapon", "Holdable" } },
 	
+	-- Desert Weapons
+	{ Id = "CactusClub", Name = "Cactus Club", StackSize = 1, Tags = { "Weapon", "Holdable", "Desert" } },
+	{ Id = "BoneSword", Name = "Bone Sword", StackSize = 1, Tags = { "Weapon", "Holdable", "Desert" } },
+	{ Id = "SanditeSword", Name = "Sandite Sword", StackSize = 1, Tags = { "Weapon", "Holdable", "Desert" } },
+	{ Id = "ScorpionDagger", Name = "Scorpion Dagger", StackSize = 1, Tags = { "Weapon", "Holdable", "Desert" } },
+	
 	-- Weapons - Diamond/Endgame
 	{ Id = "DiamondSword", Name = "Diamond Sword", StackSize = 1, Tags = { "Weapon", "Holdable" } },
 	{ Id = "EnchantedBow", Name = "Enchanted Bow", StackSize = 1, Tags = { "Weapon", "Holdable" } },
@@ -65,6 +84,19 @@ local raw = {
 	{ Id = "LeatherArmor", Name = "Leather Armor", StackSize = 1, Tags = { "Armor" } },
 	{ Id = "IronArmor", Name = "Iron Armor", StackSize = 1, Tags = { "Armor" } },
 	{ Id = "DiamondArmor", Name = "Diamond Armor", StackSize = 1, Tags = { "Armor" } },
+	
+	-- Desert Armor
+	{ Id = "BoneArmor", Name = "Bone Armor", StackSize = 1, Tags = { "Armor", "Desert" } },
+	{ Id = "SanditeArmor", Name = "Sandite Armor", StackSize = 1, Tags = { "Armor", "Desert" } },
+	{ Id = "DesertCloak", Name = "Desert Cloak", StackSize = 1, Tags = { "Armor", "Desert" } },
+	
+	-- Desert Tools
+	{ Id = "SanditePickaxe", Name = "Sandite Pickaxe", StackSize = 1, Tags = { "Tool", "Holdable", "Desert" } },
+	{ Id = "BoneHatchet", Name = "Bone Hatchet", StackSize = 1, Tags = { "Tool", "Holdable", "Desert" } },
+	
+	-- Desert Consumables
+	{ Id = "CactusJuice", Name = "Cactus Juice", StackSize = 20, Tags = { "Consumable", "Desert" } },
+	{ Id = "DesertSalve", Name = "Desert Salve", StackSize = 10, Tags = { "Consumable", "Desert" } },
 	
 	-- Utility Items
 	{ Id = "Torch", Name = "Torch", StackSize = 99, Tags = { "Placeable", "Utility" } },
