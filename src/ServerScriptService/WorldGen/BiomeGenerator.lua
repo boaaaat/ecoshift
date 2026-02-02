@@ -15,6 +15,10 @@ local function clamp_non_negative(value)
 	return value
 end
 
+local function lerp(a, b, t)
+	return a + (b - a) * t
+end
+
 local function random_in_range(rng, range, fallback)
 	if type(range) == "number" then
 		return range
@@ -164,6 +168,62 @@ function BiomeGenerator.new(config)
 	return self
 end
 
+function BiomeGenerator:_distance_t(x, z)
+	local inner = self.center_exclusion_radius or 0
+	local outer = self.world_radius or 1
+	if outer <= inner then
+		return 0
+	end
+	local dist = math.sqrt((x * x) + (z * z))
+	return math.clamp((dist - inner) / math.max(outer - inner, 1), 0, 1)
+end
+
+function BiomeGenerator:_distance_weight_factor(weight, t)
+	if t == nil then
+		return 1
+	end
+	if type(weight) == "table" then
+		local min = tonumber(weight.Min or weight.min) or 1
+		local max = tonumber(weight.Max or weight.max) or 1
+		return math.max(0, lerp(min, max, t))
+	end
+	if weight == nil then
+		return 1
+	end
+	local w = tonumber(weight) or 1
+	return math.max(0, lerp(1, w, t))
+end
+
+function BiomeGenerator:_entry_weight(entry, distance_t)
+	local weight = tonumber(entry.Weight or entry.weight) or 1
+	if distance_t ~= nil then
+		local dWeight = entry.DistanceWeight or entry.distanceWeight
+		weight = weight * self:_distance_weight_factor(dWeight, distance_t)
+	end
+	return weight
+end
+
+function BiomeGenerator:_distance_factor_for_list(list, distance_t)
+	if distance_t == nil or not list or #list == 0 then
+		return 1
+	end
+	local total = 0
+	local weighted = 0
+	for _, entry in ipairs(list) do
+		local base = tonumber(entry.Weight or entry.weight) or 1
+		if base > 0 then
+			local dWeight = entry.DistanceWeight or entry.distanceWeight
+			local factor = self:_distance_weight_factor(dWeight, distance_t)
+			total += base
+			weighted += base * factor
+		end
+	end
+	if total <= 0 then
+		return 1
+	end
+	return weighted / total
+end
+
 function BiomeGenerator:_entity_weight(spawn_def)
 	if not spawn_def then return 0 end
 	local elapsed = os.clock() - self.start_time
@@ -194,9 +254,11 @@ function BiomeGenerator:_resolve_entity_enemy_list(biome_name, region_def)
 				local type_weight = tonumber(type_weights[def.Type or def.EntityType or "Monster"]) or 1
 				local weight = base_weight * biome_weight * region_weight * type_weight
 				if weight > 0 then
+					local distance_weight = spawn.DistanceWeight or spawn.distanceWeight or (biome_def and (biome_def.DistanceWeight or biome_def.distanceWeight))
 					list[#list + 1] = {
 						Prefab = prefab,
 						Weight = weight,
+						DistanceWeight = distance_weight,
 						Id = id,
 						GroupSize = spawn.GroupSize,
 						GroupRadius = spawn.GroupRadius,
@@ -357,10 +419,11 @@ function BiomeGenerator:_resolve_prefabs_weighted(type_name, biome_name, names)
 				elseif type(entry) == "table" then
 					local name = entry.Name or entry.Id or entry.Prefab or entry[1]
 					local weight = tonumber(entry.Weight or entry.weight) or 1
+					local distance_weight = entry.DistanceWeight or entry.distanceWeight
 					if type(name) == "string" then
 						local prefab = lookup[name]
 						if prefab and weight > 0 then
-							list[#list + 1] = { Prefab = prefab, Weight = weight }
+							list[#list + 1] = { Prefab = prefab, Weight = weight, DistanceWeight = distance_weight }
 						end
 					end
 				end
@@ -370,13 +433,15 @@ function BiomeGenerator:_resolve_prefabs_weighted(type_name, biome_name, names)
 				if type(key) == "string" then
 					local prefab = lookup[key]
 					local weight = 1
+					local distance_weight = nil
 					if type(value) == "number" then
 						weight = value
 					elseif type(value) == "table" then
 						weight = tonumber(value.Weight or value.weight) or 1
+						distance_weight = value.DistanceWeight or value.distanceWeight
 					end
 					if prefab and weight > 0 then
-						list[#list + 1] = { Prefab = prefab, Weight = weight }
+						list[#list + 1] = { Prefab = prefab, Weight = weight, DistanceWeight = distance_weight }
 					end
 				end
 			end
@@ -385,15 +450,15 @@ function BiomeGenerator:_resolve_prefabs_weighted(type_name, biome_name, names)
 	return list
 end
 
-function BiomeGenerator:_choose_weighted(list)
+function BiomeGenerator:_choose_weighted(list, distance_t)
 	local total = 0
 	for _, entry in ipairs(list) do
-		total += (entry.Weight or 1)
+		total += self:_entry_weight(entry, distance_t)
 	end
 	if total <= 0 then return nil end
 	local roll = self.random:NextNumber(0, total)
 	for _, entry in ipairs(list) do
-		roll -= (entry.Weight or 1)
+		roll -= self:_entry_weight(entry, distance_t)
 		if roll <= 0 then
 			return entry.Prefab
 		end
@@ -401,15 +466,15 @@ function BiomeGenerator:_choose_weighted(list)
 	return list[#list].Prefab
 end
 
-function BiomeGenerator:_choose_weighted_entry(list)
+function BiomeGenerator:_choose_weighted_entry(list, distance_t)
 	local total = 0
 	for _, entry in ipairs(list) do
-		total += (entry.Weight or 1)
+		total += self:_entry_weight(entry, distance_t)
 	end
 	if total <= 0 then return nil end
 	local roll = self.random:NextNumber(0, total)
 	for _, entry in ipairs(list) do
-		roll -= (entry.Weight or 1)
+		roll -= self:_entry_weight(entry, distance_t)
 		if roll <= 0 then
 			return entry
 		end
@@ -547,12 +612,21 @@ function BiomeGenerator:_scatter_in_region(biome_name, region_center, region_def
 		end
 	end
 
+	local distance_t = self:_distance_t(region_center.X, region_center.Z)
 	local resource_count = random_in_range(self.random, region_def.resource_count or region_def.resourceCount)
 	local prop_count = random_in_range(self.random, region_def.prop_count or region_def.propCount)
 	local enemy_count = self.spawn_enemies and random_in_range(self.random, region_def.enemy_count or region_def.enemyCount) or 0
 
+	local resource_factor = self:_distance_factor_for_list(resource_prefabs, distance_t)
+	local prop_factor = self:_distance_factor_for_list(prop_prefabs, distance_t)
+	local enemy_factor = self.spawn_enemies and self:_distance_factor_for_list(enemy_prefabs, distance_t) or 1
+
+	resource_count = math.max(0, math.floor(resource_count * resource_factor + 0.5))
+	prop_count = math.max(0, math.floor(prop_count * prop_factor + 0.5))
+	enemy_count = self.spawn_enemies and math.max(0, math.floor(enemy_count * enemy_factor + 0.5)) or 0
+
 	for _ = 1, resource_count do
-		local prefab = self:_choose_weighted(resource_prefabs)
+		local prefab = self:_choose_weighted(resource_prefabs, distance_t)
 		if prefab then
 			-- Try multiple positions to avoid structures
 			local placed = false
@@ -570,7 +644,7 @@ function BiomeGenerator:_scatter_in_region(biome_name, region_center, region_def
 	end
 
 	for _ = 1, prop_count do
-		local prefab = self:_choose_weighted(prop_prefabs)
+		local prefab = self:_choose_weighted(prop_prefabs, distance_t)
 		if prefab then
 			-- Try multiple positions to avoid structures
 			local placed = false
@@ -591,7 +665,7 @@ function BiomeGenerator:_scatter_in_region(biome_name, region_center, region_def
 		local group_counts = {}
 		local member_counts = {}
 		for _ = 1, enemy_count do
-			local entry = self:_choose_weighted_entry(enemy_prefabs)
+			local entry = self:_choose_weighted_entry(enemy_prefabs, distance_t)
 			if entry then
 				local id = entry.Id or (entry.Prefab and entry.Prefab.Name) or "Enemy"
 				local max_groups = tonumber(entry.MaxGroupsPerRegion)
@@ -643,13 +717,16 @@ function BiomeGenerator:_scatter_in_region(biome_name, region_center, region_def
 	end
 end
 
-function BiomeGenerator:_place_large_objects(biome_name, list, count, padding, parent)
+function BiomeGenerator:_place_large_objects(biome_name, list, count, padding, parent, prefabs, distance_t)
 	if count <= 0 then
 		return
 	end
-	local prefabs = self:_resolve_prefabs_weighted(list.type_name, biome_name, list.names)
+	local prefabs = prefabs or self:_resolve_prefabs_weighted(list.type_name, biome_name, list.names)
 	if #prefabs == 0 then
 		return
+	end
+	if distance_t == nil and list.chunk_center then
+		distance_t = self:_distance_t(list.chunk_center.X, list.chunk_center.Z)
 	end
 	local tries = list.placement_tries or 10
 
@@ -657,7 +734,7 @@ function BiomeGenerator:_place_large_objects(biome_name, list, count, padding, p
 		local placed = false
 		for _ = 1, tries do
 			local position = self:_random_point_in_chunk(list.chunk_center)
-			local prefab = self:_choose_weighted(prefabs)
+			local prefab = self:_choose_weighted(prefabs, distance_t)
 			if not prefab then break end
 			local size = get_prefab_size(prefab)
 			local rect = rect_from_size(position.X, position.Z, size.X, size.Z, padding)
@@ -721,12 +798,15 @@ function BiomeGenerator:_generate(override_biome)
 		local chunk_center = Vector3.new(center.X, self.base_y, center.Y)
 		local biome = forced_biome or self:_select_biome(center.X, center.Y)
 		local biome_name = biome.name
+		local distance_t = self:_distance_t(center.X, center.Y)
 
 		self.stats.chunks += 1
 
 		-- Place structures FIRST so resources can avoid them
 		local structure_chance = resolve_probability(self.random, biome.structure_count or biome.structureCount)
-		local structure_count = (self.random:NextNumber() <= structure_chance) and 1 or 0
+		local structure_prefabs = self:_resolve_prefabs_weighted("StructurePrefabs", biome_name, biome.structures)
+		local structure_factor = self:_distance_factor_for_list(structure_prefabs, distance_t)
+		local structure_count = (self.random:NextNumber() <= (structure_chance * structure_factor)) and 1 or 0
 		if structure_count > 0 then
 			self:_place_large_objects(
 				biome_name,
@@ -738,12 +818,16 @@ function BiomeGenerator:_generate(override_biome)
 				},
 				structure_count,
 				self.structure_padding,
-				self.spawn_subfolders.Structures
+				self.spawn_subfolders.Structures,
+				structure_prefabs,
+				distance_t
 			)
 		end
 
 		local objective_chance = resolve_probability(self.random, biome.objective_count or biome.objectiveCount)
-		local objective_count = (self.random:NextNumber() <= objective_chance) and 1 or 0
+		local objective_prefabs = self:_resolve_prefabs_weighted("ObjectivePrefabs", biome_name, biome.objectives)
+		local objective_factor = self:_distance_factor_for_list(objective_prefabs, distance_t)
+		local objective_count = (self.random:NextNumber() <= (objective_chance * objective_factor)) and 1 or 0
 		if objective_count > 0 then
 			self:_place_large_objects(
 				biome_name,
@@ -755,7 +839,9 @@ function BiomeGenerator:_generate(override_biome)
 				},
 				objective_count,
 				self.objective_padding,
-				self.spawn_subfolders.Objectives
+				self.spawn_subfolders.Objectives,
+				objective_prefabs,
+				distance_t
 			)
 		end
 

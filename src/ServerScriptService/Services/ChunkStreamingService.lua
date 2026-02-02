@@ -41,11 +41,71 @@ local CENTER_EXCLUSION = WorldGenConfig.center_exclusion_radius or 260
 local CENTER_EXCLUSION_SQ = CENTER_EXCLUSION * CENTER_EXCLUSION
 local SPAWN_ENEMIES = WorldGenConfig.spawn_enemies ~= false
 
+local function lerp(a, b, t)
+	return a + (b - a) * t
+end
+
 local function isInsideCenterExclusion(x, z)
 	if CENTER_EXCLUSION <= 0 then
 		return false
 	end
 	return (x * x + z * z) <= CENTER_EXCLUSION_SQ
+end
+
+local function distanceT(x, z)
+	local inner = CENTER_EXCLUSION or 0
+	local outer = WORLD_RADIUS or 1
+	if outer <= inner then
+		return 0
+	end
+	local dist = math.sqrt((x * x) + (z * z))
+	return math.clamp((dist - inner) / math.max(outer - inner, 1), 0, 1)
+end
+
+local function distanceWeightFactor(weight, t)
+	if t == nil then
+		return 1
+	end
+	if type(weight) == "table" then
+		local min = tonumber(weight.Min or weight.min) or 1
+		local max = tonumber(weight.Max or weight.max) or 1
+		return math.max(0, lerp(min, max, t))
+	end
+	if weight == nil then
+		return 1
+	end
+	local w = tonumber(weight) or 1
+	return math.max(0, lerp(1, w, t))
+end
+
+local function entryWeight(entry, distance_t)
+	local weight = tonumber(entry.Weight or entry.weight) or 1
+	if distance_t ~= nil then
+		local dWeight = entry.DistanceWeight or entry.distanceWeight
+		weight = weight * distanceWeightFactor(dWeight, distance_t)
+	end
+	return weight
+end
+
+local function distanceFactorForList(list, distance_t)
+	if distance_t == nil or not list or #list == 0 then
+		return 1
+	end
+	local total = 0
+	local weighted = 0
+	for _, entry in ipairs(list) do
+		local base = tonumber(entry.Weight or entry.weight) or 1
+		if base > 0 then
+			local dWeight = entry.DistanceWeight or entry.distanceWeight
+			local factor = distanceWeightFactor(dWeight, distance_t)
+			total += base
+			weighted += base * factor
+		end
+	end
+	if total <= 0 then
+		return 1
+	end
+	return weighted / total
 end
 
 local function chunkKey(cx, cz)
@@ -202,10 +262,11 @@ function ChunkStreamingService:_resolvePrefabsWeighted(typeName, biomeName, name
 				elseif type(entry) == "table" then
 					local name = entry.Name or entry.Id or entry.Prefab or entry[1]
 					local weight = tonumber(entry.Weight or entry.weight) or 1
+					local distance_weight = entry.DistanceWeight or entry.distanceWeight
 					if type(name) == "string" then
 						local prefab = lookup[name]
 						if prefab and weight > 0 then
-							list[#list + 1] = { Prefab = prefab, Weight = weight }
+							list[#list + 1] = { Prefab = prefab, Weight = weight, DistanceWeight = distance_weight }
 						end
 					end
 				end
@@ -215,13 +276,15 @@ function ChunkStreamingService:_resolvePrefabsWeighted(typeName, biomeName, name
 				if type(key) == "string" then
 					local prefab = lookup[key]
 					local weight = 1
+					local distance_weight = nil
 					if type(value) == "number" then
 						weight = value
 					elseif type(value) == "table" then
 						weight = tonumber(value.Weight or value.weight) or 1
+						distance_weight = value.DistanceWeight or value.distanceWeight
 					end
 					if prefab and weight > 0 then
-						list[#list + 1] = { Prefab = prefab, Weight = weight }
+						list[#list + 1] = { Prefab = prefab, Weight = weight, DistanceWeight = distance_weight }
 					end
 				end
 			end
@@ -230,15 +293,15 @@ function ChunkStreamingService:_resolvePrefabsWeighted(typeName, biomeName, name
 	return list
 end
 
-function ChunkStreamingService:_chooseWeighted(list, rng)
+function ChunkStreamingService:_chooseWeighted(list, rng, distance_t)
 	local total = 0
 	for _, entry in ipairs(list) do
-		total += (entry.Weight or 1)
+		total += entryWeight(entry, distance_t)
 	end
 	if total <= 0 then return nil end
 	local roll = rng:NextNumber(0, total)
 	for _, entry in ipairs(list) do
-		roll -= (entry.Weight or 1)
+		roll -= entryWeight(entry, distance_t)
 		if roll <= 0 then
 			return entry.Prefab
 		end
@@ -356,6 +419,7 @@ function ChunkStreamingService:_generateChunkContent(cx, cz, chunkCenter, chunkF
 	local seed = WorldGenConfig.seed or 12345
 	local chunkSeed = seed + cx * 73856093 + cz * 19349663
 	local rng = Random.new(chunkSeed)
+	local distance_t = distanceT(chunkCenter.X, chunkCenter.Z)
 	
 	-- Generate regions in this chunk
 	local regionCount = randomInRange(rng, biome.region_count or biome.regionCount) or 1
@@ -367,38 +431,51 @@ function ChunkStreamingService:_generateChunkContent(cx, cz, chunkCenter, chunkF
 			regionDef = biome.regions[rng:NextInteger(1, #biome.regions)]
 		end
 		if regionDef then
-			self:_scatterInChunk(biomeName, chunkCenter, regionDef, subfolders, rng)
+			self:_scatterInChunk(biomeName, chunkCenter, regionDef, subfolders, rng, distance_t)
 		end
 	end
 	
 	-- Structures (probability per chunk)
 	local structureChance = tonumber(biome.structure_count or biome.structureCount) or 0
-	if rng:NextNumber() <= math.clamp(structureChance, 0, 1) then
-		self:_placeStructure(biomeName, chunkCenter, biome.structures, subfolders.Structures, rng)
+	local structurePrefabs = self:_resolvePrefabsWeighted("StructurePrefabs", biomeName, biome.structures)
+	local structureFactor = distanceFactorForList(structurePrefabs, distance_t)
+	if rng:NextNumber() <= math.clamp(structureChance * structureFactor, 0, 1) then
+		self:_placeStructure(biomeName, chunkCenter, biome.structures, subfolders.Structures, rng, structurePrefabs, distance_t)
 	end
 	
 	-- Chests (probability per chunk)
 	local chestChance = tonumber(biome.chest_count or biome.chestCount) or 0
-	if biome.chests and rng:NextNumber() <= math.clamp(chestChance, 0, 1) then
-		self:_placeChest(biomeName, chunkCenter, biome.chests, subfolders.Structures, rng)
+	if biome.chests then
+		local chestPrefabs = self:_resolvePrefabsWeighted("StructurePrefabs", biomeName, biome.chests)
+		if #chestPrefabs == 0 then
+			chestPrefabs = self:_resolvePrefabsWeighted("PropPrefabs", biomeName, biome.chests)
+		end
+		local chestFactor = distanceFactorForList(chestPrefabs, distance_t)
+		if rng:NextNumber() <= math.clamp(chestChance * chestFactor, 0, 1) then
+			self:_placeChest(biomeName, chunkCenter, biome.chests, subfolders.Structures, rng, chestPrefabs, distance_t)
+		end
 	end
 	
 	-- Objectives (probability per chunk)
 	local objectiveChance = tonumber(biome.objective_count or biome.objectiveCount) or 0
-	if rng:NextNumber() <= math.clamp(objectiveChance, 0, 1) then
-		self:_placeStructure(biomeName, chunkCenter, biome.objectives, subfolders.Objectives, rng)
+	local objectivePrefabs = self:_resolvePrefabsWeighted("ObjectivePrefabs", biomeName, biome.objectives)
+	local objectiveFactor = distanceFactorForList(objectivePrefabs, distance_t)
+	if rng:NextNumber() <= math.clamp(objectiveChance * objectiveFactor, 0, 1) then
+		self:_placeStructure(biomeName, chunkCenter, biome.objectives, subfolders.Objectives, rng, objectivePrefabs, distance_t)
 	end
 end
 
-function ChunkStreamingService:_scatterInChunk(biomeName, chunkCenter, regionDef, subfolders, rng)
+function ChunkStreamingService:_scatterInChunk(biomeName, chunkCenter, regionDef, subfolders, rng, distance_t)
 	local half = CHUNK_SIZE * 0.4
 	
 	-- Resources
 	local resourcePrefabs = self:_resolvePrefabsWeighted("ResourcePrefabs", biomeName, regionDef.resources)
 	local resourceCount = randomInRange(rng, regionDef.resource_count or regionDef.resourceCount) or 5
+	local resourceFactor = distanceFactorForList(resourcePrefabs, distance_t)
+	resourceCount = math.max(0, math.floor(resourceCount * resourceFactor + 0.5))
 	
 	for _ = 1, resourceCount do
-		local prefab = self:_chooseWeighted(resourcePrefabs, rng)
+		local prefab = self:_chooseWeighted(resourcePrefabs, rng, distance_t)
 		if prefab then
 			local x = chunkCenter.X + rng:NextNumber(-half, half)
 			local z = chunkCenter.Z + rng:NextNumber(-half, half)
@@ -410,9 +487,11 @@ function ChunkStreamingService:_scatterInChunk(biomeName, chunkCenter, regionDef
 	-- Props
 	local propPrefabs = self:_resolvePrefabsWeighted("PropPrefabs", biomeName, regionDef.props)
 	local propCount = randomInRange(rng, regionDef.prop_count or regionDef.propCount) or 3
+	local propFactor = distanceFactorForList(propPrefabs, distance_t)
+	propCount = math.max(0, math.floor(propCount * propFactor + 0.5))
 	
 	for _ = 1, propCount do
-		local prefab = self:_chooseWeighted(propPrefabs, rng)
+		local prefab = self:_chooseWeighted(propPrefabs, rng, distance_t)
 		if prefab then
 			local x = chunkCenter.X + rng:NextNumber(-half, half)
 			local z = chunkCenter.Z + rng:NextNumber(-half, half)
@@ -425,9 +504,11 @@ function ChunkStreamingService:_scatterInChunk(biomeName, chunkCenter, regionDef
 		-- Enemies
 		local enemyPrefabs = self:_resolvePrefabsWeighted("EnemyPrefabs", biomeName, regionDef.enemies)
 		local enemyCount = randomInRange(rng, regionDef.enemy_count or regionDef.enemyCount) or 0
+		local enemyFactor = distanceFactorForList(enemyPrefabs, distance_t)
+		enemyCount = math.max(0, math.floor(enemyCount * enemyFactor + 0.5))
 		
 		for _ = 1, enemyCount do
-			local prefab = self:_chooseWeighted(enemyPrefabs, rng)
+			local prefab = self:_chooseWeighted(enemyPrefabs, rng, distance_t)
 			if prefab then
 				local x = chunkCenter.X + rng:NextNumber(-half, half)
 				local z = chunkCenter.Z + rng:NextNumber(-half, half)
@@ -438,17 +519,17 @@ function ChunkStreamingService:_scatterInChunk(biomeName, chunkCenter, regionDef
 	end
 end
 
-function ChunkStreamingService:_placeStructure(biomeName, chunkCenter, names, parent, rng)
-	if not names or (type(names) == "table" and #names == 0) then return end
+function ChunkStreamingService:_placeStructure(biomeName, chunkCenter, names, parent, rng, prefabs, distance_t)
+	if (not names or (type(names) == "table" and #names == 0)) and not prefabs then return end
 	
-	local prefabs = self:_resolvePrefabsWeighted("StructurePrefabs", biomeName, names)
+	local prefabs = prefabs or self:_resolvePrefabsWeighted("StructurePrefabs", biomeName, names)
 	if #prefabs == 0 then
 		-- Try ObjectivePrefabs for objectives
 		prefabs = self:_resolvePrefabsWeighted("ObjectivePrefabs", biomeName, names)
 	end
 	if #prefabs == 0 then return end
 	
-	local prefab = self:_chooseWeighted(prefabs, rng)
+	local prefab = self:_chooseWeighted(prefabs, rng, distance_t)
 	if prefab then
 		local half = CHUNK_SIZE * 0.3
 		local x = chunkCenter.X + rng:NextNumber(-half, half)
@@ -458,18 +539,18 @@ function ChunkStreamingService:_placeStructure(biomeName, chunkCenter, names, pa
 	end
 end
 
-function ChunkStreamingService:_placeChest(biomeName, chunkCenter, chestNames, parent, rng)
-	if not chestNames or (type(chestNames) == "table" and #chestNames == 0) then return end
+function ChunkStreamingService:_placeChest(biomeName, chunkCenter, chestNames, parent, rng, prefabs, distance_t)
+	if (not chestNames or (type(chestNames) == "table" and #chestNames == 0)) and not prefabs then return end
 	
 	-- Try StructurePrefabs first for chest prefabs
-	local prefabs = self:_resolvePrefabsWeighted("StructurePrefabs", biomeName, chestNames)
+	local prefabs = prefabs or self:_resolvePrefabsWeighted("StructurePrefabs", biomeName, chestNames)
 	if #prefabs == 0 then
 		-- Try PropPrefabs as fallback
 		prefabs = self:_resolvePrefabsWeighted("PropPrefabs", biomeName, chestNames)
 	end
 	if #prefabs == 0 then return end
 	
-	local prefab = self:_chooseWeighted(prefabs, rng)
+	local prefab = self:_chooseWeighted(prefabs, rng, distance_t)
 	if prefab then
 		local half = CHUNK_SIZE * 0.35
 		local x = chunkCenter.X + rng:NextNumber(-half, half)

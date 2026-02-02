@@ -6,42 +6,42 @@ local Workspace = game:GetService("Workspace")
 local CollectionService = game:GetService("CollectionService")
 
 local BiomeService = require(script.Parent.BiomeService)
+local EntityConfig = require(script.Parent.Parent.AI.EntityConfig)
 
-local function farFromPlayers(point, minDist)
-	minDist = minDist or 60
+local function withinPlayerDistance(point, minDist, maxDist)
 	local p = point:IsA("Attachment") and point.WorldPosition or point.Position
+	local nearest = math.huge
 	for _, plr in ipairs(Players:GetPlayers()) do
 		local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-		if root and (root.Position - p).Magnitude < minDist then
-			return false
+		if root then
+			local dist = (root.Position - p).Magnitude
+			if minDist and dist < minDist then
+				return false
+			end
+			if dist < nearest then
+				nearest = dist
+			end
 		end
+	end
+	if maxDist and nearest ~= math.huge and nearest > maxDist then
+		return false
 	end
 	return true
 end
 
-local function choosePoints(points, n)
-	-- shuffle
+local function pickPoint(points, minDist, maxDist)
+	if #points == 0 then return nil end
 	local shuffled = table.clone(points)
 	for i = #shuffled, 2, -1 do
 		local j = math.random(1, i)
 		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
 	end
-	local out = {}
 	for _, pt in ipairs(shuffled) do
-		if farFromPlayers(pt) then
-			table.insert(out, pt)
-		end
-		if #out >= n then
-			break
+		if withinPlayerDistance(pt, minDist, maxDist) then
+			return pt
 		end
 	end
-	-- if not enough far points, allow closer
-	local i = 1
-	while #out < n and i <= #points do
-		table.insert(out, points[i])
-		i += 1
-	end
-	return out
+	return shuffled[1]
 end
 
 local function findPrefabInFolder(root, biomeName, id)
@@ -95,6 +95,80 @@ local function getSafeSpawnPosition(originPosition)
 	return CFrame.new(groundPosition + Vector3.new(0, 10, 0))
 end
 
+local function getSpawnConfig(id)
+	local def = EntityConfig.Entities and EntityConfig.Entities[id]
+	return def and def.Spawn or nil
+end
+
+local function randomOffset(radius)
+	if not radius or radius <= 0 then
+		return Vector3.new()
+	end
+	local angle = math.random() * math.pi * 2
+	local dist = math.sqrt(math.random()) * radius
+	return Vector3.new(math.cos(angle) * dist, 0, math.sin(angle) * dist)
+end
+
+local function normalizeSpawnRequest(entry)
+	local id = nil
+	local count = 1
+	local groupRadius = 0
+	local minPlayerDist = nil
+	local maxPlayerDist = nil
+
+	if type(entry) == "table" then
+		id = entry.Id or entry.id
+		count = tonumber(entry.Count or entry.N or 1) or 1
+		groupRadius = tonumber(entry.GroupRadius or entry.groupRadius) or 0
+		minPlayerDist = entry.MinPlayerDistance or entry.minPlayerDistance
+		maxPlayerDist = entry.MaxPlayerDistance or entry.maxPlayerDistance
+	elseif type(entry) == "string" then
+		id = entry
+	end
+
+	if not id then return nil end
+
+	local spawn = getSpawnConfig(id)
+	if spawn then
+		if groupRadius == 0 then
+			groupRadius = tonumber(spawn.GroupRadius or spawn.groupRadius) or 0
+		end
+		if not minPlayerDist then
+			minPlayerDist = spawn.MinPlayerDistance or spawn.minPlayerDistance
+		end
+		if not maxPlayerDist then
+			maxPlayerDist = spawn.MaxPlayerDistance or spawn.maxPlayerDistance
+		end
+	end
+
+	local waves = EntityConfig.EnemyWaves or {}
+	if not minPlayerDist then
+		minPlayerDist = waves.SpawnPointMinDistance or 60
+	end
+	if not maxPlayerDist then
+		maxPlayerDist = waves.SpawnPointMaxDistance
+	end
+
+	return {
+		Id = id,
+		Count = math.max(1, math.floor(count)),
+		GroupRadius = groupRadius,
+		MinPlayerDistance = minPlayerDist,
+		MaxPlayerDistance = maxPlayerDist,
+	}
+end
+
+local function spawnGroup(id, anchor, count, radius, playerCount)
+	local basePos = getAnchorPosition(anchor)
+	if not basePos then
+		return
+	end
+	for _ = 1, count do
+		local offset = randomOffset(radius)
+		spawnEnemyById(id, basePos + offset, playerCount)
+	end
+end
+
 local function getModelRoot(model)
 	return model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)
 end
@@ -137,6 +211,22 @@ local function ensureEnemiesFolder()
 	return enemiesFolder
 end
 
+local function getAnchorPosition(anchor)
+	if typeof(anchor) == "Vector3" then
+		return anchor
+	end
+	if typeof(anchor) == "CFrame" then
+		return anchor.Position
+	end
+	if anchor and anchor.IsA and anchor:IsA("Attachment") then
+		return anchor.WorldPosition
+	end
+	if anchor and anchor.Position then
+		return anchor.Position
+	end
+	return nil
+end
+
 local function spawnEnemyById(id, anchor, playerCount)
 	local prefab = resolvePrefab(getEnemyPrefab(id), id)
 	if not prefab then
@@ -144,7 +234,7 @@ local function spawnEnemyById(id, anchor, playerCount)
 		return
 	end
 
-	local anchorPos = anchor:IsA("Attachment") and anchor.WorldPosition or anchor.Position
+	local anchorPos = getAnchorPosition(anchor)
 	if not anchorPos then
 		warn("[EnemySpawner] Spawn point has no position", anchor and anchor:GetFullName() or "nil")
 		return
@@ -203,16 +293,25 @@ local function bindSpawnerCallback()
 	_G.Ecoshift = _G.Ecoshift or {}
 	_G.Ecoshift.SetEnemySpawnCallback(function(ids, points)
 		if #ids == 0 or #points == 0 then return end
-		print("[EnemySpawner] Spawning wave with enemies:", table.concat(ids, ", "))
-		local pick = choosePoints(points, math.min(#ids, #points))
-		local k = 1
+		local requests = {}
+		for _, entry in ipairs(ids) do
+			local req = normalizeSpawnRequest(entry)
+			if req then
+				table.insert(requests, req)
+			end
+		end
+		if #requests == 0 then return end
+		local summary = {}
+		for _, req in ipairs(requests) do
+			summary[#summary + 1] = tostring(req.Id) .. "x" .. tostring(req.Count or 1)
+		end
+		print("[EnemySpawner] Spawning wave with enemies:", table.concat(summary, ", "))
 		local playerCount = math.max(1, #Players:GetPlayers())
-		for _, id in ipairs(ids) do
-			local pt = pick[k] or pick[#pick]
-			k = (k % #pick) + 1
-			local ok, err = pcall(spawnEnemyById, id, pt, playerCount)
+		for _, req in ipairs(requests) do
+			local pt = pickPoint(points, req.MinPlayerDistance, req.MaxPlayerDistance)
+			local ok, err = pcall(spawnGroup, req.Id, pt, req.Count or 1, req.GroupRadius or 0, playerCount)
 			if not ok then
-				warn("[EnemySpawner] Spawn failed for", id, "-", err)
+				warn("[EnemySpawner] Spawn failed for", req.Id, "-", err)
 			end
 		end
 	end)

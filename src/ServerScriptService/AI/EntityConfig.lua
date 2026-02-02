@@ -53,6 +53,10 @@ EntityConfig.Defaults = {
 --   Weight / TimeScaledWeight: base + time-based scaling.
 --   Biomes[BiomeName].Weight: biome weight multiplier.
 --   Biomes[BiomeName].Regions[RegionName]: region weight multiplier.
+--   DistanceWeight: number or {Min, Max} scaling from center to edge (1 = no change).
+--   MinDistance / MaxDistance: world distance gates from center.
+--   MinPlayerDistance / MaxPlayerDistance: spawnpoint distance gates from players.
+--   MaxPerWave: cap per wave (applies to runtime enemy spawns).
 --   GroupSize: number spawned per group.
 --   GroupRadius: cluster radius for group members.
 --   MaxGroupsPerRegion / MaxCountPerRegion: optional caps per region.
@@ -333,12 +337,16 @@ EntityConfig.Entities = {
 }
 
 -- Enemy wave configuration (used by SpawnService)
+-- If UseEntitySpawnConfig is true, entity Spawn blocks are merged into wave tables.
 EntityConfig.EnemyWaves = {
+	UseEntitySpawnConfig = true,
 	BaseCount = 2,
 	MinCount = 1,
 	MaxCount = 24,
 	PlayerScale = 1.0,
 	PeriodSeconds = 24,
+	SpawnPointMinDistance = 60,
+	SpawnPointMaxDistance = nil,
 	DistanceSample = "Max", -- Max | Average | Min
 	Distance = {
 		MinRadius = 0,

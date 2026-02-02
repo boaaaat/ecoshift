@@ -98,6 +98,9 @@ Config.biome_metadata = {
 }
 
 -- BIOME WORLD GEN CONFIG: Regions, resources, props, structures per biome
+-- Optional: DistanceWeight can be set on any resource/prop/enemy/structure/objective/chest entry.
+-- DistanceWeight = 1 (no change), <1 less frequent toward edge, >1 more frequent toward edge.
+-- You can also use { Min = 0.8, Max = 1.4 } to control center/edge weights.
 Config.biomes = {
 	Forest = {
 		weight = 1.0,

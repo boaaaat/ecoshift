@@ -14,6 +14,7 @@ local ThreatService = require(script.Parent.ThreatService)
 local SpawnService = {}
 SpawnService._enemySpawns = Util.WaitForDescendant(Config.Paths.EnemySpawnsFolder, 5)
 SpawnService._resourceFolder = Util.WaitForDescendant(Config.Paths.ResourceNodesFolder, 5)
+SpawnService._startTime = os.clock()
 
 local function lerp(a, b, t)
 	return a + (b - a) * t
@@ -29,6 +30,66 @@ local function distFactor(dist, cfg)
 		t = t ^ exp
 	end
 	return t
+end
+
+local function distanceWeightFactor(weight, t)
+	if t == nil then
+		return 1
+	end
+	if type(weight) == "table" then
+		local min = tonumber(weight.Min or weight.min) or 1
+		local max = tonumber(weight.Max or weight.max) or 1
+		return math.max(0, lerp(min, max, t))
+	end
+	if weight == nil then
+		return 1
+	end
+	local w = tonumber(weight) or 1
+	return math.max(0, lerp(1, w, t))
+end
+
+local function resolveGroupSize(groupSize)
+	if type(groupSize) == "table" then
+		local min = tonumber(groupSize.min or groupSize.Min) or 1
+		local max = tonumber(groupSize.max or groupSize.Max) or min
+		if max < min then max = min end
+		return math.random(min, max)
+	end
+	if type(groupSize) == "number" then
+		return math.max(1, math.floor(groupSize))
+	end
+	return 1
+end
+
+local function mergeSpawnEntry(base, extra)
+	if not extra then return base end
+	for _, key in ipairs({
+		"DistanceWeight", "distanceWeight", "DistanceWeightMult", "distanceWeightMult",
+		"MinDistance", "minDistance",
+		"MaxDistance", "maxDistance",
+		"MinPlayerDistance", "minPlayerDistance",
+		"MaxPlayerDistance", "maxPlayerDistance",
+		"GroupSize", "groupSize",
+		"GroupRadius", "groupRadius",
+		"MaxPerWave", "MaxCountPerWave", "maxPerWave", "maxCountPerWave",
+	}) do
+		if extra[key] ~= nil then
+			base[key] = extra[key]
+		end
+	end
+	if extra.Weight ~= nil or extra.weight ~= nil then
+		local w = tonumber(extra.Weight or extra.weight) or 1
+		if base.BaseWeight ~= nil then
+			base.BaseWeight = base.BaseWeight * w
+		else
+			base.BaseWeight = w
+		end
+	end
+	if extra.TimeScaledWeight ~= nil or extra.timeScaledWeight ~= nil then
+		local ts = tonumber(extra.TimeScaledWeight or extra.timeScaledWeight) or 0
+		base.TimeScaledWeight = (base.TimeScaledWeight or 0) + ts
+	end
+	return base
 end
 
 local function ensureSpawnPoints(folder)
@@ -67,7 +128,7 @@ local function ensureSpawnPoints(folder)
 	end
 end
 
--- Public: returns a table of "what" to spawn at a given moment
+-- Public: returns spawn requests { Id, Count, GroupRadius, MinPlayerDistance, MaxPlayerDistance }
 function SpawnService:ComputeEnemyWave()
 	local biome = BiomeService:GetCurrent()
 	local data = BiomeConfig.BIOMES[biome]
@@ -116,36 +177,89 @@ function SpawnService:ComputeEnemyWave()
 		if t then table.insert(tables, t) end
 	end
 
-	if #tables == 0 then return {} end
-	-- build a bag
-	local bag = {}
-	for _,t in ipairs(tables) do
-		for _,entry in ipairs(t) do
-			local weight = tonumber(entry.Weight or entry.weight) or 1
-			weight = weight * globalWeightMult
-			local minD = tonumber(entry.MinDistance)
-			local maxD = tonumber(entry.MaxDistance)
-			if minD and dist < minD then
-				continue
-			end
-			if maxD and dist > maxD then
-				continue
-			end
-			local dW = entry.DistanceWeight or entry.DistanceWeightMult
-			if type(dW) == "table" then
-				local dwMin = tonumber(dW.Min) or tonumber(dW.min) or 1
-				local dwMax = tonumber(dW.Max) or tonumber(dW.max) or 1
-				weight = weight * lerp(dwMin, dwMax, distT)
-			elseif type(dW) == "number" then
-				weight = weight * dW
-			end
-			if weight > 0 then
-				local copy = {}
-				for k, v in pairs(entry) do copy[k] = v end
-				copy.Weight = weight
-				table.insert(bag, copy)
+	local entriesById = {}
+	local useEntitySpawn = waves.UseEntitySpawnConfig ~= false
+	if useEntitySpawn then
+		local entities = EntityConfig.Entities or {}
+		local typeWeights = EntityConfig.TypeWeights or {}
+		for id, def in pairs(entities) do
+			local spawn = def.Spawn
+			local biomeDef = spawn and spawn.Biomes and spawn.Biomes[biome]
+			if spawn and biomeDef then
+				local entry = {
+					Id = id,
+					BaseWeight = tonumber(spawn.Weight or spawn.weight) or 1,
+					TimeScaledWeight = tonumber(spawn.TimeScaledWeight or spawn.timeScaledWeight) or 0,
+					DistanceWeight = spawn.DistanceWeight or spawn.distanceWeight,
+					MinDistance = spawn.MinDistance or spawn.minDistance,
+					MaxDistance = spawn.MaxDistance or spawn.maxDistance,
+					MinPlayerDistance = spawn.MinPlayerDistance or spawn.minPlayerDistance,
+					MaxPlayerDistance = spawn.MaxPlayerDistance or spawn.maxPlayerDistance,
+					GroupSize = spawn.GroupSize or spawn.groupSize,
+					GroupRadius = spawn.GroupRadius or spawn.groupRadius,
+					MaxPerWave = spawn.MaxPerWave or spawn.maxPerWave or spawn.MaxCountPerWave or spawn.maxCountPerWave,
+				}
+				local biomeWeight = tonumber(biomeDef.Weight or biomeDef.weight) or 1
+				entry.BaseWeight = entry.BaseWeight * biomeWeight
+				if biomeDef.DistanceWeight or biomeDef.distanceWeight then
+					entry.DistanceWeight = biomeDef.DistanceWeight or biomeDef.distanceWeight
+				end
+				if biomeDef.MinDistance or biomeDef.minDistance then
+					entry.MinDistance = biomeDef.MinDistance or biomeDef.minDistance
+				end
+				if biomeDef.MaxDistance or biomeDef.maxDistance then
+					entry.MaxDistance = biomeDef.MaxDistance or biomeDef.maxDistance
+				end
+				local typeWeight = tonumber(typeWeights[def.Type or def.EntityType or "Monster"]) or 1
+				entry.BaseWeight = entry.BaseWeight * typeWeight
+				entriesById[id] = entry
 			end
 		end
+	end
+
+	for _,t in ipairs(tables) do
+		for _,entry in ipairs(t) do
+			local id = entry.Id or entry.id
+			if id then
+				local base = entriesById[id] or { Id = id }
+				base = mergeSpawnEntry(base, entry)
+				entriesById[id] = base
+			end
+		end
+	end
+
+	if next(entriesById) == nil then
+		return {}
+	end
+
+	-- build a bag
+	local bag = {}
+	local elapsed = os.clock() - (self._startTime or os.clock())
+	local timeScale = tonumber(waves.TimeScaleSeconds) or tonumber(BiomeConfig.time_scale_seconds) or 900
+	for _,entry in pairs(entriesById) do
+		local baseWeight = tonumber(entry.BaseWeight) or 1
+		local scaled = tonumber(entry.TimeScaledWeight) or 0
+		local weight = baseWeight + (scaled * (elapsed / math.max(timeScale, 1)))
+		weight = math.max(0, weight) * globalWeightMult
+		local minD = tonumber(entry.MinDistance)
+		local maxD = tonumber(entry.MaxDistance)
+		if minD and dist < minD then
+			continue
+		end
+		if maxD and dist > maxD then
+			continue
+		end
+		weight = weight * distanceWeightFactor(entry.DistanceWeight, distT)
+		if weight > 0 then
+			local copy = {}
+			for k, v in pairs(entry) do copy[k] = v end
+			copy.Weight = weight
+			table.insert(bag, copy)
+		end
+	end
+
+	if #bag == 0 then
+		return {}
 	end
 
 	local threat = ThreatService:Get() -- 0..10
@@ -161,12 +275,47 @@ function SpawnService:ComputeEnemyWave()
 	baseCount = math.clamp(math.floor(baseCount * mult * countMult), waves.MinCount or (waves.BaseCount or 2), waves.MaxCount or 24)
 
 	local result = {}
-	for i=1, baseCount do
+	local perId = {}
+	local remaining = baseCount
+	local attempts = 0
+	local maxAttempts = math.max(baseCount * 6, 12)
+	while remaining > 0 and attempts < maxAttempts do
 		local pick = Util.ChooseWeighted(bag, "Weight")
-		table.insert(result, pick and pick.Id or "Wolf")
+		if not pick then break end
+		local id = pick.Id or pick.id
+		if not id then break end
+		local maxPerWave = tonumber(pick.MaxPerWave or pick.MaxCountPerWave or pick.maxPerWave or pick.maxCountPerWave)
+		local current = perId[id] or 0
+		if maxPerWave and current >= maxPerWave then
+			attempts += 1
+			continue
+		end
+		local groupSize = resolveGroupSize(pick.GroupSize or pick.groupSize)
+		if maxPerWave then
+			groupSize = math.min(groupSize, maxPerWave - current)
+		end
+		groupSize = math.min(groupSize, remaining)
+		if groupSize <= 0 then
+			attempts += 1
+			continue
+		end
+		table.insert(result, {
+			Id = id,
+			Count = groupSize,
+			GroupRadius = pick.GroupRadius or pick.groupRadius,
+			MinPlayerDistance = pick.MinPlayerDistance or pick.minPlayerDistance,
+			MaxPlayerDistance = pick.MaxPlayerDistance or pick.maxPlayerDistance,
+		})
+		perId[id] = current + groupSize
+		remaining -= groupSize
+		attempts += 1
 	end
-	
-	print("[SpawnService] Computed wave for biome '"..biome.."' with enemies:", table.concat(result, ", "))
+
+	local summary = {}
+	for _, entry in ipairs(result) do
+		summary[#summary + 1] = tostring(entry.Id) .. "x" .. tostring(entry.Count or 1)
+	end
+	print("[SpawnService] Computed wave for biome '"..biome.."' with enemies:", table.concat(summary, ", "))
 
 	return result
 end

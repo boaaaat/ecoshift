@@ -1,7 +1,7 @@
 -- SpawnerOrchestrator.lua
 -- Computes *what* to spawn and *where*, on an interval. It does NOT create instances.
--- Instead, you supply a callback via _G.Ecoshift.SetEnemySpawnCallback(function(listOfIds, spawnPoints) end)
--- which will be invoked on the server when it's time to spawn a wave.
+-- Instead, you supply a callback via _G.Ecoshift.SetEnemySpawnCallback(function(list, spawnPoints) end)
+-- list can be ids or tables { Id, Count, GroupRadius, MinPlayerDistance, MaxPlayerDistance }.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
