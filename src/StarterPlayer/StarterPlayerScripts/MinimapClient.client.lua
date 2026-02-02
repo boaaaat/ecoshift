@@ -52,6 +52,11 @@ local CONFIG = {
 	StructureColor = Color3.fromRGB(150, 200, 255), -- light blue
 	ObjectiveColor = Color3.fromRGB(255, 150, 255), -- magenta
 	NeutralColor = Color3.fromRGB(180, 180, 180), -- grey
+	SpawnColor = Color3.fromRGB(255, 165, 0), -- orange for spawn point
+	
+	-- Spawn point marker
+	ShowSpawnMarker = true,
+	SpawnBlipSize = 10, -- larger for visibility
 	
 	-- Blip sizes
 	PlayerBlipSize = 12,
@@ -93,6 +98,10 @@ local cachedStructures = {} -- Cache of discovered structures
 local lastResourceScan = 0
 local RESOURCE_SCAN_INTERVAL = 2 -- seconds between full world scans
 
+-- Spawn point tracking
+local spawnPosition = nil -- Where the player spawned
+local spawnMarkerBlip = nil -- Special blip for spawn point
+
 -------------------------------------------------------------------
 -- UI CREATION
 -------------------------------------------------------------------
@@ -122,7 +131,7 @@ local function createMinimapUI()
 	-- Main container (for margin)
 	local container = Instance.new("Frame")
 	container.Name = "Container"
-	container.Size = UDim2.new(0, CONFIG.Size + CONFIG.Margin * 2, 0, CONFIG.Size + CONFIG.Margin * 2 + 25)
+	container.Size = UDim2.new(0, CONFIG.Size + CONFIG.Margin * 2, 0, CONFIG.Size + CONFIG.Margin * 2 + 45) -- Extra height for spawn distance
 	container.Position = UDim2.new(posX, 0, posY, 0)
 	container.AnchorPoint = Vector2.new(anchorX, anchorY)
 	container.BackgroundTransparency = 1
@@ -245,7 +254,7 @@ local function createMinimapUI()
 	pCorner.CornerRadius = UDim.new(0.5, 0)
 	pCorner.Parent = pBlip
 	
-	-- Compass labels
+	-- Compass labels (now shows direction relative to player - "^" always at top = forward)
 	local compassDirs = {
 		{ label = "N", angle = 0 },
 		{ label = "E", angle = 90 },
@@ -268,10 +277,45 @@ local function createMinimapUI()
 		compassLabels[dir.label] = { frame = label, baseAngle = dir.angle }
 	end
 	
+	-- Spawn point marker (special blip, always visible)
+	local spawnBlip = Instance.new("Frame")
+	spawnBlip.Name = "SpawnMarker"
+	spawnBlip.Size = UDim2.new(0, CONFIG.SpawnBlipSize, 0, CONFIG.SpawnBlipSize)
+	spawnBlip.AnchorPoint = Vector2.new(0.5, 0.5)
+	spawnBlip.BackgroundColor3 = CONFIG.SpawnColor
+	spawnBlip.BorderSizePixel = 0
+	spawnBlip.Visible = false
+	spawnBlip.ZIndex = 8 -- High priority
+	spawnBlip.Parent = blips
+	
+	local spawnCorner = Instance.new("UICorner")
+	spawnCorner.CornerRadius = UDim.new(0.5, 0)
+	spawnCorner.Parent = spawnBlip
+	
+	-- Home icon indicator (diamond shape via rotation)
+	local spawnIcon = Instance.new("Frame")
+	spawnIcon.Name = "HomeIcon"
+	spawnIcon.Size = UDim2.new(0, 6, 0, 6)
+	spawnIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+	spawnIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+	spawnIcon.BackgroundColor3 = Color3.new(1, 1, 1)
+	spawnIcon.BorderSizePixel = 0
+	spawnIcon.Rotation = 45 -- Diamond shape
+	spawnIcon.Parent = spawnBlip
+	
+	-- Glow effect for spawn marker
+	local spawnGlow = Instance.new("UIStroke")
+	spawnGlow.Color = CONFIG.SpawnColor
+	spawnGlow.Thickness = 2
+	spawnGlow.Transparency = 0.3
+	spawnGlow.Parent = spawnBlip
+	
+	spawnMarkerBlip = spawnBlip
+	
 	-- Title/coordinates display
 	local titleFrame = Instance.new("Frame")
 	titleFrame.Name = "TitleFrame"
-	titleFrame.Size = UDim2.new(1, -20, 0, 35)
+	titleFrame.Size = UDim2.new(1, -20, 0, 50) -- Increased for spawn distance
 	titleFrame.Position = UDim2.new(0.5, 0, 1, 5)
 	titleFrame.AnchorPoint = Vector2.new(0.5, 0)
 	titleFrame.BackgroundTransparency = 1
@@ -297,6 +341,18 @@ local function createMinimapUI()
 	zoomLabel.TextSize = 9
 	zoomLabel.Font = Enum.Font.Gotham
 	zoomLabel.Parent = titleFrame
+	
+	-- Spawn distance indicator
+	local spawnDistLabel = Instance.new("TextLabel")
+	spawnDistLabel.Name = "SpawnDist"
+	spawnDistLabel.Size = UDim2.new(1, 0, 0, 12)
+	spawnDistLabel.Position = UDim2.new(0, 0, 0, 27)
+	spawnDistLabel.BackgroundTransparency = 1
+	spawnDistLabel.Text = ""
+	spawnDistLabel.TextColor3 = CONFIG.SpawnColor
+	spawnDistLabel.TextSize = 9
+	spawnDistLabel.Font = Enum.Font.GothamBold
+	spawnDistLabel.Parent = titleFrame
 	
 	screenGui.Parent = playerGui
 	
@@ -378,33 +434,42 @@ local function getPlayerRotation()
 	return math.atan2(lookVector.X, lookVector.Z)
 end
 
-local function worldToMinimap(worldPos, playerPos, playerRotation)
+local function worldToMinimap(worldPos, playerPos, playerRotation, clampToEdge)
 	-- Get offset from player
 	local offset = worldPos - playerPos
 	local dx = offset.X
 	local dz = offset.Z
 	
-	-- Rotate if minimap rotates with player
-	if CONFIG.RotateWithPlayer then
-		local cos = math.cos(-playerRotation)
-		local sin = math.sin(-playerRotation)
-		local newDx = dx * cos - dz * sin
-		local newDz = dx * sin + dz * cos
-		dx, dz = newDx, newDz
-	end
+	-- Always rotate based on player facing so "up" = forward direction
+	-- This makes the minimap oriented so top = where player is looking
+	local cos = math.cos(-playerRotation)
+	local sin = math.sin(-playerRotation)
+	local newDx = dx * cos - dz * sin
+	local newDz = dx * sin + dz * cos
+	dx, dz = newDx, newDz
 	
 	-- Scale to minimap
 	local scale = (CONFIG.Size / 2) / CONFIG.Range
 	local mapX = dx * scale
-	local mapY = dz * scale -- Z is "up" on minimap
+	local mapY = -newDz * scale -- Negative Z = forward = UP on screen
 	
 	-- Check if within range (circular)
 	local dist = math.sqrt(mapX * mapX + mapY * mapY)
-	if dist > CONFIG.Size / 2 - 5 then
-		return nil -- Outside minimap
+	local maxDist = CONFIG.Size / 2 - 5
+	
+	if dist > maxDist then
+		if clampToEdge then
+			-- Clamp to edge of minimap (for spawn marker arrow)
+			local factor = maxDist / dist
+			mapX = mapX * factor
+			mapY = mapY * factor
+			return UDim2.new(0.5, mapX, 0.5, mapY), true -- true = clamped
+		else
+			return nil -- Outside minimap
+		end
 	end
 	
-	return UDim2.new(0.5, mapX, 0.5, mapY)
+	return UDim2.new(0.5, mapX, 0.5, mapY), false
 end
 
 -------------------------------------------------------------------
@@ -805,18 +870,41 @@ local function updateMinimap()
 	-- Explore area around player (fog of war)
 	exploreAroundPosition(playerPos)
 	
-	-- Update compass labels position
+	-- Update compass labels position (rotate with player so N moves based on facing)
 	local compassRadius = CONFIG.Size / 2 - 12
 	for dir, data in pairs(compassLabels) do
-		local angle = math.rad(data.baseAngle)
-		if CONFIG.RotateWithPlayer then
-			angle = angle - playerRotation
-		end
+		-- Compass rotates opposite to player - if player faces East, N should be to the left
+		local angle = math.rad(data.baseAngle) - playerRotation
 		
 		local x = math.sin(angle) * compassRadius
 		local y = -math.cos(angle) * compassRadius
 		
 		data.frame.Position = UDim2.new(0.5, x - 10, 0.5, y - 7)
+	end
+	
+	-- Update spawn marker position (always visible, clamped to edge if far)
+	if CONFIG.ShowSpawnMarker and spawnPosition and spawnMarkerBlip then
+		local spawnMapPos, isClamped = worldToMinimap(spawnPosition, playerPos, playerRotation, true)
+		if spawnMapPos then
+			spawnMarkerBlip.Position = spawnMapPos
+			spawnMarkerBlip.Visible = true
+			
+			-- Make it pulse/glow more when clamped (far away)
+			local stroke = spawnMarkerBlip:FindFirstChildOfClass("UIStroke")
+			if stroke then
+				stroke.Thickness = isClamped and 3 or 2
+				stroke.Transparency = isClamped and 0 or 0.3
+			end
+			
+			-- Calculate distance to spawn
+			local distToSpawn = (spawnPosition - playerPos).Magnitude
+			if distToSpawn < 15 then
+				-- Hide when very close to spawn
+				spawnMarkerBlip.Visible = false
+			end
+		else
+			spawnMarkerBlip.Visible = false
+		end
 	end
 	
 	-- Update coordinates display
@@ -836,14 +924,28 @@ local function updateMinimap()
 				for _ in pairs(cachedResources) do resourceCount = resourceCount + 1 end
 				zoomLabel.Text = string.format("Range: %dm | %d resources", CONFIG.Range, resourceCount)
 			end
+			
+			-- Update spawn distance display
+			local spawnDistLabel = titleFrame:FindFirstChild("SpawnDist")
+			if spawnDistLabel and spawnPosition then
+				local distToSpawn = math.floor((spawnPosition - playerPos).Magnitude)
+				if distToSpawn > 15 then
+					spawnDistLabel.Text = string.format("🏠 Spawn: %dm", distToSpawn)
+				else
+					spawnDistLabel.Text = "🏠 At Spawn"
+				end
+			elseif spawnDistLabel then
+				spawnDistLabel.Text = ""
+			end
 		end
 	end
 	
-	-- Rotate blips container if needed
-	if CONFIG.RotateWithPlayer then
-		blipsContainer.Rotation = math.deg(playerRotation)
-		playerBlip.Rotation = -math.deg(playerRotation) -- Counter-rotate player blip so direction stays correct
-	end
+	-- Player blip direction indicator always points up (forward)
+	-- The map rotates so player's forward = top, so we don't need to rotate the blip
+	playerBlip.Rotation = 0
+	
+	-- Blips container doesn't rotate - positions are already calculated relative to player facing
+	blipsContainer.Rotation = 0
 	
 	-- Hide all existing blips
 	hideAllBlips()
@@ -973,6 +1075,16 @@ function MinimapClient:ResetExploration()
 	exploredCells = {}
 end
 
+function MinimapClient:SetSpawnPoint(position)
+	-- Set a custom spawn point
+	spawnPosition = position
+	print("[Minimap] Spawn point set to:", position)
+end
+
+function MinimapClient:GetSpawnPoint()
+	return spawnPosition
+end
+
 function MinimapClient:GetExploredCount()
 	local count = 0
 	for _ in pairs(exploredCells) do count = count + 1 end
@@ -1084,8 +1196,27 @@ local function init()
 		end
 	end)
 	
+	-- Track spawn point when character is added
+	local function onCharacterAdded(character)
+		task.wait(0.1) -- Wait for character to be positioned
+		local hrp = character:WaitForChild("HumanoidRootPart", 5)
+		if hrp and not spawnPosition then
+			-- Only set spawn on first spawn (or if manually reset)
+			spawnPosition = hrp.Position
+			print("[MinimapClient] Spawn point recorded:", spawnPosition)
+		end
+	end
+	
+	player.CharacterAdded:Connect(onCharacterAdded)
+	
+	-- Set initial spawn point if character already exists
+	if player.Character then
+		onCharacterAdded(player.Character)
+	end
+	
 	print("[MinimapClient] Initialized - M=toggle | +/-=zoom | Scroll over map to zoom")
 	print("[MinimapClient] Fog of war:", CONFIG.FogEnabled and "ON" or "OFF", "| Explore radius:", CONFIG.ExploreRadius)
+	print("[MinimapClient] Spawn marker: ON - Orange marker always points to spawn")
 end
 
 init()
