@@ -58,7 +58,7 @@ function WorldGenController:GenerateBiome(biomeName)
 		
 		if USE_STREAMING then
 			-- Use dynamic chunk streaming - chunks load around players
-			ChunkStreamingService:SetBiome(biomeName)
+			ChunkStreamingService:SetBiome(biomeName, true)
 			print("[WorldGenController] Streaming mode - chunks will load around players")
 		else
 			-- Legacy: Generate entire world at once

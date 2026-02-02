@@ -37,7 +37,15 @@ local UNLOAD_DELAY = WorldGenConfig.stream_unload_delay or 10 -- Seconds before 
 local BASE_Y = WorldGenConfig.base_y or 0
 local WORLD_RADIUS = WorldGenConfig.world_radius or 2200
 local CENTER_EXCLUSION = WorldGenConfig.center_exclusion_radius or 260
+local CENTER_EXCLUSION_SQ = CENTER_EXCLUSION * CENTER_EXCLUSION
 local SPAWN_ENEMIES = WorldGenConfig.spawn_enemies ~= false
+
+local function isInsideCenterExclusion(x, z)
+	if CENTER_EXCLUSION <= 0 then
+		return false
+	end
+	return (x * x + z * z) <= CENTER_EXCLUSION_SQ
+end
 
 local function chunkKey(cx, cz)
 	return cx .. "," .. cz
@@ -268,7 +276,7 @@ function ChunkStreamingService:_loadChunk(cx, cz)
 	local worldX, worldZ = chunkToWorld(cx, cz)
 	local dist = math.sqrt(worldX * worldX + worldZ * worldZ)
 	
-	if dist > WORLD_RADIUS or dist < CENTER_EXCLUSION then
+	if dist > WORLD_RADIUS or isInsideCenterExclusion(worldX, worldZ) then
 		return -- Outside world bounds
 	end
 	
@@ -466,6 +474,9 @@ function ChunkStreamingService:_placeChest(biomeName, chunkCenter, chestNames, p
 		local x = chunkCenter.X + rng:NextNumber(-half, half)
 		local z = chunkCenter.Z + rng:NextNumber(-half, half)
 		local position = Vector3.new(x, BASE_Y, z)
+		if isInsideCenterExclusion(position.X, position.Z) then
+			return
+		end
 		
 		-- Place the chest
 		local clone = prefab:Clone()
@@ -507,6 +518,9 @@ end
 
 function ChunkStreamingService:_placePrefab(prefab, position, parent)
 	if not prefab then return end
+	if isInsideCenterExclusion(position.X, position.Z) then
+		return
+	end
 	
 	local clone = prefab:Clone()
 
@@ -604,8 +618,8 @@ function ChunkStreamingService:_updateChunks()
 	end
 end
 
-function ChunkStreamingService:SetBiome(biomeName)
-	if self._currentBiome == biomeName then return end
+function ChunkStreamingService:SetBiome(biomeName, force)
+	if self._currentBiome == biomeName and not force then return end
 	
 	self._currentBiome = biomeName
 	
