@@ -2,8 +2,9 @@
 -- Now uses ChunkStreamingService for dynamic chunk loading instead of generating entire world at once.
 local Workspace = game:GetService("Workspace")
 local ServerStorage = game:GetService("ServerStorage")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local WorldGenConfig = require(script.Parent.Parent.WorldGen.BiomeConfig)
+local WorldGenConfig = require(ReplicatedStorage.Shared.BiomeConfig)
 local BiomeService = require(script.Parent.BiomeService)
 local GridService = require(script.Parent.GridService)
 local TerrainService = require(script.Parent.TerrainService)

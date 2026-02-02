@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local BiomeConfig = require(ReplicatedStorage.Shared.BiomeConfig)
 local Util = require(ReplicatedStorage.Shared.Util)
 
 local BiomeService = {}
@@ -17,12 +18,12 @@ BiomeService._lastChangedAt = 0
 
 local function buildPool(startTime)
 	local pool = {}
-	for name, data in pairs(Config.BIOMES or {}) do
+	for name, data in pairs(BiomeConfig.BIOMES or {}) do
 		local weight = data.Weight or data.weight or 1
 		local scaled = data.TimeScaledWeight or data.timeScaledWeight or 0
 		if scaled ~= 0 then
 			local elapsed = os.clock() - (startTime or os.clock())
-			local denom = (Config.BIOME_SHIFT and Config.BIOME_SHIFT.TimeScaleSeconds) or 900
+			local denom = (BiomeConfig.BIOME_SHIFT and BiomeConfig.BIOME_SHIFT.TimeScaleSeconds) or 900
 			weight = weight + (scaled * (elapsed / math.max(denom, 1)))
 		end
 		table.insert(pool, { Id = name, Weight = weight })
@@ -31,10 +32,10 @@ local function buildPool(startTime)
 end
 
 local function pickDefault()
-	if Config.BIOME_DEFAULT and Config.BIOMES[Config.BIOME_DEFAULT] then
-		return Config.BIOME_DEFAULT
+	if BiomeConfig.BIOME_DEFAULT and BiomeConfig.BIOMES[BiomeConfig.BIOME_DEFAULT] then
+		return BiomeConfig.BIOME_DEFAULT
 	end
-	for name in pairs(Config.BIOMES or {}) do
+	for name in pairs(BiomeConfig.BIOMES or {}) do
 		return name
 	end
 	return "Unknown"
@@ -75,11 +76,11 @@ function BiomeService:GetData()
 end
 
 function BiomeService:SetCurrent(name, reason)
-	if not name or not Config.BIOMES[name] then
+	if not name or not BiomeConfig.BIOMES[name] then
 		return false
 	end
 	self._current = name
-	self._data = Config.BIOMES[name]
+	self._data = BiomeConfig.BIOMES[name]
 	self._lastChangedAt = os.clock()
 	self:_broadcast()
 	_G.Ecoshift = _G.Ecoshift or {}
@@ -95,7 +96,7 @@ function BiomeService:SetCurrent(name, reason)
 end
 
 function BiomeService:_scheduleNext()
-	local window = Config.BIOME_SHIFT or {}
+	local window = BiomeConfig.BIOME_SHIFT or {}
 	local minS = tonumber(window.MinSeconds) or 300
 	local maxS = tonumber(window.MaxSeconds) or 480
 	if maxS < minS then maxS = minS end

@@ -6,6 +6,7 @@ local CollectionService = game:GetService("CollectionService")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local BiomeConfig = require(ReplicatedStorage.Shared.BiomeConfig)
 local Util = require(ReplicatedStorage.Shared.Util)
 local WorkbenchConfig = require(ReplicatedStorage.Shared.WorkbenchConfig)
 local GridService = require(script.Parent.GridService)
@@ -89,8 +90,8 @@ function BuildService:Place(plr, buildType, worldPos)
 	if not isAllowedType(buildType) then return false end
 	if not withinRange(plr, worldPos) then return false end
 	local dist = math.sqrt(worldPos.X * worldPos.X + worldPos.Z * worldPos.Z)
-	if dist > (Config.WORLD.WorldRadius or 2200) then return false end
-	if dist < (Config.WORLD.CenterExclusionRadius or 0) then return false end
+	if dist > (BiomeConfig.WORLD.WorldRadius or 2200) then return false end
+	if dist < (BiomeConfig.WORLD.CenterExclusionRadius or 0) then return false end
 
 	local gx, gz = GridService:WorldToGrid(worldPos)
 	if GridService:IsOccupied(gx, gz) then return false end

@@ -5,6 +5,7 @@ local ServerStorage = game:GetService("ServerStorage")
 local Players = game:GetService("Players")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local BiomeConfig = require(ReplicatedStorage.Shared.BiomeConfig)
 local EntityConfig = require(script.Parent.Parent.AI.EntityConfig)
 local Util = require(ReplicatedStorage.Shared.Util)
 local BiomeService = require(script.Parent.BiomeService)
@@ -35,7 +36,7 @@ local function ensureSpawnPoints(folder)
 	if #folder:GetChildren() > 0 then return end
 
 	local cfg = EntityConfig.SpawnPoints or {}
-	local world = Config.WORLD or {}
+	local world = BiomeConfig.WORLD or {}
 	local count = math.max(1, tonumber(cfg.Count) or 24)
 	local minPad = tonumber(cfg.MinRadiusPadding) or 40
 	local maxPad = tonumber(cfg.MaxRadiusPadding) or 40
@@ -69,12 +70,12 @@ end
 -- Public: returns a table of "what" to spawn at a given moment
 function SpawnService:ComputeEnemyWave()
 	local biome = BiomeService:GetCurrent()
-	local data = Config.BIOMES[biome]
+	local data = BiomeConfig.BIOMES[biome]
 	if not data then return {} end
 
 	local waves = EntityConfig.EnemyWaves or {}
 	local distanceCfg = waves.Distance or {}
-	local world = Config.WORLD or {}
+	local world = BiomeConfig.WORLD or {}
 	local sample = tostring(waves.DistanceSample or "Max"):lower()
 	local distValues = {}
 	for _, plr in ipairs(Players:GetPlayers()) do

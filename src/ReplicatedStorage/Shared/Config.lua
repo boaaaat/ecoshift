@@ -32,86 +32,9 @@ Config.RemoteNames = {
 	HarvestFeedback = "HarvestFeedback",
 }
 
-Config.BIOME_DEFAULT = "Forest"
-Config.BIOME_SHIFT = {
-	MinSeconds = 300, -- 5 minutes
-	MaxSeconds = 480, -- 8 minutes
-	TimeScaleSeconds = 900,
-}
-
--- NOTE: Biome metadata is now in BiomeConfig.lua (ServerScriptService/WorldGen/BiomeConfig.lua)
--- This table is kept for backward compatibility with BiomeService and SpawnService
--- Only include biomes that are currently active (Forest & Desert for testing)
-Config.BIOMES = {
-	Forest = {
-		Weight = 1.0,
-		TimeScaledWeight = -0.2,
-		env = { Temp = 0, Toxin = 0, Wet = 0 },
-		resourceTags = { "Wood", "Plants", "Stone" },
-		enemyTables = { "ForestCommon" },
-	},
-	Desert = {
-		Weight = 0.8,
-		TimeScaledWeight = -0.1,
-		env = { Temp = 1, Toxin = 0, Wet = -1 },
-		resourceTags = { "Stone", "Ore", "Cactus" },
-		enemyTables = { "DesertCommon" },
-	},
-	-- Uncomment these when assets are ready:
-	--[[
-	Swamp = {
-		Weight = 0.7,
-		TimeScaledWeight = 0.15,
-		env = { Temp = 0, Toxin = 1, Wet = 2 },
-		resourceTags = { "Herb", "Reed", "Mud" },
-		enemyTables = { "SwampCommon" },
-	},
-	FrozenTundra = {
-		Weight = 0.6,
-		TimeScaledWeight = 0.25,
-		env = { Temp = -2, Toxin = 0, Wet = 0 },
-		resourceTags = { "Ice", "Stone", "Fur" },
-		enemyTables = { "TundraCommon" },
-	},
-	Volcanic = {
-		Weight = 0.4,
-		TimeScaledWeight = 0.35,
-		env = { Temp = 2, Toxin = 0, Wet = -1 },
-		resourceTags = { "Ore", "Sulfur", "Obsidian" },
-		enemyTables = { "VolcanicCommon" },
-	},
-	CrystalWastes = {
-		Weight = 0.3,
-		TimeScaledWeight = 0.4,
-		env = { Temp = 0, Toxin = 0, Wet = 0 },
-		resourceTags = { "Crystal", "Void", "Alloy" },
-		enemyTables = { "CrystalCommon" },
-	},
-	--]]
-}
-
 Config.DATASTORE = {
 	ProfileStore = "EcoshiftProfile_v1",
 	AutosaveInterval = 60,
-}
-
-Config.WORLD = {
-	WorldRadius = 2200,
-	CenterExclusionRadius = 260,
-	BaseY = 0,
-}
-
-
-Config.TERRAIN = {
-	Thickness = 24,
-	MaterialByBiome = {
-		Forest = "Grass",
-		Desert = "Sand",
-		Swamp = "Mud",
-		FrozenTundra = "Snow",
-		Volcanic = "Basalt",
-		CrystalWastes = "Rock",
-	},
 }
 
 Config.GRID = {
@@ -192,8 +115,7 @@ Config.OBJECTIVES = {
 	},
 }
 
--- NOTE: Full biome configuration is now in BiomeConfig.lua (ServerScriptService/WorldGen).
--- Config.BIOMES (defined earlier) is still used by BiomeService/SpawnService and replicated to clients.
+-- NOTE: Biome configuration moved to ReplicatedStorage/Shared/BiomeConfig.lua
 
 Config.RECIPES = {
 	StoneHatchet = {

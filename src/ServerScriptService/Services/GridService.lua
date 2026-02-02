@@ -3,6 +3,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local BiomeConfig = require(ReplicatedStorage.Shared.BiomeConfig)
 
 local GridService = {}
 GridService._grid = {} -- [key] = {ownerId, instance}
@@ -20,7 +21,7 @@ end
 
 function GridService:GridToWorld(gx, gz, y)
 	local size = Config.GRID.Size
-	return Vector3.new(gx * size, y or Config.WORLD.BaseY, gz * size)
+	return Vector3.new(gx * size, y or BiomeConfig.WORLD.BaseY, gz * size)
 end
 
 function GridService:IsOccupied(gx, gz)

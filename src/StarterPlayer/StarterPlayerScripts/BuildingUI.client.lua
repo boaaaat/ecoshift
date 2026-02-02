@@ -8,6 +8,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local BiomeConfig = require(ReplicatedStorage.Shared.BiomeConfig)
 local Util = require(ReplicatedStorage.Shared.Util)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 
@@ -214,7 +215,7 @@ local function isValidPlacement(position)
 	
 	-- World bounds check
 	local dist = math.sqrt(position.X * position.X + position.Z * position.Z)
-	if dist > (Config.WORLD.WorldRadius or 2200) then
+	if dist > (BiomeConfig.WORLD.WorldRadius or 2200) then
 		return false
 	end
 	

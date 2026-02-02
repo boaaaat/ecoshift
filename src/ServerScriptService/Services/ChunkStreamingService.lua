@@ -4,8 +4,9 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ServerStorage = game:GetService("ServerStorage")
 local CollectionService = game:GetService("CollectionService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local WorldGenConfig = require(script.Parent.Parent.WorldGen.BiomeConfig)
+local WorldGenConfig = require(ReplicatedStorage.Shared.BiomeConfig)
 local BiomeService = require(script.Parent.BiomeService)
 local ResourceNodeService = require(script.Parent.ResourceNodeService)
 
