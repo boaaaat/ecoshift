@@ -49,8 +49,8 @@ function InventoryActionService:Init()
 			end
 			
 			local item = ItemDatabase:Get(slot.Id)
-			if not item or not item:HasTag("Tool") then
-				print(string.format("[InventoryAction] Slot %s is not a tool, unequipping for %s", tostring(slotIndex), plr.Name))
+			if not item or not item:HasTag("Holdable") then
+				print(string.format("[InventoryAction] Slot %s is not holdable, unequipping for %s", tostring(slotIndex), plr.Name))
 				hum:UnequipTools()
 				return
 			end

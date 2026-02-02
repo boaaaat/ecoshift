@@ -36,29 +36,29 @@ local raw = {
 	{ Id = "Arrow", Name = "Arrow", StackSize = 99, Tags = { "Ammo" } },
 	
 	-- Tools - Basic
-	{ Id = "Harvester", Name = "Harvester", StackSize = 1, Tags = { "Tool" } },
-	{ Id = "StoneHatchet", Name = "Stone Hatchet", StackSize = 1, Tags = { "Tool" } },
-	{ Id = "StonePickaxe", Name = "Stone Pickaxe", StackSize = 1, Tags = { "Tool" } },
+	{ Id = "Harvester", Name = "Harvester", StackSize = 1, Tags = { "Tool", "Holdable" } },
+	{ Id = "StoneHatchet", Name = "Stone Hatchet", StackSize = 1, Tags = { "Tool", "Holdable" } },
+	{ Id = "StonePickaxe", Name = "Stone Pickaxe", StackSize = 1, Tags = { "Tool", "Holdable" } },
 	
 	-- Tools - Iron
-	{ Id = "IronHatchet", Name = "Iron Hatchet", StackSize = 1, Tags = { "Tool" } },
-	{ Id = "IronPickaxe", Name = "Iron Pickaxe", StackSize = 1, Tags = { "Tool" } },
+	{ Id = "IronHatchet", Name = "Iron Hatchet", StackSize = 1, Tags = { "Tool", "Holdable" } },
+	{ Id = "IronPickaxe", Name = "Iron Pickaxe", StackSize = 1, Tags = { "Tool", "Holdable" } },
 	
 	-- Tools - Diamond
-	{ Id = "DiamondPickaxe", Name = "Diamond Pickaxe", StackSize = 1, Tags = { "Tool" } },
+	{ Id = "DiamondPickaxe", Name = "Diamond Pickaxe", StackSize = 1, Tags = { "Tool", "Holdable" } },
 	
 	-- Weapons - Basic
-	{ Id = "Sword", Name = "Sword", StackSize = 1, Tags = {"Weapon"}},
-	{ Id = "WoodenSword", Name = "Wooden Sword", StackSize = 1, Tags = { "Weapon" } },
-	{ Id = "Bow", Name = "Bow", StackSize = 1, Tags = { "Weapon" } },
+	{ Id = "Sword", Name = "Sword", StackSize = 1, Tags = { "Weapon", "Holdable" } },
+	{ Id = "WoodenSword", Name = "Wooden Sword", StackSize = 1, Tags = { "Weapon", "Holdable" } },
+	{ Id = "Bow", Name = "Bow", StackSize = 1, Tags = { "Weapon", "Holdable" } },
 	
 	-- Weapons - Iron
-	{ Id = "IronSword", Name = "Iron Sword", StackSize = 1, Tags = { "Weapon" } },
-	{ Id = "Shield", Name = "Shield", StackSize = 1, Tags = { "Weapon" } },
+	{ Id = "IronSword", Name = "Iron Sword", StackSize = 1, Tags = { "Weapon", "Holdable" } },
+	{ Id = "Shield", Name = "Shield", StackSize = 1, Tags = { "Weapon", "Holdable" } },
 	
 	-- Weapons - Diamond/Endgame
-	{ Id = "DiamondSword", Name = "Diamond Sword", StackSize = 1, Tags = { "Weapon" } },
-	{ Id = "EnchantedBow", Name = "Enchanted Bow", StackSize = 1, Tags = { "Weapon" } },
+	{ Id = "DiamondSword", Name = "Diamond Sword", StackSize = 1, Tags = { "Weapon", "Holdable" } },
+	{ Id = "EnchantedBow", Name = "Enchanted Bow", StackSize = 1, Tags = { "Weapon", "Holdable" } },
 	
 	-- Armor
 	{ Id = "ClothSet", Name = "Cloth Set", StackSize = 1, Tags = { "Armor" } },

@@ -20,6 +20,11 @@ local TYPE_MAP = {
 	throwables = Throwable,
 }
 
+local function isHarvestTool(tool)
+	local toolType = WeaponUtil.GetString(tool, "ToolType", "")
+	return toolType ~= ""
+end
+
 function WeaponFactory.GetType(tool)
 	local t = WeaponUtil.GetType(tool)
 	return (t and t:lower()) or ""
@@ -27,6 +32,7 @@ end
 
 function WeaponFactory.Create(tool, owner)
 	if not tool then return nil end
+	if isHarvestTool(tool) then return nil end
 	local t = WeaponFactory.GetType(tool)
 	local cls = TYPE_MAP[t]
 	if not cls then return nil end

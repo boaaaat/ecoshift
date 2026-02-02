@@ -16,6 +16,7 @@ if not HarvestFeedbackRE then
 end
 
 local ToolConfig = require(ReplicatedStorage.Modules.ToolConfig)
+local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local ItemDropService = require(script.Parent.Services.ItemDropService)
 
 -- Per-player cooldowns
@@ -97,6 +98,15 @@ local function getWeaponType(tool: Instance?)
 	return nil
 end
 
+local function isWeaponTool(tool: Instance?)
+	if not tool or not tool:IsA("Tool") then return false end
+	if getWeaponType(tool) then
+		return true
+	end
+	local item = ItemDatabase:Get(tool.Name)
+	return item and item:HasTag("Weapon") or false
+end
+
 local function setAttr(modelOrPart: Instance, name: string, value: any)
 	local function setValueObject(instance)
 		local obj = instance:FindFirstChild(name, true)
@@ -162,6 +172,7 @@ end
 
 local function serverApplyHarvest(player: Player, nodeModel: Model, toolOrNil: Tool?)
 	if not nodeModel or not nodeModel.Parent then return end
+	if toolOrNil and isWeaponTool(toolOrNil) then return end
 
 	local prim = getPrimary(nodeModel)
 	if not prim then return end
@@ -307,12 +318,11 @@ InteractRE.OnServerEvent:Connect(function(player: Player, action: string, nodeRe
 		tool = backpack and backpack:FindFirstChildOfClass("Tool") or nil
 	end
 	if tool then
+		if isWeaponTool(tool) then
+			return
+		end
 		local toolType = getToolType(tool)
 		if not toolType then
-			-- If it's a weapon, ignore silently to avoid spam.
-			if getWeaponType(tool) then
-				return
-			end
 			warn("[ResourceService] Tool missing ToolType, harvest rejected")
 			return
 		end

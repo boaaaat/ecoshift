@@ -30,6 +30,7 @@ local tier1Services = {
 -- TIER 2: Services needed for gameplay but can load after tier 1
 local tier2Services = {
 	{ name = "ObjectiveService", method = "Init" },
+	{ name = "StatsService", method = "Init" },
 	{ name = "CombatService", method = "Bind" },
 	{ name = "DeathService", method = "Init" },
 	{ name = "BuildService", method = "Bind" },
