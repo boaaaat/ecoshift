@@ -1,7 +1,7 @@
 local Config = {}
 
-Config.seed = 12345
-Config.world_radius = 2200
+Config.seed = Random.new():NextInteger(10000, 99999)
+Config.world_radius = 1000
 Config.center_exclusion_radius = 260
 Config.base_y = 0
 Config.chunk_size = 240
@@ -33,7 +33,7 @@ Config.asset_overrides = {
 	FallenLog = { scale = 1.0, yOffset = 1 },
 	RockSmall = { scale = 1.0, yOffset = 1 },
 	Stump = { scale = 1.0, yOffset = 1 },
-	
+
 	-- DESERT RESOURCES
 	Cactus = { scale = 1.2, yOffset = 3 },
 	Sandstone = { scale = 1.5, yOffset = 4 },
