@@ -341,8 +341,9 @@ end
 
 -- Refresh item list
 function refreshItems()
+	-- Clear ALL gui children except the layout
 	for _, child in ipairs(itemContainer:GetChildren()) do
-		if child:IsA("TextButton") then
+		if child:IsA("TextButton") or child:IsA("TextLabel") then
 			child:Destroy()
 		end
 	end
