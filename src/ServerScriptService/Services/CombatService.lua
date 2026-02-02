@@ -8,6 +8,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local WeaponFactory = require(ReplicatedStorage.Shared.Weapons.WeaponFactory)
 local WeaponUtil = require(ReplicatedStorage.Shared.Weapons.WeaponUtil)
+local StatsService = require(script.Parent.StatsService)
 
 -- Lazy-loaded to avoid circular dependency
 local DeathService = nil
@@ -90,7 +91,7 @@ local function getHumanoidOrHealth(target, isPlayerTarget)
 		return hum
 	end
 	local health = getHealthValue(target)
-	if health then return health end
+	if health and isTaggedCombatTarget(target) then return health end
 	if hum then return hum end
 	return nil
 end
@@ -150,7 +151,13 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 	--  - Or a Humanoid if target is a character
 	local healthValue = getHumanoidOrHealth(target, tgtPlr ~= nil)
 	if not healthValue then return end
-	local oldHealth = healthValue:IsA("NumberValue") and healthValue.Value or healthValue.Health
+	local oldHealth = nil
+	if healthValue:IsA("Humanoid") then
+		oldHealth = healthValue.Health
+	elseif healthValue:IsA("ValueBase") then
+		oldHealth = healthValue.Value
+	end
+	if typeof(oldHealth) ~= "number" then return end
 
 	-- Shield block check for player targets
 	if tgtPlr and self._blocking[tgtPlr] then
@@ -176,6 +183,15 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 		end
 	end
 
+	-- Armor reduction (percent) for player targets
+	if tgtPlr then
+		local armor = StatsService and StatsService.GetStat and StatsService:GetStat(tgtPlr, "Armor") or 0
+		if armor and armor > 0 then
+			local pct = math.clamp(tonumber(armor) or 0, 0, 100) / 100
+			amount = math.max(0, amount * (1 - pct))
+		end
+	end
+
 	-- Optional type-based resistances via attributes (Res_Pierce, Res_Fire...)
 	if typeof(healthValue) == "Instance" then
 		local host = target
@@ -187,11 +203,13 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 	end
 
 	-- apply damage
-	if healthValue:IsA("NumberValue") then
-		healthValue.Value = math.max(0, healthValue.Value - amount)
-	else
+	if healthValue:IsA("Humanoid") then
 		-- Humanoid - DeathService hooks HealthChanged and handles death automatically
 		healthValue:TakeDamage(amount)
+	elseif healthValue:IsA("ValueBase") then
+		healthValue.Value = math.max(0, healthValue.Value - amount)
+	else
+		return
 	end
 
 	-- Combat feedback (damage numbers + health bar) for non-player targets
@@ -200,10 +218,17 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 		if self._remoteFeedback then
 			local pos = getTargetPosition(target)
 			if pos then
-				local newHealth = healthValue:IsA("NumberValue") and healthValue.Value or math.max(0, oldHealth - amount)
-				local maxHealth = healthValue:IsA("NumberValue")
-					and getMaxHealthFromTarget(target, math.max(oldHealth, newHealth))
-					or (healthValue.MaxHealth or math.max(oldHealth, newHealth))
+				local newHealth = nil
+				local maxHealth = nil
+				if healthValue:IsA("Humanoid") then
+					newHealth = healthValue.Health
+					maxHealth = healthValue.MaxHealth or math.max(oldHealth, newHealth)
+				elseif healthValue:IsA("ValueBase") then
+					newHealth = healthValue.Value
+					maxHealth = getMaxHealthFromTarget(target, math.max(oldHealth, newHealth))
+				end
+				if typeof(newHealth) ~= "number" then return end
+				if typeof(maxHealth) ~= "number" then maxHealth = math.max(oldHealth, newHealth) end
 				self._remoteFeedback:FireAllClients({
 					Node = target,
 					Position = pos,
@@ -228,6 +253,22 @@ local function getEquippedTool(plr)
 		if child:IsA("Tool") then return child end
 	end
 	return nil
+end
+
+local function hasToolType(tool)
+	if not tool or not tool:IsA("Tool") then return false end
+	local attr = tool:GetAttribute("ToolType")
+	if typeof(attr) == "string" and attr ~= "" then
+		return true
+	end
+	local child = tool:FindFirstChild("ToolType")
+	if child and child:IsA("ValueBase") then
+		if typeof(child.Value) == "string" then
+			return child.Value ~= ""
+		end
+		return tostring(child.Value) ~= ""
+	end
+	return false
 end
 
 local function getRoot(model)
@@ -354,6 +395,7 @@ function CombatService:Bind()
 		self._remoteAction.OnServerEvent:Connect(function(plr, action, data)
 			local tool = getEquippedTool(plr)
 			if not tool then return end
+			if hasToolType(tool) then return end
 			local weapon = WeaponFactory.Create(tool, plr)
 			if not weapon then return end
 			local wtype = weapon:GetType():lower()

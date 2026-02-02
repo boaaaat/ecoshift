@@ -14,6 +14,50 @@ local function getLootTablesFolder()
 	return folder
 end
 
+local function normalizePath(path)
+	if type(path) ~= "string" then return nil end
+	local trimmed = path:match("^%s*(.-)%s*$")
+	if not trimmed or trimmed == "" then return nil end
+	trimmed = trimmed:gsub("\\", "/")
+	trimmed = trimmed:gsub("^LootTables/", "")
+	trimmed = trimmed:gsub("^/+", "")
+	trimmed = trimmed:gsub("/+$", "")
+	if trimmed == "" then return nil end
+	return trimmed
+end
+
+local function resolveNode(root, path)
+	if not root then return nil end
+	local normalized = normalizePath(path)
+	if not normalized then return nil end
+	local parts = {}
+	for part in string.gmatch(normalized, "[^/]+") do
+		if part == ".." then
+			return nil
+		elseif part ~= "." and part ~= "" then
+			parts[#parts + 1] = part
+		end
+	end
+	if #parts == 0 then return nil end
+	local node = root
+	local actualParts = {}
+	for i, part in ipairs(parts) do
+		local child = node:FindFirstChild(part)
+		if not child and i == #parts then
+			local base = part:gsub("%.lua$", "")
+			if base ~= part then
+				child = node:FindFirstChild(base)
+			end
+		end
+		if not child then
+			return nil
+		end
+		actualParts[#actualParts + 1] = child.Name
+		node = child
+	end
+	return node, table.concat(actualParts, "/"), normalized
+end
+
 local function readValue(child, name, fallback)
 	if not child then return fallback end
 	local attr = child:GetAttribute(name)
@@ -102,17 +146,18 @@ local function parseFolderTable(folder, name)
 end
 
 function LootTableService:Get(tableName)
-	if not tableName or tableName == "" then return nil end
-	if self._cache[tableName] then return self._cache[tableName] end
+	local key = normalizePath(tableName)
+	if not key then return nil end
+	if self._cache[key] then return self._cache[key] end
 	local folder = getLootTablesFolder()
 	if not folder then return nil end
-	local node = folder:FindFirstChild(tableName)
+	local node, resolvedKey = resolveNode(folder, key)
 	if not node then return nil end
 	local raw = nil
 	if node:IsA("ModuleScript") then
 		local ok, result = pcall(require, node)
 		if ok and type(result) == "table" then
-			result.Name = result.Name or tableName
+			result.Name = result.Name or resolvedKey or key
 			raw = normalizeTable(result)
 		end
 	elseif node:IsA("Folder") or node:IsA("Configuration") then
@@ -120,14 +165,17 @@ function LootTableService:Get(tableName)
 		if subModule and subModule:IsA("ModuleScript") then
 			local ok, result = pcall(require, subModule)
 			if ok and type(result) == "table" then
-				result.Name = result.Name or tableName
+				result.Name = result.Name or resolvedKey or key
 				raw = normalizeTable(result)
 			end
 		else
-			raw = parseFolderTable(node, tableName)
+			raw = parseFolderTable(node, resolvedKey or key)
 		end
 	end
-	self._cache[tableName] = raw
+	if resolvedKey then
+		self._cache[resolvedKey] = raw
+	end
+	self._cache[key] = raw
 	return raw
 end
 
