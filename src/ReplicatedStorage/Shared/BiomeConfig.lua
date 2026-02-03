@@ -48,11 +48,52 @@ Config.asset_overrides = {
 }
 
 -- STREAMING CONFIG: Dynamic chunk loading around players
-Config.use_streaming = true -- Set to false to use legacy full-world generation
 Config.stream_load_radius = 3 -- Load chunks within this radius (in chunks)
 Config.stream_unload_radius = 5 -- Unload chunks beyond this radius
 Config.stream_update_interval = 0.5 -- How often to check player positions
 Config.stream_unload_delay = 10 -- Seconds before unloading unused chunk
+
+-- STRUCTURE CHESTS: Spawn chests inside structures at ChestSpawn markers
+-- Prefabs: Chest models are resolved from ServerStorage/Chests by name
+-- Spawn points: Any BasePart or Attachment named "ChestSpawn" or "ChestSpawn_*"
+-- count: number or {min, max} per structure instance (clamped to spawn points)
+-- tier_weights: tier weights can include DistanceWeight to bias rarer chests farther out
+-- loot_table: optional LootTable name to use for all chests in the structure
+-- chests: prefab list (strings or weighted entries), supports DistanceWeight like biome generation
+Config.structure_chests = {
+	Default = {
+		count = { min = 0, max = 1 },
+		spawn_points = { "ChestSpawn" },
+		tier_weights = {
+			Common = { Weight = 1.0, DistanceWeight = 0.6 },
+			Rare = { Weight = 0.35, DistanceWeight = 1.2 },
+			Legendary = { Weight = 0.12, DistanceWeight = 1.6 },
+			Celestial = { Weight = 0.03, DistanceWeight = 2.0 },
+		},
+		chests = {
+			"Common_Chest",
+			"Rare_Chest",
+			"Legendary_Chest",
+		},
+	},
+	-- Example:
+	CabinRuin = {
+		count = { min = 1, max = 1 },
+		loot_table = "Default",
+		tier_weights = {
+			Common = { Weight = 1.0, DistanceWeight = 0.6 },
+			Rare = { Weight = 0.35, DistanceWeight = 1.2 },
+			Legendary = { Weight = 0.12, DistanceWeight = 1.6 },
+			Celestial = { Weight = 0.03, DistanceWeight = 2.0 },
+		},
+		chests = {
+			"Common_Chest",
+			"Rare_Chest",
+			"Legendary_Chest",
+			"Celestial_Chest",
+		},
+	},
+}
 
 -- BIOME SHIFT CONFIG: How often biomes change
 Config.biome_default = "Forest"
@@ -129,7 +170,7 @@ Config.biomes = {
 			},
 		},
 		structures = { "CabinRuin", "WatchTower" },
-		structure_count = 0.05,
+		structure_count = 0.5,
 		objectives = {},
 		objective_count = 0.025,
 		chests = { "Common_Chest", "Rare_Chest" },

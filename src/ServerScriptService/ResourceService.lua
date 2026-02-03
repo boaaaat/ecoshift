@@ -283,10 +283,6 @@ local function findNearbyNode(player: Player, range: number)
 		end
 	end
 	
-	-- Search top-level Resources folder (legacy/non-streaming)
-	local resources = generated:FindFirstChild("Resources")
-	searchFolder(resources)
-	
 	-- Search chunk folders (streaming mode: GeneratedWorld/Chunk_X,Z/Resources)
 	for _, child in ipairs(generated:GetChildren()) do
 		if child:IsA("Folder") and child.Name:match("^Chunk_") then

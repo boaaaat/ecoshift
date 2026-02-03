@@ -8,6 +8,14 @@ local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 
 local LootTableService = {}
 LootTableService._cache = {}
+LootTableService._tagCache = nil
+
+local RARITY_NAMES = {
+	[1] = "Common",
+	[2] = "Rare",
+	[3] = "Legendary",
+	[4] = "Celestial",
+}
 
 local function getLootTablesFolder()
 	local folder = ServerStorage:FindFirstChild("LootTables")
@@ -69,10 +77,60 @@ local function readValue(child, name, fallback)
 	return fallback
 end
 
+local function getTagLookup()
+	if LootTableService._tagCache then
+		return LootTableService._tagCache
+	end
+	local lookup = {}
+	local items = ItemDatabase:All()
+	for _, item in ipairs(items) do
+		local tags = item.Tags or {}
+		for _, tag in ipairs(tags) do
+			if type(tag) == "string" and tag ~= "" then
+				local list = lookup[tag]
+				if not list then
+					list = {}
+					lookup[tag] = list
+				end
+				list[#list + 1] = item.Id
+			end
+		end
+	end
+	LootTableService._tagCache = lookup
+	return lookup
+end
+
+local function resolveTagEntry(entry, rng)
+	if not entry or not entry.Tag then return nil end
+	local lookup = getTagLookup()
+	local list = lookup[entry.Tag]
+	if not list or #list == 0 then return nil end
+	local idx = rng:NextInteger(1, #list)
+	return list[idx]
+end
+
+local function rarityNameForTier(tier)
+	return RARITY_NAMES[tier] or "Common"
+end
+
+local function normalizeRarityKey(key)
+	if type(key) ~= "string" then return nil end
+	local k = key:lower()
+	if k == "common" then return "Common" end
+	if k == "rare" then return "Rare" end
+	if k == "legendary" then return "Legendary" end
+	if k == "celestial" then return "Celestial" end
+	return nil
+end
+
 local function normalizeEntry(raw)
 	if type(raw) ~= "table" then return nil end
+	local tag = raw.Tag or raw.tag
+	if tag ~= nil and (type(tag) ~= "string" or tag == "") then
+		return nil
+	end
 	local id = raw.Id or raw.ItemId or raw.Name or raw[1]
-	if type(id) ~= "string" then return nil end
+	if tag == nil and type(id) ~= "string" then return nil end
 	local min = raw.Min or raw.min or raw.MinCount or raw.min_count or raw[2] or 1
 	local max = raw.Max or raw.max or raw.MaxCount or raw.max_count or raw[3] or min
 	local weight = raw.Weight or raw.weight or raw.Probability or raw.probability or raw[4] or 1
@@ -80,7 +138,9 @@ local function normalizeEntry(raw)
 	local maxTier = raw.MaxTier or raw.max_tier or raw.maxTier
 	local chance = raw.Chance or raw.chance
 	return {
-		Id = id,
+		Id = (type(id) == "string" and id) or nil,
+		Tag = tag,
+		IsTag = tag ~= nil,
 		Min = math.max(1, math.floor(tonumber(min) or 1)),
 		Max = math.max(1, math.floor(tonumber(max) or min or 1)),
 		Weight = math.max(0, tonumber(weight) or 0),
@@ -88,6 +148,37 @@ local function normalizeEntry(raw)
 		MaxTier = maxTier and math.floor(tonumber(maxTier) or 0) or nil,
 		Chance = chance and tonumber(chance) or nil,
 	}
+end
+
+local function normalizePool(raw, name)
+	if type(raw) ~= "table" then return nil end
+	local tbl = {}
+	tbl.Name = name or raw.Name
+	tbl.Rolls = raw.Rolls or raw.rolls or raw.RollCount or raw.rollCount
+	tbl.MinRolls = raw.MinRolls or raw.min_rolls or raw.MinRoll or raw.min_roll
+	tbl.MaxRolls = raw.MaxRolls or raw.max_rolls or raw.MaxRoll or raw.max_roll
+	tbl.Unique = raw.Unique or raw.unique or false
+	tbl.AllowDuplicates = raw.AllowDuplicates
+	if tbl.AllowDuplicates == nil then
+		tbl.AllowDuplicates = not tbl.Unique
+	end
+	tbl.Chance = raw.Chance or raw.chance
+	tbl.Items = {}
+	for _, entry in ipairs(raw.Items or raw.items or {}) do
+		local norm = normalizeEntry(entry)
+		if norm then
+			tbl.Items[#tbl.Items + 1] = norm
+		end
+	end
+	tbl.Guaranteed = {}
+	for _, entry in ipairs(raw.Guaranteed or raw.guaranteed or {}) do
+		local norm = normalizeEntry(entry)
+		if norm then
+			norm.Guaranteed = true
+			tbl.Guaranteed[#tbl.Guaranteed + 1] = norm
+		end
+	end
+	return tbl
 end
 
 local function normalizeTable(raw)
@@ -105,6 +196,7 @@ local function normalizeTable(raw)
 	tbl.DropSpread = raw.DropSpread or raw.drop_spread
 	tbl.DropHeight = raw.DropHeight or raw.drop_height
 	tbl.Items = {}
+	tbl.Guaranteed = {}
 	for _, entry in ipairs(raw.Items or raw.items or {}) do
 		local norm = normalizeEntry(entry)
 		if norm then
@@ -115,7 +207,18 @@ local function normalizeTable(raw)
 		local norm = normalizeEntry(entry)
 		if norm then
 			norm.Guaranteed = true
-			tbl.Items[#tbl.Items + 1] = norm
+			tbl.Guaranteed[#tbl.Guaranteed + 1] = norm
+		end
+	end
+	local rarities = raw.Rarities or raw.rarities
+	if type(rarities) == "table" then
+		tbl.Rarities = {}
+		for key, pool in pairs(rarities) do
+			local normKey = normalizeRarityKey(key) or tostring(key)
+			local norm = normalizePool(pool, normKey)
+			if norm then
+				tbl.Rarities[normKey] = norm
+			end
 		end
 	end
 	return tbl
@@ -197,6 +300,16 @@ local function getRollCount(tbl, rng)
 	return rng:NextInteger(min, max)
 end
 
+local function getRollCountWithFallback(tbl, fallback, rng)
+	if tbl and (tbl.Rolls ~= nil or tbl.MinRolls ~= nil or tbl.MaxRolls ~= nil or tbl.MinRoll ~= nil or tbl.MaxRoll ~= nil) then
+		return getRollCount(tbl, rng)
+	end
+	if fallback then
+		return getRollCount(fallback, rng)
+	end
+	return 1
+end
+
 local function getTierWeightMult(tbl, tier)
 	local mult = nil
 	if type(tbl.TierWeightMult) == "table" then
@@ -245,10 +358,26 @@ function LootTableService:Roll(tableName, tier)
 	tier = math.max(1, math.floor(tonumber(tier) or 1))
 	local rng = Random.new()
 	local results = {}
-	local pool = {}
 	local tierMult = getTierWeightMult(tbl, tier)
 
-	for _, entry in ipairs(tbl.Items) do
+	local activeTable = tbl
+	if tbl.Rarities then
+		local rarityName = rarityNameForTier(tier)
+		local poolTbl = tbl.Rarities[rarityName]
+		if not poolTbl then
+			return {}
+		end
+		local chance = tonumber(poolTbl.Chance)
+		if chance and chance < 1 then
+			if rng:NextNumber() > chance then
+				return {}
+			end
+		end
+		activeTable = poolTbl
+	end
+
+	local pool = {}
+	for _, entry in ipairs(activeTable.Items or {}) do
 		if eligible(entry, tier) then
 			local minTier = entry.MinTier or 1
 			local weight = entry.Weight or 1
@@ -262,19 +391,52 @@ function LootTableService:Roll(tableName, tier)
 		end
 	end
 
-	local rolls = getRollCount(tbl, rng)
-	local unique = not tbl.AllowDuplicates
+	for _, entry in ipairs(activeTable.Guaranteed or {}) do
+		local itemId = entry.Id
+		if entry.IsTag then
+			itemId = resolveTagEntry(entry, rng)
+		end
+		if itemId then
+			local count = rng:NextInteger(entry.Min, entry.Max)
+			results[#results + 1] = { Id = itemId, N = count }
+		end
+	end
+
+	local rolls = getRollCountWithFallback(activeTable, tbl, rng)
+	local unique = not (activeTable.AllowDuplicates == true)
 
 	for i = 1, rolls do
 		if #pool == 0 then break end
 		local entry = chooseWeighted(rng, pool)
 		if entry then
-			local count = rng:NextInteger(entry.Min, entry.Max)
-			results[#results + 1] = { Id = entry.Id, N = count }
-			if unique then
+			local itemId = entry.Id
+			if entry.IsTag then
+				itemId = resolveTagEntry(entry, rng)
+			end
+			if itemId then
+				local count = rng:NextInteger(entry.Min, entry.Max)
+				results[#results + 1] = { Id = itemId, N = count }
+				if unique then
+					if entry.IsTag then
+						for idx = #pool, 1, -1 do
+							if pool[idx] == entry then
+								table.remove(pool, idx)
+								break
+							end
+						end
+					else
+						for idx = #pool, 1, -1 do
+							if pool[idx].Id == entry.Id then
+								table.remove(pool, idx)
+							end
+						end
+					end
+				end
+			else
 				for idx = #pool, 1, -1 do
-					if pool[idx].Id == entry.Id then
+					if pool[idx] == entry then
 						table.remove(pool, idx)
+						break
 					end
 				end
 			end

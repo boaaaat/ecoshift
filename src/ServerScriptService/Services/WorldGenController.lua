@@ -1,7 +1,6 @@
 -- WorldGenController.lua
 -- Now uses ChunkStreamingService for dynamic chunk loading instead of generating entire world at once.
 local Workspace = game:GetService("Workspace")
-local ServerStorage = game:GetService("ServerStorage")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local WorldGenConfig = require(ReplicatedStorage.Shared.BiomeConfig)
@@ -9,14 +8,10 @@ local BiomeService = require(script.Parent.BiomeService)
 local GridService = require(script.Parent.GridService)
 local TerrainService = require(script.Parent.TerrainService)
 local ChunkStreamingService = require(script.Parent.ChunkStreamingService)
-local LootService = require(script.Parent.LootService)
 
 local WorldGenController = {}
 WorldGenController._busy = false
 WorldGenController._initialized = false
-
--- Use streaming from config (set Config.use_streaming = false in BiomeConfig to revert)
-local USE_STREAMING = WorldGenConfig.use_streaming ~= false
 
 local function clearFolder(folder)
 	if not folder then return end
@@ -57,28 +52,9 @@ function WorldGenController:GenerateBiome(biomeName)
 		TerrainService:GenerateFlat(biomeName)
 		task.wait()
 		
-		if USE_STREAMING then
-			-- Use dynamic chunk streaming - chunks load around players
-			ChunkStreamingService:SetBiome(biomeName, true)
-			print("[WorldGenController] Streaming mode - chunks will load around players")
-		else
-			-- Legacy: Generate entire world at once
-			local BiomeGenerator = require(script.Parent.Parent.WorldGen.BiomeGenerator)
-			local ResourceNodeService = require(script.Parent.ResourceNodeService)
-			local generator = BiomeGenerator.new(WorldGenConfig)
-			generator:GenerateBiome(biomeName)
-			task.defer(function()
-				ResourceNodeService:BindGeneratedWorld()
-				if LootService and LootService.RescanChests then
-					LootService:RescanChests()
-				else
-					warn("[WorldGenController] LootService missing RescanChests")
-				end
-				if LootService and LootService.RescanMonsters then
-					LootService:RescanMonsters()
-				end
-			end)
-		end
+		-- Use dynamic chunk streaming - chunks load around players
+		ChunkStreamingService:SetBiome(biomeName, true)
+		print("[WorldGenController] Streaming mode - chunks will load around players")
 		
 		local folderName = WorldGenConfig.spawn_folder_name or "GeneratedWorld"
 		local created = Workspace:FindFirstChild(folderName)
@@ -93,10 +69,8 @@ function WorldGenController:Init()
 	if self._initialized then return end
 	self._initialized = true
 	
-	-- Initialize ChunkStreamingService if using streaming
-	if USE_STREAMING then
-		ChunkStreamingService:Init()
-	end
+	-- Initialize ChunkStreamingService
+	ChunkStreamingService:Init()
 	
 	local initial = BiomeService:GetCurrent()
 	self:GenerateBiome(initial)
