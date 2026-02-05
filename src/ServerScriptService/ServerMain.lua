@@ -27,6 +27,8 @@ local tier1Services = {
 -- TIER 2: Services needed for gameplay but can load after tier 1
 local tier2Services = {
 	{ name = "ObjectiveService", method = "Init" },
+	{ name = "EventService", method = "Init" },
+	{ name = "EventEffectsService", method = "Init" },
 	{ name = "StatsService", method = "Init" },
 	{ name = "CombatService", method = "Bind" },
 	{ name = "DeathService", method = "Init" },
@@ -42,6 +44,7 @@ local tier2Services = {
 	{ name = "DayNightService", method = "Init" },
 	{ name = "CraftingService", method = "Init" },
 	{ name = "LootService", method = "Init" },
+	{ name = "RewardsObserver", method = "Init" },
 	{ name = "EntityAIService", method = "Init" },
 }
 
@@ -105,13 +108,19 @@ end)
 
 -- Biome change hook for Decay (deferred setup)
 task.defer(function()
-	if _G.Ecoshift and type(_G.Ecoshift.OnBiomeChangedAdd) == "function" then
-		_G.Ecoshift.OnBiomeChangedAdd(function(cur)
-			pcall(function() 
-				local BuildService = getService("BuildService")
-				BuildService:OnBiomeChanged(cur) 
+	for _ = 1, 50 do
+		if _G.Ecoshift and type(_G.Ecoshift.OnBiomeChangedAdd) == "function" then
+			_G.Ecoshift.OnBiomeChangedAdd(function(cur)
+				pcall(function()
+					local BuildService = getService("BuildService")
+					if BuildService and BuildService.OnBiomeChanged then
+						BuildService:OnBiomeChanged(cur)
+					end
+				end)
 			end)
-		end)
+			break
+		end
+		task.wait(0.1)
 	end
 end)
 

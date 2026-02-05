@@ -9,6 +9,8 @@ local ProfileService = require(script.Parent.ProfileService)
 
 local RoleService = {}
 RoleService._remote = nil
+RoleService._selectRemoteConn = nil
+RoleService._initialized = false
 
 local function applyAttributes(plr, roleId)
 	local def = Config.ROLES.Definitions[roleId]
@@ -22,11 +24,13 @@ local function applyAttributes(plr, roleId)
 end
 
 function RoleService:Init()
+	if self._initialized then return end
+	self._initialized = true
 	local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
 	self._remote = Util.GetRemote(remotesFolder, Config.RemoteNames.RoleUpdate)
 	self._selectRemote = Util.GetRemote(remotesFolder, Config.RemoteNames.RoleSelect)
 	if self._selectRemote then
-		self._selectRemote.OnServerEvent:Connect(function(plr, roleId)
+		self._selectRemoteConn = self._selectRemote.OnServerEvent:Connect(function(plr, roleId)
 			local profile = ProfileService:GetProfile(plr)
 			if not profile then return end
 			if profile.UnlockedRoles and profile.UnlockedRoles[roleId] then
@@ -62,7 +66,6 @@ function RoleService:ApplyFromProfile(plr)
 end
 
 Players.PlayerAdded:Connect(function(plr)
-	RoleService:Init()
 	RoleService:ApplyFromProfile(plr)
 	plr.CharacterAdded:Connect(function()
 		RoleService:ApplyFromProfile(plr)

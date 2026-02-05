@@ -150,12 +150,12 @@ local function normalizeEntry(raw)
 		Id = (type(id) == "string" and id) or nil,
 		Tag = tag,
 		IsTag = tag ~= nil,
-		Min = math.max(1, math.floor(tonumber(min) or 1)),
-		Max = math.max(1, math.floor(tonumber(max) or min or 1)),
+		Min = minN,
+		Max = maxN,
 		Weight = math.max(0, tonumber(weight) or 0),
 		MinTier = math.max(1, math.floor(tonumber(minTier) or 1)),
 		MaxTier = maxTier and math.floor(tonumber(maxTier) or 0) or nil,
-		Chance = chance and tonumber(chance) or nil,
+		Chance = chanceN,
 	}
 end
 
@@ -334,6 +334,17 @@ local function getTierWeightMult(tbl, tier)
 	return mult
 end
 
+local function normalizeChance(v)
+	local chance = tonumber(v)
+	if not chance then
+		return nil
+	end
+	if chance > 1 then
+		chance = chance <= 100 and (chance / 100) or 1
+	end
+	return math.clamp(chance, 0, 1)
+end
+
 local function eligible(entry, tier, rng, allowZeroWeight)
 	if entry.MinTier and tier < entry.MinTier then return false end
 	if entry.MaxTier and tier > entry.MaxTier then return false end
@@ -383,7 +394,7 @@ function LootTableService:Roll(tableName, tier)
 		if not poolTbl then
 			return {}
 		end
-		local chance = tonumber(poolTbl.Chance)
+		local chance = normalizeChance(poolTbl.Chance)
 		if chance and chance < 1 then
 			if rng:NextNumber() > chance then
 				return {}
@@ -394,7 +405,7 @@ function LootTableService:Roll(tableName, tier)
 
 	local pool = {}
 	for _, entry in ipairs(activeTable.Items or {}) do
-		if eligible(entry, tier) then
+		if eligible(entry, tier, rng, false) then
 			local minTier = entry.MinTier or 1
 			local weight = entry.Weight or 1
 			if minTier > 1 then
@@ -408,6 +419,9 @@ function LootTableService:Roll(tableName, tier)
 	end
 
 	for _, entry in ipairs(activeTable.Guaranteed or {}) do
+		if not eligible(entry, tier, rng, true) then
+			continue
+		end
 		local itemId = entry.Id
 		if entry.IsTag then
 			itemId = resolveTagEntry(entry, rng)

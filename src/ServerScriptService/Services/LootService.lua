@@ -19,6 +19,7 @@ LootService._chestById = {}
 LootService._openByPlayer = {} -- [player] = chestId
 LootService._monsterConns = setmetatable({}, { __mode = "k" })
 LootService._chestCleanupConns = setmetatable({}, { __mode = "k" })
+LootService._remote = nil
 
 local CHEST_TAGS = {
 	Common_Chest = 1,
@@ -137,8 +138,12 @@ end
 
 function LootService:_sendChest(plr, chest)
 	local data = self:_ensureChestData(chest)
-	local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
-	local remote = Util.GetRemote(remotesFolder, Config.RemoteNames.ChestEvent)
+	local remote = self._remote
+	if not remote then
+		local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
+		remote = Util.GetRemote(remotesFolder, Config.RemoteNames.ChestEvent)
+		self._remote = remote
+	end
 	if not remote then return end
 	self._openByPlayer[plr] = data.Id
 	print(string.format("[LootService] Open chest %s for %s (items %d)", chest.Name, plr.Name, #data.Slots))
@@ -152,8 +157,12 @@ function LootService:_sendChest(plr, chest)
 end
 
 function LootService:_updateChest(plr, data)
-	local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
-	local remote = Util.GetRemote(remotesFolder, Config.RemoteNames.ChestEvent)
+	local remote = self._remote
+	if not remote then
+		local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
+		remote = Util.GetRemote(remotesFolder, Config.RemoteNames.ChestEvent)
+		self._remote = remote
+	end
 	if not remote then return end
 	remote:FireClient(plr, "Update", {
 		ChestId = data.Id,
@@ -272,6 +281,7 @@ end
 function LootService:Init()
 	local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
 	local remote = Util.GetRemote(remotesFolder, Config.RemoteNames.ChestEvent)
+	self._remote = remote
 	if remote then
 		remote.OnServerEvent:Connect(function(plr, action, payload)
 			print(string.format("[LootService] ChestEvent %s from %s", tostring(action), plr.Name))

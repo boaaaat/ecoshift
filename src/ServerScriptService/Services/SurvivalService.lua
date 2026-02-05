@@ -1,6 +1,5 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
@@ -10,6 +9,8 @@ local ChunkStreamingService = require(script.Parent.ChunkStreamingService)
 local StatsService = require(script.Parent.StatsService)
 
 local SurvivalService = {}
+SurvivalService._initialized = false
+SurvivalService._tickInterval = 0.2
 
 SurvivalService._sprintWanted = setmetatable({}, { __mode = "k" })
 SurvivalService._sprintApplied = setmetatable({}, { __mode = "k" })
@@ -126,6 +127,9 @@ function SurvivalService:_tickPlayer(plr, dt)
 end
 
 function SurvivalService:Init()
+	if self._initialized then return end
+	self._initialized = true
+
 	local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
 	local rSprint = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.SprintToggle)
 	if rSprint then
@@ -134,12 +138,18 @@ function SurvivalService:Init()
 		end)
 	end
 
-	RunService.Heartbeat:Connect(function(dt)
-		for _, plr in ipairs(Players:GetPlayers()) do
-			local ok = pcall(function()
-				self:_tickPlayer(plr, dt)
-			end)
-			if not ok then end
+	task.spawn(function()
+		local last = os.clock()
+		while self._initialized do
+			task.wait(self._tickInterval)
+			local now = os.clock()
+			local dt = math.max(0, now - last)
+			last = now
+			for _, plr in ipairs(Players:GetPlayers()) do
+				pcall(function()
+					self:_tickPlayer(plr, dt)
+				end)
+			end
 		end
 	end)
 

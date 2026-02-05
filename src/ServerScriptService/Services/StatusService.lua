@@ -3,14 +3,13 @@
 -- Uses Attributes on Character/Humanoid; does not create instances.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local BiomeService = require(script.Parent.BiomeService)
 
 local StatusService = {}
 StatusService._tickInterval = 1.0
-StatusService._next = 0
+StatusService._bound = false
 
 local function getEventMods()
 	-- EventEffectsService populates _G.Ecoshift.Mods (optional)
@@ -63,13 +62,16 @@ function StatusService:_tickPlayer(plr)
 end
 
 function StatusService:Bind()
-	RunService.Heartbeat:Connect(function()
-		local t = os.clock()
-		if t < self._next then return end
-		self._next = t + self._tickInterval
-		for _,plr in ipairs(Players:GetPlayers()) do
-			local ok = pcall(function() self:_tickPlayer(plr) end)
-			if not ok then end
+	if self._bound then return end
+	self._bound = true
+	task.spawn(function()
+		while self._bound do
+			for _, plr in ipairs(Players:GetPlayers()) do
+				pcall(function()
+					self:_tickPlayer(plr)
+				end)
+			end
+			task.wait(self._tickInterval)
 		end
 	end)
 end

@@ -71,21 +71,24 @@ function EventService:_tick()
 	end
 end
 
-if not EventService._started then
-	EventService._started = true
-	EventService._nextMinor = scheduleWindow(Config.EVENTS.MinorCadence)
-	EventService._nextMajor = scheduleWindow(Config.EVENTS.MajorCadence)
-	task.spawn(function()
-		while EventService._started do
-			pcall(function()
-				EventService:_tick()
-			end)
-			task.wait(EventService._tickInterval)
-		end
-	end)
-end
 _G.Ecoshift = _G.Ecoshift or {}
 _G.Ecoshift.EventCallbacks = _G.Ecoshift.EventCallbacks or { Start = {}, End = {} }
 _G.Ecoshift.OnEventStartAdd = function(cb) if type(cb) == "function" then table.insert(_G.Ecoshift.EventCallbacks.Start, cb) end end
 _G.Ecoshift.OnEventEndAdd = function(cb) if type(cb) == "function" then table.insert(_G.Ecoshift.EventCallbacks.End, cb) end end
+
+function EventService:Init()
+	if self._started then return end
+	self._started = true
+	self._nextMinor = scheduleWindow(Config.EVENTS.MinorCadence)
+	self._nextMajor = scheduleWindow(Config.EVENTS.MajorCadence)
+	task.spawn(function()
+		while self._started do
+			pcall(function()
+				self:_tick()
+			end)
+			task.wait(self._tickInterval)
+		end
+	end)
+end
+
 return EventService

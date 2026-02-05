@@ -7,6 +7,7 @@ local InventoryAdapter = require(ReplicatedStorage.Shared.InventoryAdapter)
 local ProfileService = require(script.Parent.ProfileService)
 
 local RewardsObserver = {}
+RewardsObserver._initialized = false
 
 local REWARDS = {
 	RelayRepair    = { {Id="Steel",N=4}, {Id="Gear",N=1} },
@@ -27,23 +28,27 @@ local function giveAll(rewardList)
 end
 
 -- hook from ObjectiveService (_G)
-_G.Ecoshift = _G.Ecoshift or {}
-task.spawn(function()
-	for _ = 1, 50 do
-		if type(_G.Ecoshift.OnObjectiveEndAdd) == "function" then
-			_G.Ecoshift.OnObjectiveEndAdd(function(id, entry)
-				if entry and entry.State == "Completed" then
-					local r = REWARDS[id]
-					if r then pcall(giveAll, r) end
-					for _, plr in ipairs(Players:GetPlayers()) do
-						ProfileService:AddXP(plr, 15)
+function RewardsObserver:Init()
+	if self._initialized then return end
+	self._initialized = true
+	_G.Ecoshift = _G.Ecoshift or {}
+	task.spawn(function()
+		for _ = 1, 200 do
+			if type(_G.Ecoshift.OnObjectiveEndAdd) == "function" then
+				_G.Ecoshift.OnObjectiveEndAdd(function(id, entry)
+					if entry and entry.State == "Completed" then
+						local r = REWARDS[id]
+						if r then pcall(giveAll, r) end
+						for _, plr in ipairs(Players:GetPlayers()) do
+							ProfileService:AddXP(plr, 15)
+						end
 					end
-				end
-			end)
-			break
+				end)
+				return
+			end
+			task.wait(0.1)
 		end
-		task.wait(0.1)
-	end
-end)
+	end)
+end
 
 return RewardsObserver

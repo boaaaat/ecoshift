@@ -1,6 +1,7 @@
 -- EventEffectsService.lua
 -- Applies gameplay modifiers when events begin/end.
 local EventEffectsService = {}
+EventEffectsService._initialized = false
 
 local function resetMods()
 	_G.Ecoshift = _G.Ecoshift or {}
@@ -31,24 +32,24 @@ local function applyForEvent(id, isStart)
 	end
 end
 
-_G.Ecoshift = _G.Ecoshift or {}
-task.spawn(function()
-	for _ = 1, 50 do
-		if type(_G.Ecoshift.OnEventStartAdd) == "function" then
-			_G.Ecoshift.OnEventStartAdd(function(evType, id, payload)
-				applyForEvent(id, true)
-			end)
+function EventEffectsService:Init()
+	if self._initialized then return end
+	self._initialized = true
+	_G.Ecoshift = _G.Ecoshift or {}
+	task.spawn(function()
+		for _ = 1, 200 do
+			if type(_G.Ecoshift.OnEventStartAdd) == "function" and type(_G.Ecoshift.OnEventEndAdd) == "function" then
+				_G.Ecoshift.OnEventStartAdd(function(_, id)
+					applyForEvent(id, true)
+				end)
+				_G.Ecoshift.OnEventEndAdd(function(_, id)
+					applyForEvent(id, false)
+				end)
+				return
+			end
+			task.wait(0.1)
 		end
-		if type(_G.Ecoshift.OnEventEndAdd) == "function" then
-			_G.Ecoshift.OnEventEndAdd(function(evType, id, payload)
-				applyForEvent(id, false)
-			end)
-		end
-		if type(_G.Ecoshift.OnEventStartAdd) == "function" and type(_G.Ecoshift.OnEventEndAdd) == "function" then
-			break
-		end
-		task.wait(0.1)
-	end
-end)
+	end)
+end
 
 return EventEffectsService
