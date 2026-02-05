@@ -27,7 +27,12 @@ ChunkStreamingService._initialized = false
 ChunkStreamingService._currentBiome = "Forest"
 ChunkStreamingService._prefabRoots = nil
 ChunkStreamingService._prefabLookup = {}
+ChunkStreamingService._chestLookup = nil
+ChunkStreamingService._chestLookupFolder = nil
 ChunkStreamingService._biomes = nil
+ChunkStreamingService._loadQueue = {}
+ChunkStreamingService._loadQueueSet = {}
+ChunkStreamingService._loadQueueHead = 1
 
 -- Config (read from BiomeConfig or use defaults)
 local CHUNK_SIZE = WorldGenConfig.chunk_size or 240
@@ -35,6 +40,10 @@ local LOAD_RADIUS = WorldGenConfig.stream_load_radius or 3 -- Load chunks within
 local UNLOAD_RADIUS = WorldGenConfig.stream_unload_radius or 5 -- Unload chunks beyond this radius
 local UPDATE_INTERVAL = WorldGenConfig.stream_update_interval or 0.5 -- How often to check player positions
 local UNLOAD_DELAY = WorldGenConfig.stream_unload_delay or 10 -- Seconds before unloading an unused chunk
+local MAX_LOADS_PER_UPDATE = WorldGenConfig.stream_max_loads_per_update or 2
+local STREAM_OPS_PER_YIELD = WorldGenConfig.stream_ops_per_yield or WorldGenConfig.ops_per_yield or 40
+local STREAM_STEP_DELAY = WorldGenConfig.stream_step_delay or WorldGenConfig.step_delay or 0
+local STREAM_BIND_OPS_PER_YIELD = WorldGenConfig.stream_bind_ops_per_yield or STREAM_OPS_PER_YIELD
 local BASE_Y = WorldGenConfig.base_y or 0
 local WORLD_RADIUS = WorldGenConfig.world_radius or 2200
 local CENTER_EXCLUSION = WorldGenConfig.center_exclusion_radius or 260
@@ -108,6 +117,149 @@ local function distanceFactorForList(list, distance_t)
 	return weighted / total
 end
 
+local CHEST_TAG_ORDER = {
+	"Common_Chest",
+	"Rare_Chest",
+	"Legendary_Chest",
+	"Celestial_Chest",
+}
+
+local function getTierFromInstance(instance)
+	if not instance then return 1 end
+	for tier, tag in ipairs(CHEST_TAG_ORDER) do
+		if CollectionService:HasTag(instance, tag) then
+			return tier
+		end
+	end
+	local name = instance.Name:lower()
+	if name:find("celestial") then
+		return 4
+	elseif name:find("legendary") then
+		return 3
+	elseif name:find("rare") then
+		return 2
+	end
+	return 1
+end
+
+local function ensureChestTag(instance)
+	if not instance then return end
+	for _, tag in ipairs(CHEST_TAG_ORDER) do
+		if CollectionService:HasTag(instance, tag) then
+			return
+		end
+	end
+	local tier = getTierFromInstance(instance)
+	CollectionService:AddTag(instance, CHEST_TAG_ORDER[tier] or "Common_Chest")
+end
+
+local function normalizeTierKey(key)
+	if type(key) == "number" then
+		local t = math.floor(key)
+		if t >= 1 and t <= 4 then
+			return t
+		end
+	elseif type(key) == "string" then
+		local n = tonumber(key)
+		if n then
+			return normalizeTierKey(n)
+		end
+		local k = key:lower()
+		if k == "common" then return 1 end
+		if k == "rare" then return 2 end
+		if k == "legendary" then return 3 end
+		if k == "celestial" then return 4 end
+	end
+	return nil
+end
+
+local function normalizeTierWeightsConfig(raw)
+	local out = {}
+	if type(raw) ~= "table" then return out end
+	if #raw > 0 then
+		for i = 1, math.min(4, #raw) do
+			out[i] = raw[i]
+		end
+	else
+		for key, val in pairs(raw) do
+			local t = normalizeTierKey(key)
+			if t then
+				out[t] = val
+			end
+		end
+	end
+	return out
+end
+
+local function tierWeightForDistance(entry, distance_t)
+	if entry == nil then return 0 end
+	if type(entry) == "number" then
+		return entry
+	end
+	if type(entry) == "table" then
+		local base = tonumber(entry.Weight or entry.weight) or 0
+		local dWeight = entry.DistanceWeight or entry.distanceWeight
+		if distance_t ~= nil and dWeight ~= nil then
+			base = base * distanceWeightFactor(dWeight, distance_t)
+		end
+		return base
+	end
+	return 0
+end
+
+local function chooseTier(weights, rng)
+	local total = 0
+	for _, w in pairs(weights) do
+		total += w
+	end
+	if total <= 0 then return nil end
+	local roll = rng:NextNumber(0, total)
+	for tier = 1, 4 do
+		local w = weights[tier] or 0
+		if w > 0 then
+			roll -= w
+			if roll <= 0 then
+				return tier
+			end
+		end
+	end
+	return 1
+end
+
+local function nameMatchesPrefixes(name, prefixes)
+	for _, prefix in ipairs(prefixes) do
+		if name == prefix or name:sub(1, #prefix + 1) == (prefix .. "_") then
+			return true
+		end
+	end
+	return false
+end
+
+local function collectSpawnPoints(root, prefixes)
+	local points = {}
+	if not root or not prefixes or #prefixes == 0 then return points end
+	for _, d in ipairs(root:GetDescendants()) do
+		if (d:IsA("BasePart") or d:IsA("Attachment")) and nameMatchesPrefixes(d.Name, prefixes) then
+			points[#points + 1] = d
+		end
+	end
+	return points
+end
+
+local function getSpawnPointCFrame(point)
+	if point:IsA("Attachment") then
+		return point.WorldCFrame
+	end
+	return point.CFrame
+end
+
+local function shuffle(list, rng)
+	for i = #list, 2, -1 do
+		local j = rng:NextInteger(1, i)
+		list[i], list[j] = list[j], list[i]
+	end
+end
+
 local function chunkKey(cx, cz)
 	return cx .. "," .. cz
 end
@@ -142,12 +294,75 @@ local function randomInRange(rng, value)
 	return 0
 end
 
+local function getRegionTemp(regionDef)
+	if type(regionDef) ~= "table" then return nil end
+	if regionDef.Temp ~= nil then return regionDef.Temp end
+	local env = regionDef.env or regionDef.Env
+	if type(env) == "table" and env.Temp ~= nil then
+		return env.Temp
+	end
+	return nil
+end
+
+local function computeRegionCenter(chunkCenter, regionSize, rng)
+	if not regionSize then
+		return chunkCenter
+	end
+	local halfChunk = CHUNK_SIZE * 0.5
+	local halfX = (regionSize.X or 0) * 0.5
+	local halfZ = (regionSize.Y or 0) * 0.5
+	local minX = chunkCenter.X - halfChunk + halfX
+	local maxX = chunkCenter.X + halfChunk - halfX
+	local minZ = chunkCenter.Z - halfChunk + halfZ
+	local maxZ = chunkCenter.Z + halfChunk - halfZ
+	if minX > maxX then
+		minX, maxX = chunkCenter.X, chunkCenter.X
+	end
+	if minZ > maxZ then
+		minZ, maxZ = chunkCenter.Z, chunkCenter.Z
+	end
+	local x = rng:NextNumber(minX, maxX)
+	local z = rng:NextNumber(minZ, maxZ)
+	return Vector3.new(x, BASE_Y, z)
+end
+
+local function randomPointInRegion(regionCenter, regionSize, rng)
+	local size = regionSize
+	if not size then
+		size = Vector2.new(CHUNK_SIZE * 0.8, CHUNK_SIZE * 0.8)
+	end
+	local halfX = (size.X or 0) * 0.5
+	local halfZ = (size.Y or 0) * 0.5
+	local x = regionCenter.X + rng:NextNumber(-halfX, halfX)
+	local z = regionCenter.Z + rng:NextNumber(-halfZ, halfZ)
+	return Vector3.new(x, BASE_Y, z)
+end
+
 local function getOffsetValue(obj)
 	local offsetVal = obj:FindFirstChild("Offset", true)
 	if offsetVal and offsetVal:IsA("NumberValue") then
 		return offsetVal.Value
 	end
 	return 0
+end
+
+local function makeStep()
+	local maxOps = tonumber(STREAM_OPS_PER_YIELD) or 40
+	if maxOps < 1 then
+		maxOps = 1
+	end
+	local ops = 0
+	return function()
+		ops += 1
+		if ops >= maxOps then
+			ops = 0
+			if STREAM_STEP_DELAY > 0 then
+				task.wait(STREAM_STEP_DELAY)
+			else
+				task.wait()
+			end
+		end
+	end
 end
 
 function ChunkStreamingService:_ensureWorldFolder()
@@ -240,6 +455,75 @@ function ChunkStreamingService:_getPrefabLookup(typeName, biomeName)
 	return lookup
 end
 
+function ChunkStreamingService:_getChestLookup()
+	local folder = ServerStorage:FindFirstChild("Chests")
+	if self._chestLookup and self._chestLookupFolder == folder then
+		return self._chestLookup
+	end
+	local lookup = {}
+	if folder then
+		for _, child in ipairs(folder:GetChildren()) do
+			lookup[child.Name] = child
+		end
+	end
+	self._chestLookup = lookup
+	self._chestLookupFolder = folder
+	return lookup
+end
+
+local function resolveLookupWeighted(lookup, names)
+	local list = {}
+	if not lookup then return list end
+
+	if names == true or names == "*" then
+		for _, prefab in pairs(lookup) do
+			list[#list + 1] = { Prefab = prefab, Weight = 1 }
+		end
+		return list
+	end
+
+	if type(names) == "table" then
+		if #names > 0 then
+			for _, entry in ipairs(names) do
+				if type(entry) == "string" then
+					local prefab = lookup[entry]
+					if prefab then
+						list[#list + 1] = { Prefab = prefab, Weight = 1 }
+					end
+				elseif type(entry) == "table" then
+					local name = entry.Name or entry.Id or entry.Prefab or entry[1]
+					local weight = tonumber(entry.Weight or entry.weight) or 1
+					local distance_weight = entry.DistanceWeight or entry.distanceWeight
+					if type(name) == "string" then
+						local prefab = lookup[name]
+						if prefab and weight > 0 then
+							list[#list + 1] = { Prefab = prefab, Weight = weight, DistanceWeight = distance_weight }
+						end
+					end
+				end
+			end
+		else
+			for key, value in pairs(names) do
+				if type(key) == "string" then
+					local prefab = lookup[key]
+					local weight = 1
+					local distance_weight = nil
+					if type(value) == "number" then
+						weight = value
+					elseif type(value) == "table" then
+						weight = tonumber(value.Weight or value.weight) or 1
+						distance_weight = value.DistanceWeight or value.distanceWeight
+					end
+					if prefab and weight > 0 then
+						list[#list + 1] = { Prefab = prefab, Weight = weight, DistanceWeight = distance_weight }
+					end
+				end
+			end
+		end
+	end
+	return list
+end
+
 function ChunkStreamingService:_resolvePrefabsWeighted(typeName, biomeName, names)
 	local lookup = self:_getPrefabLookup(typeName, biomeName)
 	local list = {}
@@ -293,6 +577,159 @@ function ChunkStreamingService:_resolvePrefabsWeighted(typeName, biomeName, name
 	return list
 end
 
+function ChunkStreamingService:_getStructureChestConfig(biome, structureName)
+	local map = nil
+	if biome and type(biome.structure_chests) == "table" then
+		map = biome.structure_chests
+	else
+		map = WorldGenConfig.structure_chests
+	end
+	if type(map) ~= "table" then return nil end
+	local defaultCfg = map.Default or map.default
+	local specificCfg = map[structureName]
+	if not defaultCfg and not specificCfg then
+		return nil
+	end
+	local merged = {}
+	if type(defaultCfg) == "table" then
+		for k, v in pairs(defaultCfg) do
+			merged[k] = v
+		end
+	end
+	if type(specificCfg) == "table" then
+		for k, v in pairs(specificCfg) do
+			merged[k] = v
+		end
+	end
+	return merged
+end
+
+function ChunkStreamingService:_resolveChestEntries(biomeName, chestNames)
+	local chestLookup = self:_getChestLookup()
+	local entries = resolveLookupWeighted(chestLookup, chestNames)
+	if #entries == 0 then
+		entries = self:_resolvePrefabsWeighted("StructurePrefabs", biomeName, chestNames)
+	end
+	if #entries == 0 then
+		entries = self:_resolvePrefabsWeighted("PropPrefabs", biomeName, chestNames)
+	end
+	return entries
+end
+
+function ChunkStreamingService:_spawnStructureChests(structureClone, biomeName, structureName, rng, biome)
+	if not structureClone or not structureClone.Parent then return end
+	local cfg = self:_getStructureChestConfig(biome, structureName)
+	if not cfg then return end
+
+	local prefixes = cfg.spawn_points or cfg.spawnPoints or {"ChestSpawn"}
+	local spawnPoints = collectSpawnPoints(structureClone, prefixes)
+	if #spawnPoints == 0 then return end
+
+	local rawCount = cfg.count or cfg.Count
+	local count = randomInRange(rng, rawCount)
+	if rawCount == nil then
+		count = 1
+	end
+	count = math.max(0, math.floor(tonumber(count) or 0))
+	if count <= 0 then return end
+
+	if count > #spawnPoints then
+		count = #spawnPoints
+	end
+
+	shuffle(spawnPoints, rng)
+
+	local chestNames = cfg.chests or cfg.Chests
+	if chestNames == nil and biome then
+		chestNames = biome.chests or biome.Chests
+	end
+	if chestNames == nil then return end
+
+	local entries = self:_resolveChestEntries(biomeName, chestNames)
+	if #entries == 0 then return end
+
+	local tierLists = { {}, {}, {}, {} }
+	for _, entry in ipairs(entries) do
+		local tier = getTierFromInstance(entry.Prefab)
+		tierLists[tier][#tierLists[tier] + 1] = entry
+	end
+
+	local tierConfig = normalizeTierWeightsConfig(cfg.tier_weights or cfg.tierWeights)
+
+	for i = 1, count do
+		local point = spawnPoints[i]
+		local cf = getSpawnPointCFrame(point)
+		local pos = cf.Position
+		local distance_t = distanceT(pos.X, pos.Z)
+
+		local weights = {}
+		local total = 0
+		for tier = 1, 4 do
+			if #tierLists[tier] > 0 then
+				local w = tierWeightForDistance(tierConfig[tier], distance_t)
+				if w > 0 then
+					weights[tier] = w
+					total += w
+				end
+			end
+		end
+		if total <= 0 then
+			for tier = 1, 4 do
+				if #tierLists[tier] > 0 then
+					weights[tier] = 1
+					total += 1
+				end
+			end
+		end
+		if total <= 0 then
+			return
+		end
+
+		local chosenTier = chooseTier(weights, rng)
+		local list = chosenTier and tierLists[chosenTier] or nil
+		if not list or #list == 0 then
+			for tier = 1, 4 do
+				if #tierLists[tier] > 0 then
+					list = tierLists[tier]
+					break
+				end
+			end
+		end
+		if not list or #list == 0 then
+			return
+		end
+
+		local prefab = self:_chooseWeighted(list, rng, distance_t)
+		if prefab then
+			local clone = prefab:Clone()
+			local yOffset = getOffsetValue(clone)
+			local targetCf = cf * CFrame.new(0, yOffset, 0)
+			if clone:IsA("Model") then
+				clone:PivotTo(targetCf)
+			elseif clone:IsA("BasePart") then
+				clone.CFrame = targetCf
+			end
+			local lootTable = cfg.loot_table or cfg.lootTable or cfg.LootTable or cfg.lootTableName or cfg.LootTableName
+			if type(lootTable) == "string" and lootTable ~= "" then
+				clone:SetAttribute("LootTable", lootTable)
+			end
+			ensureChestTag(clone)
+
+			local parent = structureClone
+			if not (parent:IsA("Model") or parent:IsA("Folder")) then
+				parent = structureClone.Parent
+			end
+			if parent then
+				clone.Parent = parent
+				local loot = getLootService()
+				if loot and loot._ensureChestData then
+					loot:_ensureChestData(clone)
+				end
+			end
+		end
+	end
+end
+
 function ChunkStreamingService:_chooseWeighted(list, rng, distance_t)
 	local total = 0
 	for _, entry in ipairs(list) do
@@ -325,6 +762,48 @@ function ChunkStreamingService:_getOrCreateChunkFolder(cx, cz)
 	return folder
 end
 
+function ChunkStreamingService:_enqueueChunkLoad(cx, cz)
+	local key = chunkKey(cx, cz)
+	if self._loadedChunks[key] or self._loadingChunks[key] or self._loadQueueSet[key] then
+		return
+	end
+	self._loadQueue[#self._loadQueue + 1] = { cx = cx, cz = cz, key = key }
+	self._loadQueueSet[key] = true
+end
+
+function ChunkStreamingService:_processLoadQueue(desiredSet)
+	local maxLoads = tonumber(MAX_LOADS_PER_UPDATE) or 1
+	if maxLoads <= 0 then
+		maxLoads = 1
+	end
+	local loads = 0
+	while loads < maxLoads do
+		local head = self._loadQueueHead
+		if head > #self._loadQueue then
+			break
+		end
+		local entry = self._loadQueue[head]
+		self._loadQueue[head] = nil
+		self._loadQueueHead = head + 1
+		if entry then
+			self._loadQueueSet[entry.key] = nil
+			if not desiredSet or desiredSet[entry.key] then
+				self:_loadChunk(entry.cx, entry.cz)
+				loads += 1
+			end
+		end
+	end
+
+	if self._loadQueueHead > 64 and self._loadQueueHead > (#self._loadQueue * 0.5) then
+		local compacted = {}
+		for i = self._loadQueueHead, #self._loadQueue do
+			compacted[#compacted + 1] = self._loadQueue[i]
+		end
+		self._loadQueue = compacted
+		self._loadQueueHead = 1
+	end
+end
+
 function ChunkStreamingService:_loadChunk(cx, cz)
 	local key = chunkKey(cx, cz)
 	
@@ -349,15 +828,17 @@ function ChunkStreamingService:_loadChunk(cx, cz)
 	task.spawn(function()
 		local chunkFolder = self:_getOrCreateChunkFolder(cx, cz)
 		local chunkCenter = Vector3.new(worldX, BASE_Y, worldZ)
+		local step = makeStep()
 		
 		-- Generate chunk content
-		self:_generateChunkContent(cx, cz, chunkCenter, chunkFolder)
+		local regions = self:_generateChunkContent(cx, cz, chunkCenter, chunkFolder, step)
 		
 		self._loadedChunks[key] = {
 			folder = chunkFolder,
 			lastAccess = os.clock(),
 			cx = cx,
 			cz = cz,
+			regions = regions or {},
 		}
 		self._loadingChunks[key] = nil
 		
@@ -369,7 +850,9 @@ function ChunkStreamingService:_loadChunk(cx, cz)
 			local loot = getLootService()
 			if loot then
 				-- Scan chunk folder for tagged chests and monsters
-				for _, descendant in ipairs(chunkFolder:GetDescendants()) do
+				local descendants = chunkFolder:GetDescendants()
+				for i = 1, #descendants do
+					local descendant = descendants[i]
 					-- Check chest tags
 					if CollectionService:HasTag(descendant, "Common_Chest") or
 					   CollectionService:HasTag(descendant, "Rare_Chest") or
@@ -388,20 +871,25 @@ function ChunkStreamingService:_loadChunk(cx, cz)
 							loot:_bindMonster(descendant)
 						end
 					end
+					if i % STREAM_BIND_OPS_PER_YIELD == 0 then
+						task.wait()
+					end
 				end
 			end
 		end)
 	end)
 end
 
-function ChunkStreamingService:_generateChunkContent(cx, cz, chunkCenter, chunkFolder)
+function ChunkStreamingService:_generateChunkContent(cx, cz, chunkCenter, chunkFolder, step)
 	local biome = self:_findBiome(self._currentBiome)
 	if not biome then 
 		biome = self._biomes[1]
 	end
 	if not biome then return end
+	step = step or makeStep()
 	
 	local biomeName = biome.name
+	local regions = {}
 	
 	-- Create chunk-local subfolders
 	local subfolders = {}
@@ -431,8 +919,18 @@ function ChunkStreamingService:_generateChunkContent(cx, cz, chunkCenter, chunkF
 			regionDef = biome.regions[rng:NextInteger(1, #biome.regions)]
 		end
 		if regionDef then
-			self:_scatterInChunk(biomeName, chunkCenter, regionDef, subfolders, rng, distance_t)
+			local regionSize = regionDef.size
+			local regionCenter = computeRegionCenter(chunkCenter, regionSize, rng)
+			local regionTemp = getRegionTemp(regionDef)
+			regions[#regions + 1] = {
+				Center = regionCenter,
+				Size = regionSize,
+				Temp = regionTemp,
+			}
+			local regionDistanceT = distanceT(regionCenter.X, regionCenter.Z)
+			self:_scatterInChunk(biomeName, regionCenter, regionSize, regionDef, subfolders, rng, regionDistanceT, step)
 		end
+		step()
 	end
 	
 	-- Structures (probability per chunk)
@@ -440,19 +938,16 @@ function ChunkStreamingService:_generateChunkContent(cx, cz, chunkCenter, chunkF
 	local structurePrefabs = self:_resolvePrefabsWeighted("StructurePrefabs", biomeName, biome.structures)
 	local structureFactor = distanceFactorForList(structurePrefabs, distance_t)
 	if rng:NextNumber() <= math.clamp(structureChance * structureFactor, 0, 1) then
-		self:_placeStructure(biomeName, chunkCenter, biome.structures, subfolders.Structures, rng, structurePrefabs, distance_t)
+		self:_placeStructure(biomeName, chunkCenter, biome.structures, subfolders.Structures, rng, structurePrefabs, distance_t, biome, step)
 	end
 	
 	-- Chests (probability per chunk)
 	local chestChance = tonumber(biome.chest_count or biome.chestCount) or 0
 	if biome.chests then
-		local chestPrefabs = self:_resolvePrefabsWeighted("StructurePrefabs", biomeName, biome.chests)
-		if #chestPrefabs == 0 then
-			chestPrefabs = self:_resolvePrefabsWeighted("PropPrefabs", biomeName, biome.chests)
-		end
+		local chestPrefabs = self:_resolveChestEntries(biomeName, biome.chests)
 		local chestFactor = distanceFactorForList(chestPrefabs, distance_t)
 		if rng:NextNumber() <= math.clamp(chestChance * chestFactor, 0, 1) then
-			self:_placeChest(biomeName, chunkCenter, biome.chests, subfolders.Structures, rng, chestPrefabs, distance_t)
+			self:_placeChest(biomeName, chunkCenter, biome.chests, subfolders.Structures, rng, chestPrefabs, distance_t, step)
 		end
 	end
 	
@@ -461,12 +956,14 @@ function ChunkStreamingService:_generateChunkContent(cx, cz, chunkCenter, chunkF
 	local objectivePrefabs = self:_resolvePrefabsWeighted("ObjectivePrefabs", biomeName, biome.objectives)
 	local objectiveFactor = distanceFactorForList(objectivePrefabs, distance_t)
 	if rng:NextNumber() <= math.clamp(objectiveChance * objectiveFactor, 0, 1) then
-		self:_placeStructure(biomeName, chunkCenter, biome.objectives, subfolders.Objectives, rng, objectivePrefabs, distance_t)
+		self:_placeStructure(biomeName, chunkCenter, biome.objectives, subfolders.Objectives, rng, objectivePrefabs, distance_t, biome, step)
 	end
+
+	return regions
 end
 
-function ChunkStreamingService:_scatterInChunk(biomeName, chunkCenter, regionDef, subfolders, rng, distance_t)
-	local half = CHUNK_SIZE * 0.4
+function ChunkStreamingService:_scatterInChunk(biomeName, regionCenter, regionSize, regionDef, subfolders, rng, distance_t, step)
+	step = step or makeStep()
 	
 	-- Resources
 	local resourcePrefabs = self:_resolvePrefabsWeighted("ResourcePrefabs", biomeName, regionDef.resources)
@@ -477,11 +974,10 @@ function ChunkStreamingService:_scatterInChunk(biomeName, chunkCenter, regionDef
 	for _ = 1, resourceCount do
 		local prefab = self:_chooseWeighted(resourcePrefabs, rng, distance_t)
 		if prefab then
-			local x = chunkCenter.X + rng:NextNumber(-half, half)
-			local z = chunkCenter.Z + rng:NextNumber(-half, half)
-			local position = Vector3.new(x, BASE_Y, z)
-			self:_placePrefab(prefab, position, subfolders.Resources)
+			local position = randomPointInRegion(regionCenter, regionSize, rng)
+			self:_placePrefab(prefab, position, subfolders.Resources, step)
 		end
+		step()
 	end
 	
 	-- Props
@@ -493,11 +989,10 @@ function ChunkStreamingService:_scatterInChunk(biomeName, chunkCenter, regionDef
 	for _ = 1, propCount do
 		local prefab = self:_chooseWeighted(propPrefabs, rng, distance_t)
 		if prefab then
-			local x = chunkCenter.X + rng:NextNumber(-half, half)
-			local z = chunkCenter.Z + rng:NextNumber(-half, half)
-			local position = Vector3.new(x, BASE_Y, z)
-			self:_placePrefab(prefab, position, subfolders.Props)
+			local position = randomPointInRegion(regionCenter, regionSize, rng)
+			self:_placePrefab(prefab, position, subfolders.Props, step)
 		end
+		step()
 	end
 	
 	if SPAWN_ENEMIES then
@@ -510,16 +1005,15 @@ function ChunkStreamingService:_scatterInChunk(biomeName, chunkCenter, regionDef
 		for _ = 1, enemyCount do
 			local prefab = self:_chooseWeighted(enemyPrefabs, rng, distance_t)
 			if prefab then
-				local x = chunkCenter.X + rng:NextNumber(-half, half)
-				local z = chunkCenter.Z + rng:NextNumber(-half, half)
-				local position = Vector3.new(x, BASE_Y, z)
-				self:_placePrefab(prefab, position, subfolders.Enemies)
+				local position = randomPointInRegion(regionCenter, regionSize, rng)
+				self:_placePrefab(prefab, position, subfolders.Enemies, step)
 			end
+			step()
 		end
 	end
 end
 
-function ChunkStreamingService:_placeStructure(biomeName, chunkCenter, names, parent, rng, prefabs, distance_t)
+function ChunkStreamingService:_placeStructure(biomeName, chunkCenter, names, parent, rng, prefabs, distance_t, biome, step)
 	if (not names or (type(names) == "table" and #names == 0)) and not prefabs then return end
 	
 	local prefabs = prefabs or self:_resolvePrefabsWeighted("StructurePrefabs", biomeName, names)
@@ -535,19 +1029,18 @@ function ChunkStreamingService:_placeStructure(biomeName, chunkCenter, names, pa
 		local x = chunkCenter.X + rng:NextNumber(-half, half)
 		local z = chunkCenter.Z + rng:NextNumber(-half, half)
 		local position = Vector3.new(x, BASE_Y, z)
-		self:_placePrefab(prefab, position, parent)
+		local clone = self:_placePrefab(prefab, position, parent, step)
+		if clone and parent and parent.Name == "Structures" then
+			self:_spawnStructureChests(clone, biomeName, prefab.Name, rng, biome)
+		end
 	end
 end
 
-function ChunkStreamingService:_placeChest(biomeName, chunkCenter, chestNames, parent, rng, prefabs, distance_t)
+function ChunkStreamingService:_placeChest(biomeName, chunkCenter, chestNames, parent, rng, prefabs, distance_t, step)
 	if (not chestNames or (type(chestNames) == "table" and #chestNames == 0)) and not prefabs then return end
 	
-	-- Try StructurePrefabs first for chest prefabs
-	local prefabs = prefabs or self:_resolvePrefabsWeighted("StructurePrefabs", biomeName, chestNames)
-	if #prefabs == 0 then
-		-- Try PropPrefabs as fallback
-		prefabs = self:_resolvePrefabsWeighted("PropPrefabs", biomeName, chestNames)
-	end
+	-- Try chest folder first, then structure/prop prefabs
+	local prefabs = prefabs or self:_resolveChestEntries(biomeName, chestNames)
 	if #prefabs == 0 then return end
 	
 	local prefab = self:_chooseWeighted(prefabs, rng, distance_t)
@@ -572,33 +1065,13 @@ function ChunkStreamingService:_placeChest(biomeName, chunkCenter, chestNames, p
 		end
 		
 		-- Ensure chest has proper tag for LootService (tag should already be on prefab)
-		-- If not tagged, add Common_Chest as default
-		local hasChestTag = false
-		for _, tag in ipairs({"Common_Chest", "Rare_Chest", "Legendary_Chest", "Celestial_Chest"}) do
-			if CollectionService:HasTag(clone, tag) then
-				hasChestTag = true
-				break
-			end
-		end
-		if not hasChestTag then
-			-- Determine tier from name or default to Common
-			local chestName = clone.Name:lower()
-			if chestName:find("celestial") then
-				CollectionService:AddTag(clone, "Celestial_Chest")
-			elseif chestName:find("legendary") then
-				CollectionService:AddTag(clone, "Legendary_Chest")
-			elseif chestName:find("rare") then
-				CollectionService:AddTag(clone, "Rare_Chest")
-			else
-				CollectionService:AddTag(clone, "Common_Chest")
-			end
-		end
+		ensureChestTag(clone)
 		
 		clone.Parent = parent
 	end
 end
 
-function ChunkStreamingService:_placePrefab(prefab, position, parent)
+function ChunkStreamingService:_placePrefab(prefab, position, parent, step)
 	if not prefab then return end
 	if isInsideCenterExclusion(position.X, position.Z) then
 		return
@@ -611,9 +1084,14 @@ function ChunkStreamingService:_placePrefab(prefab, position, parent)
 		if clone:IsA("BasePart") then
 			clone.CanQuery = true
 		end
-		for _, d in ipairs(clone:GetDescendants()) do
+		local descendants = clone:GetDescendants()
+		for i = 1, #descendants do
+			local d = descendants[i]
 			if d:IsA("BasePart") then
 				d.CanQuery = true
+			end
+			if step and (i % 32 == 0) then
+				step()
 			end
 		end
 	end
@@ -628,6 +1106,7 @@ function ChunkStreamingService:_placePrefab(prefab, position, parent)
 		clone.CFrame = targetCf
 	end
 	clone.Parent = parent
+	return clone
 end
 
 function ChunkStreamingService:_unloadChunk(cx, cz)
@@ -678,8 +1157,9 @@ function ChunkStreamingService:_updateChunks()
 	
 	-- Load needed chunks
 	for key, chunk in pairs(chunksToLoad) do
-		self:_loadChunk(chunk.cx, chunk.cz)
+		self:_enqueueChunkLoad(chunk.cx, chunk.cz)
 	end
+	self:_processLoadQueue(chunksToLoad)
 	
 	-- Check for chunks to unload
 	for key, data in pairs(self._loadedChunks) do
@@ -714,14 +1194,43 @@ function ChunkStreamingService:SetBiome(biomeName, force)
 	self._loadedChunks = {}
 	self._chunkFolders = {}
 	self._loadingChunks = {}
+	self._loadQueue = {}
+	self._loadQueueSet = {}
+	self._loadQueueHead = 1
 	
 	-- Force immediate reload around players
 	self:_updateChunks()
 end
 
+function ChunkStreamingService:GetRegionTempAtPosition(position)
+	if not position then return nil end
+	local cx, cz = worldToChunk(position.X, position.Z)
+	local key = chunkKey(cx, cz)
+	local data = self._loadedChunks[key]
+	if not data or not data.regions then return nil end
+	for _, region in ipairs(data.regions) do
+		local size = region.Size
+		local center = region.Center
+		if size and center then
+			local halfX = (size.X or 0) * 0.5
+			local halfZ = (size.Y or 0) * 0.5
+			if position.X >= (center.X - halfX) and position.X <= (center.X + halfX)
+				and position.Z >= (center.Z - halfZ) and position.Z <= (center.Z + halfZ) then
+				if region.Temp ~= nil then
+					return region.Temp
+				end
+			end
+		end
+	end
+	return nil
+end
+
 function ChunkStreamingService:Init()
 	if self._initialized then return end
 	self._initialized = true
+	self._loadQueue = {}
+	self._loadQueueSet = {}
+	self._loadQueueHead = 1
 	
 	self:_ensureWorldFolder()
 	self:_initPrefabRoots()

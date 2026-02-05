@@ -30,6 +30,7 @@ Config.RemoteNames = {
 	ChestEvent = "ChestEvent",
 	TimeUpdate = "TimeUpdate",
 	HarvestFeedback = "HarvestFeedback",
+	SprintToggle = "SprintToggle",
 }
 
 Config.DATASTORE = {

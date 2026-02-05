@@ -11,8 +11,13 @@ StatsService.DEFAULTS = {
 	Health = 100,
 	MaxHealth = 100,
 	HealthRegen = 0,
+	Stamina = 100,
+	MaxStamina = 100,
+	Hunger = 100,
+	MaxHunger = 100,
 	Armor = 0, -- percent (0-100)
 	Temperature = 0,
+	TemperatureResistance = 0,
 	Illness = 0,
 }
 
@@ -27,10 +32,20 @@ local STAT_ALIASES = {
 	healthregen = "HealthRegen",
 	health_regen = "HealthRegen",
 	regen = "HealthRegen",
+	stamina = "Stamina",
+	maxstamina = "MaxStamina",
+	max_stamina = "MaxStamina",
+	hunger = "Hunger",
+	maxhunger = "MaxHunger",
+	max_hunger = "MaxHunger",
 	armor = "Armor",
 	armour = "Armor",
 	temperature = "Temperature",
 	temp = "Temperature",
+	temperatureresistance = "TemperatureResistance",
+	temperature_resistance = "TemperatureResistance",
+	tempres = "TemperatureResistance",
+	temp_res = "TemperatureResistance",
 	illness = "Illness",
 }
 

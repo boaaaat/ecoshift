@@ -37,11 +37,18 @@ local COLORS = {
 }
 
 local SLOT_SIZE = 64
+local HOTBAR_SLOT_SIZE = 72
 local SLOT_GAP = 6
 local HOTBAR_SLOTS = 4
-local STORAGE_COLS = 5
-local STORAGE_ROWS = 2
+local STORAGE_COLS = 6
+local STORAGE_ROWS = 3
 local MARGIN = 16
+local HEADER_HEIGHT = 44
+local STORAGE_WIDTH = (SLOT_SIZE * STORAGE_COLS) + (SLOT_GAP * (STORAGE_COLS - 1))
+local STORAGE_HEIGHT = (SLOT_SIZE * STORAGE_ROWS) + (SLOT_GAP * (STORAGE_ROWS - 1))
+local ARMOR_SECTION_HEIGHT = SLOT_SIZE + 22
+local STORAGE_SECTION_HEIGHT = STORAGE_HEIGHT + 22
+local MAIN_HEIGHT = HEADER_HEIGHT + ARMOR_SECTION_HEIGHT + STORAGE_SECTION_HEIGHT + MARGIN + 8
 
 -- Create main GUI
 local gui = Instance.new("ScreenGui")
@@ -53,9 +60,9 @@ gui.Parent = playerGui
 -- Main container
 local mainContainer = Instance.new("Frame")
 mainContainer.Name = "MainContainer"
-mainContainer.Size = UDim2.new(0, (SLOT_SIZE + SLOT_GAP) * STORAGE_COLS + MARGIN * 2, 0, 290)
-mainContainer.AnchorPoint = Vector2.new(1, 1)
-mainContainer.Position = UDim2.new(1, -20, 1, -20)
+mainContainer.Size = UDim2.new(0, STORAGE_WIDTH + MARGIN * 2, 0, MAIN_HEIGHT)
+mainContainer.AnchorPoint = Vector2.new(0.5, 0.5)
+mainContainer.Position = UDim2.new(0.5, 0, 0.5, 0)
 mainContainer.BackgroundColor3 = COLORS.Panel
 mainContainer.BackgroundTransparency = 0.05
 mainContainer.BorderSizePixel = 0
@@ -70,6 +77,8 @@ mainStroke.Color = COLORS.Border
 mainStroke.Thickness = 1
 mainStroke.Transparency = 0.5
 mainStroke.Parent = mainContainer
+
+mainContainer.Visible = false
 
 -- Shadow effect
 local shadow = Instance.new("ImageLabel")
@@ -111,43 +120,43 @@ capacityLabel.Size = UDim2.new(0, 80, 0, 20)
 capacityLabel.AnchorPoint = Vector2.new(1, 0.5)
 capacityLabel.Position = UDim2.new(1, -MARGIN, 0.5, 0)
 capacityLabel.BackgroundTransparency = 1
-capacityLabel.Text = "0/14"
+capacityLabel.Text = string.format("0/%d", HOTBAR_SLOTS + STORAGE_COLS * STORAGE_ROWS)
 capacityLabel.TextColor3 = COLORS.TextMuted
 capacityLabel.TextSize = 12
 capacityLabel.Font = Enum.Font.Gotham
 capacityLabel.TextXAlignment = Enum.TextXAlignment.Right
 capacityLabel.Parent = header
 
--- Hotbar section
-local hotbarSection = Instance.new("Frame")
-hotbarSection.Name = "HotbarSection"
-hotbarSection.Size = UDim2.new(1, -MARGIN * 2, 0, SLOT_SIZE + 22)
-hotbarSection.Position = UDim2.new(0, MARGIN, 0, 44)
-hotbarSection.BackgroundTransparency = 1
-hotbarSection.Parent = mainContainer
+-- Armor section (inside inventory)
+local armorSection = Instance.new("Frame")
+armorSection.Name = "ArmorSection"
+armorSection.Size = UDim2.new(1, -MARGIN * 2, 0, ARMOR_SECTION_HEIGHT)
+armorSection.Position = UDim2.new(0, MARGIN, 0, HEADER_HEIGHT)
+armorSection.BackgroundTransparency = 1
+armorSection.Parent = mainContainer
 
-local hotbarLabel = Instance.new("TextLabel")
-hotbarLabel.Size = UDim2.new(1, 0, 0, 14)
-hotbarLabel.BackgroundTransparency = 1
-hotbarLabel.Text = "HOTBAR"
-hotbarLabel.TextColor3 = COLORS.TextMuted
-hotbarLabel.TextSize = 10
-hotbarLabel.Font = Enum.Font.GothamBold
-hotbarLabel.TextXAlignment = Enum.TextXAlignment.Left
-hotbarLabel.Parent = hotbarSection
+local armorLabel = Instance.new("TextLabel")
+armorLabel.Size = UDim2.new(1, 0, 0, 14)
+armorLabel.BackgroundTransparency = 1
+armorLabel.Text = "ARMOR"
+armorLabel.TextColor3 = COLORS.TextMuted
+armorLabel.TextSize = 10
+armorLabel.Font = Enum.Font.GothamBold
+armorLabel.TextXAlignment = Enum.TextXAlignment.Left
+armorLabel.Parent = armorSection
 
-local hotbarContainer = Instance.new("Frame")
-hotbarContainer.Name = "Slots"
-hotbarContainer.Size = UDim2.new(1, 0, 0, SLOT_SIZE)
-hotbarContainer.Position = UDim2.new(0, 0, 0, 16)
-hotbarContainer.BackgroundTransparency = 1
-hotbarContainer.Parent = hotbarSection
+local armorContainer = Instance.new("Frame")
+armorContainer.Name = "Slots"
+armorContainer.Size = UDim2.new(1, 0, 0, SLOT_SIZE)
+armorContainer.Position = UDim2.new(0, 0, 0, 16)
+armorContainer.BackgroundTransparency = 1
+armorContainer.Parent = armorSection
 
 -- Storage section
 local storageSection = Instance.new("Frame")
 storageSection.Name = "StorageSection"
-storageSection.Size = UDim2.new(1, -MARGIN * 2, 0, SLOT_SIZE * STORAGE_ROWS + SLOT_GAP + 22)
-storageSection.Position = UDim2.new(0, MARGIN, 0, 44 + SLOT_SIZE + 32)
+storageSection.Size = UDim2.new(1, -MARGIN * 2, 0, STORAGE_SECTION_HEIGHT)
+storageSection.Position = UDim2.new(0, MARGIN, 0, HEADER_HEIGHT + ARMOR_SECTION_HEIGHT + 8)
 storageSection.BackgroundTransparency = 1
 storageSection.Parent = mainContainer
 
@@ -163,10 +172,45 @@ storageLabel.Parent = storageSection
 
 local storageContainer = Instance.new("Frame")
 storageContainer.Name = "Slots"
-storageContainer.Size = UDim2.new(1, 0, 0, SLOT_SIZE * STORAGE_ROWS + SLOT_GAP)
+storageContainer.Size = UDim2.new(1, 0, 0, STORAGE_HEIGHT)
 storageContainer.Position = UDim2.new(0, 0, 0, 16)
 storageContainer.BackgroundTransparency = 1
 storageContainer.Parent = storageSection
+
+-- Hotbar (always visible, bottom center)
+local hotbarRoot = Instance.new("Frame")
+hotbarRoot.Name = "HotbarRoot"
+hotbarRoot.Size = UDim2.new(0, (HOTBAR_SLOT_SIZE * HOTBAR_SLOTS) + (SLOT_GAP * (HOTBAR_SLOTS - 1)) + MARGIN * 2, 0, HOTBAR_SLOT_SIZE + 12)
+hotbarRoot.AnchorPoint = Vector2.new(0.5, 1)
+hotbarRoot.Position = UDim2.new(0.5, 0, 1, -20)
+hotbarRoot.BackgroundTransparency = 1
+hotbarRoot.Parent = gui
+
+local hotbarPanel = Instance.new("Frame")
+hotbarPanel.Name = "HotbarPanel"
+hotbarPanel.Size = UDim2.new(1, 0, 1, 0)
+hotbarPanel.BackgroundColor3 = COLORS.Panel
+hotbarPanel.BackgroundTransparency = 0.1
+hotbarPanel.BorderSizePixel = 0
+hotbarPanel.Parent = hotbarRoot
+
+local hotbarCorner = Instance.new("UICorner")
+hotbarCorner.CornerRadius = UDim.new(0, 10)
+hotbarCorner.Parent = hotbarPanel
+
+local hotbarStroke = Instance.new("UIStroke")
+hotbarStroke.Color = COLORS.Border
+hotbarStroke.Thickness = 1
+hotbarStroke.Transparency = 0.5
+hotbarStroke.Parent = hotbarPanel
+
+local hotbarContainer = Instance.new("Frame")
+hotbarContainer.Name = "Slots"
+hotbarContainer.Size = UDim2.new(0, (HOTBAR_SLOT_SIZE * HOTBAR_SLOTS) + (SLOT_GAP * (HOTBAR_SLOTS - 1)), 0, HOTBAR_SLOT_SIZE)
+hotbarContainer.AnchorPoint = Vector2.new(0.5, 0.5)
+hotbarContainer.Position = UDim2.new(0.5, 0, 0.5, 0)
+hotbarContainer.BackgroundTransparency = 1
+hotbarContainer.Parent = hotbarPanel
 
 -- Tooltip
 local tooltip = Instance.new("Frame")
@@ -241,7 +285,13 @@ tooltipHint.ZIndex = 101
 tooltipHint.Parent = tooltip
 
 -- Slot creation helper
-local function createSlot(parent, x, y, slotType, index)
+local function createSlot(parent, x, y, slotType, index, slotSize)
+	slotSize = slotSize or SLOT_SIZE
+	local iconSize = math.floor(slotSize * 0.62)
+	local keySize = math.max(16, math.floor(slotSize * 0.25))
+	local badgeW = math.max(24, math.floor(slotSize * 0.4))
+	local badgeH = math.max(14, math.floor(slotSize * 0.22))
+
 	local slot = Instance.new("Frame")
 	slot.Name = slotType .. "_" .. index
 	slot:SetAttribute("SlotType", slotType)
@@ -249,7 +299,7 @@ local function createSlot(parent, x, y, slotType, index)
 	slot:SetAttribute("HasItem", false)
 	slot:SetAttribute("ItemId", "")
 	slot:SetAttribute("Count", 0)
-	slot.Size = UDim2.new(0, SLOT_SIZE, 0, SLOT_SIZE)
+	slot.Size = UDim2.new(0, slotSize, 0, slotSize)
 	slot.Position = UDim2.new(0, x, 0, y)
 	slot.BackgroundColor3 = COLORS.SlotEmpty
 	slot.BorderSizePixel = 0
@@ -268,8 +318,8 @@ local function createSlot(parent, x, y, slotType, index)
 
 	local icon = Instance.new("ImageLabel")
 	icon.Name = "Icon"
-	icon.Size = UDim2.new(0, 40, 0, 40)
-	icon.Position = UDim2.new(0.5, 0, 0.5, -4)
+	icon.Size = UDim2.new(0, iconSize, 0, iconSize)
+	icon.Position = UDim2.new(0.5, 0, 0.5, -2)
 	icon.AnchorPoint = Vector2.new(0.5, 0.5)
 	icon.BackgroundTransparency = 1
 	icon.Image = ""
@@ -295,8 +345,8 @@ local function createSlot(parent, x, y, slotType, index)
 	-- Quantity badge
 	local qtyBadge = Instance.new("Frame")
 	qtyBadge.Name = "QtyBadge"
-	qtyBadge.Size = UDim2.new(0, 24, 0, 14)
-	qtyBadge.Position = UDim2.new(1, -26, 1, -16)
+	qtyBadge.Size = UDim2.new(0, badgeW, 0, badgeH)
+	qtyBadge.Position = UDim2.new(1, -(badgeW + 2), 1, -(badgeH + 2))
 	qtyBadge.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 	qtyBadge.BackgroundTransparency = 0.4
 	qtyBadge.BorderSizePixel = 0
@@ -323,7 +373,7 @@ local function createSlot(parent, x, y, slotType, index)
 	if slotType == "Hotbar" then
 		local keybind = Instance.new("TextLabel")
 		keybind.Name = "Keybind"
-		keybind.Size = UDim2.new(0, 16, 0, 16)
+		keybind.Size = UDim2.new(0, keySize, 0, keySize)
 		keybind.Position = UDim2.new(0, 4, 0, 4)
 		keybind.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 		keybind.BackgroundTransparency = 0.5
@@ -391,13 +441,13 @@ local slots = {}
 
 -- Hotbar slots
 for i = 1, HOTBAR_SLOTS do
-	local x = (i - 1) * (SLOT_SIZE + SLOT_GAP)
-	local slot = createSlot(hotbarContainer, x, 0, "Hotbar", i)
+	local x = (i - 1) * (HOTBAR_SLOT_SIZE + SLOT_GAP)
+	local slot = createSlot(hotbarContainer, x, 0, "Hotbar", i, HOTBAR_SLOT_SIZE)
 	table.insert(slots, slot)
 end
 
--- Armor slot (next to hotbar)
-local armorSlot = createSlot(hotbarContainer, (SLOT_SIZE + SLOT_GAP) * HOTBAR_SLOTS + SLOT_GAP * 2, 0, "Armor", 1)
+-- Armor slot (inside inventory)
+local armorSlot = createSlot(armorContainer, 0, 0, "Armor", 1, SLOT_SIZE)
 table.insert(slots, armorSlot)
 
 -- Storage slots
@@ -406,7 +456,7 @@ for i = 1, STORAGE_COLS * STORAGE_ROWS do
 	local col = (i - 1) % STORAGE_COLS
 	local x = col * (SLOT_SIZE + SLOT_GAP)
 	local y = row * (SLOT_SIZE + SLOT_GAP)
-	local slot = createSlot(storageContainer, x, y, "Storage", i)
+	local slot = createSlot(storageContainer, x, y, "Storage", i, SLOT_SIZE)
 	table.insert(slots, slot)
 end
 
@@ -414,6 +464,17 @@ end
 local inventorySnapshot = nil
 local selectedSlot = nil
 local hoveredSlot = nil
+local inventoryOpen = false
+local contextMenu = nil
+
+local function setInventoryOpen(open)
+	inventoryOpen = open and true or false
+	mainContainer.Visible = inventoryOpen
+	if not inventoryOpen then
+		if tooltip then tooltip.Visible = false end
+		if contextMenu then contextMenu.Visible = false end
+	end
+end
 
 -- Helper functions
 local function hashColor(id)
@@ -604,9 +665,9 @@ local function shiftMove(slot)
 end
 
 -- Context menu
-local contextMenu = Instance.new("Frame")
+contextMenu = Instance.new("Frame")
 contextMenu.Name = "ContextMenu"
-contextMenu.Size = UDim2.new(0, 120, 0, 64)
+contextMenu.Size = UDim2.new(0, 120, 0, 92)
 contextMenu.BackgroundColor3 = COLORS.Background
 contextMenu.BorderSizePixel = 0
 contextMenu.Visible = false
@@ -640,13 +701,18 @@ local function makeMenuButton(text, order)
 	return btn
 end
 
-local contextDrop = makeMenuButton("Drop", 1)
-local contextSplit = makeMenuButton("Split", 2)
+local contextUse = makeMenuButton("Use", 1)
+local contextDrop = makeMenuButton("Drop", 2)
+local contextSplit = makeMenuButton("Split", 3)
 local contextSlot = nil
 
 local function showContextMenu(slot, position)
 	contextSlot = slot
 	contextMenu.Position = UDim2.fromOffset(position.X + 6, position.Y + 6)
+	local data = getSlotData(slot.Type, slot.Index)
+	local item = data and ItemDatabase:Get(data.Id) or nil
+	local canUse = item and (item:HasTag("Food") or item:HasTag("Consumable")) or false
+	contextUse.Visible = canUse
 	contextMenu.Visible = true
 end
 
@@ -675,6 +741,17 @@ contextSplit.MouseButton1Click:Connect(function()
 	rInventoryAction:FireServer("Split", {
 		FromType = contextSlot.Type,
 		FromIndex = contextSlot.Index,
+	})
+	hideContextMenu()
+end)
+
+contextUse.MouseButton1Click:Connect(function()
+	if not contextSlot then return end
+	local data = getSlotData(contextSlot.Type, contextSlot.Index)
+	if not data or not rInventoryAction then return end
+	rInventoryAction:FireServer("Use", {
+		SlotType = contextSlot.Type,
+		SlotIndex = contextSlot.Index,
 	})
 	hideContextMenu()
 end)
@@ -742,9 +819,14 @@ local DRAG_THRESHOLD = 6
 local dragging = { Active = false, Pending = false, From = nil, Ghost = nil, StartPos = nil }
 
 local function createDragGhost(slot, data)
+	local size = slot.Frame.AbsoluteSize
+	if size.X <= 0 or size.Y <= 0 then
+		size = Vector2.new(SLOT_SIZE, SLOT_SIZE)
+	end
+	local iconSize = math.floor(size.X * 0.62)
 	local ghost = Instance.new("Frame")
 	ghost.Name = "DragGhost"
-	ghost.Size = UDim2.new(0, SLOT_SIZE, 0, SLOT_SIZE)
+	ghost.Size = UDim2.new(0, size.X, 0, size.Y)
 	ghost.BackgroundColor3 = COLORS.SlotSelected
 	ghost.BackgroundTransparency = 0.3
 	ghost.BorderSizePixel = 0
@@ -756,7 +838,7 @@ local function createDragGhost(slot, data)
 	corner.Parent = ghost
 	
 	local icon = Instance.new("ImageLabel")
-	icon.Size = UDim2.new(0, 40, 0, 40)
+	icon.Size = UDim2.new(0, iconSize, 0, iconSize)
 	icon.Position = UDim2.new(0.5, 0, 0.5, 0)
 	icon.AnchorPoint = Vector2.new(0.5, 0.5)
 	icon.BackgroundTransparency = 1
@@ -829,10 +911,12 @@ local function slotAtPoint(point)
 	local adjustedPoint = Vector2.new(point.X - inset.X, point.Y - inset.Y)
 	
 	for _, slot in ipairs(slots) do
-		local pos = slot.Frame.AbsolutePosition
-		local size = slot.Frame.AbsoluteSize
-		if adjustedPoint.X >= pos.X and adjustedPoint.X <= pos.X + size.X and adjustedPoint.Y >= pos.Y and adjustedPoint.Y <= pos.Y + size.Y then
-			return slot
+		if not (slot.Frame:IsDescendantOf(mainContainer) and not mainContainer.Visible) then
+			local pos = slot.Frame.AbsolutePosition
+			local size = slot.Frame.AbsoluteSize
+			if adjustedPoint.X >= pos.X and adjustedPoint.X <= pos.X + size.X and adjustedPoint.Y >= pos.Y and adjustedPoint.Y <= pos.Y + size.Y then
+				return slot
+			end
 		end
 	end
 	return nil
@@ -853,9 +937,10 @@ UserInputService.InputChanged:Connect(function(input)
 		end
 		
 		if dragging.Active and dragging.Ghost then
+			local gSize = dragging.Ghost.AbsoluteSize
 			dragging.Ghost.Position = UDim2.fromOffset(
-				input.Position.X - SLOT_SIZE / 2,
-				input.Position.Y - SLOT_SIZE / 2
+				input.Position.X - gSize.X / 2,
+				input.Position.Y - gSize.Y / 2
 			)
 		end
 	end
@@ -886,6 +971,11 @@ end)
 
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
+	if input.KeyCode == Enum.KeyCode.Tab then
+		if UserInputService:GetFocusedTextBox() then return end
+		setInventoryOpen(not inventoryOpen)
+		return
+	end
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
 		-- Hide context menu when clicking elsewhere
 		if contextMenu.Visible then
@@ -968,7 +1058,7 @@ if rInventory then
 		-- Convert false back to nil for consistent local handling
 		if payload.Storage then
 			local normalized = {}
-			for i = 1, 10 do -- STORAGE_SLOTS
+			for i = 1, STORAGE_COLS * STORAGE_ROWS do -- STORAGE_SLOTS
 				local slot = payload.Storage[i]
 				-- Treat false as nil (empty slot)
 				if slot and slot ~= false and type(slot) == "table" then
@@ -1002,7 +1092,7 @@ if rInventory then
 		-- Debug: Log storage contents
 		print("[InventoryUI] Snapshot received:")
 		if payload.Storage then
-			for i = 1, 10 do
+			for i = 1, STORAGE_COLS * STORAGE_ROWS do
 				local slot = payload.Storage[i]
 				if slot then
 					print(string.format("  Storage[%d]: %s x%d", i, slot.Id, slot.N))

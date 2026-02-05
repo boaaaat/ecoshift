@@ -158,6 +158,9 @@ local function normalizeSpawnRequest(entry)
 	}
 end
 
+local getAnchorPosition
+local spawnEnemyById
+
 local function spawnGroup(id, anchor, count, radius, playerCount)
 	local basePos = getAnchorPosition(anchor)
 	if not basePos then
@@ -211,7 +214,7 @@ local function ensureEnemiesFolder()
 	return enemiesFolder
 end
 
-local function getAnchorPosition(anchor)
+getAnchorPosition = function(anchor)
 	if typeof(anchor) == "Vector3" then
 		return anchor
 	end
@@ -227,7 +230,7 @@ local function getAnchorPosition(anchor)
 	return nil
 end
 
-local function spawnEnemyById(id, anchor, playerCount)
+spawnEnemyById = function(id, anchor, playerCount)
 	local prefab = resolvePrefab(getEnemyPrefab(id), id)
 	if not prefab then
 		warn("[EnemySpawner] Missing prefab for", id)
