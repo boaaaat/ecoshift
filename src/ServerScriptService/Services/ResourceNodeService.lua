@@ -51,10 +51,23 @@ local function parseDropCount(instance)
 	if typeof(count) == "number" then
 		return math.max(1, math.floor(count))
 	end
-	local min = getAttr(instance, "DropMin") or getAttr(instance, "LootMin")
-	local max = getAttr(instance, "DropMax") or getAttr(instance, "LootMax")
-	if typeof(min) == "number" and typeof(max) == "number" then
-		return math.random(math.floor(min), math.floor(max))
+	local minRaw = getAttr(instance, "DropMin") or getAttr(instance, "LootMin")
+	local maxRaw = getAttr(instance, "DropMax") or getAttr(instance, "LootMax")
+	local min = tonumber(minRaw)
+	local max = tonumber(maxRaw)
+	if min and max then
+		min = math.max(1, math.floor(min))
+		max = math.max(1, math.floor(max))
+		if max < min then
+			min, max = max, min
+		end
+		return math.random(min, max)
+	end
+	if min then
+		return math.max(1, math.floor(min))
+	end
+	if max then
+		return math.max(1, math.floor(max))
 	end
 	return 1
 end

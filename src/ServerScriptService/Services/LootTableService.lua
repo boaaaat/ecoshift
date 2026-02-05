@@ -79,14 +79,23 @@ local function normalizeEntry(raw)
 	local minTier = raw.MinTier or raw.min_tier or raw.minTier or 1
 	local maxTier = raw.MaxTier or raw.max_tier or raw.maxTier
 	local chance = raw.Chance or raw.chance
+	local minN = math.max(1, math.floor(tonumber(min) or 1))
+	local maxN = math.max(minN, math.floor(tonumber(max) or minN))
+	local chanceN = chance and tonumber(chance) or nil
+	if chanceN then
+		if chanceN > 1 then
+			chanceN = chanceN <= 100 and (chanceN / 100) or 1
+		end
+		chanceN = math.clamp(chanceN, 0, 1)
+	end
 	return {
 		Id = id,
-		Min = math.max(1, math.floor(tonumber(min) or 1)),
-		Max = math.max(1, math.floor(tonumber(max) or min or 1)),
+		Min = minN,
+		Max = maxN,
 		Weight = math.max(0, tonumber(weight) or 0),
 		MinTier = math.max(1, math.floor(tonumber(minTier) or 1)),
 		MaxTier = maxTier and math.floor(tonumber(maxTier) or 0) or nil,
-		Chance = chance and tonumber(chance) or nil,
+		Chance = chanceN,
 	}
 end
 
@@ -212,15 +221,22 @@ local function getTierWeightMult(tbl, tier)
 	return mult
 end
 
-local function eligible(entry, tier)
+local function eligible(entry, tier, rng, allowZeroWeight)
 	if entry.MinTier and tier < entry.MinTier then return false end
 	if entry.MaxTier and tier > entry.MaxTier then return false end
-	if entry.Chance and entry.Chance < 1 then
-		if math.random() > entry.Chance then
+	if entry.Chance ~= nil then
+		local chance = math.clamp(tonumber(entry.Chance) or 0, 0, 1)
+		if chance <= 0 then
+			return false
+		end
+		if chance < 1 and rng:NextNumber() > chance then
 			return false
 		end
 	end
-	return entry.Weight > 0
+	if allowZeroWeight then
+		return true
+	end
+	return (entry.Weight or 0) > 0
 end
 
 local function chooseWeighted(rng, entries)
@@ -249,7 +265,12 @@ function LootTableService:Roll(tableName, tier)
 	local tierMult = getTierWeightMult(tbl, tier)
 
 	for _, entry in ipairs(tbl.Items) do
-		if eligible(entry, tier) then
+		if entry.Guaranteed then
+			if eligible(entry, tier, rng, true) then
+				local count = rng:NextInteger(entry.Min, entry.Max)
+				results[#results + 1] = { Id = entry.Id, N = count }
+			end
+		elseif eligible(entry, tier, rng, false) then
 			local minTier = entry.MinTier or 1
 			local weight = entry.Weight or 1
 			if minTier > 1 then
@@ -288,7 +309,8 @@ function LootTableService:Roll(tableName, tier)
 	end
 	local out = {}
 	for id, count in pairs(merged) do
-		local stackMax = (ItemDatabase:Get(id) and ItemDatabase:Get(id).StackSize) or 99
+		local item = ItemDatabase:Get(id)
+		local stackMax = (item and item.StackSize) or 99
 		local remaining = count
 		while remaining > 0 do
 			local add = math.min(stackMax, remaining)

@@ -1,6 +1,5 @@
 -- EventService.lua (updated with _G hooks)
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
@@ -14,6 +13,8 @@ EventService._remote = Util.GetRemote(EventService._remotesFolder, Config.Remote
 EventService._nextMinor = 0
 EventService._nextMajor = 0
 EventService._active = {Minor=nil, Major=nil}
+EventService._tickInterval = 0.25
+EventService._started = false
 
 local function scheduleWindow(range) return os.clock() + math.random(range[1], range[2]) end
 local function safeFire(remote, evType, id, payload)
@@ -70,9 +71,19 @@ function EventService:_tick()
 	end
 end
 
-RunService.Heartbeat:Connect(function() local ok=pcall(function() EventService:_tick() end) if not ok then end end)
-EventService._nextMinor = scheduleWindow(Config.EVENTS.MinorCadence)
-EventService._nextMajor = scheduleWindow(Config.EVENTS.MajorCadence)
+if not EventService._started then
+	EventService._started = true
+	EventService._nextMinor = scheduleWindow(Config.EVENTS.MinorCadence)
+	EventService._nextMajor = scheduleWindow(Config.EVENTS.MajorCadence)
+	task.spawn(function()
+		while EventService._started do
+			pcall(function()
+				EventService:_tick()
+			end)
+			task.wait(EventService._tickInterval)
+		end
+	end)
+end
 _G.Ecoshift = _G.Ecoshift or {}
 _G.Ecoshift.EventCallbacks = _G.Ecoshift.EventCallbacks or { Start = {}, End = {} }
 _G.Ecoshift.OnEventStartAdd = function(cb) if type(cb) == "function" then table.insert(_G.Ecoshift.EventCallbacks.Start, cb) end end

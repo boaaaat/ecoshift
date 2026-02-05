@@ -183,8 +183,7 @@ Config.BUILD = {
 	},
 }
 
-Config.UI = {
-	UpdateInterval = 0.25,
-}
+Config.UI = Config.UI or {}
+Config.UI.UpdateInterval = 0.25
 
 return Config

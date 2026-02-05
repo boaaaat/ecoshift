@@ -1,6 +1,5 @@
 -- ObjectiveService.lua (updated with _G hooks)
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
@@ -11,9 +10,16 @@ local ObjectiveService = {}
 ObjectiveService._remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
 ObjectiveService._remote = Util.GetRemote(ObjectiveService._remotesFolder, Config.RemoteNames.ObjectiveUpdate)
 ObjectiveService._active = {} -- [id] = {StartedAt, EndsAt, State, Biome, Data}
+ObjectiveService._tickInterval = 0.25
+ObjectiveService._started = false
 
 local function now() return os.clock() end
-local function withinWindow(range) return math.random(range[1], range[2]) end
+local function withinWindow(range)
+	local min = tonumber(range and range[1]) or 60
+	local max = tonumber(range and range[2]) or min
+	if max < min then max = min end
+	return math.random(min, max)
+end
 local function hook(kind, ...)
 	local list = _G.Ecoshift and _G.Ecoshift.ObjectiveCallbacks and _G.Ecoshift.ObjectiveCallbacks[kind]
 	if type(list) == "table" then
@@ -86,13 +92,22 @@ function ObjectiveService:_tick()
 end
 
 function ObjectiveService:Init()
+	if self._started then return end
+	self._started = true
 	self._t0 = now()
 	_G.Ecoshift = _G.Ecoshift or {}
 	_G.Ecoshift.ObjectiveCallbacks = _G.Ecoshift.ObjectiveCallbacks or { Start = {}, End = {}, Progress = {} }
 	_G.Ecoshift.OnObjectiveStartAdd = function(cb) if type(cb) == "function" then table.insert(_G.Ecoshift.ObjectiveCallbacks.Start, cb) end end
 	_G.Ecoshift.OnObjectiveEndAdd = function(cb) if type(cb) == "function" then table.insert(_G.Ecoshift.ObjectiveCallbacks.End, cb) end end
 	_G.Ecoshift.OnObjectiveProgressAdd = function(cb) if type(cb) == "function" then table.insert(_G.Ecoshift.ObjectiveCallbacks.Progress, cb) end end
-	RunService.Heartbeat:Connect(function() local ok=pcall(function() self:_tick() end) if not ok then end end)
+	task.spawn(function()
+		while self._started do
+			pcall(function()
+				self:_tick()
+			end)
+			task.wait(self._tickInterval)
+		end
+	end)
 end
 
 return ObjectiveService

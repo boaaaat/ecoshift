@@ -18,6 +18,7 @@ LootService._chests = {} -- [Instance] = { Id, Tier, Table, Slots }
 LootService._chestById = {}
 LootService._openByPlayer = {} -- [player] = chestId
 LootService._monsterConns = setmetatable({}, { __mode = "k" })
+LootService._chestCleanupConns = setmetatable({}, { __mode = "k" })
 
 local CHEST_TAGS = {
 	Common_Chest = 1,
@@ -32,6 +33,9 @@ local MONSTER_TAGS = {
 	Legendary_Monster = 3,
 	Celestial_Monster = 4,
 }
+
+local PROMPT_BOUND_ATTR = "LootServiceBound"
+local DROP_RNG = Random.new()
 
 local function getTierFromTags(instance, map)
 	for tag, tier in pairs(map) do
@@ -113,6 +117,24 @@ function LootService:_ensureChestData(chest)
 	return data
 end
 
+function LootService:_clearChestData(chest)
+	local data = self._chests[chest]
+	if data and data.Id then
+		self._chestById[data.Id] = nil
+		for plr, openChestId in pairs(self._openByPlayer) do
+			if openChestId == data.Id then
+				self._openByPlayer[plr] = nil
+			end
+		end
+	end
+	self._chests[chest] = nil
+	local conn = self._chestCleanupConns[chest]
+	if conn then
+		conn:Disconnect()
+		self._chestCleanupConns[chest] = nil
+	end
+end
+
 function LootService:_sendChest(plr, chest)
 	local data = self:_ensureChestData(chest)
 	local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
@@ -152,6 +174,15 @@ local function attachChestPrompt(chest)
 		prompt.RequiresLineOfSight = false
 		prompt.Parent = part
 	end
+	prompt.ActionText = "Open"
+	prompt.ObjectText = chest.Name
+	prompt.HoldDuration = 0.2
+	prompt.MaxActivationDistance = 10
+	prompt.RequiresLineOfSight = false
+	if prompt:GetAttribute(PROMPT_BOUND_ATTR) then
+		return
+	end
+	prompt:SetAttribute(PROMPT_BOUND_ATTR, true)
 	prompt.Triggered:Connect(function(plr)
 		LootService:_sendChest(plr, chest)
 	end)
@@ -159,6 +190,16 @@ end
 
 function LootService:_bindChest(chest)
 	if not chest or not chest.Parent then return end
+	if not self._chestCleanupConns[chest] then
+		local ok, conn = pcall(function()
+			return chest.Destroying:Connect(function()
+				self:_clearChestData(chest)
+			end)
+		end)
+		if ok and conn then
+			self._chestCleanupConns[chest] = conn
+		end
+	end
 	PromptQueueService:Enqueue(function()
 		attachChestPrompt(chest)
 	end)
@@ -178,9 +219,9 @@ local function dropLoot(model, tier, tableName, destroyModel)
 	local height = tonumber(cfg.DropHeight) or 2
 	for _, item in ipairs(items) do
 		local offset = Vector3.new(
-			math.random() * spread - spread * 0.5,
+			DROP_RNG:NextNumber() * spread - spread * 0.5,
 			height,
-			math.random() * spread - spread * 0.5
+			DROP_RNG:NextNumber() * spread - spread * 0.5
 		)
 		ItemDropService:SpawnDrop(item.Id, item.N, pos + offset)
 	end

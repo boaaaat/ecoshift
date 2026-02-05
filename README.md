@@ -1,538 +1,310 @@
-# Ecoshift – Systems Guide
+# Ecoshift Developer Guide
 
-This README explains **every system** in the project and how to use/extend it. It’s written for editing the game’s systems while leaving content (items/biomes/etc.) flexible.
-
----
+This guide is for developers extending game systems and content in this repo.
 
 ## Quick Start
 
-1) **Required folders (ServerStorage)**
-- `ResourcePrefabs/<BiomeName>/...` (resources)
-- `StructurePrefabs/<BiomeName>/...`
-- `PropPrefabs/<BiomeName>/...`
-- `ObjectivePrefabs/<BiomeName>/...`
-- `EnemyPrefabs/<BiomeName>/...` (AI enemies)
-- `GameItems/<ItemId>` (pickup models for drops)
-- `Tools/Harvester` (tool template; contains Damage/Range/Cooldown)
-- `LootTables/<TableName>` (ModuleScripts that return loot table data)
+1. Open the project in Roblox Studio with this source synced.
+2. Ensure required `ServerStorage` folders exist:
+   - `ResourcePrefabs/<BiomeName>`
+   - `PropPrefabs/<BiomeName>`
+   - `StructurePrefabs/<BiomeName>`
+   - `ObjectivePrefabs/<BiomeName>`
+   - `EnemyPrefabs/<BiomeName>`
+   - `GameItems/<ItemId>` (optional visual drop models)
+   - `Tools/<ItemId>` (for holdable tools/weapons)
+   - `BuildPrefabs/<BuildType>` (for placeable structures)
+   - `LootTables/<TableName>` (ModuleScript or folder-style table)
+3. Start the game. `src/ServerScriptService/ServerMain.lua` boots services by tier.
 
-2) **Run** Studio; `ServerMain.server.lua` boots all services.
+## Project Layout
 
-3) **Customize** biomes in `WorldGen/BiomeConfig.lua` and entities in `AI/EntityConfig.lua`.
+- Server services: `src/ServerScriptService/Services`
+- Shared configs/data: `src/ReplicatedStorage/Shared`
+- World generation: `src/ServerScriptService/WorldGen`, `src/ReplicatedStorage/Shared/BiomeConfig.lua`
+- AI config: `src/ServerScriptService/AI/EntityConfig.lua`
+- Client UIs/scripts: `src/StarterPlayer/StarterPlayerScripts`
 
----
+## Core System Map
 
-## World Generation
+- Biomes and world shift: `BiomeService`
+- Terrain slab generation: `TerrainService`
+- Dynamic chunk loading/world content: `ChunkStreamingService`
+- Legacy full-world generation: `WorldGen/BiomeGenerator.lua`
+- Loot tables and drops: `LootTableService`, `LootService`, `ItemDropService`
+- Objectives: `ObjectiveService`, `ObjectiveRuntimeService`
+- Inventory and item actions: `InventoryService`, `InventoryActionService`
+- Crafting and stations: `CraftingService`, `Shared/WorkbenchConfig.lua`
+- Building placement: `BuildService`, `GridService`
+- Enemy wave planning and AI: `SpawnService`, `SpawnerOrchestrator`, `EntityAIService`, `AI/EntityConfig.lua`
+- Match pressure loops: `ThreatService`, `EventService`, `StatusService`
 
-### BiomeGenerator
-**File:** `src/ServerScriptService/WorldGen/BiomeGenerator.lua` (ModuleScript)
+## Creating New Items
 
-**Purpose:** Creates the 2D world with regions, resources, props, structures, objectives, and enemies. No overlap; ignores center exclusion radius; generates in steps to reduce lag.
+### 1. Define item data
 
-**How to use:**
-- Edit `WorldGen/BiomeConfig.lua`:
-  - `world_radius`, `chunk_size`, `max_chunks`, `center_exclusion_radius`.
-  - `spawn_enemies = false` to rely on the Spawn Orchestrator instead of worldgen enemy placement.
-  - `biomes` table: regions, resources, props, structure/objective probability.
-- Set `use_entity_config_enemies = true` to use `AI/EntityConfig.lua` for enemy spawning.
-- Each region definition controls resource/prop/enemy counts and sizes.
-- Each prefab can include a `NumberValue` named `Offset` to adjust Y placement.
+Edit `src/ReplicatedStorage/Shared/Items/ItemDatabase.lua` and add a definition to `raw`:
 
-### BiomeConfig
-**File:** `src/ServerScriptService/WorldGen/BiomeConfig.lua`
+```lua
+{ Id = "CopperOre", Name = "Copper Ore", StackSize = 99, Tags = { "Resource", "Ore" } },
+```
 
-**Purpose:** Main generation tuning + biome data.
+Important fields:
+- `Id`: canonical identifier used everywhere.
+- `Name`: display text.
+- `StackSize`: max stack.
+- `Tags`: behavior hints (`Tool`, `Weapon`, `Armor`, `Holdable`, `Placeable`, etc).
 
-**How to use:**
-- Add/remove biomes and regions.
-- Configure `structure_count`/`objective_count` as **probability per chunk** (max 1 per chunk).
-- Configure `resource_count`, `prop_count`, `enemy_count` as min/max ranges.
+### 2. Optional icon
 
-### WorldGenController
-**File:** `src/ServerScriptService/Services/WorldGenController.lua`
+`ItemDatabase` resolves icons from `ReplicatedStorage/ItemIcons/<ItemId>` if present.
 
-**Purpose:** Calls BiomeGenerator, handles re-generation and informs other systems.
+### 3. Optional world drop model
 
-**How to use:**
-- Called by `ServerMain`. You can trigger regeneration or rescan logic here.
+If you want a custom pickup model when dropped/looted, add:
+- `ServerStorage/GameItems/<ItemId>` (Model)
 
-### TerrainService
-**File:** `src/ServerScriptService/Services/TerrainService.lua`
+If missing, the game spawns a fallback part.
 
-**Purpose:** Creates a base Terrain slab (size = world) and paints material to match current biome.
+### 4. Optional equippable tool/weapon
 
-**How to use:**
-- Edit materials in `Shared/Config.lua` under `Config.TERRAIN.MaterialByBiome`.
+If item has `Holdable` tag and should equip, create:
+- `ServerStorage/Tools/<ItemId>` (Tool)
 
----
+`ToolService` syncs tools from inventory into backpack/character.
 
-## Grid & Building
+### 5. Optional placeable structure/station
 
-### GridService
-**File:** `src/ServerScriptService/Services/GridService.lua`
+For placeable content (like `Chest`, `Workbench`):
+- Add item entry with `Placeable` tag.
+- Add build type in `Config.BUILD.AllowedTypes` and `Config.BUILD.PlaceableItems`.
+- Add prefab at `ServerStorage/BuildPrefabs/<BuildType>`.
 
-**Purpose:** Grid placement logic for building and snapping.
+## Creating Loot Tables
 
-**How to use:**
-- Edit grid size in `Shared/Config.lua` → `Config.GRID.Size`.
-- Used by BuildService to validate placement.
+Loot tables live in `ServerStorage/LootTables` and are rolled by `LootTableService`.
 
-### BuildService
-**File:** `src/ServerScriptService/Services/BuildService.lua`
+### ModuleScript format (recommended)
 
-**Purpose:** Build placement, validation, and decay/biome interactions.
+```lua
+return {
+  Rolls = { min = 2, max = 4 },
+  Unique = false,
+  TierWeightMult = {
+    [1] = 1.0,
+    [2] = 1.35,
+    [3] = 1.75,
+    [4] = 2.2,
+  },
+  Guaranteed = {
+    { Id = "Wood", Min = 1, Max = 3 },
+  },
+  Items = {
+    { Id = "Stone", Min = 1, Max = 2, Weight = 10, MinTier = 1 },
+    { Id = "Diamond", Min = 1, Max = 1, Weight = 1, MinTier = 3, Chance = 0.2 },
+  },
+}
+```
 
-**How to use:**
-- Clients request builds via remote `Build`.
-- On biome change, BuildService performs decay/cleanup (if enabled).
+Entry fields:
+- `Id`
+- `Min` / `Max`
+- `Weight`
+- `MinTier` / `MaxTier`
+- `Chance` (0-1, or 0-100 percent)
 
----
+Table fields:
+- `Rolls` (number or `{min,max}`)
+- `Unique` / `AllowDuplicates`
+- `Guaranteed` (always rolled, still tier/chance-gated)
 
-## Inventory & Items
+### Folder format
 
-### Items OOP
-**Files:**
-- `src/ReplicatedStorage/Shared/Items/Item.lua`
+You can also use folder/config objects under `LootTables`:
+- Table-level values: `Rolls`, `MinRolls`, `MaxRolls`, `Unique`
+- Child folders/configurations per item with `Min`, `Max`, `Weight`, `MinTier`, `MaxTier`
+
+### Binding tables to world entities
+
+`LootService` chooses table names from:
+- `LootTable` or `LootTableName` attribute
+- `LootTable` or `LootTableName` StringValue
+- fallback to `Config.LOOT.DefaultTable`
+
+Chest tier tags:
+- `Common_Chest`, `Rare_Chest`, `Legendary_Chest`, `Celestial_Chest`
+
+Monster tier tags:
+- `Common_Monster`, `Rare_Monster`, `Legendary_Monster`, `Celestial_Monster`
+
+Generic `Monster` tagged entities only drop loot when they have an explicit loot table name.
+
+## Creating Objectives
+
+### 1. Register objective IDs
+
+Edit `src/ReplicatedStorage/Shared/Config.lua`:
+- `Config.OBJECTIVES.Pool`
+- `Config.OBJECTIVES.DurationSeconds`
+- `Config.OBJECTIVES.MaxConcurrent`
+
+Example:
+
+```lua
+Config.OBJECTIVES.Pool = {
+  { Id = "RelayRepair", MinMinute = 0 },
+  { Id = "StormBeacon", MinMinute = 5 },
+}
+```
+
+### 2. Place objective anchors
+
+`ObjectiveRuntimeService` scans `Workspace/Objectives` for BaseParts where:
+- `ObjectiveId` attribute equals your objective ID, or
+- part `Name` equals objective ID.
+
+When objective starts, prompts are enabled on matching anchors.
+
+### 3. Progress behavior
+
+Default runtime prompt contributes `0.2` progress per trigger.
+Adjust this in:
+- `src/ServerScriptService/Services/ObjectiveRuntimeService.lua`
+
+You can also progress objectives from custom interactions:
+- Send `Interact` remote with action `ObjectiveProgress`
+- Payload: `{ ObjectiveId = "StormBeacon", Delta = 0.1 }`
+
+### 4. Lifecycle hooks
+
+`ObjectiveService` publishes global callbacks:
+- `_G.Ecoshift.OnObjectiveStartAdd(fn)`
+- `_G.Ecoshift.OnObjectiveProgressAdd(fn)`
+- `_G.Ecoshift.OnObjectiveEndAdd(fn)`
+
+Use these to award rewards, spawn waves, update UI logic, etc.
+
+## Terrain and World Generation
+
+### Terrain slab
+
+`TerrainService` currently creates one flat terrain block per biome generation.
+Material is selected from:
+- `src/ReplicatedStorage/Shared/BiomeConfig.lua`
+- `Config.TERRAIN.MaterialByBiome[BiomeName]`
+
+World dimensions come from:
+- `Config.WORLD.WorldRadius`
+- `Config.WORLD.BaseY`
+- `Config.TERRAIN.Thickness`
+
+### Streaming chunk generation (default)
+
+Enabled by default via `BiomeConfig.use_streaming = true`.
+`ChunkStreamingService` loads chunks around players and unloads distant chunks.
+
+Important config keys in `BiomeConfig.lua`:
+- `chunk_size`
+- `stream_load_radius`
+- `stream_unload_radius`
+- `stream_update_interval`
+- `stream_unload_delay`
+- `world_radius`
+- `center_exclusion_radius`
+
+Per-biome content config (`Config.biomes[BiomeName]`):
+- `region_count`
+- `regions[]` with `resource_count`, `prop_count`, `enemy_count`
+- `structures` + `structure_count` (probability per chunk)
+- `objectives` + `objective_count` (probability per chunk)
+- `chests` + `chest_count` (probability per chunk)
+
+Distance-based scaling is supported with `DistanceWeight` on entries.
+
+### Legacy full-world generation
+
+If you set `use_streaming = false`, `WorldGenController` uses `WorldGen/BiomeGenerator.lua` to generate full map content up front.
+
+## Biomes, Threat, Events, and Spawning
+
+### Biome rotation
+
+`BiomeService` rotates active biome using:
+- `BiomeConfig.BIOME_SHIFT.MinSeconds`
+- `BiomeConfig.BIOME_SHIFT.MaxSeconds`
+- weighted `BiomeConfig.BIOMES`
+
+### Threat and dynamic pressure
+
+`ThreatService` raises/lower threat over time and objective outcomes.
+`SpawnService` uses threat + player count + biome tables to compute wave requests.
+
+### Enemy definitions
+
+Edit `src/ServerScriptService/AI/EntityConfig.lua`:
+- `Entities[Id].AI`
+- `Entities[Id].Spawn`
+- `EnemyWaves.Tables`
+
+Enemy spawn tuning supports:
+- `Weight`, `TimeScaledWeight`
+- `DistanceWeight`
+- `MinDistance`, `MaxDistance`
+- `GroupSize`, `GroupRadius`
+- `MaxPerWave`
+
+## Crafting, Building, Inventory
+
+### Crafting recipes and stations
+
+Primary recipe source:
+- `src/ReplicatedStorage/Shared/WorkbenchConfig.lua`
+
+Recipe supports:
+- `Ingredients`
+- `Output`
+- `StationTier` or `StationType`
+- `Category`
+
+Station metadata in `WorkbenchConfig.STATIONS` controls interaction radius and tier.
+
+### Building
+
+`BuildService` validates placement through `GridService` and world bounds from `BiomeConfig.WORLD`.
+
+If build type is in `Config.BUILD.PlaceableItems`, placement consumes an inventory item.
+Otherwise it uses `Config.BUILD.Costs` resource costs.
+
+### Inventory
+
+`InventoryService` is authoritative for slot state and stacking.
+`InventoryActionService` handles remote actions (`Move`, `Split`, `Equip`).
+
+## End-to-End Example: Add a New Biome Resource Loop
+
+1. Add new item IDs in `ItemDatabase.lua`.
+2. Add resource prefabs to `ServerStorage/ResourcePrefabs/<BiomeName>`.
+3. Reference those prefab names in `BiomeConfig.lua` under `biomes.<Biome>.regions[].resources`.
+4. Add crafting recipes in `WorkbenchConfig.RECIPES` that consume the new resources.
+5. Add loot table entries in `ServerStorage/LootTables` so chests/monsters can drop them.
+6. If needed, add `ServerStorage/GameItems/<ItemId>` and `ServerStorage/Tools/<ItemId>` models.
+
+## Common Pitfalls
+
+- Item IDs must match exactly across `ItemDatabase`, recipes, loot tables, prefabs, and tool names.
+- If chest prompt appears but no loot, verify chest has valid loot table reference or `Default` table exists.
+- If objective prompts never appear, confirm anchor is in `Workspace/Objectives` and `ObjectiveId` matches `Config.OBJECTIVES.Pool` entry.
+- If terrain/world looks empty in streaming mode, verify prefab folder names and biome subfolder names match biome IDs.
+- If a holdable item will not equip, confirm it has `Holdable` tag and matching `ServerStorage/Tools/<ItemId>` tool.
+
+## Files You Will Edit Most
+
 - `src/ReplicatedStorage/Shared/Items/ItemDatabase.lua`
-
-**Purpose:** Item definitions (id, name, icon, max stack). Easy to extend.
-
-**How to use:**
-- Add item entries in `ItemDatabase` with `Id`, `Name`, `Icon`, `MaxStack`.
-- Items referenced by `Id` in loot tables, resource drops, crafting, etc.
-
-### InventoryService
-**File:** `src/ServerScriptService/Services/InventoryService.lua`
-
-**Purpose:** Server-side inventory data + stack logic. Supports hotbar, storage, armor.
-
-**How to use:**
-- `Give(player, itemId, count)` to add items.
-- `Move` handles drag/drop + stacking (same item stacks).
-- Supports `Split` and direct slot adds (`TryAddToSlot`).
-
-### InventoryActionService
-**File:** `src/ServerScriptService/Services/InventoryActionService.lua`
-
-**Purpose:** Remote actions from UI (move, split, equip, drop, etc.).
-
-**How to use:**
-- Client fires `InventoryAction` with actions.
-- Service validates and applies to InventoryService.
-
-### Inventory UI
-**File:** `src/StarterPlayer/StarterPlayerScripts/InventoryUI.client.lua`
-
-**Purpose:** Client inventory UI (hotbar 1–4, storage 10, armor slot). Drag & drop, shift-click, right-click menu.
-
-**How to use:**
-- Customize layout and styling here.
-- Shift-click: moves between hotbar/storage.
-- Right-click: menu for Drop/Split.
-
-### ArmorService
-**File:** `src/ServerScriptService/Services/ArmorService.lua`
-
-**Purpose:** Equip/unequip armor slot and apply stats.
-
-**How to use:**
-- Any item in armor slot triggers equip logic.
-
-### ToolService
-**File:** `src/ServerScriptService/Services/ToolService.lua`
-
-**Purpose:** Manages tools in inventory, equips, and syncs to character.
-
-**How to use:**
-- Tools are cloned from `ServerStorage/Tools`.
-
----
-
-## Harvesting & Resources
-
-### ResourceService
-**File:** `src/ServerScriptService/ResourceService.lua`
-
-**Purpose:** Core harvesting logic (health-based + tool damage). Sends harvest feedback UI.
-
-**How to use:**
-- **Resource prefab values**:
-  - `Health` (int): hits required.
-  - `Duration` (float): hold prompt; auto-add item to inventory.
-  - `DropItemId` / `DropCount` or `DropMin`/`DropMax`.
-  - `Weakness` (tool type for bonus damage).
-- Tool stats are read from tool values (`Damage`, `Range`, `Cooldown`).
-
-### ResourceNodeService
-**File:** `src/ServerScriptService/Services/ResourceNodeService.lua`
-
-**Purpose:** Adds ProximityPrompts to duration resources in **batches**.
-
-**How to use:**
-- Rate limit controlled by `Config.PROMPTS.MaxPerSecond`.
-
-### HarvestingManager
-**File:** `src/ServerScriptService/HarvestingManager.lua`
-
-**Purpose:** Legacy interface and logging for harvest requests.
-
-### Harvester Tool
-**ServerStorage:** `Tools/Harvester`
-
-**How to use:**
-- Must have `Damage`, `Range`, `Cooldown` values.
-- Starter items spawn this tool in hotbar slot 1.
-
-### Harvester Client
-**File:** `src/StarterPlayer/StarterPlayerScripts/HarvesterClient.client.lua`
-
-**Purpose:** Handles click/hold harvesting, sends requests to server, debug prints.
-
----
-
-## Loot & Chests
-
-### LootTableService
-**File:** `src/ServerScriptService/Services/LootTableService.lua`
-
-**Purpose:** Rolls loot from `ServerStorage/LootTables` ModuleScripts.
-
-**How to use:**
-- Loot table format:
-  ```lua
-  return {
-    Rolls = { min = 2, max = 5 },
-    TierWeightMult = { [1]=1.0, [2]=1.35, [3]=1.75, [4]=2.2 },
-    Items = {
-      { Id = "Wood", Min = 1, Max = 3, Weight = 10, MinTier = 1 },
-      { Id = "RareGem", Min = 1, Max = 1, Weight = 1, MinTier = 3 },
-    },
-  }
-  ```
-
-### LootService
-**File:** `src/ServerScriptService/Services/LootService.lua`
-
-**Purpose:**
-- Adds prompts to chests via CollectionService tags.
-- Opens chest UI and syncs chest contents.
-- Handles monster loot drops on death.
-
-**How to use:**
-- Tag chests with:
-  - `Common_Chest`, `Rare_Chest`, `Legendary_Chest`, `Celestial_Chest`.
-- Tag monsters with:
-  - `Common_Monster`, `Rare_Monster`, `Legendary_Monster`, `Celestial_Monster`.
-- Set `LootTable` attribute or StringValue on chest/monster.
-
-### Chest UI
-**File:** `src/StarterPlayer/StarterPlayerScripts/ChestUI.client.lua`
-
-**Purpose:** Shows chest inventory; drag into player inventory; shift-click support.
-
----
-
-## Drops & Pickups
-
-### ItemDropService
-**File:** `src/ServerScriptService/Services/ItemDropService.lua`
-
-**Purpose:** Spawns pickup items from `ServerStorage/GameItems`.
-
-### DropItemService
-**File:** `src/ServerScriptService/Services/DropItemService.lua`
-
-**Purpose:** Handles player “Drop” actions from inventory UI.
-
----
-
-## AI System (Monsters + Animals)
-
-### EntityConfig (central AI + spawn config)
-**File:** `src/ServerScriptService/AI/EntityConfig.lua`
-
-**Purpose:** One place to define **AI tuning + spawn rules**.
-
-**How to use:**
-- Add new entities under `EntityConfig.Entities`:
-  - `Type = "Monster" | "Animal"`
-  - `AIClass = "Wolf"` (custom AI module name)
-  - `AI = { ... }` (detection, damage, speed, etc.)
-  - `Spawn = { Weight, TimeScaledWeight, GroupSize, Biomes = { ... } }`
-
-### Entity AI Runtime
-**Files:**
-- `src/ServerScriptService/Services/EntityAIService.lua`
-- `src/ServerScriptService/AI/EntityBase.lua`
-- `src/ServerScriptService/AI/Monster.lua`
-- `src/ServerScriptService/AI/Animal.lua`
-- `src/ServerScriptService/AI/Wolf.lua`
-
-**Purpose:** Pathfinding, detection (angle + distance), auto detect radius, target selection by priority, attack ranges.
-
-**How to use:**
-- Tag monsters with `Monster` and animals with `Animal` (auto-tagged by worldgen/spawner).
-- Set attributes or values on models to override config.
-- Add custom AI by creating a module in `AI/` and setting `AIClass`.
-
-**Wolf example:**
-- Spawns in Forest; extra weight in `ThickGrove` region.
-- Pack boosts speed/attack.
-
----
-
-## Enemy Spawning
-
-### SpawnService
-**File:** `src/ServerScriptService/Services/SpawnService.lua`
-
-**Purpose:** Builds enemy wave IDs based on biome and threat.
-
-**How to use:**
-- Edit `EntityConfig.EnemyWaves` in `AI/EntityConfig.lua`.
-- `Config.BIOMES[biome].enemyTables` decides which table(s) are active per biome.
-- Currently only Wolf spawns in Forest.
-
-**Spawn points:**\n- If `Workspace/EnemySpawns` is empty, SpawnService auto-creates invisible spawn points.\n- Tune count/radius in `EntityConfig.SpawnPoints` in `AI/EntityConfig.lua`.
-
-### EnemySpawner
-**Files:**
-- `src/ServerScriptService/EnemySpawner.lua`
-- `src/ServerScriptService/Services/EnemySpawner.lua`
-
-**Purpose:** Places enemy prefabs in world using spawn points and safe raycast.
-
-**How to use:**
-- Ensure enemy prefabs exist in ServerStorage.
-- Spawner auto-tags new enemies for AI.
-
-### SpawnerOrchestrator
-**File:** `src/ServerScriptService/Services/SpawnerOrchestrator.lua`
-
-**Purpose:** Requests waves from SpawnService and triggers EnemySpawner callbacks.
-
----
-
-## Biome Shifts & Game Loop
-
-### BiomeService
-**File:** `src/ServerScriptService/Services/BiomeService.lua`
-
-**Purpose:** Stores and broadcasts current biome; used by other services.
-
-### GameLoopService
-**File:** `src/ServerScriptService/Services/GameLoopService.lua`
-
-**Purpose:** Cycles core loop; handles biome shift timings.
-
-### DayNightService
-**File:** `src/ServerScriptService/Services/DayNightService.lua`
-
-**Purpose:** Tracks time-of-day, broadcasts to clients, and applies night multipliers.
-
-### RoundService / GameStateService
-**Files:**
-- `src/ServerScriptService/Services/RoundService.lua`
-- `src/ServerScriptService/Services/GameStateService.lua`
-
-**Purpose:** Round lifecycle and match state.
-
----
-
-## Objectives & Events
-
-### ObjectiveService + Runtime
-**Files:**
+- `src/ReplicatedStorage/Shared/WorkbenchConfig.lua`
+- `src/ReplicatedStorage/Shared/Config.lua`
+- `src/ReplicatedStorage/Shared/BiomeConfig.lua`
+- `src/ServerScriptService/AI/EntityConfig.lua`
+- `src/ServerScriptService/Services/LootTableService.lua`
 - `src/ServerScriptService/Services/ObjectiveService.lua`
 - `src/ServerScriptService/Services/ObjectiveRuntimeService.lua`
-- `src/ServerScriptService/Services/ObjectiveBootstrap.lua`
-
-**Purpose:** Chooses objectives, spawns, tracks completion.
-
-### EventService + Effects
-**Files:**
-- `src/ServerScriptService/Services/EventService.lua`
-- `src/ServerScriptService/Services/EventEffectsService.lua`
-
-**Purpose:** Random events (meteor, fog, etc.) and world effects.
-
-### ThreatService
-**File:** `src/ServerScriptService/Services/ThreatService.lua`
-
-**Purpose:** Threat scaling over time; used for wave strength.
-
----
-
-## Roles, Combat, Status
-
-### RoleService
-**File:** `src/ServerScriptService/Services/RoleService.lua`
-
-**Purpose:** Assigns player roles and multipliers (gather, combat, build).
-
-### CombatService
-**File:** `src/ServerScriptService/Services/CombatService.lua`
-
-**Purpose:** Handles weapon actions, damage validation, and shield blocking.
-
-**Weapon System (new):**
-- Weapons are **Tools** with **ValueBase children** (NumberValue/IntValue/StringValue).  
-- Required child values by type:
-  - **Sword**: `WeaponType = "Sword"`, `Damage`, `Range`, `AttackSpeed`
-  - **Bow**: `WeaponType = "Bow"`, `Damage`, `ProjectileSpeed`, `ChargeTime`
-  - **Gun**: `WeaponType = "Gun"`, `Damage`, `FireRate`, `Ammo`, `MaxAmmo`
-  - **Shield**: `WeaponType = "Shield"`, `Durability`, `BlockPercent`
-  - **Throwable**: `WeaponType = "Throwable"`, `Damage`, `ThrowSpeed`, `ThrowTime`
-
-**Base classes (extendable):**
-- `ReplicatedStorage/Shared/Weapons/Sword.lua`
-- `ReplicatedStorage/Shared/Weapons/Bow.lua`
-- `ReplicatedStorage/Shared/Weapons/Gun.lua`
-- `ReplicatedStorage/Shared/Weapons/Shield.lua`
-- `ReplicatedStorage/Shared/Weapons/Throwable.lua`
-
-### StatusService
-**File:** `src/ServerScriptService/Services/StatusService.lua`
-
-**Purpose:** Buff/debuff and status management.
-
----
-
-## Crafting
-
-### CraftingService + Bootstrap
-**Files:**
-- `src/ServerScriptService/Services/CraftingService.lua`
-- `src/ServerScriptService/Bootstrap/CraftingBootstrap.lua`
-- `src/StarterPlayer/StarterPlayerScripts/CraftingUI.client.lua`
-
-**Purpose:** Workbench crafting, recipe validation, UI.
-
-**How to use:**
-- Recipes live in `Shared/Config.lua` under `Config.RECIPES`.
-
----
-
-## Persistence
-
-### ProfileService
-**File:** `src/ServerScriptService/Services/ProfileService.lua`
-
-**Purpose:** DataStore persistence for player profiles/inventory.
-
-**How to use:**
-- Configure store name in `Shared/Config.lua` → `Config.DATASTORE`.
-
----
-
-## UI & Client Systems
-
-### MainHUD
-**File:** `src/StarterPlayer/StarterPlayerScripts/MainHUD.client.lua`
-
-**Purpose:** Shows biome, time, role, and buttons.
-
-### Inventory UI
-**File:** `src/StarterPlayer/StarterPlayerScripts/InventoryUI.client.lua`
-
-**Purpose:** Inventory interface, hotbar, armor slot, drag‑swap, shift click, right‑click menu.
-
-### Chest UI
-**File:** `src/StarterPlayer/StarterPlayerScripts/ChestUI.client.lua`
-
-**Purpose:** Looting interface for chests.
-
-### HarvestFeedback UI
-**File:** `src/StarterPlayer/StarterPlayerScripts/HarvestFeedbackUI.client.lua`
-
-**Purpose:** Damage numbers + linear health bar feedback for harvesting.
-
-### DayNightClient
-**File:** `src/StarterPlayer/StarterPlayerScripts/DayNightClient.client.lua`
-
-**Purpose:** Client side day/night visuals.
-
----
-
-## Bootstrapping
-
-### ServerMain
-**File:** `src/ServerScriptService/ServerMain.lua`
-
-**Purpose:** Initializes all services in priority tiers.
-
-### RemotesBootstrap
-**File:** `src/ServerScriptService/RemotesBootstrap.server.lua`
-
-**Purpose:** Creates RemoteEvents under `ReplicatedStorage/Remotes`.
-
-### WorldFoldersBootstrap
-**File:** `src/ServerScriptService/WorldFoldersBootstrap.server.lua`
-
-**Purpose:** Ensures key Workspace folders exist (Resources, Objectives, etc.).
-
-### PlayerBootstrap
-**File:** `src/ServerScriptService/PlayerBootstrap.lua`
-
-**Purpose:** Sets starter inventory, role defaults, and hooks player events.
-
----
-
-## Other Systems & Utilities
-
-### ChunkStreamingService (optional)
-**File:** `src/ServerScriptService/Services/ChunkStreamingService.lua`
-
-**Purpose:** Experimental runtime chunk loading/unloading around players.
-
-**How to use:**\n- Not currently initialized in `ServerMain`. Add to init list if you want streaming.\n- Config reads from `WorldGen/BiomeConfig.lua` (stream_* settings).
-
-### AIService (legacy)
-**File:** `src/ServerScriptService/Services/AIService.lua`
-
-**Purpose:** Old targeting helper; kept for compatibility.
-
-### InteractService
-**File:** `src/ServerScriptService/Services/InteractService.lua`
-
-**Purpose:** Handles generic interaction remote (`Interact`).
-
-### RewardsObserver
-**File:** `src/ServerScriptService/Services/RewardsObserver.lua`
-
-**Purpose:** Grants rewards + XP on objective completion.
-
-### WorldBuilder (placeholder)
-**File:** `src/ServerScriptService/Services/WorldBuilder.lua`
-
-**Purpose:** Placeholder for future terrain/material passes.
-
-### WorldGenServer (bootstrap)
-**File:** `src/ServerScriptService/WorldGenServer.lua`
-
-**Purpose:** Convenience bootstrap for WorldGenController (not required if using `ServerMain`).
-
-### Utilities / Adapters
-**Files:**\n- `src/ReplicatedStorage/Shared/Util.lua`\n- `src/ReplicatedStorage/Shared/InventoryAdapter.lua`\n- `src/ReplicatedStorage/Modules/ToolConfig.lua`
-
-**Purpose:**\n- `Util`: helpers (weighted choice, remote lookup, waits).\n- `InventoryAdapter`: thin adapter for services wanting inventory access.\n- `ToolConfig`: reads tool stats (Damage/Range/Cooldown/ToolType).
-
----
-
-## Adding New Content (Summary)
-
-- **New biome:** edit `WorldGen/BiomeConfig.lua` and add matching prefab folders under ServerStorage.
-- **New resource/prop/structure:** place prefab under matching biome folder, add to region lists.
-- **New enemy/animal:**
-  1) Add prefab under `ServerStorage/EnemyPrefabs/<BiomeName>`.
-  2) Add entry in `AI/EntityConfig.lua` with Spawn rules.
-  3) (Optional) Add custom AI module and set `AIClass`.
-- **New item:** add to `Shared/Items/ItemDatabase.lua` and create `GameItems/<Id>` model for pickups.
-- **New loot table:** add ModuleScript under `ServerStorage/LootTables`.
-
----
-
-## Notes
-
-- Only **Wolf** spawns for now (forest only). Update `Shared/Config.lua` and `AI/EntityConfig.lua` to add more monsters later.
-- Most systems are modular; you can disable them by removing or no‑op’ing the service `Init/Bind` calls in `ServerMain`.
+- `src/ServerScriptService/Services/ChunkStreamingService.lua`

@@ -1,21 +1,18 @@
 -- ServerMain.server.lua
--- OPTIMIZED: Parallel initialization with priority tiers
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+-- Boots core services in tiers and exposes global gameplay helpers.
 local Players = game:GetService("Players")
 
--- Lazy-load services to avoid blocking at require time
 local Services = script.Parent.Services
-local function lazyRequire(name)
-	return function()
-		return require(Services:FindFirstChild(name))
-	end
-end
 
--- Service references (loaded on-demand)
 local _services = {}
 local function getService(name)
 	if not _services[name] then
-		_services[name] = require(Services:FindFirstChild(name))
+		local module = Services:FindFirstChild(name)
+		if not module then
+			warn("[ServerMain] Missing service module:", name)
+			return nil
+		end
+		_services[name] = require(module)
 	end
 	return _services[name]
 end
@@ -57,11 +54,12 @@ local tier3Services = {
 
 -- Initialize services in parallel batches
 local function initTier(services, initMethod)
-	local threads = {}
+	local remaining = 0
 	for _, entry in ipairs(services) do
 		local name = type(entry) == "string" and entry or entry.name
 		local method = type(entry) == "table" and entry.method or initMethod
-		threads[#threads + 1] = task.spawn(function()
+		remaining += 1
+		task.spawn(function()
 			local ok, err = pcall(function()
 				print("[ServerMain] Loading service:", name)
 				local svc = getService(name)
@@ -75,13 +73,11 @@ local function initTier(services, initMethod)
 			if not ok then
 				warn("[ServerMain] Failed to init " .. name .. ": " .. tostring(err))
 			end
+			remaining -= 1
 		end)
 	end
-	-- Wait for all tier threads
-	for _, t in ipairs(threads) do
-		if coroutine.status(t) ~= "dead" then
-			task.wait()
-		end
+	while remaining > 0 do
+		task.wait()
 	end
 end
 

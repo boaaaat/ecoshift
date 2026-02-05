@@ -7,6 +7,9 @@ local PromptQueueService = require(script.Parent.PromptQueueService)
 
 local ObjectiveRuntimeService = {}
 ObjectiveRuntimeService._activePrompts = {}
+ObjectiveRuntimeService._promptConns = setmetatable({}, { __mode = "k" })
+ObjectiveRuntimeService._promptObjective = setmetatable({}, { __mode = "k" })
+ObjectiveRuntimeService._initialized = false
 
 local function findAnchors(objectiveId)
 	local folder = Workspace:FindFirstChild("Objectives")
@@ -28,17 +31,25 @@ local function attachPrompt(part, objectiveId)
 	local prompt = part:FindFirstChildOfClass("ProximityPrompt")
 	if not prompt then
 		prompt = Instance.new("ProximityPrompt")
-		prompt.ActionText = "Contribute"
-		prompt.ObjectText = objectiveId
-		prompt.HoldDuration = 0.5
-		prompt.MaxActivationDistance = 10
-		prompt.RequiresLineOfSight = false
 		prompt.Parent = part
 	end
+	prompt.ActionText = "Contribute"
+	prompt.ObjectText = objectiveId
+	prompt.HoldDuration = 0.5
+	prompt.MaxActivationDistance = 10
+	prompt.RequiresLineOfSight = false
+	local conn = ObjectiveRuntimeService._promptConns[prompt]
+	if not conn then
+		conn = prompt.Triggered:Connect(function()
+			local boundObjective = ObjectiveRuntimeService._promptObjective[prompt]
+			if boundObjective and prompt.Enabled then
+				ObjectiveService:Advance(boundObjective, 0.2)
+			end
+		end)
+		ObjectiveRuntimeService._promptConns[prompt] = conn
+	end
+	ObjectiveRuntimeService._promptObjective[prompt] = objectiveId
 	prompt.Enabled = true
-	prompt.Triggered:Connect(function(plr)
-		ObjectiveService:Advance(objectiveId, 0.2)
-	end)
 	return prompt
 end
 
@@ -49,7 +60,7 @@ function ObjectiveRuntimeService:OnStart(objectiveId)
 		PromptQueueService:Enqueue(function()
 			local prompt = attachPrompt(part, objectiveId)
 			if prompt then
-				table.insert(self._activePrompts[objectiveId], prompt)
+				self._activePrompts[objectiveId][prompt] = true
 			end
 		end)
 	end
@@ -58,26 +69,35 @@ end
 function ObjectiveRuntimeService:OnEnd(objectiveId)
 	local prompts = self._activePrompts[objectiveId]
 	if not prompts then return end
-	for _, prompt in ipairs(prompts) do
+	for prompt in pairs(prompts) do
 		if prompt and prompt.Parent then
 			prompt.Enabled = false
+		end
+		if self._promptObjective[prompt] == objectiveId then
+			self._promptObjective[prompt] = nil
 		end
 	end
 	self._activePrompts[objectiveId] = nil
 end
 
 function ObjectiveRuntimeService:Init()
+	if self._initialized then return end
+	self._initialized = true
 	_G.Ecoshift = _G.Ecoshift or {}
-	if type(_G.Ecoshift.OnObjectiveStartAdd) == "function" then
-		_G.Ecoshift.OnObjectiveStartAdd(function(id)
-			ObjectiveRuntimeService:OnStart(id)
-		end)
-	end
-	if type(_G.Ecoshift.OnObjectiveEndAdd) == "function" then
-		_G.Ecoshift.OnObjectiveEndAdd(function(id)
-			ObjectiveRuntimeService:OnEnd(id)
-		end)
-	end
+	task.spawn(function()
+		for _ = 1, 100 do
+			if type(_G.Ecoshift.OnObjectiveStartAdd) == "function" and type(_G.Ecoshift.OnObjectiveEndAdd) == "function" then
+				_G.Ecoshift.OnObjectiveStartAdd(function(id)
+					ObjectiveRuntimeService:OnStart(id)
+				end)
+				_G.Ecoshift.OnObjectiveEndAdd(function(id)
+					ObjectiveRuntimeService:OnEnd(id)
+				end)
+				return
+			end
+			task.wait(0.1)
+		end
+	end)
 end
 
 return ObjectiveRuntimeService
