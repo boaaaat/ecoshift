@@ -16,6 +16,13 @@ local BuildService = {}
 BuildService._remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
 BuildService._remoteBuild = Util.GetRemote(BuildService._remotesFolder, Config.RemoteNames.Build)
 
+local CHEST_TAGS = {
+	Common_Chest = true,
+	Rare_Chest = true,
+	Legendary_Chest = true,
+	Celestial_Chest = true,
+}
+
 local function isAllowedType(t)
 	return Config.BUILD.AllowedTypes[t] == true
 end
@@ -86,6 +93,34 @@ local function setupWorkbenchInteraction(inst, stationType)
 	CollectionService:AddTag(inst, "CraftingStation")
 end
 
+local function resolveChestTag(inst)
+	for tag in pairs(CHEST_TAGS) do
+		if CollectionService:HasTag(inst, tag) then
+			return tag
+		end
+	end
+
+	local tagAttr = inst:GetAttribute("ChestTag")
+	if type(tagAttr) == "string" and CHEST_TAGS[tagAttr] then
+		return tagAttr
+	end
+
+	local tierAttr = tostring(inst:GetAttribute("ChestTier") or ""):lower()
+	if tierAttr == "rare" then
+		return "Rare_Chest"
+	elseif tierAttr == "legendary" then
+		return "Legendary_Chest"
+	elseif tierAttr == "celestial" then
+		return "Celestial_Chest"
+	end
+
+	return "Common_Chest"
+end
+
+local function setupChestInteraction(inst)
+	CollectionService:AddTag(inst, resolveChestTag(inst))
+end
+
 function BuildService:Place(plr, buildType, worldPos)
 	if not isAllowedType(buildType) then return false end
 	if not withinRange(plr, worldPos) then return false end
@@ -146,6 +181,11 @@ function BuildService:Place(plr, buildType, worldPos)
 	local stationDef = WorkbenchConfig.STATIONS[buildType]
 	if stationDef and stationDef.BuildType then
 		setupWorkbenchInteraction(inst, buildType)
+	end
+
+	-- Placed chests must be tagged so LootService binds prompts and UI events.
+	if buildType == "Chest" then
+		setupChestInteraction(inst)
 	end
 
 	GridService:Reserve(gx, gz, plr.UserId, inst)

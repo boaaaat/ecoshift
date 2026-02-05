@@ -3,6 +3,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
 local TweenService = game:GetService("TweenService")
 local GuiService = game:GetService("GuiService")
 
@@ -19,6 +20,7 @@ local remotesFolder = Util.GetDescendant(Config.Paths.Remotes)
 local rInventory = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.InventoryUpdate)
 local rInventoryAction = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.InventoryAction)
 local rDrop = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.DropItem)
+local rChest = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.ChestEvent)
 
 -- UI Constants
 local COLORS = {
@@ -466,8 +468,17 @@ local selectedSlot = nil
 local hoveredSlot = nil
 local inventoryOpen = false
 local contextMenu = nil
+local INVENTORY_TOGGLE_ACTION = "EcoshiftToggleInventory"
+local inventoryToggleActionBound = false
 
-local function setInventoryOpen(open)
+local function isChestTransferLockActive()
+	return gui:GetAttribute("ChestOpen") == true
+end
+
+local function setInventoryOpen(open, force)
+	if not force and isChestTransferLockActive() and not open then
+		return
+	end
 	inventoryOpen = open and true or false
 	mainContainer.Visible = inventoryOpen
 	if not inventoryOpen then
@@ -475,6 +486,41 @@ local function setInventoryOpen(open)
 		if contextMenu then contextMenu.Visible = false end
 	end
 end
+
+local function bindInventoryToggleAction()
+	local priority = Enum.ContextActionPriority.High.Value + 200
+	local ok = pcall(function()
+		ContextActionService:BindActionAtPriority(INVENTORY_TOGGLE_ACTION, function(_, inputState)
+			if inputState ~= Enum.UserInputState.Begin then
+				return Enum.ContextActionResult.Sink
+			end
+			if isChestTransferLockActive() then
+				return Enum.ContextActionResult.Sink
+			end
+			if UserInputService:GetFocusedTextBox() then
+				return Enum.ContextActionResult.Sink
+			end
+			setInventoryOpen(not inventoryOpen)
+			return Enum.ContextActionResult.Sink
+		end, false, priority, Enum.KeyCode.G)
+	end)
+	inventoryToggleActionBound = ok
+end
+
+bindInventoryToggleAction()
+
+gui:GetAttributeChangedSignal("ForceOpen"):Connect(function()
+	local v = gui:GetAttribute("ForceOpen")
+	if typeof(v) == "boolean" then
+		setInventoryOpen(v, true)
+	end
+end)
+
+gui:GetAttributeChangedSignal("ChestOpen"):Connect(function()
+	if gui:GetAttribute("ChestOpen") == true then
+		setInventoryOpen(true, true)
+	end
+end)
 
 -- Helper functions
 local function hashColor(id)
@@ -904,6 +950,69 @@ local function endDrag(targetSlot)
 	end
 end
 
+local function chestSlotFrameAtPoint(point)
+	if gui:GetAttribute("ChestOpen") ~= true then
+		return nil
+	end
+	local chestId = gui:GetAttribute("ChestId")
+	if type(chestId) ~= "string" or chestId == "" then
+		return nil
+	end
+	local chestGui = playerGui:FindFirstChild("ChestUI")
+	if not chestGui then return nil end
+	local chestPanel = chestGui:FindFirstChild("ChestPanel")
+	if not chestPanel or not chestPanel:IsA("Frame") or not chestPanel.Visible then
+		return nil
+	end
+	local chestSlots = chestPanel:FindFirstChild("Slots")
+	if not chestSlots then return nil end
+
+	local inset = GuiService:GetGuiInset()
+	local adjustedPoint = Vector2.new(point.X - inset.X, point.Y - inset.Y)
+	for _, frame in ipairs(chestSlots:GetChildren()) do
+		if frame:IsA("Frame") and tonumber(frame:GetAttribute("ChestIndex")) then
+			local pos = frame.AbsolutePosition
+			local size = frame.AbsoluteSize
+			if adjustedPoint.X >= pos.X and adjustedPoint.X <= pos.X + size.X and adjustedPoint.Y >= pos.Y and adjustedPoint.Y <= pos.Y + size.Y then
+				return frame
+			end
+		end
+	end
+	return nil
+end
+
+local function endDragToChest(chestFrame)
+	if not dragging.Active then return end
+	if dragging.From then
+		dragging.From.Frame.BackgroundTransparency = 0
+	end
+	if dragging.Ghost then
+		dragging.Ghost:Destroy()
+	end
+
+	local from = dragging.From
+	dragging.Active = false
+	dragging.From = nil
+	dragging.Ghost = nil
+
+	if not from or not chestFrame or not rChest then return end
+	local chestId = gui:GetAttribute("ChestId")
+	if type(chestId) ~= "string" or chestId == "" then return end
+
+	local toIndex = tonumber(chestFrame:GetAttribute("ChestIndex"))
+	if not toIndex then return end
+	local data = getSlotData(from.Type, from.Index)
+	if not data then return end
+
+	rChest:FireServer("Put", {
+		ChestId = chestId,
+		FromType = from.Type,
+		FromIndex = from.Index,
+		ToIndex = toIndex,
+		Amount = data.N,
+	})
+end
+
 local function slotAtPoint(point)
 	-- GetMouseLocation includes GUI inset, AbsolutePosition doesn't
 	-- Subtract the inset to align coordinate systems
@@ -948,9 +1057,19 @@ end)
 
 UserInputService.InputEnded:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 and (dragging.Active or dragging.Pending) then
-		local target = slotAtPoint(UserInputService:GetMouseLocation())
+		local mouseLocation = UserInputService:GetMouseLocation()
+		local target = slotAtPoint(mouseLocation)
 		if dragging.Active then
-			endDrag(target)
+			if target then
+				endDrag(target)
+			else
+				local chestTarget = chestSlotFrameAtPoint(mouseLocation)
+				if chestTarget then
+					endDragToChest(chestTarget)
+				else
+					endDrag(nil)
+				end
+			end
 		elseif dragging.Pending and dragging.From then
 			selectedSlot = dragging.From
 			renderAll()
@@ -970,12 +1089,13 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 UserInputService.InputBegan:Connect(function(input, processed)
-	if processed then return end
-	if input.KeyCode == Enum.KeyCode.Tab then
+	if input.KeyCode == Enum.KeyCode.G and not inventoryToggleActionBound then
 		if UserInputService:GetFocusedTextBox() then return end
+		if isChestTransferLockActive() then return end
 		setInventoryOpen(not inventoryOpen)
 		return
 	end
+	if processed then return end
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
 		-- Hide context menu when clicking elsewhere
 		if contextMenu.Visible then

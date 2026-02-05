@@ -3,6 +3,8 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
+local CollectionService = game:GetService("CollectionService")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
@@ -11,19 +13,22 @@ local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-local remotesFolder = Util.GetDescendant(Config.Paths.Remotes) or Util.WaitForDescendant(Config.Paths.Remotes, 5)
-local chestRemote = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.ChestEvent)
+local remotesFolder = Util.GetDescendant(Config.Paths.Remotes) or Util.WaitForDescendant(Config.Paths.Remotes, 15)
+local chestRemote = nil
+if remotesFolder then
+	chestRemote = Util.GetRemote(remotesFolder, Config.RemoteNames.ChestEvent)
+	if not chestRemote then
+		chestRemote = remotesFolder:WaitForChild(Config.RemoteNames.ChestEvent, 15)
+	end
+end
 if not chestRemote then
 	warn("[ChestUI] Missing ChestEvent remote")
 end
 
--- UI constants (match InventoryUI)
 local COLORS = {
-	Background = Color3.fromRGB(18, 18, 22),
 	Panel = Color3.fromRGB(28, 28, 35),
 	SlotEmpty = Color3.fromRGB(38, 38, 48),
 	SlotFilled = Color3.fromRGB(48, 48, 60),
-	SlotHover = Color3.fromRGB(58, 58, 75),
 	Border = Color3.fromRGB(60, 60, 80),
 	Text = Color3.fromRGB(240, 240, 245),
 	TextMuted = Color3.fromRGB(160, 160, 175),
@@ -34,11 +39,15 @@ local SLOT_SIZE = 64
 local SLOT_GAP = 6
 local COLS = 5
 local MARGIN = 16
+local FIXED_SLOTS = 10
+
+local CHEST_TAGS = { "Common_Chest", "Rare_Chest", "Legendary_Chest", "Celestial_Chest" }
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "ChestUI"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
+gui.DisplayOrder = 25
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = playerGui
 
@@ -46,7 +55,7 @@ local panel = Instance.new("Frame")
 panel.Name = "ChestPanel"
 panel.Size = UDim2.new(0, (SLOT_SIZE + SLOT_GAP) * COLS + MARGIN * 2, 0, 220)
 panel.AnchorPoint = Vector2.new(0, 1)
-panel.Position = UDim2.new(0, 20, 1, -20)
+panel.Position = UDim2.new(0, 20, 1, -190)
 panel.BackgroundColor3 = COLORS.Panel
 panel.BackgroundTransparency = 0.05
 panel.BorderSizePixel = 0
@@ -76,7 +85,7 @@ title.Font = Enum.Font.GothamBold
 title.TextSize = 16
 title.TextColor3 = COLORS.Text
 title.TextXAlignment = Enum.TextXAlignment.Left
-title.Text = "🧰 Chest"
+title.Text = "Chest"
 title.Parent = header
 
 local closeButton = Instance.new("TextButton")
@@ -104,7 +113,14 @@ slotContainer.Parent = panel
 
 local slots = {}
 local slotData = {}
+local slotCount = FIXED_SLOTS
 local currentChestId = nil
+local lastOpenRequestAt = 0
+local dragging = { Active = false, Source = nil, ChestIndex = nil, Inv = nil, Ghost = nil, InvFrames = nil, ChestFrames = nil }
+
+local function isShiftDown()
+	return UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
+end
 
 local function hashColor(id)
 	local hash = 0
@@ -114,11 +130,267 @@ local function hashColor(id)
 	return Color3.fromHSV(hash / 360, 0.55, 0.85)
 end
 
+local function isChestTagged(inst)
+	if typeof(inst) ~= "Instance" then return false end
+	for _, tag in ipairs(CHEST_TAGS) do
+		if CollectionService:HasTag(inst, tag) then
+			return true
+		end
+	end
+	return false
+end
+
+local function setInventoryChestState(open, chestId)
+	local invGui = playerGui:FindFirstChild("InventoryUI")
+	if invGui and invGui:IsA("ScreenGui") then
+		invGui:SetAttribute("ChestOpen", open and true or false)
+		invGui:SetAttribute("ForceOpen", open and true or false)
+		invGui:SetAttribute("ChestId", open and chestId or nil)
+	end
+end
+
+local function normalizeSlots(raw)
+	local normalized = {}
+	local maxIndex = 0
+	if type(raw) ~= "table" then
+		return normalized, 0
+	end
+	for k, v in pairs(raw) do
+		local index = tonumber(k)
+		if index and index >= 1 and index % 1 == 0 then
+			if v and v ~= false and type(v) == "table" and v.Id and tonumber(v.N) and tonumber(v.N) > 0 then
+				normalized[index] = { Id = v.Id, N = math.floor(tonumber(v.N)) }
+			else
+				normalized[index] = nil
+			end
+			if index > maxIndex then
+				maxIndex = index
+			end
+		end
+	end
+	return normalized, maxIndex
+end
+
+local function getInventorySlots()
+	local invGui = playerGui:FindFirstChild("InventoryUI")
+	if not invGui then
+		return {}
+	end
+	local list = {}
+	for _, inst in ipairs(invGui:GetDescendants()) do
+		if inst:IsA("Frame") and inst:GetAttribute("SlotType") then
+			list[#list + 1] = inst
+		end
+	end
+	return list
+end
+
+local function getChestSlotFrames()
+	local frames = {}
+	for _, slot in ipairs(slots) do
+		frames[#frames + 1] = slot.Frame
+	end
+	return frames
+end
+
+local function slotAtPoint(point, frames)
+	local inset = GuiService:GetGuiInset()
+	local adjusted = Vector2.new(point.X - inset.X, point.Y - inset.Y)
+	for _, frame in ipairs(frames) do
+		local pos = frame.AbsolutePosition
+		local size = frame.AbsoluteSize
+		if adjusted.X >= pos.X and adjusted.X <= pos.X + size.X and adjusted.Y >= pos.Y and adjusted.Y <= pos.Y + size.Y then
+			return frame
+		end
+	end
+	return nil
+end
+
 local function clearSlots()
-	for _, s in ipairs(slots) do
-		s.Frame:Destroy()
+	for _, slot in ipairs(slots) do
+		slot.Frame:Destroy()
 	end
 	slots = {}
+end
+
+local function renderSlot(slot)
+	local data = slotData[slot.Index]
+	if not data then
+		slot.Icon.Image = ""
+		slot.Icon.Visible = false
+		slot.QtyBadge.Visible = false
+		slot.ItemText.Visible = false
+		slot.ItemText.Text = ""
+		slot.Frame.BackgroundColor3 = COLORS.SlotEmpty
+		return
+	end
+
+	local item = ItemDatabase:Get(data.Id)
+	local icon = item and item.Icon or nil
+	slot.Qty.Text = tostring(data.N)
+	slot.QtyBadge.Visible = data.N > 1
+	slot.Frame.BackgroundColor3 = COLORS.SlotFilled
+
+	if icon and icon ~= "" then
+		slot.Icon.Image = icon
+		slot.Icon.ImageColor3 = Color3.new(1, 1, 1)
+		slot.Icon.Visible = true
+		slot.ItemText.Visible = false
+		slot.ItemText.Text = ""
+	else
+		slot.Icon.Image = ""
+		slot.Icon.Visible = false
+		slot.ItemText.Text = string.format("%s x%d", data.Id, data.N)
+		slot.ItemText.TextColor3 = hashColor(data.Id)
+		slot.ItemText.Visible = true
+	end
+end
+
+local function renderAll()
+	for _, slot in ipairs(slots) do
+		renderSlot(slot)
+	end
+end
+
+local function takeFromChestSlot(index, targetFrame)
+	if not currentChestId or not chestRemote then return end
+	local data = slotData[index]
+	if not data then return end
+	local payload = {
+		ChestId = currentChestId,
+		FromIndex = index,
+		Amount = data.N,
+	}
+	if targetFrame then
+		payload.ToType = targetFrame:GetAttribute("SlotType")
+		payload.ToIndex = targetFrame:GetAttribute("SlotIndex")
+	end
+	chestRemote:FireServer("Take", payload)
+end
+
+local function createGhost(itemId, count)
+	local ghost = Instance.new("Frame")
+	ghost.Size = UDim2.new(0, 40, 0, 40)
+	ghost.BackgroundColor3 = COLORS.Panel
+	ghost.BackgroundTransparency = 0.15
+	ghost.BorderSizePixel = 0
+	ghost.Parent = gui
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = ghost
+
+	local item = ItemDatabase:Get(itemId)
+	local icon = item and item.Icon or nil
+	if icon and icon ~= "" then
+		local image = Instance.new("ImageLabel")
+		image.Size = UDim2.new(0, 28, 0, 28)
+		image.Position = UDim2.new(0.5, 0, 0.5, 0)
+		image.AnchorPoint = Vector2.new(0.5, 0.5)
+		image.BackgroundTransparency = 1
+		image.Image = icon
+		image.ImageColor3 = Color3.new(1, 1, 1)
+		image.Parent = ghost
+	else
+		local text = Instance.new("TextLabel")
+		text.Size = UDim2.new(1, -4, 1, -4)
+		text.Position = UDim2.new(0, 2, 0, 2)
+		text.BackgroundTransparency = 1
+		text.Font = Enum.Font.GothamBold
+		text.TextSize = 10
+		text.TextWrapped = true
+		text.TextColor3 = hashColor(itemId)
+		text.Text = itemId
+		text.Parent = ghost
+	end
+
+	if count > 1 then
+		local qty = Instance.new("TextLabel")
+		qty.Size = UDim2.new(0, 20, 0, 12)
+		qty.AnchorPoint = Vector2.new(1, 1)
+		qty.Position = UDim2.new(1, -2, 1, -2)
+		qty.BackgroundTransparency = 1
+		qty.Font = Enum.Font.GothamBold
+		qty.TextSize = 10
+		qty.TextColor3 = COLORS.Text
+		qty.Text = tostring(count)
+		qty.TextXAlignment = Enum.TextXAlignment.Right
+		qty.Parent = ghost
+	end
+
+	return ghost
+end
+
+local function beginChestDrag(index)
+	local data = slotData[index]
+	if not data then return end
+	dragging.Active = true
+	dragging.Source = "Chest"
+	dragging.ChestIndex = index
+	dragging.Inv = nil
+	dragging.InvFrames = getInventorySlots()
+	dragging.ChestFrames = getChestSlotFrames()
+	dragging.Ghost = createGhost(data.Id, data.N)
+end
+
+local function endDrag(mousePoint)
+	if not dragging.Active then return end
+	if dragging.Ghost then
+		dragging.Ghost:Destroy()
+	end
+
+	local source = dragging.Source
+	local fromChestIndex = dragging.ChestIndex
+	local invFrames = dragging.InvFrames or {}
+	local chestFrames = dragging.ChestFrames or {}
+
+	dragging.Active = false
+	dragging.Source = nil
+	dragging.ChestIndex = nil
+	dragging.Inv = nil
+	dragging.Ghost = nil
+	dragging.InvFrames = nil
+	dragging.ChestFrames = nil
+
+	if not currentChestId or not chestRemote then return end
+
+	local chestTarget = slotAtPoint(mousePoint, chestFrames)
+	local invTarget = slotAtPoint(mousePoint, invFrames)
+
+	if source == "Chest" and fromChestIndex then
+		if chestTarget then
+			local toIndex = tonumber(chestTarget:GetAttribute("ChestIndex"))
+			if toIndex and toIndex ~= fromChestIndex then
+				chestRemote:FireServer("Move", {
+					ChestId = currentChestId,
+					FromIndex = fromChestIndex,
+					ToIndex = toIndex,
+				})
+				return
+			end
+		end
+		if invTarget then
+			takeFromChestSlot(fromChestIndex, invTarget)
+		end
+		return
+	end
+
+end
+
+local function findEmptyInventorySlot(preferStorage)
+	local frames = getInventorySlots()
+	local function pick(slotType)
+		for _, frame in ipairs(frames) do
+			if frame:GetAttribute("SlotType") == slotType and frame:GetAttribute("HasItem") == false then
+				return frame
+			end
+		end
+		return nil
+	end
+	if preferStorage then
+		return pick("Storage") or pick("Hotbar")
+	end
+	return pick("Hotbar") or pick("Storage")
 end
 
 local function createSlot(index, x, y)
@@ -128,6 +400,7 @@ local function createSlot(index, x, y)
 	slot.Position = UDim2.new(0, x, 0, y)
 	slot.BackgroundColor3 = COLORS.SlotEmpty
 	slot.BorderSizePixel = 0
+	slot:SetAttribute("ChestIndex", index)
 	slot.Parent = slotContainer
 
 	local corner = Instance.new("UICorner")
@@ -146,6 +419,7 @@ local function createSlot(index, x, y)
 	icon.AnchorPoint = Vector2.new(0.5, 0.5)
 	icon.BackgroundTransparency = 1
 	icon.Image = ""
+	icon.Visible = false
 	icon.ScaleType = Enum.ScaleType.Fit
 	icon.Parent = slot
 
@@ -158,6 +432,7 @@ local function createSlot(index, x, y)
 	itemText.TextColor3 = COLORS.TextMuted
 	itemText.TextXAlignment = Enum.TextXAlignment.Left
 	itemText.Text = ""
+	itemText.Visible = false
 	itemText.Parent = slot
 
 	local qtyBadge = Instance.new("Frame")
@@ -188,71 +463,31 @@ local function createSlot(index, x, y)
 	button.Text = ""
 	button.Parent = slot
 
-	return { Frame = slot, Icon = icon, ItemText = itemText, QtyBadge = qtyBadge, Qty = qty, Button = button, Index = index }
-end
+	button.MouseButton1Down:Connect(function()
+		if not currentChestId then return end
+		if isShiftDown() then
+			local target = findEmptyInventorySlot(true)
+			takeFromChestSlot(index, target)
+			return
+		end
+		beginChestDrag(index)
+	end)
 
-local function normalizeSlots(raw)
-	if type(raw) ~= "table" then return {} end
-	local numeric = {}
-	local maxIndex = 0
-	for k, v in pairs(raw) do
-		if type(k) == "number" then
-			numeric[k] = v
-			if k > maxIndex then maxIndex = k end
-		end
-	end
-	if maxIndex > 0 then
-		local list = {}
-		for i = 1, maxIndex do
-			if numeric[i] then
-				list[#list + 1] = numeric[i]
-			end
-		end
-		return list
-	end
-	local list = {}
-	for _, v in pairs(raw) do
-		list[#list + 1] = v
-	end
-	return list
-end
-
-local function renderSlot(slot)
-	local data = slotData[slot.Index]
-	if not data then
-		slot.Icon.Image = ""
-		slot.Icon.ImageColor3 = Color3.new(1, 1, 1)
-		slot.QtyBadge.Visible = false
-		if slot.ItemText then
-			slot.ItemText.Text = ""
-		end
-		return
-	end
-	local item = ItemDatabase:Get(data.Id)
-	if item and item.Icon and item.Icon ~= "" then
-		slot.Icon.Image = item.Icon
-		slot.Icon.ImageColor3 = Color3.new(1, 1, 1)
-		if slot.ItemText then
-			slot.ItemText.Text = "x" .. tostring(data.N)
-		end
-	else
-		slot.Icon.Image = (Config.UI and Config.UI.PlaceholderIcon) or ""
-		slot.Icon.ImageColor3 = hashColor(data.Id)
-		if slot.ItemText then
-			slot.ItemText.Text = string.format("%s x%d", data.Id, data.N)
-		end
-	end
-	slot.Qty.Text = tostring(data.N)
-	slot.QtyBadge.Visible = data.N > 1
-end
-
-local function renderAll()
-	for _, slot in ipairs(slots) do
-		renderSlot(slot)
-	end
+	return {
+		Frame = slot,
+		Icon = icon,
+		ItemText = itemText,
+		QtyBadge = qtyBadge,
+		Qty = qty,
+		Button = button,
+		Index = index,
+	}
 end
 
 local function ensureSlotCount(count)
+	if #slots == count then
+		return
+	end
 	clearSlots()
 	local rows = math.max(1, math.ceil(count / COLS))
 	panel.Size = UDim2.new(0, (SLOT_SIZE + SLOT_GAP) * COLS + MARGIN * 2, 0, 60 + rows * (SLOT_SIZE + SLOT_GAP))
@@ -261,186 +496,92 @@ local function ensureSlotCount(count)
 		local col = (i - 1) % COLS
 		local x = col * (SLOT_SIZE + SLOT_GAP)
 		local y = row * (SLOT_SIZE + SLOT_GAP)
-		local slot = createSlot(i, x, y)
-		table.insert(slots, slot)
+		slots[#slots + 1] = createSlot(i, x, y)
 	end
 end
 
-local function getInventorySlots()
-	local invGui = playerGui:FindFirstChild("InventoryUI")
-	if not invGui then
-		warn("[ChestUI] InventoryUI not found")
-		return {}
+local function closeChest(sendCloseEvent)
+	if dragging.Ghost then
+		dragging.Ghost:Destroy()
 	end
-	local list = {}
-	for _, inst in ipairs(invGui:GetDescendants()) do
-		if inst:IsA("Frame") and inst:GetAttribute("SlotType") then
-			list[#list + 1] = inst
-		end
-	end
-	return list
-end
-
-local function slotAtPoint(point, frames)
-	local inset = GuiService:GetGuiInset()
-	local adjusted = Vector2.new(point.X - inset.X, point.Y - inset.Y)
-	for _, frame in ipairs(frames) do
-		local pos = frame.AbsolutePosition
-		local size = frame.AbsoluteSize
-		if adjusted.X >= pos.X and adjusted.X <= pos.X + size.X and adjusted.Y >= pos.Y and adjusted.Y <= pos.Y + size.Y then
-			return frame
-		end
-	end
-	return nil
-end
-
-local dragging = { Active = false, From = nil, Ghost = nil, InvSlots = nil }
-
-local function isShiftDown()
-	return UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
-end
-
-local function findEmptyInventorySlot(preferStorage)
-	local invGui = playerGui:FindFirstChild("InventoryUI")
-	if not invGui then return nil end
-	local candidates = {}
-	for _, frame in ipairs(invGui:GetDescendants()) do
-		if frame:IsA("Frame") and frame:GetAttribute("SlotType") then
-			candidates[#candidates + 1] = frame
-		end
-	end
-	local function pick(slotType)
-		for _, frame in ipairs(candidates) do
-			if frame:GetAttribute("SlotType") == slotType and frame:GetAttribute("HasItem") == false then
-				return frame
-			end
-		end
-		return nil
-	end
-	if preferStorage then
-		return pick("Storage") or pick("Hotbar")
-	end
-	return pick("Hotbar") or pick("Storage")
-end
-
-local function beginDrag(slot)
-	if not slotData[slot.Index] then return end
-	dragging.Active = true
-	dragging.From = slot
-	dragging.InvSlots = getInventorySlots()
-	local ghost = Instance.new("ImageLabel")
-	ghost.Size = UDim2.new(0, 32, 0, 32)
-	ghost.BackgroundTransparency = 1
-	local item = ItemDatabase:Get(slotData[slot.Index].Id)
-	if item and item.Icon and item.Icon ~= "" then
-		ghost.Image = item.Icon
-		ghost.ImageColor3 = Color3.new(1, 1, 1)
-	else
-		ghost.Image = (Config.UI and Config.UI.PlaceholderIcon) or ""
-		ghost.ImageColor3 = hashColor(slotData[slot.Index].Id)
-	end
-	ghost.Parent = gui
-	dragging.Ghost = ghost
-end
-
-local function endDrag(targetFrame)
-	if not dragging.Active then return end
-	if dragging.Ghost then dragging.Ghost:Destroy() end
-	local from = dragging.From
 	dragging.Active = false
-	dragging.From = nil
+	dragging.Source = nil
+	dragging.ChestIndex = nil
+	dragging.Inv = nil
 	dragging.Ghost = nil
-	if not targetFrame or not currentChestId then return end
-	local slotType = targetFrame:GetAttribute("SlotType")
-	local slotIndex = targetFrame:GetAttribute("SlotIndex")
-	if not slotType or not slotIndex then return end
-	local data = slotData[from.Index]
-	if not data then return end
-	print(string.format("[ChestUI] Take %s x%d -> %s[%s]", data.Id, data.N, slotType, tostring(slotIndex)))
-	if chestRemote then
-		chestRemote:FireServer("Take", {
-			ChestId = currentChestId,
-			FromIndex = from.Index,
-			ToType = slotType,
-			ToIndex = slotIndex,
-			Amount = data.N,
-		})
+	dragging.InvFrames = nil
+	dragging.ChestFrames = nil
+	panel.Visible = false
+	currentChestId = nil
+	setInventoryChestState(false, nil)
+	if sendCloseEvent and chestRemote then
+		chestRemote:FireServer("Close")
 	end
+end
+
+closeButton.MouseButton1Click:Connect(function()
+	closeChest(true)
+end)
+
+if chestRemote then
+	chestRemote.OnClientEvent:Connect(function(action, payload)
+		if action == "Open" then
+			if type(payload) ~= "table" then return end
+			currentChestId = payload.ChestId
+			title.Text = payload.Title or "Chest"
+			slotData = normalizeSlots(payload.Slots or {})
+			slotCount = FIXED_SLOTS
+			ensureSlotCount(slotCount)
+			renderAll()
+			panel.Visible = true
+			setInventoryChestState(true, currentChestId)
+		elseif action == "Update" then
+			if type(payload) ~= "table" or payload.ChestId ~= currentChestId then return end
+			slotData = normalizeSlots(payload.Slots or {})
+			slotCount = FIXED_SLOTS
+			ensureSlotCount(slotCount)
+			renderAll()
+		elseif action == "Close" then
+			closeChest(false)
+		end
+	end)
 end
 
 UserInputService.InputChanged:Connect(function(input)
 	if dragging.Active and input.UserInputType == Enum.UserInputType.MouseMovement then
 		if dragging.Ghost then
-			dragging.Ghost.Position = UDim2.fromOffset(input.Position.X + 4, input.Position.Y + 4)
+			local size = dragging.Ghost.AbsoluteSize
+			dragging.Ghost.Position = UDim2.fromOffset(input.Position.X - size.X * 0.5, input.Position.Y - size.Y * 0.5)
 		end
 	end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 and dragging.Active then
-		local target = slotAtPoint(UserInputService:GetMouseLocation(), dragging.InvSlots or {})
-		endDrag(target)
+		endDrag(UserInputService:GetMouseLocation())
 	end
 end)
 
-local function bindSlotButtons()
-	for _, slot in ipairs(slots) do
-		slot.Button.MouseButton1Down:Connect(function()
-			if isShiftDown() then
-				if not currentChestId then return end
-				local data = slotData[slot.Index]
-				if not data then return end
-				local target = findEmptyInventorySlot(true)
-				if not target then return end
-				local slotType = target:GetAttribute("SlotType")
-				local slotIndex = target:GetAttribute("SlotIndex")
-				print(string.format("[ChestUI] Shift take %s x%d -> %s[%s]", data.Id, data.N, tostring(slotType), tostring(slotIndex)))
-				if chestRemote then
-					chestRemote:FireServer("Take", {
-						ChestId = currentChestId,
-						FromIndex = slot.Index,
-						ToType = slotType,
-						ToIndex = slotIndex,
-						Amount = data.N,
-					})
-				end
-				return
-			end
-			beginDrag(slot)
-		end)
-	end
-end
-
-closeButton.MouseButton1Click:Connect(function()
-	panel.Visible = false
-	currentChestId = nil
-	if chestRemote then
-		chestRemote:FireServer("Close")
+UserInputService.InputBegan:Connect(function(input)
+	if input.KeyCode ~= Enum.KeyCode.G then return end
+	if UserInputService:GetFocusedTextBox() then return end
+	if currentChestId then
+		closeChest(true)
 	end
 end)
 
-if chestRemote then
-	chestRemote.OnClientEvent:Connect(function(action, payload)
-		print(string.format("[ChestUI] Event %s", tostring(action)))
-		if action == "Open" then
-			currentChestId = payload.ChestId
-			slotData = normalizeSlots(payload.Slots or {})
-			title.Text = payload.Title or "Chest"
-			ensureSlotCount(math.max(8, #slotData))
-			bindSlotButtons()
-			renderAll()
-			panel.Visible = true
-			print(string.format("[ChestUI] Open %s slots=%d", tostring(payload.ChestId), #slotData))
-		elseif action == "Update" then
-			if not payload or payload.ChestId ~= currentChestId then return end
-			slotData = normalizeSlots(payload.Slots or {})
-			ensureSlotCount(math.max(8, #slotData))
-			bindSlotButtons()
-			renderAll()
-			print(string.format("[ChestUI] Update slots=%d", #slotData))
-		elseif action == "Close" then
-			panel.Visible = false
-			currentChestId = nil
-		end
-	end)
-end
+ProximityPromptService.PromptTriggered:Connect(function(prompt, playerWhoTriggered)
+	if playerWhoTriggered ~= player then return end
+	if not chestRemote then return end
+	local parent = prompt and prompt.Parent
+	if not parent then return end
+
+	local chest = parent:FindFirstAncestorOfClass("Model") or parent
+	if not chest or not chest.Parent then return end
+	if not isChestTagged(chest) then return end
+
+	local now = os.clock()
+	if now - lastOpenRequestAt < 0.1 then return end
+	lastOpenRequestAt = now
+	chestRemote:FireServer("Open", { Chest = chest })
+end)

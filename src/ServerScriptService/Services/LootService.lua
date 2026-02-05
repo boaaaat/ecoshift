@@ -12,6 +12,7 @@ local InventoryService = require(script.Parent.InventoryService)
 local ItemDropService = require(script.Parent.ItemDropService)
 local PromptQueueService = require(script.Parent.PromptQueueService)
 local LootTableService = require(script.Parent.LootTableService)
+local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 
 local LootService = {}
 LootService._chests = {} -- [Instance] = { Id, Tier, Table, Slots }
@@ -19,6 +20,7 @@ LootService._chestById = {}
 LootService._openByPlayer = {} -- [player] = chestId
 LootService._monsterConns = setmetatable({}, { __mode = "k" })
 LootService._chestCleanupConns = setmetatable({}, { __mode = "k" })
+LootService._chestPromptConns = setmetatable({}, { __mode = "k" })
 LootService._remote = nil
 
 local CHEST_TAGS = {
@@ -37,6 +39,7 @@ local MONSTER_TAGS = {
 
 local PROMPT_BOUND_ATTR = "LootServiceBound"
 local DROP_RNG = Random.new()
+local DEFAULT_CHEST_SLOT_COUNT = 10
 
 local function getTierFromTags(instance, map)
 	for tag, tier in pairs(map) do
@@ -45,6 +48,16 @@ local function getTierFromTags(instance, map)
 		end
 	end
 	return 1
+end
+
+local function isChestTagged(instance)
+	if typeof(instance) ~= "Instance" then return false end
+	for tag in pairs(CHEST_TAGS) do
+		if CollectionService:HasTag(instance, tag) then
+			return true
+		end
+	end
+	return false
 end
 
 local function getLootTableName(instance)
@@ -81,22 +94,69 @@ local function getPrimary(model)
 	return nil
 end
 
-local function compressSlots(items)
-	local slots = {}
-	for _, item in ipairs(items) do
-		slots[#slots + 1] = { Id = item.Id, N = item.N }
-	end
-	return slots
+local function maxStack(itemId)
+	local item = ItemDatabase:Get(itemId)
+	return (item and item.StackSize) or 99
 end
 
-local function compactSlots(slots)
+local function getChestSlotCount(chest)
+	return DEFAULT_CHEST_SLOT_COUNT
+end
+
+local function normalizeChestSlots(slots, slotCount)
 	local out = {}
-	for _, slot in pairs(slots) do
-		if slot and type(slot) == "table" and slot.Id and slot.N and slot.N > 0 then
-			out[#out + 1] = { Id = slot.Id, N = slot.N }
+	for i = 1, slotCount do
+		local slot = slots and slots[i]
+		if slot and type(slot) == "table" and slot.Id and tonumber(slot.N) and tonumber(slot.N) > 0 then
+			out[i] = { Id = slot.Id, N = math.floor(tonumber(slot.N)) }
+		else
+			out[i] = nil
 		end
 	end
 	return out
+end
+
+local function encodeChestSlotsForClient(slots, slotCount)
+	local encoded = {}
+	for i = 1, slotCount do
+		local slot = slots and slots[i]
+		encoded[i] = (slot and { Id = slot.Id, N = slot.N }) or false
+	end
+	return encoded
+end
+
+local function getInventorySlot(inv, slotType, slotIndex)
+	if not inv then return nil end
+	if slotType == "Hotbar" then
+		return inv.Hotbar and inv.Hotbar[slotIndex]
+	elseif slotType == "Storage" then
+		return inv.Storage and inv.Storage[slotIndex]
+	elseif slotType == "Armor" then
+		return inv.Armor
+	end
+	return nil
+end
+
+local function resolveChestFromPayload(payload)
+	if type(payload) ~= "table" then return nil end
+	local inst = payload.Chest or payload.Target or payload.Instance
+	if typeof(inst) ~= "Instance" then return nil end
+	if inst:IsA("ProximityPrompt") then
+		inst = inst.Parent
+	end
+	if inst and inst:IsA("BasePart") then
+		inst = inst:FindFirstAncestorOfClass("Model") or inst
+	end
+	if not inst or not inst.Parent then return nil end
+	return inst
+end
+
+local function canPlayerOpenChest(plr, chest)
+	if not plr or not chest or not chest.Parent then return false end
+	local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+	local primary = getPrimary(chest)
+	if not root or not primary then return false end
+	return (root.Position - primary.Position).Magnitude <= 12
 end
 
 function LootService:_ensureChestData(chest)
@@ -106,11 +166,20 @@ function LootService:_ensureChestData(chest)
 	local tier = getTierFromTags(chest, CHEST_TAGS)
 	local tableName = getLootTableName(chest)
 	local items = LootTableService:Roll(tableName, tier)
+	local slotCount = getChestSlotCount(chest)
+	local slots = {}
+	local cursor = 1
+	for _, item in ipairs(items) do
+		if cursor > slotCount then break end
+		slots[cursor] = { Id = item.Id, N = item.N }
+		cursor += 1
+	end
 	data = {
 		Id = id,
 		Tier = tier,
 		Table = tableName,
-		Slots = compressSlots(items),
+		SlotCount = slotCount,
+		Slots = normalizeChestSlots(slots, slotCount),
 	}
 	print(string.format("[LootService] Chest %s -> table %s tier %d items %d", chest.Name, tableName, tier, #data.Slots))
 	self._chests[chest] = data
@@ -134,10 +203,19 @@ function LootService:_clearChestData(chest)
 		conn:Disconnect()
 		self._chestCleanupConns[chest] = nil
 	end
+	local primary = getPrimary(chest)
+	local prompt = primary and primary:FindFirstChildOfClass("ProximityPrompt")
+	local promptConn = prompt and self._chestPromptConns[prompt]
+	if promptConn then
+		promptConn:Disconnect()
+		self._chestPromptConns[prompt] = nil
+	end
 end
 
 function LootService:_sendChest(plr, chest)
 	local data = self:_ensureChestData(chest)
+	data.SlotCount = getChestSlotCount(chest)
+	data.Slots = normalizeChestSlots(data.Slots, data.SlotCount)
 	local remote = self._remote
 	if not remote then
 		local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
@@ -151,12 +229,15 @@ function LootService:_sendChest(plr, chest)
 		ChestId = data.Id,
 		Tier = data.Tier,
 		Table = data.Table,
-		Slots = data.Slots,
+		SlotCount = data.SlotCount,
+		Slots = encodeChestSlotsForClient(data.Slots, data.SlotCount),
 		Title = chest.Name,
 	})
 end
 
 function LootService:_updateChest(plr, data)
+	data.SlotCount = DEFAULT_CHEST_SLOT_COUNT
+	data.Slots = normalizeChestSlots(data.Slots, data.SlotCount)
 	local remote = self._remote
 	if not remote then
 		local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
@@ -166,7 +247,8 @@ function LootService:_updateChest(plr, data)
 	if not remote then return end
 	remote:FireClient(plr, "Update", {
 		ChestId = data.Id,
-		Slots = data.Slots,
+		SlotCount = data.SlotCount,
+		Slots = encodeChestSlotsForClient(data.Slots, data.SlotCount),
 	})
 end
 
@@ -188,11 +270,12 @@ local function attachChestPrompt(chest)
 	prompt.HoldDuration = 0.2
 	prompt.MaxActivationDistance = 10
 	prompt.RequiresLineOfSight = false
-	if prompt:GetAttribute(PROMPT_BOUND_ATTR) then
+	prompt:SetAttribute(PROMPT_BOUND_ATTR, true)
+	if LootService._chestPromptConns[prompt] then
 		return
 	end
-	prompt:SetAttribute(PROMPT_BOUND_ATTR, true)
-	prompt.Triggered:Connect(function(plr)
+	LootService._chestPromptConns[prompt] = prompt.Triggered:Connect(function(plr)
+		print(string.format("[LootService] Prompt triggered on %s by %s", chest.Name, plr.Name))
 		LootService:_sendChest(plr, chest)
 	end)
 end
@@ -285,8 +368,98 @@ function LootService:Init()
 	if remote then
 		remote.OnServerEvent:Connect(function(plr, action, payload)
 			print(string.format("[LootService] ChestEvent %s from %s", tostring(action), plr.Name))
+			if action == "Open" then
+				local chest = resolveChestFromPayload(payload)
+				if not chest or not chest.Parent then return end
+				if not isChestTagged(chest) then return end
+				if not canPlayerOpenChest(plr, chest) then return end
+				self:_bindChest(chest)
+				self:_sendChest(plr, chest)
+				return
+			end
 			if action == "Close" then
 				self._openByPlayer[plr] = nil
+				return
+			end
+			if action == "Move" and type(payload) == "table" then
+				local chestId = payload.ChestId
+				local fromIndex = tonumber(payload.FromIndex)
+				local toIndex = tonumber(payload.ToIndex)
+				if not chestId or not fromIndex or not toIndex then return end
+				local chest = self._chestById[chestId]
+				if not chest or not chest.Parent then return end
+				if self._openByPlayer[plr] ~= chestId then return end
+				local data = self._chests[chest]
+				if not data then return end
+				if fromIndex < 1 or fromIndex > data.SlotCount or toIndex < 1 or toIndex > data.SlotCount then return end
+				if fromIndex == toIndex then return end
+				local fromSlot = data.Slots[fromIndex]
+				local toSlot = data.Slots[toIndex]
+				if not fromSlot then return end
+
+				if toSlot and toSlot.Id == fromSlot.Id then
+					local stackMax = maxStack(fromSlot.Id)
+					local space = math.max(0, stackMax - toSlot.N)
+					if space <= 0 then return end
+					local moved = math.min(space, fromSlot.N)
+					toSlot.N += moved
+					fromSlot.N -= moved
+					if fromSlot.N <= 0 then
+						data.Slots[fromIndex] = nil
+					end
+				else
+					data.Slots[fromIndex], data.Slots[toIndex] = data.Slots[toIndex], data.Slots[fromIndex]
+				end
+
+				self:_updateChest(plr, data)
+				return
+			end
+			if action == "Put" and type(payload) == "table" then
+				local chestId = payload.ChestId
+				local toIndex = tonumber(payload.ToIndex)
+				local fromType = payload.FromType
+				local fromIndex = tonumber(payload.FromIndex)
+				if not chestId or not toIndex or not fromType or not fromIndex then return end
+
+				local chest = self._chestById[chestId]
+				if not chest or not chest.Parent then return end
+				if self._openByPlayer[plr] ~= chestId then return end
+				local data = self._chests[chest]
+				if not data then return end
+				if toIndex < 1 or toIndex > data.SlotCount then return end
+
+				local inv = InventoryService:GetAll(plr)
+				local sourceSlot = getInventorySlot(inv, fromType, fromIndex)
+				if not sourceSlot then return end
+				local itemId = sourceSlot.Id
+
+				local amount = tonumber(payload.Amount) or sourceSlot.N
+				amount = math.floor(amount)
+				if amount <= 0 then return end
+				if amount > sourceSlot.N then amount = sourceSlot.N end
+
+				local targetSlot = data.Slots[toIndex]
+				if targetSlot and targetSlot.Id ~= itemId then
+					return
+				end
+
+				if targetSlot then
+					local stackMax = maxStack(itemId)
+					local space = math.max(0, stackMax - targetSlot.N)
+					if space <= 0 then return end
+					amount = math.min(amount, space)
+				end
+				if amount <= 0 then return end
+
+				local takenId = InventoryService:TakeFromSlot(plr, fromType, fromIndex, amount)
+				if not takenId or takenId ~= itemId then return end
+
+				if targetSlot then
+					targetSlot.N += amount
+				else
+					data.Slots[toIndex] = { Id = itemId, N = amount }
+				end
+				self:_updateChest(plr, data)
 				return
 			end
 			if action == "Take" and type(payload) == "table" then
@@ -302,6 +475,7 @@ function LootService:Init()
 				if self._openByPlayer[plr] ~= chestId then return end
 				local data = self._chests[chest]
 				if not data then return end
+				if fromIndex < 1 or fromIndex > data.SlotCount then return end
 				local slot = data.Slots[fromIndex]
 				if not slot then return end
 				local take = math.min(slot.N, amount)
@@ -320,7 +494,6 @@ function LootService:Init()
 				if slot.N <= 0 then
 					data.Slots[fromIndex] = nil
 				end
-				data.Slots = compactSlots(data.Slots)
 				print(string.format("[LootService] Took %s x%d (remaining %d)", slot.Id, added, #data.Slots))
 				self:_updateChest(plr, data)
 				return
