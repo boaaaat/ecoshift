@@ -6,11 +6,24 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local InventoryService = require(script.Parent.InventoryService)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
+local StatsService = require(script.Parent.StatsService)
 
 local ArmorService = {}
 ArmorService._equipped = {} -- [player] = { Id = string, Instance = Instance?, Character = Model? }
 
 local EQUIP_FOLDER = "EquippedArmor"
+local MOD_ID_ARMOR = "ArmorEquip"
+local MOD_ID_TEMPRES = "TempResEquip"
+
+local ARMOR_STATS = {
+	ClothSet = { Armor = 5, TempRes = 1 },
+	LeatherArmor = { Armor = 10, TempRes = 2 },
+	IronArmor = { Armor = 20, TempRes = 3 },
+	DiamondArmor = { Armor = 30, TempRes = 4 },
+	BoneArmor = { Armor = 12, TempRes = 2 },
+	SanditeArmor = { Armor = 18, TempRes = 3 },
+	DesertCloak = { Armor = 8, TempRes = 4 },
+}
 
 local function isArmor(itemId)
 	local item = ItemDatabase:Get(itemId)
@@ -31,6 +44,10 @@ local function clearArmor(plr)
 		entry.Instance:Destroy()
 	end
 	ArmorService._equipped[plr] = nil
+	if StatsService and StatsService.RemoveModifier then
+		StatsService:RemoveModifier(plr, "Armor", MOD_ID_ARMOR)
+		StatsService:RemoveModifier(plr, "TemperatureResistance", MOD_ID_TEMPRES)
+	end
 	local char = plr.Character
 	if char then
 		local folder = char:FindFirstChild(EQUIP_FOLDER)
@@ -111,6 +128,20 @@ function ArmorService:Equip(plr, itemId)
 
 	ArmorService._equipped[plr] = { Id = itemId, Instance = clone, Character = char }
 	plr:SetAttribute("EquippedArmor", itemId)
+
+	local stats = ARMOR_STATS[itemId]
+	if StatsService and StatsService.AddModifier then
+		if stats and stats.Armor then
+			StatsService:AddModifier(plr, "Armor", stats.Armor, "Add", nil, MOD_ID_ARMOR)
+		else
+			StatsService:RemoveModifier(plr, "Armor", MOD_ID_ARMOR)
+		end
+		if stats and stats.TempRes then
+			StatsService:AddModifier(plr, "TemperatureResistance", stats.TempRes, "Add", nil, MOD_ID_TEMPRES)
+		else
+			StatsService:RemoveModifier(plr, "TemperatureResistance", MOD_ID_TEMPRES)
+		end
+	end
 end
 
 function ArmorService:Sync(plr)

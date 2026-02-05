@@ -13,7 +13,7 @@ InventoryService._remote = nil
 InventoryService._callbacks = {}
 
 local HOTBAR_SLOTS = 4
-local STORAGE_SLOTS = 10
+local STORAGE_SLOTS = 18
 
 local function emptySlots(n)
 	local slots = {}

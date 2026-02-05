@@ -150,30 +150,119 @@ Config.biomes = {
 		regions = {
 			{
 				name = "ForestClearing",
+				-- Optional: Temp or env = { Temp = number } for region-specific temperature
 				size = Vector2.new(100, 100),
-				resources = { Tree = 1, Mushroom = 2, Reed = 3 },
+				resources = {
+					Tree = { Weight = 1.2, DistanceWeight = { Min = 1.1, Max = 0.9 } },
+					Mushroom = { Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 1.1 } },
+					Reed = { Weight = 0.9, DistanceWeight = { Min = 0.9, Max = 1.3 } },
+				},
 				resource_count = { min = 16, max = 28 },
-				props = { "Bush", "FallenLog" },
+				props = {
+					{ Name = "Bush", Weight = 1.2, DistanceWeight = { Min = 1.0, Max = 1.1 } },
+					{ Name = "FallenLog", Weight = 0.7, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+				},
 				prop_count = { min = 10, max = 18 },
-				enemies = { "Wolf" },
+				enemies = {
+					{ Name = "Wolf", Weight = 1.0, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+				},
 				enemy_count = { min = 0, max = 2 },
 			},
 			{
 				name = "ThickGrove",
 				size = Vector2.new(80, 80),
-				resources = { Mud = 3, Stone = 1, Mushroom = 2 },
+				resources = {
+					Mud = { Weight = 1.1, DistanceWeight = { Min = 1.1, Max = 0.9 } },
+					Stone = { Weight = 0.7, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+					Mushroom = { Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 1.2 } },
+				},
 				resource_count = { min = 22, max = 36 },
-				props = { "RockSmall", "Stump" },
+				props = {
+					{ Name = "RockSmall", Weight = 0.9, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+					{ Name = "Stump", Weight = 0.8, DistanceWeight = { Min = 1.1, Max = 0.9 } },
+				},
 				prop_count = { min = 8, max = 14 },
-				enemies = { "Wolf" },
+				enemies = {
+					{ Name = "Wolf", Weight = 1.0, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+				},
 				enemy_count = { min = 0, max = 2 },
 			},
+			{
+				name = "FlowerHollow",
+				size = Vector2.new(90, 90),
+				resources = {
+					Tree = { Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 0.9 } },
+					Mushroom = { Weight = 1.1, DistanceWeight = { Min = 1.0, Max = 1.1 } },
+					Reed = { Weight = 0.8, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+				},
+				resource_count = { min = 18, max = 30 },
+				props = {
+					{ Name = "CoolFlower", Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 1.1 } },
+					{ Name = "FireFlowers", Weight = 0.6, DistanceWeight = { Min = 0.8, Max = 1.4 } },
+					{ Name = "MossFlowers", Weight = 0.9, DistanceWeight = { Min = 1.1, Max = 1.0 } },
+					{ Name = "PeachFlowers", Weight = 0.8, DistanceWeight = { Min = 1.0, Max = 1.2 } },
+					{ Name = "PinkFlowers", Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 1.1 } },
+					{ Name = "WhiteFlowerBush", Weight = 0.7, DistanceWeight = { Min = 0.9, Max = 1.3 } },
+				},
+				prop_count = { min = 16, max = 26 },
+				enemies = {
+					{ Name = "Wolf", Weight = 0.9, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+				},
+				enemy_count = { min = 0, max = 1 },
+			},
+			{
+				name = "OldGrowthRidge",
+				size = Vector2.new(110, 90),
+				resources = {
+					BigTree = { Weight = 0.9, DistanceWeight = { Min = 0.9, Max = 1.3 } },
+					Tree = { Weight = 1.1, DistanceWeight = { Min = 1.1, Max = 0.9 } },
+					Stone = { Weight = 0.8, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+				},
+				resource_count = { min = 16, max = 26 },
+				props = {
+					{ Name = "FallenLog", Weight = 0.9, DistanceWeight = { Min = 1.0, Max = 1.2 } },
+					{ Name = "Stump", Weight = 0.7, DistanceWeight = { Min = 1.1, Max = 0.9 } },
+					{ Name = "RockSmall", Weight = 0.8, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+				},
+				prop_count = { min = 8, max = 14 },
+				enemies = {
+					{ Name = "Wolf", Weight = 1.0, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+				},
+				enemy_count = { min = 0, max = 2 },
+			},
+			{
+				name = "MistyGlen",
+				size = Vector2.new(85, 100),
+				resources = {
+					Mud = { Weight = 1.0, DistanceWeight = { Min = 1.2, Max = 0.9 } },
+					Mushroom = { Weight = 1.1, DistanceWeight = { Min = 1.0, Max = 1.2 } },
+					Reed = { Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 1.3 } },
+					SmallTree = { Weight = 0.8, DistanceWeight = { Min = 1.0, Max = 0.9 } },
+				},
+				resource_count = { min = 20, max = 34 },
+				props = {
+					{ Name = "Bush", Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 1.1 } },
+					{ Name = "MossFlowers", Weight = 0.9, DistanceWeight = { Min = 1.1, Max = 1.0 } },
+					{ Name = "QuantumFlowers", Weight = 0.5, DistanceWeight = { Min = 0.8, Max = 1.6 } },
+				},
+				prop_count = { min = 12, max = 20 },
+				enemies = {
+					{ Name = "Wolf", Weight = 0.9, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+				},
+				enemy_count = { min = 0, max = 1 },
+			},
 		},
-		structures = { "CabinRuin", "WatchTower" },
+		structures = {
+			{ Name = "CabinRuin", Weight = 0.7, DistanceWeight = { Min = 0.9, Max = 1.3 } },
+			{ Name = "WatchTower", Weight = 0.5, DistanceWeight = { Min = 1.0, Max = 1.4 } },
+		},
 		structure_count = 0.5,
 		objectives = {},
 		objective_count = 0.025,
-		chests = { "Common_Chest", "Rare_Chest" },
+		chests = {
+			{ Name = "Common_Chest", Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 0.9 } },
+			{ Name = "Rare_Chest", Weight = 0.4, DistanceWeight = { Min = 0.9, Max = 1.3 } },
+		},
 		chest_count = 0.08,
 	},
 	Desert = {
