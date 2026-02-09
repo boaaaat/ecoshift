@@ -169,7 +169,7 @@ function LootService:_ensureChestData(chest)
 	local slotCount = getChestSlotCount(chest)
 	local slots = {}
 	local cursor = 1
-	for _, item in ipairs(items) do
+	for _, item in ipairs(items) do`
 		if cursor > slotCount then break end
 		slots[cursor] = { Id = item.Id, N = item.N }
 		cursor += 1

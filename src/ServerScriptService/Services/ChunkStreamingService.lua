@@ -49,6 +49,121 @@ local WORLD_RADIUS = WorldGenConfig.world_radius or 2200
 local CENTER_EXCLUSION = WorldGenConfig.center_exclusion_radius or 260
 local CENTER_EXCLUSION_SQ = CENTER_EXCLUSION * CENTER_EXCLUSION
 local SPAWN_ENEMIES = WorldGenConfig.spawn_enemies ~= false
+local REGION_PADDING = math.max(0, tonumber(WorldGenConfig.region_padding) or 0)
+local STRUCTURE_PADDING = math.max(0, tonumber(WorldGenConfig.structure_padding) or 0)
+local OBJECTIVE_PADDING = math.max(0, tonumber(WorldGenConfig.objective_padding) or 0)
+local AVOID_REGIONS_FOR_STRUCTURES = WorldGenConfig.avoid_regions_for_structures ~= false
+local TERRAIN_THICKNESS = (WorldGenConfig.TERRAIN and tonumber(WorldGenConfig.TERRAIN.Thickness)) or 24
+
+local ASSET_OVERRIDES = WorldGenConfig.asset_overrides or {}
+local MIN_SPACING_CONFIG = WorldGenConfig.stream_min_spacing or {}
+local DENSITY_CONFIG = WorldGenConfig.spawn_density or {}
+local REGION_NOISE_CONFIG = WorldGenConfig.region_noise or {}
+local TERRAIN_DETAIL_CONFIG = WorldGenConfig.terrain_detail or {}
+
+local REGION_SELECT_SCALE = tonumber(REGION_NOISE_CONFIG.scale) or 0.22
+local REGION_COUNT_SCALE = tonumber(REGION_NOISE_CONFIG.count_scale) or 0.28
+local REGION_WARP_SCALE = tonumber(REGION_NOISE_CONFIG.warp_scale) or 0.08
+local REGION_WARP_STRENGTH = tonumber(REGION_NOISE_CONFIG.warp_strength) or 1.0
+
+local TERRAIN_DETAIL_ENABLED = TERRAIN_DETAIL_CONFIG.enabled ~= false
+local TERRAIN_DETAIL_CELL_SIZE = math.max(8, tonumber(TERRAIN_DETAIL_CONFIG.cell_size) or 24)
+local TERRAIN_DETAIL_NOISE_SCALE = tonumber(TERRAIN_DETAIL_CONFIG.noise_scale) or 0.03
+local TERRAIN_DETAIL_PATH_SCALE = tonumber(TERRAIN_DETAIL_CONFIG.path_scale) or 0.014
+local TERRAIN_DETAIL_PATH_WIDTH = math.clamp(tonumber(TERRAIN_DETAIL_CONFIG.path_width) or 0.16, 0.02, 0.45)
+local TERRAIN_DETAIL_OCTAVES = math.clamp(math.floor(tonumber(TERRAIN_DETAIL_CONFIG.octaves) or 2), 1, 4)
+local TERRAIN_DETAIL_LACUNARITY = tonumber(TERRAIN_DETAIL_CONFIG.lacunarity) or 2
+local TERRAIN_DETAIL_GAIN = tonumber(TERRAIN_DETAIL_CONFIG.gain) or 0.5
+
+local DEFAULT_MIN_SPACING = {
+	Resources = 9,
+	Props = 7,
+	Enemies = 12,
+	Structures = 28,
+	Objectives = 24,
+	Chests = 10,
+}
+
+local DEFAULT_DENSITY = {
+	resources = {
+		scale = 0.03,
+		threshold = 0.43,
+		feather = 0.28,
+		octaves = 2,
+		lacunarity = 2,
+		gain = 0.5,
+		warp_scale = 0.012,
+		warp_strength = 12,
+		attempts_per_spawn = 6,
+	},
+	props = {
+		scale = 0.036,
+		threshold = 0.44,
+		feather = 0.28,
+		octaves = 2,
+		lacunarity = 2,
+		gain = 0.5,
+		warp_scale = 0.014,
+		warp_strength = 9,
+		attempts_per_spawn = 7,
+	},
+	enemies = {
+		scale = 0.024,
+		threshold = 0.48,
+		feather = 0.25,
+		octaves = 2,
+		lacunarity = 2,
+		gain = 0.5,
+		warp_scale = 0.01,
+		warp_strength = 8,
+		attempts_per_spawn = 8,
+	},
+}
+
+local DEFAULT_GROUND_DETAIL = {
+	Forest = {
+		path = "Ground",
+		patches = {
+			{ material = "Ground", threshold = 0.58 },
+			{ material = "Mud", threshold = 0.76 },
+		},
+	},
+	Desert = {
+		path = "Sandstone",
+		patches = {
+			{ material = "Sandstone", threshold = 0.62 },
+			{ material = "Rock", threshold = 0.84 },
+		},
+	},
+	Swamp = {
+		path = "Mud",
+		patches = {
+			{ material = "Grass", threshold = 0.6 },
+			{ material = "Mud", threshold = 0.72 },
+		},
+	},
+	FrozenTundra = {
+		path = "Ice",
+		patches = {
+			{ material = "Ice", threshold = 0.64 },
+			{ material = "Rock", threshold = 0.86 },
+		},
+	},
+	Volcanic = {
+		path = "Basalt",
+		patches = {
+			{ material = "Rock", threshold = 0.58 },
+			{ material = "Basalt", threshold = 0.78 },
+		},
+	},
+	CrystalWastes = {
+		path = "Rock",
+		patches = {
+			{ material = "Slate", threshold = 0.62 },
+			{ material = "Rock", threshold = 0.82 },
+		},
+	},
+}
 
 local function lerp(a, b, t)
 	return a + (b - a) * t
@@ -115,6 +230,214 @@ local function distanceFactorForList(list, distance_t)
 		return 1
 	end
 	return weighted / total
+end
+
+local function materialFromName(name, fallback)
+	if typeof(name) == "EnumItem" then
+		return name
+	end
+	if type(name) ~= "string" then
+		return fallback
+	end
+	local ok, material = pcall(function()
+		return Enum.Material[name]
+	end)
+	if ok and material then
+		return material
+	end
+	return fallback
+end
+
+local function getBaseMaterialForBiome(biomeName)
+	local matName = WorldGenConfig.TERRAIN
+		and WorldGenConfig.TERRAIN.MaterialByBiome
+		and WorldGenConfig.TERRAIN.MaterialByBiome[biomeName]
+	return materialFromName(matName, Enum.Material.Grass)
+end
+
+local function getGroundDetailConfigForBiome(biomeName)
+	local overrideByBiome = TERRAIN_DETAIL_CONFIG.materials_by_biome
+		or TERRAIN_DETAIL_CONFIG.materialsByBiome
+		or (WorldGenConfig.TERRAIN and WorldGenConfig.TERRAIN.DetailMaterialsByBiome)
+	local cfg = nil
+	if type(overrideByBiome) == "table" then
+		cfg = overrideByBiome[biomeName]
+	end
+	if type(cfg) ~= "table" then
+		cfg = DEFAULT_GROUND_DETAIL[biomeName]
+	end
+	return cfg
+end
+
+local function sampleFractalNoise01(x, z, seed, scale, octaves, lacunarity, gain)
+	local amplitude = 1
+	local frequency = scale
+	local total = 0
+	local normalizer = 0
+	for i = 1, octaves do
+		total += amplitude * math.noise(x * frequency, z * frequency, seed + i * 17.173)
+		normalizer += amplitude
+		amplitude *= gain
+		frequency *= lacunarity
+	end
+	if normalizer <= 0 then
+		return 0.5
+	end
+	local n = total / normalizer
+	return math.clamp((n + 1) * 0.5, 0, 1)
+end
+
+local function smoothstep01(t)
+	t = math.clamp(t, 0, 1)
+	return t * t * (3 - 2 * t)
+end
+
+local function resolveDensityConfig(kind, regionDef)
+	local fallback = DEFAULT_DENSITY[kind] or {}
+	local singular = kind:sub(-1) == "s" and kind:sub(1, -2) or kind
+	local globalCfgRaw = DENSITY_CONFIG[kind] or DENSITY_CONFIG[singular]
+	local globalCfg = type(globalCfgRaw) == "table" and globalCfgRaw or {}
+	local regionCfgRaw = nil
+	if regionDef then
+		regionCfgRaw = regionDef[kind .. "_density"] or regionDef[singular .. "_density"]
+	end
+	local regionCfg = type(regionCfgRaw) == "table" and regionCfgRaw or {}
+	local out = {}
+	for k, v in pairs(fallback) do
+		out[k] = v
+	end
+	for k, v in pairs(globalCfg) do
+		out[k] = v
+	end
+	for k, v in pairs(regionCfg) do
+		out[k] = v
+	end
+	return out
+end
+
+local function getCategorySpacing(categoryName, regionDef)
+	local regionKey = nil
+	if categoryName == "Resources" then
+		regionKey = "resource_min_spacing"
+	elseif categoryName == "Props" then
+		regionKey = "prop_min_spacing"
+	elseif categoryName == "Enemies" then
+		regionKey = "enemy_min_spacing"
+	elseif categoryName == "Structures" then
+		regionKey = "structure_min_spacing"
+	elseif categoryName == "Objectives" then
+		regionKey = "objective_min_spacing"
+	elseif categoryName == "Chests" then
+		regionKey = "chest_min_spacing"
+	end
+	local regionValue = regionKey and regionDef and regionDef[regionKey] or nil
+	if regionValue ~= nil then
+		return math.max(0, tonumber(regionValue) or 0)
+	end
+	local cfgValue = MIN_SPACING_CONFIG[categoryName] or MIN_SPACING_CONFIG[categoryName:lower()]
+	if cfgValue ~= nil then
+		return math.max(0, tonumber(cfgValue) or 0)
+	end
+	return DEFAULT_MIN_SPACING[categoryName] or 0
+end
+
+local function getAssetOverrideForPrefab(prefabName)
+	if type(prefabName) ~= "string" then
+		return nil
+	end
+	local override = ASSET_OVERRIDES[prefabName]
+	if type(override) == "table" then
+		return override
+	end
+	return nil
+end
+
+local function getAssetYOffset(prefabName)
+	local override = getAssetOverrideForPrefab(prefabName)
+	if not override then
+		return 0
+	end
+	return tonumber(override.yOffset or override.YOffset or override.offsetY or override.OffsetY) or 0
+end
+
+local function tryApplyScaleOverride(instance, prefabName)
+	local override = getAssetOverrideForPrefab(prefabName)
+	if not override then
+		return
+	end
+	local scale = tonumber(override.scale or override.Scale)
+	if not scale or scale <= 0 or math.abs(scale - 1) < 0.0001 then
+		return
+	end
+	pcall(function()
+		if instance:IsA("Model") then
+			instance:ScaleTo(scale)
+		elseif instance:IsA("BasePart") then
+			instance.Size = instance.Size * scale
+		end
+	end)
+end
+
+local function rectIntersects(a, b)
+	return a.minX <= b.maxX and a.maxX >= b.minX and a.minZ <= b.maxZ and a.maxZ >= b.minZ
+end
+
+local function makeRect(x, z, sizeX, sizeZ, padding)
+	local halfX = math.max(0, sizeX * 0.5 + (padding or 0))
+	local halfZ = math.max(0, sizeZ * 0.5 + (padding or 0))
+	return {
+		minX = x - halfX,
+		maxX = x + halfX,
+		minZ = z - halfZ,
+		maxZ = z + halfZ,
+	}
+end
+
+local function makeRectFromRegion(regionCenter, regionSize, padding)
+	local size = regionSize
+	if not size then
+		size = Vector2.new(CHUNK_SIZE * 0.8, CHUNK_SIZE * 0.8)
+	end
+	return makeRect(regionCenter.X, regionCenter.Z, size.X or 0, size.Y or 0, padding)
+end
+
+local function expandRect(rect, amount)
+	if not amount or amount <= 0 then
+		return rect
+	end
+	return {
+		minX = rect.minX - amount,
+		maxX = rect.maxX + amount,
+		minZ = rect.minZ - amount,
+		maxZ = rect.maxZ + amount,
+	}
+end
+
+local function defaultRegionSize(regionSize)
+	if regionSize then
+		return regionSize
+	end
+	return Vector2.new(CHUNK_SIZE * 0.8, CHUNK_SIZE * 0.8)
+end
+
+local function pointTooClose(points, x, z, minSpacing)
+	if minSpacing <= 0 then
+		return false
+	end
+	local minSq = minSpacing * minSpacing
+	for i = 1, #points do
+		local p = points[i]
+		local dx = x - p.x
+		local dz = z - p.z
+		if (dx * dx + dz * dz) < minSq then
+			return true
+		end
+	end
+	return false
+end
+
+local function addPlacementPoint(points, x, z)
+	points[#points + 1] = { x = x, z = z }
 end
 
 local CHEST_TAG_ORDER = {
@@ -287,11 +610,91 @@ end
 
 local function randomInRange(rng, value)
 	if type(value) == "table" then
-		return rng:NextInteger(value.min or 0, value.max or 0)
+		local min = math.floor(tonumber(value.min or value.Min) or 0)
+		local max = math.floor(tonumber(value.max or value.Max) or min)
+		if max < min then
+			min, max = max, min
+		end
+		return rng:NextInteger(min, max)
 	elseif type(value) == "number" then
 		return value
 	end
 	return 0
+end
+
+local function weightedIndexByValue(list, value01)
+	if not list or #list == 0 then
+		return nil
+	end
+	local total = 0
+	for i = 1, #list do
+		total += math.max(0, tonumber(list[i].Weight or list[i].weight) or 1)
+	end
+	if total <= 0 then
+		return 1
+	end
+	local target = math.clamp(value01, 0, 1) * total
+	for i = 1, #list do
+		target -= math.max(0, tonumber(list[i].Weight or list[i].weight) or 1)
+		if target <= 0 then
+			return i
+		end
+	end
+	return #list
+end
+
+local function pickRegionByNoise(regionDefs, cx, cz, slotIndex, seed)
+	if not regionDefs or #regionDefs == 0 then
+		return nil
+	end
+	if #regionDefs == 1 then
+		return regionDefs[1]
+	end
+	local indexOffset = slotIndex * 37.11
+	local wx = cx + indexOffset
+	local wz = cz - indexOffset
+	local warpX = math.noise(wx * REGION_WARP_SCALE, wz * REGION_WARP_SCALE, seed * 0.0017) * REGION_WARP_STRENGTH
+	local warpZ = math.noise((wx + 67.3) * REGION_WARP_SCALE, (wz - 29.5) * REGION_WARP_SCALE, seed * 0.0023) * REGION_WARP_STRENGTH
+	local value = (math.noise((wx + warpX) * REGION_SELECT_SCALE, (wz + warpZ) * REGION_SELECT_SCALE, seed * 0.0009) + 1) * 0.5
+	local idx = weightedIndexByValue(regionDefs, value)
+	return idx and regionDefs[idx] or regionDefs[1]
+end
+
+local function countFromNoise(value, cx, cz, seed, fallbackRng)
+	if type(value) == "number" then
+		return value
+	end
+	if type(value) ~= "table" then
+		return randomInRange(fallbackRng, value)
+	end
+	local min = math.floor(tonumber(value.min or value.Min) or 0)
+	local max = math.floor(tonumber(value.max or value.Max) or min)
+	if max < min then
+		min, max = max, min
+	end
+	if min == max then
+		return min
+	end
+	local n = (math.noise(cx * REGION_COUNT_SCALE, cz * REGION_COUNT_SCALE, seed * 0.0029) + 1) * 0.5
+	return min + math.floor(n * (max - min + 1 - 0.0001))
+end
+
+local function getPrefabFootprint(prefab)
+	if not prefab then
+		return 8, 8
+	end
+	if prefab:IsA("BasePart") then
+		return math.max(4, prefab.Size.X), math.max(4, prefab.Size.Z)
+	end
+	if prefab:IsA("Model") then
+		local ok, _, size = pcall(function()
+			return prefab:GetBoundingBox()
+		end)
+		if ok and size then
+			return math.max(4, size.X), math.max(4, size.Z)
+		end
+	end
+	return 12, 12
 end
 
 local function getRegionTemp(regionDef)
@@ -305,16 +708,14 @@ local function getRegionTemp(regionDef)
 end
 
 local function computeRegionCenter(chunkCenter, regionSize, rng)
-	if not regionSize then
-		return chunkCenter
-	end
+	regionSize = defaultRegionSize(regionSize)
 	local halfChunk = CHUNK_SIZE * 0.5
 	local halfX = (regionSize.X or 0) * 0.5
 	local halfZ = (regionSize.Y or 0) * 0.5
-	local minX = chunkCenter.X - halfChunk + halfX
-	local maxX = chunkCenter.X + halfChunk - halfX
-	local minZ = chunkCenter.Z - halfChunk + halfZ
-	local maxZ = chunkCenter.Z + halfChunk - halfZ
+	local minX = chunkCenter.X - halfChunk + halfX + REGION_PADDING
+	local maxX = chunkCenter.X + halfChunk - halfX - REGION_PADDING
+	local minZ = chunkCenter.Z - halfChunk + halfZ + REGION_PADDING
+	local maxZ = chunkCenter.Z + halfChunk - halfZ - REGION_PADDING
 	if minX > maxX then
 		minX, maxX = chunkCenter.X, chunkCenter.X
 	end
@@ -327,10 +728,7 @@ local function computeRegionCenter(chunkCenter, regionSize, rng)
 end
 
 local function randomPointInRegion(regionCenter, regionSize, rng)
-	local size = regionSize
-	if not size then
-		size = Vector2.new(CHUNK_SIZE * 0.8, CHUNK_SIZE * 0.8)
-	end
+	local size = defaultRegionSize(regionSize)
 	local halfX = (size.X or 0) * 0.5
 	local halfZ = (size.Y or 0) * 0.5
 	local x = regionCenter.X + rng:NextNumber(-halfX, halfX)
@@ -360,6 +758,191 @@ local function makeStep()
 				task.wait(STREAM_STEP_DELAY)
 			else
 				task.wait()
+			end
+		end
+	end
+end
+
+function ChunkStreamingService:_newPlacementState()
+	return {
+		points = {
+			Resources = {},
+			Props = {},
+			Enemies = {},
+			Structures = {},
+			Objectives = {},
+			Chests = {},
+		},
+		rects = {
+			Structures = {},
+			Objectives = {},
+			Chests = {},
+		},
+		regionRects = {},
+	}
+end
+
+function ChunkStreamingService:_densityChance(cfg, x, z, seed)
+	local scale = tonumber(cfg.scale) or 0
+	if scale <= 0 then
+		return 1
+	end
+	local warpScale = tonumber(cfg.warp_scale or cfg.warpScale) or (scale * 0.45)
+	local warpStrength = tonumber(cfg.warp_strength or cfg.warpStrength) or 0
+	if warpStrength ~= 0 then
+		x += math.noise(x * warpScale, z * warpScale, seed * 0.0011 + 7.2) * warpStrength
+		z += math.noise((x + 91.3) * warpScale, (z - 57.7) * warpScale, seed * 0.0017 + 13.9) * warpStrength
+	end
+	local octaves = math.clamp(math.floor(tonumber(cfg.octaves) or 2), 1, 4)
+	local lacunarity = tonumber(cfg.lacunarity) or 2
+	local gain = tonumber(cfg.gain) or 0.5
+	local value = sampleFractalNoise01(x, z, seed * 0.0023 + 19.7, scale, octaves, lacunarity, gain)
+	local threshold = tonumber(cfg.threshold) or 0.5
+	local feather = math.max(0.01, tonumber(cfg.feather) or 0.25)
+	local normalized = (value - (threshold - feather * 0.5)) / feather
+	return smoothstep01(normalized)
+end
+
+function ChunkStreamingService:_isPointBlocked(placementState, categoryName, x, z, spacing)
+	local points = placementState and placementState.points
+	if not points then
+		return false
+	end
+	local own = points[categoryName] or {}
+	if pointTooClose(own, x, z, spacing) then
+		return true
+	end
+	if categoryName == "Props" then
+		if pointTooClose(points.Resources or {}, x, z, spacing * 0.65) then
+			return true
+		end
+	elseif categoryName == "Structures" or categoryName == "Objectives" or categoryName == "Chests" then
+		if pointTooClose(points.Structures or {}, x, z, spacing)
+			or pointTooClose(points.Objectives or {}, x, z, spacing)
+			or pointTooClose(points.Chests or {}, x, z, spacing) then
+			return true
+		end
+	end
+	return false
+end
+
+function ChunkStreamingService:_registerPoint(placementState, categoryName, x, z)
+	local points = placementState and placementState.points
+	if not points then
+		return
+	end
+	if not points[categoryName] then
+		points[categoryName] = {}
+	end
+	addPlacementPoint(points[categoryName], x, z)
+end
+
+function ChunkStreamingService:_isRectBlocked(placementState, rect, spacing, avoidRegions)
+	local rects = placementState and placementState.rects
+	if not rects then
+		return false
+	end
+	local probe = expandRect(rect, spacing)
+	if avoidRegions and AVOID_REGIONS_FOR_STRUCTURES then
+		for i = 1, #placementState.regionRects do
+			if rectIntersects(probe, placementState.regionRects[i]) then
+				return true
+			end
+		end
+	end
+	local groups = { "Structures", "Objectives", "Chests" }
+	for i = 1, #groups do
+		local group = groups[i]
+		local list = rects[group] or {}
+		for j = 1, #list do
+			if rectIntersects(probe, list[j]) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+function ChunkStreamingService:_registerRect(placementState, categoryName, rect)
+	local rects = placementState and placementState.rects
+	if not rects then
+		return
+	end
+	if not rects[categoryName] then
+		rects[categoryName] = {}
+	end
+	rects[categoryName][#rects[categoryName] + 1] = rect
+end
+
+function ChunkStreamingService:_paintChunkGround(biomeName, chunkCenter, seed, step)
+	if not TERRAIN_DETAIL_ENABLED then
+		return
+	end
+	local detailCfg = getGroundDetailConfigForBiome(biomeName)
+	if type(detailCfg) ~= "table" then
+		return
+	end
+	local pathMaterial = materialFromName(
+		detailCfg.path or detailCfg.pathMaterial or detailCfg.path_material,
+		nil
+	)
+	local patchEntries = detailCfg.patches
+	local patches = {}
+	if type(patchEntries) == "table" then
+		for i = 1, #patchEntries do
+			local patch = patchEntries[i]
+			if type(patch) == "table" then
+				patches[#patches + 1] = {
+					material = materialFromName(patch.material or patch.Material, nil),
+					threshold = tonumber(patch.threshold or patch.Threshold) or 1,
+				}
+			end
+		end
+	end
+	if not pathMaterial and #patches == 0 then
+		return
+	end
+	table.sort(patches, function(a, b)
+		return a.threshold < b.threshold
+	end)
+
+	local terrain = Workspace.Terrain
+	local baseMaterial = getBaseMaterialForBiome(biomeName)
+	local half = CHUNK_SIZE * 0.5
+	local cell = TERRAIN_DETAIL_CELL_SIZE
+	local y = BASE_Y - (TERRAIN_THICKNESS * 0.5)
+	local startX = chunkCenter.X - half + cell * 0.5
+	local startZ = chunkCenter.Z - half + cell * 0.5
+	local endX = chunkCenter.X + half - cell * 0.5
+	local endZ = chunkCenter.Z + half - cell * 0.5
+
+	for x = startX, endX, cell do
+		for z = startZ, endZ, cell do
+			if not isInsideCenterExclusion(x, z) and ((x * x) + (z * z)) <= (WORLD_RADIUS * WORLD_RADIUS) then
+				local material = baseMaterial
+				local pathNoise = math.abs(math.noise(x * TERRAIN_DETAIL_PATH_SCALE, z * TERRAIN_DETAIL_PATH_SCALE, seed * 0.0007 + 41.1))
+				if pathMaterial and pathNoise < TERRAIN_DETAIL_PATH_WIDTH then
+					material = pathMaterial
+				elseif #patches > 0 then
+					local n = sampleFractalNoise01(
+						x,
+						z,
+						seed * 0.0013 + 73.5,
+						TERRAIN_DETAIL_NOISE_SCALE,
+						TERRAIN_DETAIL_OCTAVES,
+						TERRAIN_DETAIL_LACUNARITY,
+						TERRAIN_DETAIL_GAIN
+					)
+					for i = 1, #patches do
+						if n >= patches[i].threshold and patches[i].material then
+							material = patches[i].material
+						end
+					end
+				end
+				terrain:FillBlock(CFrame.new(x, y, z), Vector3.new(cell, TERRAIN_THICKNESS, cell), material)
+			end
+			if step then
+				step()
 			end
 		end
 	end
@@ -702,7 +1285,8 @@ function ChunkStreamingService:_spawnStructureChests(structureClone, biomeName, 
 		local prefab = self:_chooseWeighted(list, rng, distance_t)
 		if prefab then
 			local clone = prefab:Clone()
-			local yOffset = getOffsetValue(clone)
+			tryApplyScaleOverride(clone, prefab.Name)
+			local yOffset = getOffsetValue(clone) + getAssetYOffset(prefab.Name)
 			local targetCf = cf * CFrame.new(0, yOffset, 0)
 			if clone:IsA("Model") then
 				clone:PivotTo(targetCf)
@@ -908,18 +1492,21 @@ function ChunkStreamingService:_generateChunkContent(cx, cz, chunkCenter, chunkF
 	local chunkSeed = seed + cx * 73856093 + cz * 19349663
 	local rng = Random.new(chunkSeed)
 	local distance_t = distanceT(chunkCenter.X, chunkCenter.Z)
+	local placementState = self:_newPlacementState()
+
+	self:_paintChunkGround(biomeName, chunkCenter, chunkSeed, step)
 	
 	-- Generate regions in this chunk
-	local regionCount = randomInRange(rng, biome.region_count or biome.regionCount) or 1
+	local regionCount = countFromNoise(biome.region_count or biome.regionCount, cx, cz, seed, rng) or 1
 	if regionCount < 1 then regionCount = 1 end
 	
-	for _ = 1, regionCount do
+	for regionIndex = 1, regionCount do
 		local regionDef = nil
 		if biome.regions and #biome.regions > 0 then
-			regionDef = biome.regions[rng:NextInteger(1, #biome.regions)]
+			regionDef = pickRegionByNoise(biome.regions, cx, cz, regionIndex, seed)
 		end
 		if regionDef then
-			local regionSize = regionDef.size
+			local regionSize = defaultRegionSize(regionDef.size)
 			local regionCenter = computeRegionCenter(chunkCenter, regionSize, rng)
 			local regionTemp = getRegionTemp(regionDef)
 			regions[#regions + 1] = {
@@ -927,8 +1514,20 @@ function ChunkStreamingService:_generateChunkContent(cx, cz, chunkCenter, chunkF
 				Size = regionSize,
 				Temp = regionTemp,
 			}
+			placementState.regionRects[#placementState.regionRects + 1] = makeRectFromRegion(regionCenter, regionSize, REGION_PADDING)
 			local regionDistanceT = distanceT(regionCenter.X, regionCenter.Z)
-			self:_scatterInChunk(biomeName, regionCenter, regionSize, regionDef, subfolders, rng, regionDistanceT, step)
+			self:_scatterInChunk(
+				biomeName,
+				regionCenter,
+				regionSize,
+				regionDef,
+				subfolders,
+				rng,
+				regionDistanceT,
+				step,
+				placementState,
+				seed
+			)
 		end
 		step()
 	end
@@ -938,7 +1537,19 @@ function ChunkStreamingService:_generateChunkContent(cx, cz, chunkCenter, chunkF
 	local structurePrefabs = self:_resolvePrefabsWeighted("StructurePrefabs", biomeName, biome.structures)
 	local structureFactor = distanceFactorForList(structurePrefabs, distance_t)
 	if rng:NextNumber() <= math.clamp(structureChance * structureFactor, 0, 1) then
-		self:_placeStructure(biomeName, chunkCenter, biome.structures, subfolders.Structures, rng, structurePrefabs, distance_t, biome, step)
+		self:_placeStructure(
+			biomeName,
+			chunkCenter,
+			biome.structures,
+			subfolders.Structures,
+			rng,
+			structurePrefabs,
+			distance_t,
+			biome,
+			step,
+			placementState,
+			"Structures"
+		)
 	end
 	
 	-- Chests (probability per chunk)
@@ -947,7 +1558,17 @@ function ChunkStreamingService:_generateChunkContent(cx, cz, chunkCenter, chunkF
 		local chestPrefabs = self:_resolveChestEntries(biomeName, biome.chests)
 		local chestFactor = distanceFactorForList(chestPrefabs, distance_t)
 		if rng:NextNumber() <= math.clamp(chestChance * chestFactor, 0, 1) then
-			self:_placeChest(biomeName, chunkCenter, biome.chests, subfolders.Structures, rng, chestPrefabs, distance_t, step)
+			self:_placeChest(
+				biomeName,
+				chunkCenter,
+				biome.chests,
+				subfolders.Structures,
+				rng,
+				chestPrefabs,
+				distance_t,
+				step,
+				placementState
+			)
 		end
 	end
 	
@@ -956,13 +1577,54 @@ function ChunkStreamingService:_generateChunkContent(cx, cz, chunkCenter, chunkF
 	local objectivePrefabs = self:_resolvePrefabsWeighted("ObjectivePrefabs", biomeName, biome.objectives)
 	local objectiveFactor = distanceFactorForList(objectivePrefabs, distance_t)
 	if rng:NextNumber() <= math.clamp(objectiveChance * objectiveFactor, 0, 1) then
-		self:_placeStructure(biomeName, chunkCenter, biome.objectives, subfolders.Objectives, rng, objectivePrefabs, distance_t, biome, step)
+		self:_placeStructure(
+			biomeName,
+			chunkCenter,
+			biome.objectives,
+			subfolders.Objectives,
+			rng,
+			objectivePrefabs,
+			distance_t,
+			biome,
+			step,
+			placementState,
+			"Objectives"
+		)
 	end
 
 	return regions
 end
 
-function ChunkStreamingService:_scatterInChunk(biomeName, regionCenter, regionSize, regionDef, subfolders, rng, distance_t, step)
+function ChunkStreamingService:_scatterCategory(categoryName, regionCenter, regionSize, regionDef, parent, prefabs, count, rng, distance_t, step, placementState, seed)
+	if count <= 0 or not prefabs or #prefabs == 0 then
+		return
+	end
+	local densityKind = categoryName:lower()
+	local densityCfg = resolveDensityConfig(densityKind, regionDef)
+	local attemptsPerSpawn = math.max(2, tonumber(densityCfg.attempts_per_spawn or densityCfg.attemptsPerSpawn) or 6)
+	local maxAttempts = math.max(count * attemptsPerSpawn, count + 6)
+	local minSpacing = getCategorySpacing(categoryName, regionDef)
+	local placed = 0
+	local attempts = 0
+	while placed < count and attempts < maxAttempts do
+		attempts += 1
+		local position = randomPointInRegion(regionCenter, regionSize, rng)
+		local chance = self:_densityChance(densityCfg, position.X, position.Z, seed)
+		if chance > 0 and rng:NextNumber() <= chance and not self:_isPointBlocked(placementState, categoryName, position.X, position.Z, minSpacing) then
+			local prefab = self:_chooseWeighted(prefabs, rng, distance_t)
+			if prefab then
+				local clone = self:_placePrefab(prefab, position, parent, step)
+				if clone then
+					self:_registerPoint(placementState, categoryName, position.X, position.Z)
+					placed += 1
+				end
+			end
+		end
+		step()
+	end
+end
+
+function ChunkStreamingService:_scatterInChunk(biomeName, regionCenter, regionSize, regionDef, subfolders, rng, distance_t, step, placementState, seed)
 	step = step or makeStep()
 	
 	-- Resources
@@ -970,30 +1632,14 @@ function ChunkStreamingService:_scatterInChunk(biomeName, regionCenter, regionSi
 	local resourceCount = randomInRange(rng, regionDef.resource_count or regionDef.resourceCount) or 5
 	local resourceFactor = distanceFactorForList(resourcePrefabs, distance_t)
 	resourceCount = math.max(0, math.floor(resourceCount * resourceFactor + 0.5))
-	
-	for _ = 1, resourceCount do
-		local prefab = self:_chooseWeighted(resourcePrefabs, rng, distance_t)
-		if prefab then
-			local position = randomPointInRegion(regionCenter, regionSize, rng)
-			self:_placePrefab(prefab, position, subfolders.Resources, step)
-		end
-		step()
-	end
+	self:_scatterCategory("Resources", regionCenter, regionSize, regionDef, subfolders.Resources, resourcePrefabs, resourceCount, rng, distance_t, step, placementState, seed)
 	
 	-- Props
 	local propPrefabs = self:_resolvePrefabsWeighted("PropPrefabs", biomeName, regionDef.props)
 	local propCount = randomInRange(rng, regionDef.prop_count or regionDef.propCount) or 3
 	local propFactor = distanceFactorForList(propPrefabs, distance_t)
 	propCount = math.max(0, math.floor(propCount * propFactor + 0.5))
-	
-	for _ = 1, propCount do
-		local prefab = self:_chooseWeighted(propPrefabs, rng, distance_t)
-		if prefab then
-			local position = randomPointInRegion(regionCenter, regionSize, rng)
-			self:_placePrefab(prefab, position, subfolders.Props, step)
-		end
-		step()
-	end
+	self:_scatterCategory("Props", regionCenter, regionSize, regionDef, subfolders.Props, propPrefabs, propCount, rng, distance_t, step, placementState, seed)
 	
 	if SPAWN_ENEMIES then
 		-- Enemies
@@ -1001,19 +1647,11 @@ function ChunkStreamingService:_scatterInChunk(biomeName, regionCenter, regionSi
 		local enemyCount = randomInRange(rng, regionDef.enemy_count or regionDef.enemyCount) or 0
 		local enemyFactor = distanceFactorForList(enemyPrefabs, distance_t)
 		enemyCount = math.max(0, math.floor(enemyCount * enemyFactor + 0.5))
-		
-		for _ = 1, enemyCount do
-			local prefab = self:_chooseWeighted(enemyPrefabs, rng, distance_t)
-			if prefab then
-				local position = randomPointInRegion(regionCenter, regionSize, rng)
-				self:_placePrefab(prefab, position, subfolders.Enemies, step)
-			end
-			step()
-		end
+		self:_scatterCategory("Enemies", regionCenter, regionSize, regionDef, subfolders.Enemies, enemyPrefabs, enemyCount, rng, distance_t, step, placementState, seed)
 	end
 end
 
-function ChunkStreamingService:_placeStructure(biomeName, chunkCenter, names, parent, rng, prefabs, distance_t, biome, step)
+function ChunkStreamingService:_placeStructure(biomeName, chunkCenter, names, parent, rng, prefabs, distance_t, biome, step, placementState, categoryName)
 	if (not names or (type(names) == "table" and #names == 0)) and not prefabs then return end
 	
 	local prefabs = prefabs or self:_resolvePrefabsWeighted("StructurePrefabs", biomeName, names)
@@ -1022,52 +1660,89 @@ function ChunkStreamingService:_placeStructure(biomeName, chunkCenter, names, pa
 		prefabs = self:_resolvePrefabsWeighted("ObjectivePrefabs", biomeName, names)
 	end
 	if #prefabs == 0 then return end
-	
-	local prefab = self:_chooseWeighted(prefabs, rng, distance_t)
-	if prefab then
+
+	categoryName = categoryName or (parent and parent.Name) or "Structures"
+	local extraPadding = categoryName == "Objectives" and OBJECTIVE_PADDING or STRUCTURE_PADDING
+	local minSpacing = getCategorySpacing(categoryName, nil)
+	local tries = 10
+	for _ = 1, tries do
+		local prefab = self:_chooseWeighted(prefabs, rng, distance_t)
+		if not prefab then
+			return
+		end
 		local half = CHUNK_SIZE * 0.3
 		local x = chunkCenter.X + rng:NextNumber(-half, half)
 		local z = chunkCenter.Z + rng:NextNumber(-half, half)
-		local position = Vector3.new(x, BASE_Y, z)
-		local clone = self:_placePrefab(prefab, position, parent, step)
-		if clone and parent and parent.Name == "Structures" then
-			self:_spawnStructureChests(clone, biomeName, prefab.Name, rng, biome)
+		local footprintX, footprintZ = getPrefabFootprint(prefab)
+		local rect = makeRect(x, z, footprintX, footprintZ, extraPadding)
+		local avoidRegions = categoryName == "Structures" or categoryName == "Objectives"
+		if not self:_isRectBlocked(placementState, rect, minSpacing, avoidRegions) then
+			local position = Vector3.new(x, BASE_Y, z)
+			local clone = self:_placePrefab(prefab, position, parent, step)
+			if clone then
+				self:_registerRect(placementState, categoryName, rect)
+				self:_registerPoint(placementState, categoryName, x, z)
+				if categoryName == "Structures" and parent and parent.Name == "Structures" then
+					self:_spawnStructureChests(clone, biomeName, prefab.Name, rng, biome)
+				end
+				return clone
+			end
+		end
+		if step then
+			step()
 		end
 	end
 end
 
-function ChunkStreamingService:_placeChest(biomeName, chunkCenter, chestNames, parent, rng, prefabs, distance_t, step)
+function ChunkStreamingService:_placeChest(biomeName, chunkCenter, chestNames, parent, rng, prefabs, distance_t, step, placementState)
 	if (not chestNames or (type(chestNames) == "table" and #chestNames == 0)) and not prefabs then return end
 	
 	-- Try chest folder first, then structure/prop prefabs
 	local prefabs = prefabs or self:_resolveChestEntries(biomeName, chestNames)
 	if #prefabs == 0 then return end
-	
-	local prefab = self:_chooseWeighted(prefabs, rng, distance_t)
-	if prefab then
+
+	local minSpacing = getCategorySpacing("Chests", nil)
+	for _ = 1, 10 do
+		local prefab = self:_chooseWeighted(prefabs, rng, distance_t)
+		if not prefab then
+			return
+		end
 		local half = CHUNK_SIZE * 0.35
 		local x = chunkCenter.X + rng:NextNumber(-half, half)
 		local z = chunkCenter.Z + rng:NextNumber(-half, half)
 		local position = Vector3.new(x, BASE_Y, z)
 		if isInsideCenterExclusion(position.X, position.Z) then
-			return
+			if step then
+				step()
+			end
+		else
+			local footprintX, footprintZ = getPrefabFootprint(prefab)
+			local rect = makeRect(x, z, footprintX, footprintZ, 0)
+			if not self:_isRectBlocked(placementState, rect, minSpacing, false) then
+				-- Place the chest
+				local clone = prefab:Clone()
+				tryApplyScaleOverride(clone, prefab.Name)
+				local yOffset = getOffsetValue(clone) + getAssetYOffset(prefab.Name)
+				local targetCf = CFrame.new(position.X, BASE_Y + yOffset, position.Z)
+
+				if clone:IsA("Model") then
+					clone:PivotTo(targetCf)
+				elseif clone:IsA("BasePart") then
+					clone.CFrame = targetCf
+				end
+
+				-- Ensure chest has proper tag for LootService (tag should already be on prefab)
+				ensureChestTag(clone)
+
+				clone.Parent = parent
+				self:_registerRect(placementState, "Chests", rect)
+				self:_registerPoint(placementState, "Chests", x, z)
+				return clone
+			end
+			if step then
+				step()
+			end
 		end
-		
-		-- Place the chest
-		local clone = prefab:Clone()
-		local yOffset = getOffsetValue(clone)
-		local targetCf = CFrame.new(position.X, BASE_Y + yOffset, position.Z)
-		
-		if clone:IsA("Model") then
-			clone:PivotTo(targetCf)
-		elseif clone:IsA("BasePart") then
-			clone.CFrame = targetCf
-		end
-		
-		-- Ensure chest has proper tag for LootService (tag should already be on prefab)
-		ensureChestTag(clone)
-		
-		clone.Parent = parent
 	end
 end
 
@@ -1078,6 +1753,7 @@ function ChunkStreamingService:_placePrefab(prefab, position, parent, step)
 	end
 	
 	local clone = prefab:Clone()
+	tryApplyScaleOverride(clone, prefab.Name)
 
 	-- Set CanQuery for world obstacles/resources
 	if parent.Name == "Resources" or parent.Name == "Props" or parent.Name == "Structures" or parent.Name == "Objectives" then
@@ -1097,7 +1773,7 @@ function ChunkStreamingService:_placePrefab(prefab, position, parent, step)
 	end
 	
 	-- Get Y offset
-	local yOffset = getOffsetValue(clone)
+	local yOffset = getOffsetValue(clone) + getAssetYOffset(prefab.Name)
 	
 	local targetCf = CFrame.new(position.X, BASE_Y + yOffset, position.Z)
 	if clone:IsA("Model") then

@@ -53,6 +53,91 @@ Config.stream_unload_radius = 5 -- Unload chunks beyond this radius
 Config.stream_update_interval = 0.5 -- How often to check player positions
 Config.stream_unload_delay = 10 -- Seconds before unloading unused chunk
 
+-- STREAMING DENSITY/SPACING: Used by ChunkStreamingService
+Config.stream_min_spacing = {
+	Resources = 10,
+	Props = 7,
+	Enemies = 12,
+	Structures = 28,
+	Objectives = 24,
+	Chests = 10,
+}
+
+-- DENSITY MASKS: 2D noise masks to avoid uniform random scatter.
+-- Optional per-region overrides:
+-- resource_density / prop_density / enemy_density
+Config.spawn_density = {
+	resources = {
+		scale = 0.03,
+		threshold = 0.43,
+		feather = 0.28,
+		octaves = 2,
+		lacunarity = 2,
+		gain = 0.5,
+		warp_scale = 0.012,
+		warp_strength = 12,
+		attempts_per_spawn = 6,
+	},
+	props = {
+		scale = 0.036,
+		threshold = 0.44,
+		feather = 0.28,
+		octaves = 2,
+		lacunarity = 2,
+		gain = 0.5,
+		warp_scale = 0.014,
+		warp_strength = 9,
+		attempts_per_spawn = 7,
+	},
+	enemies = {
+		scale = 0.024,
+		threshold = 0.48,
+		feather = 0.25,
+		octaves = 2,
+		lacunarity = 2,
+		gain = 0.5,
+		warp_scale = 0.01,
+		warp_strength = 8,
+		attempts_per_spawn = 8,
+	},
+}
+
+-- REGION NOISE: Makes region type selection coherent across neighboring chunks.
+Config.region_noise = {
+	scale = 0.22,
+	count_scale = 0.28,
+	warp_scale = 0.08,
+	warp_strength = 1.0,
+}
+
+-- FLAT TERRAIN DETAIL PASS: paints chunk-local material variation without changing Y height.
+Config.terrain_detail = {
+	enabled = true,
+	cell_size = 24,
+	noise_scale = 0.03,
+	path_scale = 0.014,
+	path_width = 0.16,
+	octaves = 2,
+	lacunarity = 2,
+	gain = 0.5,
+	materials_by_biome = {
+		Forest = {
+			path = "Ground",
+			patches = {
+				{ material = "Ground", threshold = 0.58 },
+				{ material = "Mud", threshold = 0.76 },
+			},
+		},
+		Desert = {
+			path = "Sandstone",
+			patches = {
+				{ material = "Sandstone", threshold = 0.62 },
+				{ material = "Rock", threshold = 0.84 },
+			},
+		},
+	},
+}
+
 -- STRUCTURE CHESTS: Spawn chests inside structures at ChestSpawn markers
 -- Prefabs: Chest models are resolved from ServerStorage/Chests by name
 -- Spawn points: Any BasePart or Attachment named "ChestSpawn" or "ChestSpawn_*"
