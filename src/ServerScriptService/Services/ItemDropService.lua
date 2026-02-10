@@ -54,6 +54,17 @@ local function stripPrompts(instance)
 	end
 end
 
+local function setAnchoredRecursive(instance, anchored)
+	if instance:IsA("BasePart") then
+		instance.Anchored = anchored
+	end
+	for _, d in ipairs(instance:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.Anchored = anchored
+		end
+	end
+end
+
 local function cloneFallbackResourceModel(sourceModel, itemId, dropScale)
 	if typeof(sourceModel) ~= "Instance" then return nil end
 	if not sourceModel:IsA("Model") and not sourceModel:IsA("BasePart") then return nil end
@@ -115,13 +126,14 @@ function ItemDropService:SpawnDrop(itemId, count, position, options)
 	if not model then
 		local part = Instance.new("Part")
 		part.Size = Vector3.new(2, 2, 2)
-		part.Anchored = true
+		part.Anchored = false
 		part.Name = itemId .. "_Drop"
 		model = Instance.new("Model")
 		model.Name = itemId
 		part.Parent = model
 		model.PrimaryPart = part
 	end
+	setAnchoredRecursive(model, false)
 	model:SetAttribute("ItemId", itemId)
 	model:SetAttribute("Count", count)
 	model:PivotTo(CFrame.new(position))
