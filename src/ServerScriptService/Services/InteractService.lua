@@ -140,7 +140,7 @@ ACTIONS.Harvest = function(plr, payload)
 	-- Check if destroyed
 	if currentHealth <= 0 then
 		-- Get drop info
-		local itemId = getNodeAttr(node, "DropItemId") or getNodeAttr(node, "ItemId") or node.Name
+		local itemId = getNodeAttr(node, "DropItemId") or getNodeAttr(node, "DropItemID") or getNodeAttr(node, "ItemId") or node.Name
 		local dropCount = tonumber(getNodeAttr(node, "DropCount")) or tonumber(getNodeAttr(node, "LootCount")) or 1
 		
 		-- Apply resource multiplier

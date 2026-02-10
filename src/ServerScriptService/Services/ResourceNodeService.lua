@@ -102,7 +102,7 @@ local function attachDurationPrompt(instance)
 	end
 	prompt.Triggered:Connect(function(plr)
 		print(string.format("[ResourceNodeService] Prompt triggered by %s on %s", plr.Name, instance.Name))
-		local itemId = getAttr(instance, "DropItemId") or getAttr(instance, "ItemId") or instance.Name
+		local itemId = getAttr(instance, "DropItemId") or getAttr(instance, "DropItemID") or getAttr(instance, "ItemId") or instance.Name
 		local count = parseDropCount(instance)
 		local roleMult = tonumber(plr:GetAttribute("Role_Gather")) or 1.0
 		count = math.max(1, math.floor(count * roleMult))
