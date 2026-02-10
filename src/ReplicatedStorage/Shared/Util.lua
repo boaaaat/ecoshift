@@ -71,4 +71,19 @@ function Util.ForEachPlayer(callback)
 	end
 end
 
+function Util.DeepMerge(base, override)
+	if type(override) ~= "table" then return override end
+	if type(base) ~= "table" then return Util.DeepCopy(override) end
+	if override[1] ~= nil then return Util.DeepCopy(override) end
+	local result = Util.DeepCopy(base)
+	for k, v in pairs(override) do
+		if type(v) == "table" and type(result[k]) == "table" and v[1] == nil then
+			result[k] = Util.DeepMerge(result[k], v)
+		else
+			result[k] = type(v) == "table" and Util.DeepCopy(v) or v
+		end
+	end
+	return result
+end
+
 return Util

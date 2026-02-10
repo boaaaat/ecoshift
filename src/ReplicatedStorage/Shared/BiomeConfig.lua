@@ -36,11 +36,13 @@ Config.asset_overrides = {
 
 	-- DESERT RESOURCES
 	Cactus = { scale = 1.2, yOffset = 3 },
+	Coal = { scale = 1.0, yOffset = 1.5 },
 	Sandstone = { scale = 1.5, yOffset = 4 },
 	DriedBone = { scale = 0.8, yOffset = 1 },
 	-- DESERT PROPS
 	Skull = { scale = 0.6, yOffset = 0.5 },
 	DeadShrub = { scale = 1.0, yOffset = 1 },
+	Sand = { scale = 1.0, yOffset = 0 },
 	SandDune = { scale = 2.0, yOffset = 0 },
 	-- DESERT STRUCTURES
 	AncientRuins = { scale = 1.0, yOffset = 4 },
@@ -356,31 +358,125 @@ Config.biomes = {
 		region_count = { min = 1, max = 2 },
 		regions = {
 			{
+				-- Wide open dune fields: rolling sand with scattered cacti
 				name = "SandyDunes",
-				size = Vector2.new(100, 100),
-				resources = { Cactus = 1, Sandstone = 2, DriedBone = 3 },
-				resource_count = { min = 14, max = 24 },
-				props = { "Skull", "DeadShrub", "SandDune" },
-				prop_count = { min = 10, max = 18 },
-				enemies = { "Scorpion" },
+				size = Vector2.new(110, 100),
+				resources = {
+					Cactus = { Weight = 0.8, DistanceWeight = { Min = 1.0, Max = 0.8 } },
+					Sandstone = { Weight = 0.4, DistanceWeight = { Min = 0.8, Max = 1.2 } },
+					DriedBone = { Weight = 0.3, DistanceWeight = { Min = 0.9, Max = 1.1 } },
+				},
+				resource_count = { min = 10, max = 18 },
+				props = {
+					{ Name = "SandDune", Weight = 1.4, DistanceWeight = { Min = 1.0, Max = 1.1 } },
+					{ Name = "Sand", Weight = 1.2, DistanceWeight = { Min = 1.1, Max = 0.9 } },
+					{ Name = "DeadShrub", Weight = 0.6, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+				},
+				prop_count = { min = 14, max = 24 },
+				enemies = {
+					{ Name = "Scorpion", Weight = 1.0, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+				},
 				enemy_count = { min = 0, max = 2 },
 			},
 			{
+				-- Exposed rock and mineable stone: the desert quarry
 				name = "RockyOutcrop",
-				size = Vector2.new(80, 80),
-				resources = { Sandstone = 1, Stone = 2, DriedBone = 3 },
-				resource_count = { min = 18, max = 30 },
-				props = { "Skull", "DeadShrub" },
+				size = Vector2.new(85, 85),
+				resources = {
+					Sandstone = { Weight = 1.3, DistanceWeight = { Min = 1.1, Max = 0.9 } },
+					Coal = { Weight = 1.0, DistanceWeight = { Min = 0.8, Max = 1.3 } },
+					DriedBone = { Weight = 0.5, DistanceWeight = { Min = 0.9, Max = 1.1 } },
+				},
+				resource_count = { min = 16, max = 28 },
+				props = {
+					{ Name = "Sand", Weight = 0.7, DistanceWeight = { Min = 0.9, Max = 1.1 } },
+					{ Name = "Skull", Weight = 0.9, DistanceWeight = { Min = 1.0, Max = 1.2 } },
+					{ Name = "DeadShrub", Weight = 0.6, DistanceWeight = { Min = 1.0, Max = 1.1 } },
+				},
 				prop_count = { min = 8, max = 14 },
-				enemies = { "Scorpion", "SandSerpent" },
+				enemies = {
+					{ Name = "Scorpion", Weight = 1.0, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+					{ Name = "SandSerpent", Weight = 0.6, DistanceWeight = { Min = 0.8, Max = 1.4 } },
+				},
+				enemy_count = { min = 0, max = 2 },
+			},
+			{
+				-- Graveyard of bones and remains: eerie, skull-heavy
+				name = "BoneYard",
+				size = Vector2.new(80, 80),
+				resources = {
+					DriedBone = { Weight = 1.4, DistanceWeight = { Min = 1.0, Max = 1.2 } },
+					Cactus = { Weight = 0.4, DistanceWeight = { Min = 1.0, Max = 0.8 } },
+					Coal = { Weight = 0.6, DistanceWeight = { Min = 0.9, Max = 1.3 } },
+				},
+				resource_count = { min = 14, max = 22 },
+				props = {
+					{ Name = "Skull", Weight = 1.5, DistanceWeight = { Min = 1.0, Max = 1.1 } },
+					{ Name = "Sand", Weight = 0.8, DistanceWeight = { Min = 1.0, Max = 0.9 } },
+					{ Name = "DeadShrub", Weight = 0.5, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+				},
+				prop_count = { min = 12, max = 20 },
+				enemies = {
+					{ Name = "Scorpion", Weight = 0.8, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+					{ Name = "SandSerpent", Weight = 0.7, DistanceWeight = { Min = 0.9, Max = 1.3 } },
+				},
+				enemy_count = { min = 0, max = 2 },
+			},
+			{
+				-- Dense cactus field: thorny and resource-rich
+				name = "CactusFlats",
+				size = Vector2.new(95, 90),
+				resources = {
+					Cactus = { Weight = 1.5, DistanceWeight = { Min = 1.1, Max = 0.9 } },
+					Sandstone = { Weight = 0.5, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+					DriedBone = { Weight = 0.3, DistanceWeight = { Min = 1.0, Max = 1.1 } },
+				},
+				resource_count = { min = 18, max = 30 },
+				props = {
+					{ Name = "DeadShrub", Weight = 1.2, DistanceWeight = { Min = 1.0, Max = 1.1 } },
+					{ Name = "Sand", Weight = 0.9, DistanceWeight = { Min = 1.1, Max = 0.9 } },
+					{ Name = "SandDune", Weight = 0.4, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+				},
+				prop_count = { min = 10, max = 18 },
+				enemies = {
+					{ Name = "Scorpion", Weight = 1.0, DistanceWeight = { Min = 0.9, Max = 1.1 } },
+				},
+				enemy_count = { min = 0, max = 2 },
+			},
+			{
+				-- Coal-rich scorched earth: blackened sand with mining opportunities
+				name = "ScorchedBasin",
+				size = Vector2.new(80, 90),
+				resources = {
+					Coal = { Weight = 1.4, DistanceWeight = { Min = 0.8, Max = 1.3 } },
+					Sandstone = { Weight = 0.9, DistanceWeight = { Min = 1.0, Max = 1.1 } },
+					Cactus = { Weight = 0.3, DistanceWeight = { Min = 1.0, Max = 0.8 } },
+				},
+				resource_count = { min = 16, max = 26 },
+				props = {
+					{ Name = "DeadShrub", Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 1.1 } },
+					{ Name = "Skull", Weight = 0.5, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+					{ Name = "Sand", Weight = 0.8, DistanceWeight = { Min = 1.1, Max = 0.9 } },
+				},
+				prop_count = { min = 10, max = 16 },
+				enemies = {
+					{ Name = "Scorpion", Weight = 0.9, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+					{ Name = "SandSerpent", Weight = 0.5, DistanceWeight = { Min = 0.8, Max = 1.4 } },
+				},
 				enemy_count = { min = 0, max = 2 },
 			},
 		},
-		structures = { "AncientRuins", "DesertOutpost" },
-		structure_count = 0.05,
+		structures = {
+			{ Name = "AncientRuins", Weight = 0.7, DistanceWeight = { Min = 0.9, Max = 1.3 } },
+			{ Name = "DesertOutpost", Weight = 0.5, DistanceWeight = { Min = 1.0, Max = 1.4 } },
+		},
+		structure_count = 0.5,
 		objectives = {},
 		objective_count = 0.025,
-		chests = { "Desert_Chest", "Rare_Chest" },
+		chests = {
+			{ Name = "Common_Chest", Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 0.9 } },
+			{ Name = "Rare_Chest", Weight = 0.4, DistanceWeight = { Min = 0.9, Max = 1.3 } },
+		},
 		chest_count = 0.08,
 	},
 	--[[ SWAMP - Uncomment when assets are ready
