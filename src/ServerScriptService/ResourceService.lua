@@ -13,7 +13,7 @@ if not HarvestFeedbackRE then
 	HarvestFeedbackRE = Instance.new("RemoteEvent")
 	HarvestFeedbackRE.Name = "HarvestFeedback"
 	HarvestFeedbackRE.Parent = Remotes
-end
+end`
 
 local ToolConfig = require(ReplicatedStorage.Modules.ToolConfig)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)

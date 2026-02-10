@@ -10,7 +10,7 @@ local StatsService = require(script.Parent.StatsService)
 
 local SurvivalService = {}
 SurvivalService._initialized = false
-SurvivalService._tickInterval = 0.2
+SurvivalService._tickInterval = 1
 
 SurvivalService._sprintWanted = setmetatable({}, { __mode = "k" })
 SurvivalService._sprintApplied = setmetatable({}, { __mode = "k" })
@@ -88,7 +88,7 @@ function SurvivalService:_tickPlayer(plr, dt)
 	end
 	temp = clamp(temp, TEMP_MIN, TEMP_MAX)
 
-	local over = math.max(0, math.abs(temp) - 50)
+	local over = math.max(0, (math.abs(temp) - 50) / 10)
 	if over > 0 then
 		hum:TakeDamage(over * dt)
 	end
