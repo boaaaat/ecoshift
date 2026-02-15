@@ -13,7 +13,7 @@ if not HarvestFeedbackRE then
 	HarvestFeedbackRE = Instance.new("RemoteEvent")
 	HarvestFeedbackRE.Name = "HarvestFeedback"
 	HarvestFeedbackRE.Parent = Remotes
-end
+end`
 
 local ToolConfig = require(ReplicatedStorage.Modules.ToolConfig)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
@@ -155,7 +155,9 @@ local function parseDropCount(nodeModel)
 end
 
 local function destroyNode(nodeModel: Model, player: Player?)
-	local itemId = getAttr(nodeModel, "DropItemId") or getAttr(nodeModel, "ItemId") or getAttr(nodeModel, "PickupItemId") or nodeModel.Name
+	local explicitDropItemId = getAttr(nodeModel, "DropItemId") or getAttr(nodeModel, "DropItemID")
+	local itemId = explicitDropItemId or getAttr(nodeModel, "ItemId") or getAttr(nodeModel, "PickupItemId") or nodeModel.Name
+	local dropScale = tonumber(getAttr(nodeModel, "DropScale"))
 	local count = parseDropCount(nodeModel)
 	if player then
 		local roleMult = tonumber(player:GetAttribute("Role_Gather")) or 1.0
@@ -166,7 +168,14 @@ local function destroyNode(nodeModel: Model, player: Player?)
 		count = math.max(1, math.floor(count * nightMult))
 	end
 	local pos = nodeModel:GetPivot().Position
-	ItemDropService:SpawnDrop(itemId, count, pos + Vector3.new(0, 2, 0))
+	local dropOptions = nil
+	if not explicitDropItemId and dropScale and dropScale > 0 then
+		dropOptions = {
+			FallbackModel = nodeModel,
+			DropScale = dropScale,
+		}
+	end
+	ItemDropService:SpawnDrop(itemId, count, pos + Vector3.new(0, 2, 0), dropOptions)
 	nodeModel:Destroy()
 end
 

@@ -85,20 +85,11 @@ Config.THREAT = {
 	FailedObjective = 1.5,
 }
 
+-- Event pools and definitions moved to EventsConfig.lua
+-- Cadence kept here for backward compat; EventService reads from EventsConfig primarily.
 Config.EVENTS = {
 	MinorCadence = { 180, 300 },
 	MajorCadence = { 420, 540 },
-	PoolMinor = {
-		"MeteorShower",
-		"ToxicFog",
-		"ResourceBoom",
-		"MonsoonFlood",
-	},
-	PoolMajor = {
-		"MonsterSiege",
-		"WormholeRift",
-		"BiomeQuake",
-	},
 }
 
 Config.OBJECTIVES = {
