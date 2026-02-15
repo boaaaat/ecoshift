@@ -1,8 +1,12 @@
 -- ServerMain.server.lua
 -- Boots core services in tiers and exposes global gameplay helpers.
 local Players = game:GetService("Players")
+local StarterPlayer = game:GetService("StarterPlayer")
 
 local Services = script.Parent.Services
+
+-- Reserve Shift for gameplay UI interactions (no Roblox shift lock).
+StarterPlayer.EnableMouseLockOption = false
 
 local _services = {}
 local function getService(name)

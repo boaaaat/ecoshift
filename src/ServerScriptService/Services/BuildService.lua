@@ -82,7 +82,7 @@ local function setupWorkbenchInteraction(inst, stationType)
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
 	prompt.HoldDuration = 0
 	prompt.MaxActivationDistance = station.InteractRadius or 8
-	prompt.RequiresLineOfSight = false
+	prompt.RequiresLineOfSight = true
 	prompt.Parent = promptParent
 	
 	-- Store station type for client reference

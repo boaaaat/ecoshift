@@ -2,11 +2,20 @@
 -- Spawns pickup items from ServerStorage/GameItems.
 local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local InventoryService = require(script.Parent.InventoryService)
 local PromptQueueService = require(script.Parent.PromptQueueService)
+local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 
 local ItemDropService = {}
+
+local function getPromptObjectText(itemId, count)
+	local item = ItemDatabase:Get(itemId)
+	local itemName = (item and item.Name) or itemId or "Item"
+	local qty = math.max(1, math.floor(tonumber(count) or 1))
+	return string.format("%dx %s", qty, itemName)
+end
 
 local function ensureFolder()
 	local folder = Workspace:FindFirstChild("ItemDrops")
@@ -31,16 +40,18 @@ local function attachPrompt(model)
 	local part = model.PrimaryPart or getPrimary(model)
 	if not part then return end
 	model.PrimaryPart = part
+	local itemId = model:GetAttribute("ItemId") or model.Name
+	local count = model:GetAttribute("Count") or 1
 	local prompt = part:FindFirstChildOfClass("ProximityPrompt")
 	if not prompt then
 		prompt = Instance.new("ProximityPrompt")
-		prompt.ActionText = "Pick Up"
-		prompt.ObjectText = model:GetAttribute("ItemId") or model.Name
-		prompt.RequiresLineOfSight = false
-		prompt.HoldDuration = 0.2
-		prompt.MaxActivationDistance = 10
 		prompt.Parent = part
 	end
+	prompt.ActionText = "Pick Up"
+	prompt.ObjectText = getPromptObjectText(itemId, count)
+	prompt.RequiresLineOfSight = true
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = 10
 	prompt.Triggered:Connect(function(plr)
 		local id = model:GetAttribute("ItemId")
 		local count = model:GetAttribute("Count") or 1
@@ -53,6 +64,7 @@ local function attachPrompt(model)
 end
 
 function ItemDropService:SpawnDrop(itemId, count, position)
+	count = math.max(1, math.floor(tonumber(count) or 1))
 	local itemsFolder = ServerStorage:FindFirstChild("GameItems")
 	local prefab = itemsFolder and itemsFolder:FindFirstChild(itemId)
 	local model

@@ -86,7 +86,7 @@ local function attachDurationPrompt(instance)
 		prompt = Instance.new("ProximityPrompt")
 		prompt.ActionText = "Harvest"
 		prompt.ObjectText = instance.Name
-		prompt.RequiresLineOfSight = false
+		prompt.RequiresLineOfSight = true
 		prompt.Parent = part
 	end
 	prompt.MaxActivationDistance = 10

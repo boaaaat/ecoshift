@@ -37,7 +37,7 @@ local function attachPrompt(part, objectiveId)
 	prompt.ObjectText = objectiveId
 	prompt.HoldDuration = 0.5
 	prompt.MaxActivationDistance = 10
-	prompt.RequiresLineOfSight = false
+	prompt.RequiresLineOfSight = true
 	local conn = ObjectiveRuntimeService._promptConns[prompt]
 	if not conn then
 		conn = prompt.Triggered:Connect(function()

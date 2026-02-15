@@ -11,14 +11,14 @@ if not rSprint then
 	return
 end
 
-local function isShift(keyCode)
-	return keyCode == Enum.KeyCode.LeftShift or keyCode == Enum.KeyCode.RightShift
+local function isSprintKey(keyCode)
+	return keyCode == Enum.KeyCode.LeftControl or keyCode == Enum.KeyCode.RightControl
 end
 
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 	if UserInputService:GetFocusedTextBox() then return end
-	if isShift(input.KeyCode) then
+	if isSprintKey(input.KeyCode) then
 		rSprint:FireServer(true)
 	end
 end)
@@ -26,7 +26,7 @@ end)
 UserInputService.InputEnded:Connect(function(input, processed)
 	if processed then return end
 	if UserInputService:GetFocusedTextBox() then return end
-	if isShift(input.KeyCode) then
+	if isSprintKey(input.KeyCode) then
 		rSprint:FireServer(false)
 	end
 end)

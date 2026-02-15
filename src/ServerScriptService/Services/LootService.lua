@@ -169,7 +169,7 @@ function LootService:_ensureChestData(chest)
 	local slotCount = getChestSlotCount(chest)
 	local slots = {}
 	local cursor = 1
-	for _, item in ipairs(items) do`
+	for _, item in ipairs(items) do
 		if cursor > slotCount then break end
 		slots[cursor] = { Id = item.Id, N = item.N }
 		cursor += 1
@@ -262,14 +262,14 @@ local function attachChestPrompt(chest)
 		prompt.ObjectText = chest.Name
 		prompt.HoldDuration = 0.2
 		prompt.MaxActivationDistance = 10
-		prompt.RequiresLineOfSight = false
+		prompt.RequiresLineOfSight = true
 		prompt.Parent = part
 	end
 	prompt.ActionText = "Open"
 	prompt.ObjectText = chest.Name
 	prompt.HoldDuration = 0.2
 	prompt.MaxActivationDistance = 10
-	prompt.RequiresLineOfSight = false
+	prompt.RequiresLineOfSight = true
 	prompt:SetAttribute(PROMPT_BOUND_ATTR, true)
 	if LootService._chestPromptConns[prompt] then
 		return

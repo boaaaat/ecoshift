@@ -347,7 +347,7 @@ function DeathService:_createRagdoll(character)
 		prompt.ObjectText = character.Name
 		prompt.HoldDuration = REVIVAL_TIME
 		prompt.MaxActivationDistance = REVIVAL_RANGE
-		prompt.RequiresLineOfSight = false
+		prompt.RequiresLineOfSight = true
 		prompt.Parent = hrp
 		
 		-- Store original player reference

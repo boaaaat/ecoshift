@@ -21,6 +21,15 @@ local function disableDefaultUI()
 end
 disableDefaultUI()
 
+local function disableShiftLock()
+	local localPlayer = Players.LocalPlayer
+	if not localPlayer then return end
+	pcall(function()
+		localPlayer.DevEnableMouseLock = false
+	end)
+end
+disableShiftLock()
+
 -- OPTIMIZED: Defer config loading to not block script start
 local Config, Util
 task.spawn(function()
