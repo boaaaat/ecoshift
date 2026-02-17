@@ -123,7 +123,7 @@ local function attachPrompt(model)
 	end)
 end
 
-function ItemDropService:SpawnDrop(itemId, count, position)
+function ItemDropService:SpawnDrop(itemId, count, position, options)
 	count = math.max(1, math.floor(tonumber(count) or 1))
 	local itemsFolder = ServerStorage:FindFirstChild("GameItems")
 	local prefab = itemsFolder and itemsFolder:FindFirstChild(itemId)

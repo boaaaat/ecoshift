@@ -28,18 +28,3 @@ local remotesFolder = ensureFolder(ReplicatedStorage, "Remotes")
 for _, name in pairs(Config.RemoteNames) do
 	ensureRemoteEvent(remotesFolder, name)
 end
-
--- Extra remotes used by resource/harvest scripts
-ensureRemoteEvent(remotesFolder, "ResourceInteract")
-ensureRemoteEvent(remotesFolder, "ResourceCarry")
-ensureRemoteEvent(remotesFolder, "GiveResourceEvent")
-
--- Extra remotes for UI systems
-ensureRemoteEvent(remotesFolder, "InventoryUpdate")
-ensureRemoteEvent(remotesFolder, "InventoryAction")
-ensureRemoteEvent(remotesFolder, "ProfileUpdate")
-ensureRemoteEvent(remotesFolder, "RoleUpdate")
-ensureRemoteEvent(remotesFolder, "RoleSelect")
-ensureRemoteEvent(remotesFolder, "GameStateUpdate")
-ensureRemoteEvent(remotesFolder, "DropItem")
-ensureRemoteEvent(remotesFolder, "ChestEvent")

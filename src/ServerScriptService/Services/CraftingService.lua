@@ -11,6 +11,20 @@ local InventoryService = require(script.Parent.InventoryService)
 local CraftingService = {}
 CraftingService._initialized = false
 
+local function resolveRecipe(recipeId)
+	return WorkbenchConfig.RECIPES[recipeId]
+end
+
+local function adjustedIngredientsForPlayer(plr, ingredients)
+	local craftMult = tonumber(plr:GetAttribute("Role_Craft")) or 1.0
+	local adjusted = {}
+	for _, entry in ipairs(ingredients or {}) do
+		local n = math.max(1, math.floor((entry.N or 1) / math.max(craftMult, 0.1)))
+		adjusted[#adjusted + 1] = { Id = entry.Id, N = n }
+	end
+	return adjusted
+end
+
 -- Find nearest workbench of a specific type within range
 function CraftingService:FindNearbyStation(plr, stationType)
 	local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
@@ -67,20 +81,7 @@ end
 
 -- Check if player can craft a recipe (with station validation)
 function CraftingService:CanCraft(plr, recipeId, stationType)
-	local recipe = WorkbenchConfig.RECIPES[recipeId]
-	
-	-- Fallback to old Config.RECIPES for backwards compatibility
-	if not recipe then
-		local oldRecipe = Config.RECIPES[recipeId]
-		if oldRecipe then
-			-- Convert old format to new format
-			recipe = {
-				Ingredients = oldRecipe,
-				Output = { Id = recipeId, N = 1 },
-				StationTier = 1,  -- Default to workbench tier
-			}
-		end
-	end
+	local recipe = resolveRecipe(recipeId)
 	
 	if not recipe then 
 		print("[CraftingService] No recipe found for:", recipeId)
@@ -110,12 +111,7 @@ function CraftingService:CanCraft(plr, recipeId, stationType)
 	local ingredients = recipe.Ingredients or recipe
 	
 	-- Calculate adjusted costs with craft multiplier
-	local craftMult = tonumber(plr:GetAttribute("Role_Craft")) or 1.0
-	local adjusted = {}
-	for _, entry in ipairs(ingredients) do
-		local n = math.max(1, math.floor((entry.N or 1) / math.max(craftMult, 0.1)))
-		adjusted[#adjusted + 1] = { Id = entry.Id, N = n }
-	end
+	local adjusted = adjustedIngredientsForPlayer(plr, ingredients)
 	
 	-- Check if player can afford
 	if not InventoryService:CanAfford(plr, adjusted) then
@@ -137,28 +133,15 @@ function CraftingService:Craft(plr, recipeId, stationType)
 		return false, reason, extra
 	end
 	
-	-- Get recipe
-	local recipe = WorkbenchConfig.RECIPES[recipeId]
+	local recipe = resolveRecipe(recipeId)
 	if not recipe then
-		local oldRecipe = Config.RECIPES[recipeId]
-		if oldRecipe then
-			recipe = {
-				Ingredients = oldRecipe,
-				Output = { Id = recipeId, N = 1 },
-			}
-		end
+		return false, "NoRecipe"
 	end
 	
 	local ingredients = recipe.Ingredients or recipe
 	local output = recipe.Output or { Id = recipeId, N = 1 }
 	
-	-- Calculate adjusted costs
-	local craftMult = tonumber(plr:GetAttribute("Role_Craft")) or 1.0
-	local adjusted = {}
-	for _, entry in ipairs(ingredients) do
-		local n = math.max(1, math.floor((entry.N or 1) / math.max(craftMult, 0.1)))
-		adjusted[#adjusted + 1] = { Id = entry.Id, N = n }
-	end
+	local adjusted = adjustedIngredientsForPlayer(plr, ingredients)
 	
 	-- Pay the cost
 	if not InventoryService:PayCost(plr, adjusted) then
@@ -168,13 +151,21 @@ function CraftingService:Craft(plr, recipeId, stationType)
 	
 	-- Give the output item(s)
 	local outputId = output.Id or recipeId
-	local outputCount = output.N or 1
-	local added = InventoryService:Give(plr, outputId, outputCount)
+	local outputCount = math.max(1, math.floor(tonumber(output.N) or 1))
+	local added = InventoryService:Give(plr, outputId, outputCount, true)
+	if added ~= outputCount then
+		-- Roll back consumed ingredients (best effort) so crafting cannot eat items.
+		for _, entry in ipairs(adjusted) do
+			InventoryService:Give(plr, entry.Id, entry.N)
+		end
+		warn(string.format("[CraftingService] Output grant failed for %s (%s x%d). Rolled back ingredients.",
+			plr.Name, tostring(outputId), outputCount))
+		return false, "InventoryFull"
+	end
+
+	print(string.format("[CraftingService] Crafted %s x%d for %s", outputId, outputCount, plr.Name))
 	
-	print(string.format("[CraftingService] Crafted %s x%d for %s (added: %d)", 
-		outputId, outputCount, plr.Name, added))
-	
-	return true
+	return true, "Success"
 end
 
 -- Get all recipes available at a station
@@ -194,9 +185,17 @@ function CraftingService:Init()
 			print(string.format("[CraftingService] Received craft request from %s for %s at %s", 
 				plr.Name, tostring(recipeId), tostring(stationType or "Hand")))
 			local ok, reason, extra = self:Craft(plr, recipeId, stationType)
+			local normalizedReason = reason or (ok and "Success" or "Unknown")
+			rCraft:FireClient(plr, "Result", {
+				Success = ok == true,
+				RecipeId = recipeId,
+				Reason = normalizedReason,
+				Extra = extra,
+				StationType = stationType or "Hand",
+			})
 			if not ok then
 				warn(string.format("[CraftingService] Craft failed for %s: %s (%s)", 
-					plr.Name, tostring(reason), tostring(extra)))
+					plr.Name, tostring(normalizedReason), tostring(extra)))
 			end
 		end)
 		print("[CraftingService] Initialized - listening for craft requests")

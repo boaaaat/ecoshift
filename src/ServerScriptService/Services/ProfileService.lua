@@ -80,6 +80,17 @@ local function toSaveData(profile)
 	}
 end
 
+local function unionSets(a, b)
+	local out = {}
+	for k, v in pairs(a or {}) do
+		if v then out[k] = true end
+	end
+	for k, v in pairs(b or {}) do
+		if v then out[k] = true end
+	end
+	return out
+end
+
 function ProfileService:Init()
 	if self._remote then return end
 	local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
@@ -119,7 +130,27 @@ function ProfileService:Save(plr)
 	local key = tostring(plr.UserId)
 	local payload = toSaveData(profile)
 	local ok, err = pcall(function()
-		self._store:SetAsync(key, payload)
+		self._store:UpdateAsync(key, function(current)
+			local currentProfile = sanitize(current)
+			local incomingProfile = sanitize(Util.DeepCopy(payload))
+
+			local merged = {
+				XP = math.max(tonumber(currentProfile.XP) or 0, tonumber(incomingProfile.XP) or 0),
+				Level = math.max(tonumber(currentProfile.Level) or 1, tonumber(incomingProfile.Level) or 1),
+				Role = incomingProfile.Role or currentProfile.Role or Config.ROLES.Default,
+				UnlockedRoles = unionSets(currentProfile.UnlockedRoles, incomingProfile.UnlockedRoles),
+				Perks = unionSets(currentProfile.Perks, incomingProfile.Perks),
+				Cosmetics = unionSets(currentProfile.Cosmetics, incomingProfile.Cosmetics),
+				Blueprints = unionSets(currentProfile.Blueprints, incomingProfile.Blueprints),
+			}
+
+			if not merged.UnlockedRoles[merged.Role] then
+				merged.Role = Config.ROLES.Default
+				merged.UnlockedRoles[merged.Role] = true
+			end
+
+			return toSaveData(merged)
+		end)
 	end)
 	if not ok then
 		warn("[ProfileService] Save failed:", err)

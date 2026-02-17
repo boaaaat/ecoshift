@@ -122,26 +122,29 @@ local function setupChestInteraction(inst)
 end
 
 function BuildService:Place(plr, buildType, worldPos)
-	if not isAllowedType(buildType) then return false end
-	if not withinRange(plr, worldPos) then return false end
+	if type(buildType) ~= "string" or typeof(worldPos) ~= "Vector3" then
+		return false, "InvalidPayload"
+	end
+	if not isAllowedType(buildType) then return false, "InvalidType" end
+	if not withinRange(plr, worldPos) then return false, "OutOfRange" end
 	local dist = math.sqrt(worldPos.X * worldPos.X + worldPos.Z * worldPos.Z)
-	if dist > (BiomeConfig.WORLD.WorldRadius or 2200) then return false end
-	if dist < (BiomeConfig.WORLD.CenterExclusionRadius or 0) then return false end
+	if dist > (BiomeConfig.WORLD.WorldRadius or 2200) then return false, "OutOfBounds" end
+	if dist < (BiomeConfig.WORLD.CenterExclusionRadius or 0) then return false, "OutOfBounds" end
 
 	local gx, gz = GridService:WorldToGrid(worldPos)
-	if GridService:IsOccupied(gx, gz) then return false end
+	if GridService:IsOccupied(gx, gz) then return false, "Occupied" end
 
 	-- Check if this is a placeable item (uses item from inventory)
 	if isPlaceableItem(buildType) then
 		-- Check if player has the item
 		if not InventoryService:HasItem(plr, buildType, 1) then
 			print(string.format("[BuildService] Player %s doesn't have %s to place", plr.Name, buildType))
-			return false
+			return false, "MissingPlaceableItem"
 		end
 		-- Consume the item
 		if not InventoryService:Take(plr, buildType, 1) then
 			print(string.format("[BuildService] Failed to consume %s from %s", buildType, plr.Name))
-			return false
+			return false, "MissingPlaceableItem"
 		end
 	else
 		-- Traditional building with resource costs
@@ -152,7 +155,7 @@ function BuildService:Place(plr, buildType, worldPos)
 			local n = math.max(1, math.floor((entry.N or 1) / math.max(buildMult, 0.1)))
 			adjusted[#adjusted + 1] = { Id = entry.Id, N = n }
 		end
-		if not InventoryService:PayCost(plr, adjusted) then return false end
+		if not InventoryService:PayCost(plr, adjusted) then return false, "MissingCost" end
 	end
 
 	local pos = GridService:GridToWorld(gx, gz, worldPos.Y)
@@ -191,46 +194,91 @@ function BuildService:Place(plr, buildType, worldPos)
 	GridService:Reserve(gx, gz, plr.UserId, inst)
 	
 	print(string.format("[BuildService] %s placed %s at (%d, %d)", plr.Name, buildType, gx, gz))
-	return true
+	return true, "Success"
 end
 
 function BuildService:Remove(plr, target)
-	if typeof(target) ~= "Instance" or not target.Parent then return false end
-	local owner = target:GetAttribute("OwnerUserId")
-	if owner and owner ~= plr.UserId then return false end
-	local pos = target:IsA("Model") and target:GetPivot().Position or target.Position
-	if not withinRange(plr, pos) then return false end
+	if typeof(target) ~= "Instance" or not target.Parent then return false, "InvalidPayload" end
+	local placed = target
+	if placed:IsA("BasePart") then
+		local maybeModel = placed:FindFirstAncestorOfClass("Model")
+		if maybeModel and maybeModel:GetAttribute("BuildType") then
+			placed = maybeModel
+		end
+	end
+	if not placed:GetAttribute("BuildType") then return false, "NotStructure" end
+	if not CollectionService:HasTag(placed, "Structure") then return false, "NotStructure" end
+
+	local owner = tonumber(placed:GetAttribute("OwnerUserId"))
+	if owner ~= plr.UserId then return false, "NotOwner" end
+
+	local pos = placed:IsA("Model") and placed:GetPivot().Position or placed.Position
+	if not withinRange(plr, pos) then return false, "RemoveOutOfRange" end
 	
 	-- Return placeable item to player's inventory
-	local buildType = target:GetAttribute("BuildType")
+	local buildType = placed:GetAttribute("BuildType")
 	if buildType and isPlaceableItem(buildType) then
 		InventoryService:Give(plr, buildType, 1)
 		print(string.format("[BuildService] Returned %s to %s's inventory", buildType, plr.Name))
 	end
 	
-	local gx = target:GetAttribute("GridX")
-	local gz = target:GetAttribute("GridZ")
+	local gx = placed:GetAttribute("GridX")
+	local gz = placed:GetAttribute("GridZ")
 	if typeof(gx) == "number" and typeof(gz) == "number" then
 		GridService:Release(gx, gz)
 	else
-		GridService:ReleaseByInstance(target)
+		GridService:ReleaseByInstance(placed)
 	end
-	target:Destroy()
-	return true
+	placed:Destroy()
+	return true, "Success"
 end
 
 function BuildService:Bind()
-	if not self._remoteBuild then return end
+	if not self._remoteBuild then
+		warn("[BuildService] Missing build remote:", Config.RemoteNames.Build)
+		return
+	end
 	self._remoteBuild.OnServerEvent:Connect(function(plr, action, payload)
 		if type(action) ~= "string" then return end
 		if action == "Place" then
 			local buildType = payload and payload.Type
 			local pos = payload and payload.Position
-			if typeof(pos) ~= "Vector3" or type(buildType) ~= "string" then return end
-			pcall(function() BuildService:Place(plr, buildType, pos) end)
+			if typeof(pos) ~= "Vector3" or type(buildType) ~= "string" then
+				self._remoteBuild:FireClient(plr, "Result", {
+					Action = "Place",
+					Success = false,
+					Reason = "InvalidPayload",
+				})
+				return
+			end
+			local ok, placed, reason = pcall(function()
+				return BuildService:Place(plr, buildType, pos)
+			end)
+			local success = ok and placed == true
+			self._remoteBuild:FireClient(plr, "Result", {
+				Action = "Place",
+				Success = success,
+				Reason = success and (reason or "Success") or (ok and (reason or "Unknown") or "Unknown"),
+			})
 		elseif action == "Remove" then
 			local target = payload and payload.Target
-			pcall(function() BuildService:Remove(plr, target) end)
+			if typeof(target) ~= "Instance" then
+				self._remoteBuild:FireClient(plr, "Result", {
+					Action = "Remove",
+					Success = false,
+					Reason = "InvalidPayload",
+				})
+				return
+			end
+			local ok, removed, reason = pcall(function()
+				return BuildService:Remove(plr, target)
+			end)
+			local success = ok and removed == true
+			self._remoteBuild:FireClient(plr, "Result", {
+				Action = "Remove",
+				Success = success,
+				Reason = success and (reason or "Success") or (ok and (reason or "Unknown") or "Unknown"),
+			})
 		end
 	end)
 end

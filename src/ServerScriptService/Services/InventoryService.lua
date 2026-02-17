@@ -219,11 +219,27 @@ function InventoryService:Give(plr, itemId, amount, requireFit)
 	return added
 end
 
-function InventoryService:Consume(plr, itemId, amount)
+local function consumeNoSync(inv, itemId, amount)
 	amount = math.floor(tonumber(amount) or 0)
 	if amount <= 0 then return false end
-	if not self:Has(plr, itemId, amount) then return false end
-	local inv = getInv(plr)
+
+	local total = 0
+	for i = 1, HOTBAR_SLOTS do
+		local slot = inv.Hotbar[i]
+		if slot and slot.Id == itemId then
+			total += slot.N
+		end
+	end
+	for i = 1, STORAGE_SLOTS do
+		local slot = inv.Storage[i]
+		if slot and slot.Id == itemId then
+			total += slot.N
+		end
+	end
+	if total < amount then
+		return false
+	end
+
 	local remaining = amount
 	local function consumeSlots(slots, slotCount)
 		for i = 1, slotCount do
@@ -232,15 +248,26 @@ function InventoryService:Consume(plr, itemId, amount)
 				local take = math.min(slot.N, remaining)
 				slot.N -= take
 				remaining -= take
-				if slot.N <= 0 then slots[i] = nil end
-				if remaining <= 0 then return end
+				if slot.N <= 0 then
+					slots[i] = nil
+				end
+				if remaining <= 0 then
+					return
+				end
 			end
 		end
 	end
+
 	consumeSlots(inv.Hotbar, HOTBAR_SLOTS)
 	if remaining > 0 then
 		consumeSlots(inv.Storage, STORAGE_SLOTS)
 	end
+	return remaining <= 0
+end
+
+function InventoryService:Consume(plr, itemId, amount)
+	local inv = getInv(plr)
+	if not consumeNoSync(inv, itemId, amount) then return false end
 	self:Sync(plr)
 	return true
 end
@@ -287,8 +314,14 @@ function InventoryService:TryAddToSlot(plr, slotType, slotIndex, itemId, amount)
 end
 
 function InventoryService:CanAfford(plr, costList)
+	local required = {}
 	for _, cost in ipairs(costList or {}) do
-		if not self:Has(plr, cost.Id, cost.N) then
+		if cost and cost.Id then
+			required[cost.Id] = (required[cost.Id] or 0) + (tonumber(cost.N) or 0)
+		end
+	end
+	for itemId, amount in pairs(required) do
+		if amount > 0 and not self:Has(plr, itemId, amount) then
 			return false
 		end
 	end
@@ -297,9 +330,13 @@ end
 
 function InventoryService:PayCost(plr, costList)
 	if not self:CanAfford(plr, costList) then return false end
+	local inv = getInv(plr)
 	for _, cost in ipairs(costList or {}) do
-		self:Consume(plr, cost.Id, cost.N)
+		if not consumeNoSync(inv, cost.Id, cost.N) then
+			return false
+		end
 	end
+	self:Sync(plr)
 	return true
 end
 

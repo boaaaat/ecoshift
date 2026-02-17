@@ -376,16 +376,6 @@ end
 local function onInputBegan(input, gameProcessed)
 	if gameProcessed then return end
 	
-	-- DEBUG: Press K to kill yourself for testing
-	if input.KeyCode == Enum.KeyCode.K then
-		local char = player.Character
-		local hum = char and char:FindFirstChildOfClass("Humanoid")
-		if hum and hum.Health > 0 then
-			hum.Health = 0
-			print("[DEBUG] Killed player for testing")
-		end
-	end
-	
 	if isSpectating then
 		if input.KeyCode == Enum.KeyCode.Q then
 			-- Previous target

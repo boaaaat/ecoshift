@@ -6,7 +6,6 @@ local Config = {}
 Config.Paths = {
 	Remotes = "ReplicatedStorage/Remotes",
 	EnemySpawnsFolder = "Workspace/EnemySpawns",
-	ResourceNodesFolder = "Workspace/ResourceNodes",
 	ObjectivesFolder = "Workspace/Objectives",
 }
 
@@ -85,8 +84,7 @@ Config.THREAT = {
 	FailedObjective = 1.5,
 }
 
--- Event pools and definitions moved to EventsConfig.lua
--- Cadence kept here for backward compat; EventService reads from EventsConfig primarily.
+-- Event cadence values consumed by EventService.
 Config.EVENTS = {
 	MinorCadence = { 180, 300 },
 	MajorCadence = { 420, 540 },
@@ -108,29 +106,6 @@ Config.OBJECTIVES = {
 }
 
 -- NOTE: Biome configuration moved to ReplicatedStorage/Shared/BiomeConfig.lua
-
-Config.RECIPES = {
-	StoneHatchet = {
-		{ Id = "Wood", N = 2 },
-		{ Id = "Stone", N = 1 },
-	},
-	StonePickaxe = {
-		{ Id = "Wood", N = 2 },
-		{ Id = "Stone", N = 2 },
-	},
-	Bow = {
-		{ Id = "Wood", N = 3 },
-		{ Id = "Reed", N = 2 },
-	},
-	Arrow = {
-		{ Id = "Wood", N = 1 },
-		{ Id = "Stone", N = 1 },
-	},
-	Campfire = {
-		{ Id = "Wood", N = 4 },
-		{ Id = "Stone", N = 2 },
-	},
-}
 
 Config.BUILD = {
 	AllowedTypes = {

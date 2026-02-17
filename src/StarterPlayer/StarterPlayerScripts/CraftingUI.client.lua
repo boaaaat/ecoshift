@@ -10,15 +10,19 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local WorkbenchConfig = require(ReplicatedStorage.Shared.WorkbenchConfig)
+local ResultMessages = require(ReplicatedStorage.Shared.ResultMessages)
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- OPTIMIZED: Try immediate lookup first, use shorter timeout
-local remotesFolder = Util.GetDescendant(Config.Paths.Remotes) 
-	or Util.WaitForDescendant(Config.Paths.Remotes, 5)
+local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 5)
 local rCraft = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.Craft)
 local rInventory = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.InventoryUpdate)
+if not remotesFolder then
+	warn("[CraftingUI] Missing remotes folder:", Config.Paths.Remotes)
+elseif not rCraft then
+	warn("[CraftingUI] Missing craft remote:", Config.RemoteNames.Craft)
+end
 
 -- UI Constants (matching inventory style)
 local COLORS = {
@@ -39,11 +43,16 @@ local COLORS = {
 
 local MARGIN = 16
 local RECIPE_HEIGHT = 70
+local CRAFT_REQUEST_TIMEOUT = 2
+local CRAFT_MESSAGES = ResultMessages.Craft or {}
 
 -- State
 local isOpen = false
 local inventorySnapshot = nil
 local selectedRecipe = nil
+local isCraftPending = false
+local pendingRequestToken = 0
+local statusToken = 0
 
 -- Create main GUI
 local gui = Instance.new("ScreenGui")
@@ -195,13 +204,50 @@ craftBtnStroke.Color = COLORS.Border
 craftBtnStroke.Thickness = 1
 craftBtnStroke.Parent = craftBtn
 
--- Helper functions
-local function hashColor(id)
-	local hash = 0
-	for i = 1, #id do
-		hash = (hash * 33 + string.byte(id, i)) % 360
+local inlineStatusLabel = Instance.new("TextLabel")
+inlineStatusLabel.Name = "InlineStatus"
+inlineStatusLabel.Size = UDim2.new(1, -MARGIN * 2, 0, 16)
+inlineStatusLabel.AnchorPoint = Vector2.new(0, 1)
+inlineStatusLabel.Position = UDim2.new(0, MARGIN, 1, -6)
+inlineStatusLabel.BackgroundTransparency = 1
+inlineStatusLabel.Text = ""
+inlineStatusLabel.TextColor3 = COLORS.TextMuted
+inlineStatusLabel.TextSize = 12
+inlineStatusLabel.Font = Enum.Font.Gotham
+inlineStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+inlineStatusLabel.Visible = false
+inlineStatusLabel.ZIndex = 12
+inlineStatusLabel.Parent = mainPanel
+
+local function messageForReason(reason)
+	local key = tostring(reason or "Unknown")
+	return CRAFT_MESSAGES[key] or CRAFT_MESSAGES.Unknown or "Crafting failed."
+end
+
+local function showInlineStatus(text, color, duration)
+	statusToken += 1
+	local token = statusToken
+	inlineStatusLabel.Text = text or ""
+	inlineStatusLabel.TextColor3 = color or COLORS.TextMuted
+	inlineStatusLabel.Visible = text ~= nil and text ~= ""
+	if duration and duration > 0 then
+		task.delay(duration, function()
+			if token ~= statusToken then return end
+			inlineStatusLabel.Visible = false
+			inlineStatusLabel.Text = ""
+		end)
 	end
-	return Color3.fromHSV(hash / 360, 0.55, 0.85)
+end
+
+local function beginCraftPending()
+	isCraftPending = true
+	pendingRequestToken += 1
+	local token = pendingRequestToken
+	craftBtn.Text = "Crafting..."
+	craftBtn.TextColor3 = COLORS.Text
+	craftBtn.BackgroundColor3 = COLORS.Accent
+	craftBtnStroke.Color = COLORS.Accent
+	return token
 end
 
 local function getItemCount(itemId)
@@ -225,27 +271,10 @@ local function getItemCount(itemId)
 end
 
 local function canCraftRecipe(recipeId)
-	-- Check WorkbenchConfig first for new recipes
 	local recipe = WorkbenchConfig.RECIPES[recipeId]
-	if recipe then
-		local craftMult = tonumber(player:GetAttribute("Role_Craft")) or 1.0
-		for _, ingredient in ipairs(recipe.Ingredients or {}) do
-			local needed = math.max(1, math.floor((ingredient.N or 1) / math.max(craftMult, 0.1)))
-			local have = getItemCount(ingredient.Id)
-			if have < needed then
-				return false
-			end
-		end
-		return true
-	end
-	
-	-- Fallback to old Config.RECIPES for backwards compatibility
-	local oldRecipe = Config.RECIPES[recipeId]
-	if not oldRecipe then return false end
-	
+	if not recipe then return false end
 	local craftMult = tonumber(player:GetAttribute("Role_Craft")) or 1.0
-	
-	for _, ingredient in ipairs(oldRecipe) do
+	for _, ingredient in ipairs(recipe.Ingredients or {}) do
 		local needed = math.max(1, math.floor((ingredient.N or 1) / math.max(craftMult, 0.1)))
 		local have = getItemCount(ingredient.Id)
 		if have < needed then
@@ -305,18 +334,8 @@ end
 local recipeCards = {}
 
 local function createRecipeCard(recipeId, recipeData)
-	-- Handle both old format (array) and new format (table with Ingredients)
-	local ingredients, output, category
-	if recipeData.Ingredients then
-		-- New WorkbenchConfig format
-		ingredients = recipeData.Ingredients
-		output = recipeData.Output or { Id = recipeId, N = 1 }
-		category = recipeData.Category
-	else
-		-- Old Config.RECIPES format
-		ingredients = recipeData
-		output = { Id = recipeId, N = 1 }
-	end
+	local ingredients = recipeData.Ingredients or {}
+	local output = recipeData.Output or { Id = recipeId, N = 1 }
 	
 	local item = ItemDatabase:Get(output.Id)
 	local name = item and item.Name or output.Id
@@ -429,6 +448,14 @@ local function createRecipeCard(recipeId, recipeData)
 end
 
 function updateCraftButton()
+	if isCraftPending then
+		craftBtn.Text = "Crafting..."
+		craftBtn.TextColor3 = COLORS.Text
+		craftBtn.BackgroundColor3 = COLORS.Accent
+		craftBtnStroke.Color = COLORS.Accent
+		return
+	end
+	
 	if not selectedRecipe then
 		craftBtn.Text = "Select a Recipe"
 		craftBtn.TextColor3 = COLORS.TextMuted
@@ -507,6 +534,11 @@ local function openCrafting()
 	}):Play()
 	
 	refreshRecipes()
+	if isCraftPending then
+		showInlineStatus("Crafting...", COLORS.Accent)
+	else
+		showInlineStatus(nil)
+	end
 end
 
 local function closeCrafting()
@@ -538,22 +570,24 @@ backdrop.InputBegan:Connect(function(input)
 end)
 
 craftBtn.MouseButton1Click:Connect(function()
+	if isCraftPending then return end
 	if not selectedRecipe then return end
 	if not canCraftRecipe(selectedRecipe) then return end
 	if not rCraft then return end
 	
+	local requestToken = beginCraftPending()
+	showInlineStatus("Crafting...", COLORS.Accent)
+	
 	-- Send craft request (Hand crafting)
 	rCraft:FireServer(selectedRecipe, "Hand")
 	
-	-- Visual feedback
-	local originalColor = craftBtn.BackgroundColor3
-	craftBtn.BackgroundColor3 = COLORS.Accent
-	task.delay(0.15, function()
-		if canCraftRecipe(selectedRecipe) then
-			craftBtn.BackgroundColor3 = COLORS.Success
-		else
-			craftBtn.BackgroundColor3 = COLORS.Danger
-		end
+	task.delay(CRAFT_REQUEST_TIMEOUT, function()
+		if not isCraftPending then return end
+		if requestToken ~= pendingRequestToken then return end
+		isCraftPending = false
+		pendingRequestToken += 1
+		updateCraftButton()
+		showInlineStatus("Request timed out", COLORS.Warning, 2)
 	end)
 end)
 
@@ -570,6 +604,23 @@ UserInputService.InputBegan:Connect(function(input, processed)
 		closeCrafting()
 	end
 end)
+
+if rCraft then
+	rCraft.OnClientEvent:Connect(function(kind, payload)
+		if kind ~= "Result" or type(payload) ~= "table" then return end
+		if payload.StationType and payload.StationType ~= "Hand" then return end
+		local success = payload.Success == true
+		if isCraftPending then
+			isCraftPending = false
+			pendingRequestToken += 1
+		end
+		local reason = payload.Reason or (success and "Success" or "Unknown")
+		showInlineStatus(messageForReason(reason), success and COLORS.Success or COLORS.Danger, success and 1.2 or 1.8)
+		if isOpen then
+			refreshRecipes()
+		end
+	end)
+end
 
 -- Inventory sync - MUST be set up early to catch initial snapshot
 if rInventory then

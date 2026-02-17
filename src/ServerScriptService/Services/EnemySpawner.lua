@@ -75,10 +75,7 @@ end
 local function getEnemyPrefab(id)
 	local biomeName = BiomeService:GetCurrent()
 	local biomeRoot = ServerStorage:FindFirstChild("EnemyPrefabs")
-	local fallbackRoot = ServerStorage:FindFirstChild("Enemies")
-	local prefab = findPrefabInFolder(biomeRoot, biomeName, id)
-	if prefab then return prefab end
-	return findPrefabInFolder(fallbackRoot, biomeName, id)
+	return findPrefabInFolder(biomeRoot, biomeName, id)
 end
 
 local function getSafeSpawnPosition(originPosition)
@@ -87,7 +84,6 @@ local function getSafeSpawnPosition(originPosition)
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 	raycastParams.FilterDescendantsInstances = {
-		ServerStorage:FindFirstChild("Enemies"),
 		ServerStorage:FindFirstChild("EnemyPrefabs"),
 	}
 	local result = Workspace:Raycast(rayOrigin, rayDirection, raycastParams)

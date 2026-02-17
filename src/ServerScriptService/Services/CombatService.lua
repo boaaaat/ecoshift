@@ -382,14 +382,8 @@ end
 
 function CombatService:Bind()
 	ensureRemotes(self)
-	if self._remoteDamage then
-		self._remoteDamage.OnServerEvent:Connect(function(plr, target, amount, dmgType)
-			local ok = pcall(function()
-				CombatService:OnDamageRequest(plr, target, amount, dmgType)
-			end)
-			if not ok then end
-		end)
-	end
+	-- Security: client-authoritative damage requests are intentionally disabled.
+	-- Damage must flow through validated CombatAction requests or server systems.
 
 	if self._remoteAction then
 		self._remoteAction.OnServerEvent:Connect(function(plr, action, data)

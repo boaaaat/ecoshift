@@ -11,9 +11,7 @@ local Util = require(ReplicatedStorage.Shared.Util)
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- OPTIMIZED: Try immediate lookup first, use shorter timeout
-local remotesFolder = Util.GetDescendant(Config.Paths.Remotes) 
-	or Util.WaitForDescendant(Config.Paths.Remotes, 5)
+local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 5)
 local rFeedback = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.HarvestFeedback)
 
 -- UI Constants
@@ -208,72 +206,37 @@ local function cleanupHealthBars()
 	end
 end
 
--- Listen for feedback from ResourceService
+local function handleFeedback(data)
+	print("[HarvestFeedbackUI] Received feedback:", data)
+	if type(data) ~= "table" then return end
+
+	local node = data.Node
+	local position = data.Position
+	local damage = data.Damage or 0
+	-- Support both 'Health' and 'CurrentHealth' field names
+	local currentHealth = data.Health or data.CurrentHealth or 0
+	local maxHealth = data.MaxHealth or 100
+	local destroyed = data.Destroyed
+
+	if not position then
+		warn("[HarvestFeedbackUI] No position in feedback data")
+		return
+	end
+
+	if damage > 0 then
+		createDamageNumber(position, damage, destroyed)
+	end
+
+	if node then
+		updateHealthBar(node, position, currentHealth, maxHealth, destroyed)
+	end
+end
+
 if rFeedback then
-	rFeedback.OnClientEvent:Connect(function(data)
-		print("[HarvestFeedbackUI] Received feedback:", data)
-		if type(data) ~= "table" then return end
-		
-		local node = data.Node
-		local position = data.Position
-		local damage = data.Damage or 0
-		-- Support both 'Health' and 'CurrentHealth' field names
-		local currentHealth = data.Health or data.CurrentHealth or 0
-		local maxHealth = data.MaxHealth or 100
-		local destroyed = data.Destroyed
-		
-		if not position then 
-			warn("[HarvestFeedbackUI] No position in feedback data")
-			return 
-		end
-		
-		-- Show damage number
-		if damage > 0 then
-			createDamageNumber(position, damage, destroyed)
-		end
-		
-		-- Update health bar
-		if node then
-			updateHealthBar(node, position, currentHealth, maxHealth, destroyed)
-		end
-	end)
+	rFeedback.OnClientEvent:Connect(handleFeedback)
 	print("[HarvestFeedbackUI] Connected to HarvestFeedback remote")
 else
-	warn("[HarvestFeedbackUI] HarvestFeedback remote not found! Will attempt fallback...")
-	-- Fallback: Try to find the remote after a short delay
-	task.spawn(function()
-		task.wait(2)
-		local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-		if remotes then
-			local feedbackRemote = remotes:FindFirstChild("HarvestFeedback")
-			if feedbackRemote then
-				print("[HarvestFeedbackUI] Found HarvestFeedback remote via fallback")
-				feedbackRemote.OnClientEvent:Connect(function(data)
-					print("[HarvestFeedbackUI] Received feedback (fallback):", data)
-					if type(data) ~= "table" then return end
-					
-					local node = data.Node
-					local position = data.Position
-					local damage = data.Damage or 0
-					local currentHealth = data.Health or data.CurrentHealth or 0
-					local maxHealth = data.MaxHealth or 100
-					local destroyed = data.Destroyed
-					
-					if not position then return end
-					
-					if damage > 0 then
-						createDamageNumber(position, damage, destroyed)
-					end
-					
-					if node then
-						updateHealthBar(node, position, currentHealth, maxHealth, destroyed)
-					end
-				end)
-			else
-				warn("[HarvestFeedbackUI] Fallback: Still could not find HarvestFeedback remote")
-			end
-		end
-	end)
+	warn("[HarvestFeedbackUI] Missing HarvestFeedback remote:", Config.RemoteNames.HarvestFeedback)
 end
 
 -- Cleanup loop (throttled to avoid performance issues)

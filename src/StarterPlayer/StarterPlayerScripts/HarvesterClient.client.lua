@@ -4,18 +4,21 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 
--- OPTIMIZED: Try immediate lookup first
+local Config = require(ReplicatedStorage.Shared.Config)
 local Remotes = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage:WaitForChild("Remotes", 5)
-local InteractRE = Remotes and (Remotes:FindFirstChild("ResourceInteract") or Remotes:WaitForChild("ResourceInteract", 3))
+local function resolveInteractRemote()
+	if not Remotes then return nil end
+	return Remotes:FindFirstChild(Config.RemoteNames.Interact)
+		or Remotes:WaitForChild(Config.RemoteNames.Interact, 3)
+end
+local InteractRE = resolveInteractRemote()
 local ToolConfig = require(ReplicatedStorage.Modules.ToolConfig)
+local missingInteractWarned = false
 
 local player = Players.LocalPlayer
 
-local function raycastTarget(range, excludeTerrain)
-	local camera = Workspace.CurrentCamera
-	if not camera then return nil end
-	local mousePos = UserInputService:GetMouseLocation()
-	local ray = camera:ScreenPointToRay(mousePos.X, mousePos.Y)
+local function raycastTarget(origin, direction, excludeTerrain)
+	if not origin or not direction then return nil, nil end
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	local filters = { player.Character }
@@ -23,29 +26,76 @@ local function raycastTarget(range, excludeTerrain)
 		table.insert(filters, Workspace.Terrain)
 	end
 	params.FilterDescendantsInstances = filters
-	local result = Workspace:Raycast(ray.Origin, ray.Direction * range, params)
-	return result and result.Instance or nil
+	local result = Workspace:Raycast(origin, direction, params)
+	return result and result.Instance or nil, result
+end
+
+local function getMouseRay()
+	local camera = Workspace.CurrentCamera
+	if not camera then return nil, nil end
+	local mousePos = UserInputService:GetMouseLocation()
+	local ray = camera:ScreenPointToRay(mousePos.X, mousePos.Y)
+	return ray.Origin, ray.Direction
+end
+
+local function acquireHarvestHit(range)
+	local camOrigin, camDirection = getMouseRay()
+	if not camOrigin or not camDirection then
+		return nil
+	end
+
+	local acquireDistance = math.max((range or 8) * 6, 64)
+	local camHit, camResult = raycastTarget(camOrigin, camDirection * acquireDistance, false)
+	if not camHit then
+		camHit, camResult = raycastTarget(camOrigin, camDirection * acquireDistance, true)
+	end
+
+	local char = player.Character
+	local root = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head"))
+	local aimPosition = (camResult and camResult.Position) or (camOrigin + camDirection * acquireDistance)
+
+	if root and aimPosition then
+		local toAim = aimPosition - root.Position
+		if toAim.Magnitude > 0.001 then
+			local rootHit = nil
+			local rootDirection = toAim.Unit * (math.max(range or 8, 8) + 2)
+			rootHit = select(1, raycastTarget(root.Position, rootDirection, false))
+			if not rootHit then
+				rootHit = select(1, raycastTarget(root.Position, rootDirection, true))
+			end
+			if rootHit then
+				return rootHit
+			end
+		end
+	end
+
+	return camHit
 end
 
 local function findNode(hit)
 	if not hit then return nil end
+	local function hasValue(inst, name)
+		return inst:GetAttribute(name) ~= nil or inst:FindFirstChild(name, true) ~= nil
+	end
+	local function hasHarvestMarkers(inst)
+		return hasValue(inst, "Health")
+			or hasValue(inst, "MaxHealth")
+			or hasValue(inst, "Duration")
+			or hasValue(inst, "HarvestDuration")
+	end
 	local current = hit
 	while current do
 		if current:IsA("Model") then
-			local function hasValue(name)
-				return current:GetAttribute(name) ~= nil or current:FindFirstChild(name, true)
-			end
-			if hasValue("Health") or hasValue("Duration") or hasValue("HarvestDuration") then
+			if hasHarvestMarkers(current) then
 				return current
 			end
 			local pp = current.PrimaryPart
-			if pp then
-				local function hasValueOn(part, name)
-					return part:GetAttribute(name) ~= nil or part:FindFirstChild(name)
-				end
-				if hasValueOn(pp, "Health") or hasValueOn(pp, "Duration") or hasValueOn(pp, "HarvestDuration") then
-					return current
-				end
+			if pp and hasHarvestMarkers(pp) then
+				return current
+			end
+		elseif current:IsA("BasePart") then
+			if hasHarvestMarkers(current) then
+				return current
 			end
 		end
 		current = current.Parent
@@ -112,14 +162,21 @@ local function getCooldown(tool)
 end
 
 local function harvestOnce(tool)
-	local range = getRange(tool)
-	local hit = raycastTarget(range, false)
-	local node = findNode(hit)
-	if not node then
-		hit = raycastTarget(range, true)
-		node = findNode(hit)
+	if not InteractRE then
+		InteractRE = resolveInteractRemote()
 	end
-	InteractRE:FireServer("Harvest", node)
+	if not InteractRE then
+		if not missingInteractWarned then
+			missingInteractWarned = true
+			warn("[HarvesterClient] Missing interact remote:", Config.RemoteNames.Interact)
+		end
+		return
+	end
+	missingInteractWarned = false
+	local range = getRange(tool)
+	local hit = acquireHarvestHit(range)
+	local node = findNode(hit)
+	InteractRE:FireServer("Harvest", node or hit)
 end
 
 local function startLoop(tool)
@@ -148,7 +205,7 @@ local function bindTool(tool)
 		holding = false
 		activeTool = nil
 	end)
-	tool.Activated:Connect(function()
+	tool.Activated:Connect(function()`
 		-- Single click still works
 		holding = true
 		startLoop(tool)

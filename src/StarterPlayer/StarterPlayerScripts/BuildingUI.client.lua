@@ -11,15 +11,20 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local BiomeConfig = require(ReplicatedStorage.Shared.BiomeConfig)
 local Util = require(ReplicatedStorage.Shared.Util)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
+local ResultMessages = require(ReplicatedStorage.Shared.ResultMessages)
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local mouse = player:GetMouse()
 
-local remotesFolder = Util.GetDescendant(Config.Paths.Remotes) 
-	or Util.WaitForDescendant(Config.Paths.Remotes, 5)
+local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 5)
 local rBuild = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.Build)
 local rInventory = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.InventoryUpdate)
+if not remotesFolder then
+	warn("[BuildingUI] Missing remotes folder:", Config.Paths.Remotes)
+elseif not rBuild then
+	warn("[BuildingUI] Missing build remote:", Config.RemoteNames.Build)
+end
 
 -- UI Constants
 local COLORS = {
@@ -41,6 +46,8 @@ local COLORS = {
 }
 
 local GRID_SIZE = Config.GRID.Size or 6
+local BUILD_MESSAGES = ResultMessages.Build or {}
+local DEFAULT_HINT_TEXT = "Click to place • Right-click to cancel"
 
 -- State
 local isPlacementMode = false
@@ -48,6 +55,7 @@ local selectedItem = nil
 local inventorySnapshot = nil
 local previewPart = nil
 local canPlace = false
+local hintMessageToken = 0
 
 -- Create GUI
 local gui = Instance.new("ScreenGui")
@@ -96,13 +104,31 @@ hintLabel.Size = UDim2.new(0, 300, 0, 24)
 hintLabel.Position = UDim2.new(0.5, 0, 0, 75)
 hintLabel.AnchorPoint = Vector2.new(0.5, 0)
 hintLabel.BackgroundTransparency = 1
-hintLabel.Text = "Click to place • Right-click to cancel"
+hintLabel.Text = DEFAULT_HINT_TEXT
 hintLabel.TextColor3 = COLORS.TextMuted
 hintLabel.TextSize = 12
 hintLabel.Font = Enum.Font.Gotham
 hintLabel.Visible = false
 hintLabel.ZIndex = 100
 hintLabel.Parent = gui
+
+local function showHintStatus(text, color, duration)
+	hintMessageToken += 1
+	local token = hintMessageToken
+	hintLabel.Text = text
+	hintLabel.TextColor3 = color
+	hintLabel.Visible = true
+	task.delay(duration or 1, function()
+		if token ~= hintMessageToken then return end
+		if isPlacementMode then
+			hintLabel.Text = DEFAULT_HINT_TEXT
+			hintLabel.TextColor3 = COLORS.TextMuted
+			hintLabel.Visible = true
+		else
+			hintLabel.Visible = false
+		end
+	end)
+end
 
 -- Item selection panel (shows placeable items)
 local selectionPanel = Instance.new("Frame")
@@ -324,6 +350,8 @@ local function createItemButton(itemId, count)
 		isPlacementMode = true
 		modeIndicator.Visible = true
 		hintLabel.Visible = true
+		hintLabel.Text = DEFAULT_HINT_TEXT
+		hintLabel.TextColor3 = COLORS.TextMuted
 		refreshItems()
 	end)
 	
@@ -407,16 +435,6 @@ local function placeItem()
 		Type = selectedItem,
 		Position = position,
 	})
-	
-	-- Check if we have more of this item
-	local placeableItems = getPlaceableItems()
-	if (placeableItems[selectedItem] or 0) <= 1 then
-		-- No more items, exit placement mode
-		cancelPlacement()
-	end
-	
-	-- Refresh after a short delay to let server update inventory
-	task.delay(0.2, refreshItems)
 end
 
 -- Input handling
@@ -475,6 +493,21 @@ if rInventory then
 		if selectionPanel.Visible then
 			refreshItems()
 		end
+	end)
+end
+
+if rBuild then
+	rBuild.OnClientEvent:Connect(function(kind, payload)
+		if kind ~= "Result" or type(payload) ~= "table" then return end
+		if payload.Action ~= "Place" and payload.Action ~= "Remove" then return end
+		local success = payload.Success == true
+		local reason = tostring(payload.Reason or (success and "Success" or "Unknown"))
+		if success then
+			showHintStatus(BUILD_MESSAGES.Success or "Build action complete.", COLORS.Success, 0.8)
+		else
+			showHintStatus(BUILD_MESSAGES[reason] or BUILD_MESSAGES.Unknown or "Build action failed.", COLORS.Danger, 1.2)
+		end
+		task.delay(0.2, refreshItems)
 	end)
 end
 

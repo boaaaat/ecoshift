@@ -13,7 +13,6 @@ local ThreatService = require(script.Parent.ThreatService)
 
 local SpawnService = {}
 SpawnService._enemySpawns = Util.WaitForDescendant(Config.Paths.EnemySpawnsFolder, 5)
-SpawnService._resourceFolder = Util.WaitForDescendant(Config.Paths.ResourceNodesFolder, 5)
 SpawnService._startTime = os.clock()
 
 local function lerp(a, b, t)
