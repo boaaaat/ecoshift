@@ -88,6 +88,20 @@ title.TextXAlignment = Enum.TextXAlignment.Left
 title.Text = "Chest"
 title.Parent = header
 
+local transferStatusLabel = Instance.new("TextLabel")
+transferStatusLabel.Name = "TransferStatus"
+transferStatusLabel.Size = UDim2.new(1, -MARGIN * 2 - 70, 0, 14)
+transferStatusLabel.AnchorPoint = Vector2.new(0, 1)
+transferStatusLabel.Position = UDim2.new(0, MARGIN, 1, -2)
+transferStatusLabel.BackgroundTransparency = 1
+transferStatusLabel.Font = Enum.Font.Gotham
+transferStatusLabel.TextSize = 11
+transferStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+transferStatusLabel.TextColor3 = COLORS.TextMuted
+transferStatusLabel.Text = ""
+transferStatusLabel.Visible = false
+transferStatusLabel.Parent = header
+
 local closeButton = Instance.new("TextButton")
 closeButton.Size = UDim2.new(0, 64, 0, 22)
 closeButton.AnchorPoint = Vector2.new(1, 0.5)
@@ -117,6 +131,7 @@ local slotCount = FIXED_SLOTS
 local currentChestId = nil
 local lastOpenRequestAt = 0
 local dragging = { Active = false, Source = nil, ChestIndex = nil, Inv = nil, Ghost = nil, InvFrames = nil, ChestFrames = nil }
+local transferStatusToken = 0
 
 local function isShiftDown()
 	return UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
@@ -128,6 +143,29 @@ local function hashColor(id)
 		hash = (hash * 33 + string.byte(id, i)) % 360
 	end
 	return Color3.fromHSV(hash / 360, 0.55, 0.85)
+end
+
+local function getItemStackSize(itemId)
+	local item = ItemDatabase:Get(itemId)
+	return (item and tonumber(item.StackSize)) or 99
+end
+
+local function showTransferStatus(text, color, duration)
+	transferStatusToken += 1
+	local token = transferStatusToken
+	if type(text) ~= "string" or text == "" then
+		transferStatusLabel.Visible = false
+		transferStatusLabel.Text = ""
+		return
+	end
+	transferStatusLabel.Text = text
+	transferStatusLabel.TextColor3 = color or COLORS.TextMuted
+	transferStatusLabel.Visible = true
+	task.delay(tonumber(duration) or 1.0, function()
+		if token ~= transferStatusToken then return end
+		transferStatusLabel.Visible = false
+		transferStatusLabel.Text = ""
+	end)
 end
 
 local function isChestTagged(inst)
@@ -222,6 +260,9 @@ local function renderSlot(slot)
 		slot.ItemText.Visible = false
 		slot.ItemText.Text = ""
 		slot.Frame.BackgroundColor3 = COLORS.SlotEmpty
+		slot.Frame:SetAttribute("HasItem", false)
+		slot.Frame:SetAttribute("ItemId", "")
+		slot.Frame:SetAttribute("Count", 0)
 		return
 	end
 
@@ -244,6 +285,9 @@ local function renderSlot(slot)
 		slot.ItemText.TextColor3 = hashColor(data.Id)
 		slot.ItemText.Visible = true
 	end
+	slot.Frame:SetAttribute("HasItem", true)
+	slot.Frame:SetAttribute("ItemId", data.Id)
+	slot.Frame:SetAttribute("Count", data.N)
 end
 
 local function renderAll()
@@ -377,9 +421,26 @@ local function endDrag(mousePoint)
 
 end
 
-local function findEmptyInventorySlot(preferStorage)
+local function findInventoryTargetForItem(itemId, preferStorage)
 	local frames = getInventorySlots()
-	local function pick(slotType)
+	table.sort(frames, function(a, b)
+		return (tonumber(a:GetAttribute("SlotIndex")) or math.huge) < (tonumber(b:GetAttribute("SlotIndex")) or math.huge)
+	end)
+	local maxStack = getItemStackSize(itemId)
+	local function pickStack(slotType)
+		for _, frame in ipairs(frames) do
+			if frame:GetAttribute("SlotType") == slotType
+				and frame:GetAttribute("HasItem") == true
+				and frame:GetAttribute("ItemId") == itemId then
+				local count = tonumber(frame:GetAttribute("Count")) or 0
+				if count < maxStack then
+					return frame
+				end
+			end
+		end
+		return nil
+	end
+	local function pickEmpty(slotType)
 		for _, frame in ipairs(frames) do
 			if frame:GetAttribute("SlotType") == slotType and frame:GetAttribute("HasItem") == false then
 				return frame
@@ -387,10 +448,40 @@ local function findEmptyInventorySlot(preferStorage)
 		end
 		return nil
 	end
-	if preferStorage then
-		return pick("Storage") or pick("Hotbar")
+	local order = preferStorage and { "Storage", "Hotbar" } or { "Hotbar", "Storage" }
+	for _, slotType in ipairs(order) do
+		local stackTarget = pickStack(slotType)
+		if stackTarget then
+			return stackTarget
+		end
 	end
-	return pick("Hotbar") or pick("Storage")
+	for _, slotType in ipairs(order) do
+		local emptyTarget = pickEmpty(slotType)
+		if emptyTarget then
+			return emptyTarget
+		end
+	end
+	return nil
+end
+
+local function chestSlotData(index)
+	local data = slotData[index]
+	if data and data.Id and tonumber(data.N) and tonumber(data.N) > 0 then
+		return data
+	end
+	return nil
+end
+
+local function quickTakeFromChest(index, preferStorage)
+	local data = chestSlotData(index)
+	if not data then return end
+	local target = findInventoryTargetForItem(data.Id, preferStorage)
+	takeFromChestSlot(index, target)
+	if target then
+		showTransferStatus("Moved to inventory", COLORS.Accent, 0.9)
+	else
+		showTransferStatus("No direct slot, auto-placing", COLORS.Warning, 1.1)
+	end
 end
 
 local function createSlot(index, x, y)
@@ -401,6 +492,9 @@ local function createSlot(index, x, y)
 	slot.BackgroundColor3 = COLORS.SlotEmpty
 	slot.BorderSizePixel = 0
 	slot:SetAttribute("ChestIndex", index)
+	slot:SetAttribute("HasItem", false)
+	slot:SetAttribute("ItemId", "")
+	slot:SetAttribute("Count", 0)
 	slot.Parent = slotContainer
 
 	local corner = Instance.new("UICorner")
@@ -466,8 +560,7 @@ local function createSlot(index, x, y)
 	button.MouseButton1Down:Connect(function()
 		if not currentChestId then return end
 		if isShiftDown() then
-			local target = findEmptyInventorySlot(true)
-			takeFromChestSlot(index, target)
+			quickTakeFromChest(index, true)
 			return
 		end
 		beginChestDrag(index)
@@ -511,6 +604,7 @@ local function closeChest(sendCloseEvent)
 	dragging.Ghost = nil
 	dragging.InvFrames = nil
 	dragging.ChestFrames = nil
+	showTransferStatus(nil)
 	panel.Visible = false
 	currentChestId = nil
 	setInventoryChestState(false, nil)
@@ -527,6 +621,7 @@ if chestRemote then
 	chestRemote.OnClientEvent:Connect(function(action, payload)
 		if action == "Open" then
 			if type(payload) ~= "table" then return end
+			showTransferStatus(nil)
 			currentChestId = payload.ChestId
 			title.Text = payload.Title or "Chest"
 			slotData = normalizeSlots(payload.Slots or {})

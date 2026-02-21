@@ -284,6 +284,9 @@ spawnEnemyById = function(id, anchor, playerCount)
 	applyHealthScaling(newEnemy, playerCount or math.max(1, #Players:GetPlayers()))
 end
 
+local EnemySpawner = {}
+EnemySpawner._started = false
+
 local function bindSpawnerCallback()
 	while not (_G.Ecoshift and _G.Ecoshift.SetEnemySpawnCallback) do
 		task.wait(0.1)
@@ -325,6 +328,12 @@ local function bindSpawnerCallback()
 	print("[EnemySpawner] Successfully connected to Orchestrator. Ready for wave requests.")
 end
 
-task.spawn(bindSpawnerCallback)
+function EnemySpawner:Init()
+	if self._started then
+		return
+	end
+	self._started = true
+	task.spawn(bindSpawnerCallback)
+end
 
-return {}
+return EnemySpawner

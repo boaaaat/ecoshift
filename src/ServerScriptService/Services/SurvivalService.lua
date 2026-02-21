@@ -15,7 +15,7 @@ SurvivalService._tickInterval = 1
 SurvivalService._sprintWanted = setmetatable({}, { __mode = "k" })
 SurvivalService._sprintApplied = setmetatable({}, { __mode = "k" })
 
-local HUNGER_DRAIN = 0.5
+local HUNGER_DRAIN = 0.05
 local HUNGER_DAMAGE = 10
 local STAMINA_DRAIN = 12
 local STAMINA_REGEN = 8
