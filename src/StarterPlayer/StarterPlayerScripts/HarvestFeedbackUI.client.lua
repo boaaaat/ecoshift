@@ -32,14 +32,18 @@ gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = playerGui
 
 -- Track active health bars
-local activeHealthBars = {} -- [node] = {BillboardGui, lastUpdate}
+local activeHealthBars = {} -- [node] = {Billboard, Fill, Attachment, lastUpdate}
 
 -- Create a floating damage number
 local function createDamageNumber(position, damage, destroyed)
+	if typeof(position) ~= "Vector3" then
+		return
+	end
+
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "DamageNumber"
 	billboard.Size = UDim2.new(0, 140, 0, 70)
-	billboard.StudsOffset = Vector3.new(math.random(-10, 10) / 10, 2.2, math.random(-10, 10) / 10)
+	billboard.StudsOffset = Vector3.new(math.random(-10, 10) / 10, 1.6, math.random(-10, 10) / 10)
 	billboard.AlwaysOnTop = true
 	billboard.MaxDistance = 50
 	billboard.Parent = gui
@@ -91,6 +95,9 @@ local function updateHealthBar(node, position, currentHealth, maxHealth, destroy
 		-- Remove health bar if exists
 		if activeHealthBars[node] then
 			activeHealthBars[node].Billboard:Destroy()
+			if activeHealthBars[node].Attachment then
+				activeHealthBars[node].Attachment:Destroy()
+			end
 			activeHealthBars[node] = nil
 		end
 		return
@@ -103,30 +110,15 @@ local function updateHealthBar(node, position, currentHealth, maxHealth, destroy
 		local billboard = Instance.new("BillboardGui")
 		billboard.Name = "HealthBar"
 		billboard.Size = UDim2.new(0, 140, 0, 28)
-		billboard.StudsOffset = Vector3.new(0, 3.4, 0)
+		billboard.StudsOffset = Vector3.new(0, 1.8, 0)
 		billboard.AlwaysOnTop = true
 		billboard.MaxDistance = 40
 		billboard.Parent = gui
-		
-		-- Try to adornee to the node
-		local adornPart = nil
-		if node:IsA("BasePart") then
-			adornPart = node
-		elseif node:IsA("Model") then
-			adornPart = node.PrimaryPart
-			if not adornPart then
-				for _, d in ipairs(node:GetDescendants()) do
-					if d:IsA("BasePart") then
-						adornPart = d
-						break
-					end
-				end
-			end
-		end
-		
-		if adornPart then
-			billboard.Adornee = adornPart
-		end
+
+		local attachment = Instance.new("Attachment")
+		attachment.WorldPosition = position
+		attachment.Parent = workspace.Terrain
+		billboard.Adornee = attachment
 		
 		-- Background
 		local bg = Instance.new("Frame")
@@ -170,6 +162,7 @@ local function updateHealthBar(node, position, currentHealth, maxHealth, destroy
 		activeHealthBars[node] = {
 			Billboard = billboard,
 			Fill = fill,
+			Attachment = attachment,
 			lastUpdate = os.clock()
 		}
 	end
@@ -177,6 +170,9 @@ local function updateHealthBar(node, position, currentHealth, maxHealth, destroy
 	-- Update health bar
 	local data = activeHealthBars[node]
 	data.lastUpdate = os.clock()
+	if data.Attachment and typeof(position) == "Vector3" then
+		data.Attachment.WorldPosition = position
+	end
 	
 	-- Animate health change
 	local targetColor = healthPercent > 0.3 and COLORS.HealthBar or COLORS.HealthBarLow
@@ -198,6 +194,9 @@ local function cleanupHealthBars()
 				task.delay(0.3, function()
 					if data.Billboard then
 						data.Billboard:Destroy()
+					end
+					if data.Attachment then
+						data.Attachment:Destroy()
 					end
 				end)
 			end

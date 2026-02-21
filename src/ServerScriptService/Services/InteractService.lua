@@ -83,6 +83,44 @@ local function getPrimary(node)
 	return nil
 end
 
+local function getClosestNodePoint(node, worldPoint)
+	if typeof(node) ~= "Instance" or typeof(worldPoint) ~= "Vector3" then
+		return nil, nil
+	end
+
+	local bestPoint = nil
+	local bestDistance = math.huge
+
+	local function considerPart(part)
+		local closestPoint = part.Position
+		local ok, result = pcall(part.GetClosestPointOnSurface, part, worldPoint)
+		if ok and typeof(result) == "Vector3" then
+			closestPoint = result
+		end
+
+		local dist = (worldPoint - closestPoint).Magnitude
+		if dist < bestDistance then
+			bestDistance = dist
+			bestPoint = closestPoint
+		end
+	end
+
+	if node:IsA("BasePart") then
+		considerPart(node)
+	elseif node:IsA("Model") then
+		for _, inst in ipairs(node:GetDescendants()) do
+			if inst:IsA("BasePart") then
+				considerPart(inst)
+			end
+		end
+	end
+
+	if not bestPoint then
+		return nil, nil
+	end
+	return bestPoint, bestDistance
+end
+
 local function hasMarker(node, name)
 	if node:GetAttribute(name) ~= nil then
 		return true
@@ -303,11 +341,22 @@ local function handleHarvest(plr, payload)
 	end
 
 	local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-	local primary = getPrimary(node)
-	local nodePos = primary and primary.Position or getNodePosition(node)
-	if not root or not nodePos or not primary then
+	if not root then
 		return
 	end
+	local rootPos = root.Position
+
+	local closestNodePoint, nodeDistance = getClosestNodePoint(node, rootPos)
+	if not closestNodePoint or not nodeDistance then
+		local primary = getPrimary(node)
+		if not primary then
+			return
+		end
+		closestNodePoint = primary.Position
+		nodeDistance = (rootPos - primary.Position).Magnitude
+	end
+
+	local nodePos = closestNodePoint or getNodePosition(node)
 
 	local cfg = ToolConfig.Read(tool)
 	cfg.Range = math.max(cfg.Range or 0, 8)
@@ -317,7 +366,7 @@ local function handleHarvest(plr, payload)
 		return
 	end
 
-	if (root.Position - primary.Position).Magnitude > (cfg.Range or 8) then
+	if nodeDistance > (cfg.Range or 8) then
 		return
 	end
 
