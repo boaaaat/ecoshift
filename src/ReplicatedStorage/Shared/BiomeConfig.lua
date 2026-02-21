@@ -47,6 +47,25 @@ Config.asset_overrides = {
 	-- DESERT STRUCTURES
 	AncientRuins = { scale = 1.0, yOffset = 4 },
 	DesertOutpost = { scale = 1.0, yOffset = 4 },
+
+	-- SWAMP RESOURCES
+	MangroveTree = { scale = 1.0, yOffset = 3.5 },
+	CypressTree = { scale = 1.0, yOffset = 3.5 },
+	WillowTreeSwamp = { scale = 1.0, yOffset = 3.2 },
+	BogReed = { scale = 1.0, yOffset = 1.0 },
+	GlowcapCluster = { scale = 1.0, yOffset = 0.6 },
+	PeatMound = { scale = 1.0, yOffset = 0.6 },
+	MireStone = { scale = 1.0, yOffset = 1.4 },
+	-- SWAMP PROPS
+	LilyPadCluster = { scale = 1.0, yOffset = 0.2 },
+	CattailPatch = { scale = 1.0, yOffset = 1.0 },
+	DriftwoodLog = { scale = 1.0, yOffset = 0.9 },
+	MossyStump = { scale = 1.0, yOffset = 0.9 },
+	RootTangle = { scale = 1.0, yOffset = 0.9 },
+	BogFern = { scale = 1.0, yOffset = 0.8 },
+	-- SWAMP STRUCTURES
+	SunkenShack = { scale = 1.0, yOffset = 2.8 },
+	WreckedSkiff = { scale = 1.0, yOffset = 1.0 },
 }
 
 -- STREAMING CONFIG: Dynamic chunk loading around players
@@ -135,6 +154,13 @@ Config.terrain_detail = {
 			patches = {
 				{ material = "Sandstone", threshold = 0.62 },
 				{ material = "Rock", threshold = 0.84 },
+			},
+		},
+		Swamp = {
+			path = "Mud",
+			patches = {
+				{ material = "Grass", threshold = 0.6 },
+				{ material = "Mud", threshold = 0.72 },
 			},
 		},
 	},
@@ -479,146 +505,136 @@ Config.biomes = {
 		},
 		chest_count = 0.08,
 	},
-	--[[ SWAMP - Uncomment when assets are ready
 	Swamp = {
-		weight = 0.5,
-		timeScaledWeight = 0.15,
+		weight = 0.65,
+		timeScaledWeight = 0.05,
 		region_count = { min = 1, max = 2 },
 		regions = {
 			{
+				-- Deep bog with dense reeds and mangrove roots
 				name = "MurkyBog",
-				size = Vector2.new(100, 100),
-				resources = { WillowTree = 1, SwampReed = 2, GlowMoss = 3 },
+				size = Vector2.new(110, 100),
+				resources = {
+					BogReed = { Weight = 1.4, DistanceWeight = { Min = 1.0, Max = 1.2 } },
+					PeatMound = { Weight = 1.0, DistanceWeight = { Min = 1.1, Max = 1.0 } },
+					MangroveTree = { Weight = 1.1, DistanceWeight = { Min = 1.0, Max = 1.2 } },
+				},
+				resource_count = { min = 18, max = 30 },
+				props = {
+					{ Name = "RootTangle", Weight = 1.2, DistanceWeight = { Min = 1.0, Max = 1.2 } },
+					{ Name = "LilyPadCluster", Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 1.1 } },
+					{ Name = "CattailPatch", Weight = 0.9, DistanceWeight = { Min = 1.1, Max = 1.0 } },
+				},
+				prop_count = { min = 12, max = 20 },
+				enemies = {
+					{ Name = "GiantLeech", Weight = 1.1, DistanceWeight = { Min = 1.0, Max = 1.4 } },
+					{ Name = "BogToad", Weight = 0.7, DistanceWeight = { Min = 0.9, Max = 1.3 } },
+				},
+				enemy_count = { min = 0, max = 2 },
+			},
+			{
+				-- Damp fungal pockets with bioluminescent mushrooms
+				name = "FungalMarsh",
+				size = Vector2.new(90, 80),
+				resources = {
+					GlowcapCluster = { Weight = 1.6, DistanceWeight = { Min = 1.0, Max = 1.2 } },
+					PeatMound = { Weight = 1.0, DistanceWeight = { Min = 1.2, Max = 0.9 } },
+					WillowTreeSwamp = { Weight = 0.8, DistanceWeight = { Min = 1.0, Max = 1.0 } },
+				},
 				resource_count = { min = 16, max = 28 },
-				props = { "LilyPad", "DeadTree", "MudPile" },
+				props = {
+					{ Name = "MossyStump", Weight = 1.2, DistanceWeight = { Min = 1.1, Max = 1.0 } },
+					{ Name = "BogFern", Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 1.1 } },
+					{ Name = "DriftwoodLog", Weight = 0.8, DistanceWeight = { Min = 1.0, Max = 1.2 } },
+				},
 				prop_count = { min = 10, max = 18 },
-				enemies = { "GiantLeech" },
+				enemies = {
+					{ Name = "BogToad", Weight = 1.0, DistanceWeight = { Min = 0.9, Max = 1.4 } },
+					{ Name = "GiantLeech", Weight = 0.8, DistanceWeight = { Min = 1.0, Max = 1.3 } },
+				},
 				enemy_count = { min = 0, max = 2 },
 			},
 			{
-				name = "ToxicMarsh",
-				size = Vector2.new(80, 80),
-				resources = { SwampReed = 1, GlowMoss = 2, Mud = 3 },
-				resource_count = { min = 20, max = 32 },
-				props = { "DeadTree", "MudPile" },
-				prop_count = { min = 8, max = 14 },
-				enemies = { "GiantLeech", "BogToad" },
-				enemy_count = { min = 0, max = 2 },
-			},
-		},
-		structures = { "SwampHut", "AbandonedBoat" },
-		structure_count = 0.05,
-		objectives = {},
-		objective_count = 0.025,
-		chests = { "Swamp_Chest", "Rare_Chest" },
-		chest_count = 0.08,
-	},
-	--]]
-	--[[ FROZEN TUNDRA - Uncomment when assets are ready
-	FrozenTundra = {
-		weight = 0.3,
-		timeScaledWeight = 0.25,
-		region_count = { min = 1, max = 2 },
-		regions = {
-			{
-				name = "FrozenPlains",
-				size = Vector2.new(100, 100),
-				resources = { FrozenPine = 1, IceCrystal = 2, PermafrostOre = 4 },
+				-- Dense cypress zone with exposed mineral pockets
+				name = "CypressHollow",
+				size = Vector2.new(95, 90),
+				resources = {
+					CypressTree = { Weight = 1.3, DistanceWeight = { Min = 1.0, Max = 1.3 } },
+					MangroveTree = { Weight = 0.8, DistanceWeight = { Min = 1.0, Max = 1.2 } },
+					MireStone = { Weight = 0.9, DistanceWeight = { Min = 0.9, Max = 1.3 } },
+				},
 				resource_count = { min = 14, max = 24 },
-				props = { "IceShard", "SnowPile", "FrozenCorpse" },
-				prop_count = { min = 10, max = 18 },
-				enemies = { "FrostWolf" },
-				enemy_count = { min = 0, max = 2 },
-			},
-			{
-				name = "GlacialRidge",
-				size = Vector2.new(80, 80),
-				resources = { IceCrystal = 1, PermafrostOre = 2, Stone = 3 },
-				resource_count = { min = 18, max = 28 },
-				props = { "IceShard", "SnowPile" },
+				props = {
+					{ Name = "RootTangle", Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 1.2 } },
+					{ Name = "MossyStump", Weight = 0.9, DistanceWeight = { Min = 1.1, Max = 1.0 } },
+					{ Name = "DriftwoodLog", Weight = 0.8, DistanceWeight = { Min = 1.0, Max = 1.2 } },
+				},
 				prop_count = { min = 8, max = 14 },
-				enemies = { "FrostWolf", "IceWraith" },
-				enemy_count = { min = 0, max = 2 },
-			},
-		},
-		structures = { "FrozenCabin", "IceCave" },
-		structure_count = 0.05,
-		objectives = {},
-		objective_count = 0.025,
-		chests = { "Frozen_Chest", "Rare_Chest" },
-		chest_count = 0.08,
-	},
-	--]]
-	--[[ VOLCANIC - Uncomment when assets are ready
-	Volcanic = {
-		weight = 0.2,
-		timeScaledWeight = 0.35,
-		region_count = { min = 1, max = 2 },
-		regions = {
-			{
-				name = "AshenWastes",
-				size = Vector2.new(100, 100),
-				resources = { CharredTree = 1, Obsidian = 2, SulfurDeposit = 3 },
-				resource_count = { min = 12, max = 22 },
-				props = { "LavaRock", "AshPile", "SmokeVent" },
-				prop_count = { min = 10, max = 18 },
-				enemies = { "MagmaHound" },
+				enemies = {
+					{ Name = "GiantLeech", Weight = 0.9, DistanceWeight = { Min = 1.0, Max = 1.3 } },
+					{ Name = "BogToad", Weight = 0.6, DistanceWeight = { Min = 0.9, Max = 1.4 } },
+				},
 				enemy_count = { min = 0, max = 2 },
 			},
 			{
-				name = "MoltenCore",
-				size = Vector2.new(80, 80),
-				resources = { Obsidian = 1, SulfurDeposit = 2 },
+				-- Open waterlogged flats with reed and lily clusters
+				name = "ReedwaterFlats",
+				size = Vector2.new(100, 95),
+				resources = {
+					BogReed = { Weight = 1.8, DistanceWeight = { Min = 1.1, Max = 1.2 } },
+					PeatMound = { Weight = 0.8, DistanceWeight = { Min = 1.2, Max = 0.9 } },
+					GlowcapCluster = { Weight = 0.8, DistanceWeight = { Min = 1.0, Max = 1.1 } },
+				},
+				resource_count = { min = 20, max = 34 },
+				props = {
+					{ Name = "LilyPadCluster", Weight = 1.2, DistanceWeight = { Min = 1.0, Max = 1.1 } },
+					{ Name = "CattailPatch", Weight = 1.1, DistanceWeight = { Min = 1.0, Max = 1.2 } },
+					{ Name = "BogFern", Weight = 0.8, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+				},
+				prop_count = { min = 12, max = 22 },
+				enemies = {
+					{ Name = "BogToad", Weight = 1.1, DistanceWeight = { Min = 0.9, Max = 1.4 } },
+					{ Name = "GiantLeech", Weight = 0.7, DistanceWeight = { Min = 1.0, Max = 1.4 } },
+				},
+				enemy_count = { min = 0, max = 2 },
+			},
+			{
+				-- Transition marsh edge with mixed flora and salvage
+				name = "SunkenEdge",
+				size = Vector2.new(85, 85),
+				resources = {
+					WillowTreeSwamp = { Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 1.1 } },
+					MireStone = { Weight = 0.9, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+					PeatMound = { Weight = 0.9, DistanceWeight = { Min = 1.2, Max = 0.9 } },
+					BogReed = { Weight = 0.9, DistanceWeight = { Min = 1.0, Max = 1.1 } },
+				},
 				resource_count = { min = 16, max = 26 },
-				props = { "LavaRock", "SmokeVent" },
-				prop_count = { min = 8, max = 14 },
-				enemies = { "MagmaHound", "LavaGolem" },
+				props = {
+					{ Name = "DriftwoodLog", Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 1.1 } },
+					{ Name = "MossyStump", Weight = 0.9, DistanceWeight = { Min = 1.1, Max = 1.0 } },
+					{ Name = "BogFern", Weight = 0.8, DistanceWeight = { Min = 1.0, Max = 1.2 } },
+				},
+				prop_count = { min = 10, max = 16 },
+				enemies = {
+					{ Name = "GiantLeech", Weight = 0.8, DistanceWeight = { Min = 1.0, Max = 1.3 } },
+					{ Name = "BogToad", Weight = 0.8, DistanceWeight = { Min = 0.9, Max = 1.3 } },
+				},
 				enemy_count = { min = 0, max = 2 },
 			},
 		},
-		structures = { "LavaForge", "ObsidianTemple" },
-		structure_count = 0.05,
-		objectives = {},
-		objective_count = 0.025,
-		chests = { "Volcanic_Chest", "Legendary_Chest" },
-		chest_count = 0.08,
-	},
-	--]]
-	--[[ CRYSTAL WASTES - Uncomment when assets are ready
-	CrystalWastes = {
-		weight = 0.1,
-		timeScaledWeight = 0.4,
-		region_count = { min = 1, max = 2 },
-		regions = {
-			{
-				name = "ShatteredFields",
-				size = Vector2.new(100, 100),
-				resources = { VoidCrystal = 1, CorruptedOre = 2, PrismShard = 3 },
-				resource_count = { min = 10, max = 18 },
-				props = { "FloatingCrystal", "VoidRift", "CrystalSpire" },
-				prop_count = { min = 10, max = 18 },
-				enemies = { "CrystalStalker" },
-				enemy_count = { min = 0, max = 2 },
-			},
-			{
-				name = "VoidNexus",
-				size = Vector2.new(80, 80),
-				resources = { VoidCrystal = 1, PrismShard = 2 },
-				resource_count = { min = 14, max = 22 },
-				props = { "CrystalSpire", "VoidRift" },
-				prop_count = { min = 8, max = 14 },
-				enemies = { "CrystalStalker", "VoidSentinel" },
-				enemy_count = { min = 0, max = 1 },
-			},
+		structures = {
+			{ Name = "SunkenShack", Weight = 0.6, DistanceWeight = { Min = 0.9, Max = 1.3 } },
+			{ Name = "WreckedSkiff", Weight = 0.4, DistanceWeight = { Min = 1.0, Max = 1.4 } },
 		},
-		structures = { "CrystalAltar", "VoidPortal" },
-		structure_count = 0.05,
+		structure_count = 0.4,
 		objectives = {},
 		objective_count = 0.025,
-		chests = { "Void_Chest", "Celestial_Chest" },
+		chests = {
+			{ Name = "Common_Chest", Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 0.9 } },
+			{ Name = "Rare_Chest", Weight = 0.45, DistanceWeight = { Min = 0.9, Max = 1.3 } },
+		},
 		chest_count = 0.08,
 	},
-	--]]
 }
 
 -- Shared gameplay config (moved from ReplicatedStorage/Shared/Config.lua)
