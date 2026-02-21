@@ -26,6 +26,9 @@ local playerGui = player:WaitForChild("PlayerGui")
 local WORLD_RADIUS = (BiomeConfig.WORLD and BiomeConfig.WORLD.WorldRadius) or (BiomeConfig.world_radius or 1000)
 local CHUNK_SIZE = BiomeConfig.chunk_size or 240
 local GENERATED_FOLDER_NAME = MapConfig.GeneratedWorldFolderName or BiomeConfig.spawn_folder_name or "GeneratedWorld"
+local ORIENTATION = MapConfig.Orientation or {}
+local MAP_FLIP_X = ORIENTATION.FlipX == true
+local MAP_FLIP_Z = ORIENTATION.FlipZ == true
 
 local MAP_CAPTURE_ACTION = "EcoshiftMapCapture"
 local MAP_TOGGLE_ACTION = "EcoshiftToggleMap"
@@ -36,6 +39,7 @@ local STATE = {
 	fullMapOpen = false,
 	fullZoom = MapConfig.Fullscreen.DefaultZoom,
 	panWorld = Vector2.new(0, 0),
+	fullRenderBoostUntil = 0,
 	fogEnabled = true,
 	markerVisibility = {
 		Players = MapConfig.MarkerDefaults.Players,
@@ -48,6 +52,12 @@ local STATE = {
 	},
 	spawnPosition = nil,
 	customBlips = {},
+	playerEmojiByUserId = {},
+	usedPlayerEmojis = {},
+	playerEmojiRng = Random.new(),
+	enemyEmojiByTypeKey = {},
+	usedEnemyEmojis = {},
+	enemyEmojiRng = Random.new(),
 }
 
 local WORLD = {
@@ -72,6 +82,9 @@ local UI = {
 	minimapBlips = nil,
 	minimapPlayer = nil,
 	minimapSpawn = nil,
+	minimapChunkLayer = nil,
+	minimapRegionLayer = nil,
+	minimapMarkerLayer = nil,
 	minimapCoords = nil,
 	minimapZoom = nil,
 	fullRoot = nil,
@@ -87,9 +100,15 @@ local UI = {
 
 local RENDER_CACHE = {
 	minimapBlips = {},
+	minimapChunkFrames = {},
+	minimapRegionFrames = {},
+	minimapMarkerFrames = {},
 	chunkFrames = {},
 	regionFrames = {},
 	markerFrames = {},
+	usedMinimapChunkKeys = {},
+	usedMinimapRegionKeys = {},
+	usedMinimapMarkerKeys = {},
 	usedChunkKeys = {},
 	usedRegionKeys = {},
 	usedMarkerKeys = {},
@@ -101,6 +120,11 @@ local INPUT = {
 	lastTouchPan = nil,
 	gamepadPan = Vector2.new(0, 0),
 }
+
+-- Forward declare glyph helpers so createUI can call them.
+local getMarkerGlyph
+local applyGlyphToFrame
+local clearGlyphFromFrame
 
 local function tableClear(t)
 	for k in pairs(t) do
@@ -149,9 +173,46 @@ local function getObjectPosition(obj)
 	return nil
 end
 
+local function mapOrientedXZ(x, z)
+	if MAP_FLIP_X then
+		x = -x
+	end
+	if MAP_FLIP_Z then
+		z = -z
+	end
+	return x, z
+end
+
 local function headingDegFromLook(look)
-	-- 0 = north (-Z), 90 = east (+X)
-	return math.deg(math.atan2(look.X, -look.Z))
+	-- Compute heading from the same oriented map vector used by position projection.
+	-- 0 = up on the map, 90 = right on the map.
+	local mapX, mapZ = mapOrientedXZ(look.X, look.Z)
+	return math.deg(math.atan2(mapX, mapZ))
+end
+
+local function headingDegFromPoints(fromPos, toPos)
+	if typeof(fromPos) ~= "Vector3" or typeof(toPos) ~= "Vector3" then
+		return 0
+	end
+	local dir = toPos - fromPos
+	if dir.Magnitude <= 0.001 then
+		return 0
+	end
+	return headingDegFromLook(Vector3.new(dir.X, 0, dir.Z))
+end
+
+local function markerRotationWithOffset(angle, kind)
+	local rotCfg = MapConfig.MarkerRotation or {}
+	local offset = 0
+	local base = angle or 0
+	if kind == "Players" then
+		offset = tonumber(rotCfg.PlayerOffset) or 0
+	elseif kind == "Enemies" then
+		offset = tonumber(rotCfg.EnemyOffset) or 0
+	elseif kind == "Spawn" then
+		offset = tonumber(rotCfg.SpawnOffset) or 0
+	end
+	return base + offset
 end
 
 local function playerYawForRotatingMinimap(root)
@@ -163,6 +224,222 @@ end
 local function getBiomeColor(biome)
 	local map = MapConfig.Colors.BiomeTile or {}
 	return map[biome] or map.Unknown or Color3.fromRGB(72, 78, 86)
+end
+
+local function hashString(text)
+	local h = 2166136261
+	local s = tostring(text or "")
+	for i = 1, #s do
+		h = bit32.bxor(h, s:byte(i))
+		h = (h * 16777619) % 4294967296
+	end
+	return h
+end
+
+local function colorFromHash(text)
+	local h = hashString(text)
+	local hue = (h % 360) / 360
+	local sat = 0.35 + ((bit32.rshift(h, 8) % 30) / 100)
+	local val = 0.48 + ((bit32.rshift(h, 16) % 35) / 100)
+	return Color3.fromHSV(hue, math.clamp(sat, 0.3, 0.8), math.clamp(val, 0.4, 0.9))
+end
+
+local function glyphPoolPick(pool, seedText)
+	if type(pool) ~= "table" or #pool == 0 then
+		return "❖"
+	end
+	local idx = (hashString(seedText) % #pool) + 1
+	local value = pool[idx]
+	if type(value) ~= "string" or value == "" then
+		return "❖"
+	end
+	return value
+end
+
+local FALLBACK_PLAYER_EMOJIS = { "😀", "😃", "😄", "😁", "😆", "😎", "🥳", "🤠", "🙂", "😊", "😺", "😸" }
+local FALLBACK_ENEMY_EMOJIS = { "👹", "👺", "👻", "💀", "🧟", "🧌", "🕷️", "🦂", "🐍", "🐺", "🦇", "🪳" }
+
+local function getUniqueEmojiPool(kind)
+	local glyphs = MapConfig.MarkerGlyphs or {}
+	local cfg = glyphs[kind]
+	if type(cfg) == "table" then
+		local t = string.lower(tostring(cfg.Type or cfg.type or ""))
+		local values = cfg.Values or cfg.values
+		if t == "emoji_pool" and type(values) == "table" and #values > 0 then
+			return values
+		end
+	end
+	if kind == "PlayerUnique" then
+		return FALLBACK_PLAYER_EMOJIS
+	end
+	return FALLBACK_ENEMY_EMOJIS
+end
+
+local function allocateUniqueEmoji(pool, usedCounts, rng)
+	if type(pool) ~= "table" or #pool == 0 then
+		return "🙂"
+	end
+	local available = {}
+	for i = 1, #pool do
+		local emoji = pool[i]
+		if type(emoji) == "string" and emoji ~= "" and not usedCounts[emoji] then
+			available[#available + 1] = emoji
+		end
+	end
+	local pickSet = (#available > 0) and available or pool
+	local pick = pickSet[rng:NextInteger(1, #pickSet)] or "🙂"
+	usedCounts[pick] = (usedCounts[pick] or 0) + 1
+	return pick
+end
+
+local function poolContainsEmoji(pool, emoji)
+	if type(pool) ~= "table" or type(emoji) ~= "string" then
+		return false
+	end
+	for i = 1, #pool do
+		if pool[i] == emoji then
+			return true
+		end
+	end
+	return false
+end
+
+local function releaseEmoji(usedCounts, emoji)
+	if type(emoji) ~= "string" then return end
+	local n = usedCounts[emoji]
+	if not n then return end
+	if n <= 1 then
+		usedCounts[emoji] = nil
+	else
+		usedCounts[emoji] = n - 1
+	end
+end
+
+local function getPlayerEmoji(plr)
+	local userId = plr and plr.UserId
+	if type(userId) ~= "number" then
+		return "🙂"
+	end
+	local pool = getUniqueEmojiPool("PlayerUnique")
+	local existing = STATE.playerEmojiByUserId[userId]
+	if existing and poolContainsEmoji(pool, existing) then
+		return existing
+	end
+	if existing then
+		releaseEmoji(STATE.usedPlayerEmojis, existing)
+		STATE.playerEmojiByUserId[userId] = nil
+	end
+	local emoji = allocateUniqueEmoji(pool, STATE.usedPlayerEmojis, STATE.playerEmojiRng)
+	STATE.playerEmojiByUserId[userId] = emoji
+	return emoji
+end
+
+local function getEnemyTypeKey(inst)
+	if not inst then
+		return "Enemy"
+	end
+	local function readTypeKey(obj)
+		if not obj then return nil end
+		local entityId = obj:GetAttribute("EntityId")
+		if type(entityId) == "string" and entityId ~= "" then
+			return entityId
+		end
+		local configId = obj:GetAttribute("ConfigId")
+		if type(configId) == "string" and configId ~= "" then
+			return configId
+		end
+		local entityType = obj:GetAttribute("EntityType")
+		if type(entityType) == "string" and entityType ~= "" then
+			return entityType
+		end
+		return nil
+	end
+
+	local key = readTypeKey(inst)
+	if key then
+		return key
+	end
+
+	local model = inst:FindFirstAncestorWhichIsA("Model")
+	key = readTypeKey(model)
+	if key then
+		return key
+	end
+	if model and type(model.Name) == "string" and model.Name ~= "" then
+		return model.Name
+	end
+	if type(inst.Name) == "string" and inst.Name ~= "" then
+		return inst.Name
+	end
+	return "Enemy"
+end
+
+local function getEnemyEmoji(inst)
+	local typeKey = getEnemyTypeKey(inst)
+	local existing = STATE.enemyEmojiByTypeKey[typeKey]
+	if existing then
+		return existing
+	end
+	local pool = getUniqueEmojiPool("EnemyUnique")
+	local emoji = allocateUniqueEmoji(pool, STATE.usedEnemyEmojis, STATE.enemyEmojiRng)
+	STATE.enemyEmojiByTypeKey[typeKey] = emoji
+	return emoji
+end
+
+local function getPlayerGlyph(plr)
+	return {
+		Type = "emoji",
+		Value = getPlayerEmoji(plr),
+	}
+end
+
+local function getEnemyGlyph(inst)
+	local base = MapConfig.MarkerGlyphs and MapConfig.MarkerGlyphs.Enemy
+	if type(base) == "table" then
+		local t = string.lower(tostring(base.Type or base.type or "emoji"))
+		if t == "icon" then
+			return base
+		end
+	end
+	return {
+		Type = "emoji",
+		Value = getEnemyEmoji(inst),
+	}
+end
+
+local function glyphKeyForMapMarkerGroup(group)
+	if group == "Structures" then
+		return "Structure"
+	end
+	return nil
+end
+
+local function resolveRegionStyle(regionName)
+	local regionStyles = MapConfig.RegionStyles or {}
+	local defaultStyle = regionStyles.Default or {}
+	local overrides = (regionStyles.ByName and regionStyles.ByName[regionName]) or {}
+	local style = {}
+
+	style.FillColor = overrides.FillColor or defaultStyle.FillColor or colorFromHash(regionName)
+	style.FillTransparency = tonumber(overrides.FillTransparency or defaultStyle.FillTransparency) or 0.88
+	style.StrokeColor = overrides.StrokeColor or defaultStyle.StrokeColor or style.FillColor:Lerp(Color3.new(1, 1, 1), 0.35)
+	style.StrokeTransparency = tonumber(overrides.StrokeTransparency or defaultStyle.StrokeTransparency) or 0.45
+	style.ShowLabel = overrides.ShowLabel
+	if style.ShowLabel == nil then
+		style.ShowLabel = defaultStyle.ShowLabel ~= false
+	end
+
+	local glyphOverride = overrides.Glyph or defaultStyle.Glyph
+	if glyphOverride then
+		style.Glyph = glyphOverride
+	else
+		local pool = regionStyles.GlyphPool
+		style.Glyph = {
+			Type = "emoji",
+			Value = glyphPoolPick(pool, regionName),
+		}
+	end
+	return style
 end
 
 local function clampPan()
@@ -183,8 +460,9 @@ local function worldToCanvas(wx, wz, absSize, zoom, panWorld)
 	local scale = mapScale(absSize, zoom)
 	local cx = absSize.X * 0.5
 	local cy = absSize.Y * 0.5
-	local x = cx + (wx + panWorld.X) * scale
-	local y = cy - (wz + panWorld.Y) * scale
+	local mapX, mapZ = mapOrientedXZ(wx, wz)
+	local x = cx + (mapX + panWorld.X) * scale
+	local y = cy - (mapZ + panWorld.Y) * scale
 	return x, y, scale
 end
 
@@ -197,6 +475,12 @@ local function canvasToWorld(px, py, absSize, zoom, panWorld)
 	local cy = absSize.Y * 0.5
 	local wx = ((px - cx) / scale) - panWorld.X
 	local wz = -((py - cy) / scale) - panWorld.Y
+	if MAP_FLIP_X then
+		wx = -wx
+	end
+	if MAP_FLIP_Z then
+		wz = -wz
+	end
 	return wx, wz
 end
 
@@ -304,40 +588,23 @@ local function createUI()
 	mapStroke.Transparency = 0.2
 	mapStroke.Parent = mapFrame
 
-	for i = 1, 2 do
-		local ring = buildCoreFrame(mapFrame, UDim2.fromScale(i / 3, i / 3), UDim2.fromScale(0.5 - (i / 6), 0.5 - (i / 6)), Color3.fromRGB(255, 255, 255), 1)
-		local ringCorner = Instance.new("UICorner")
-		ringCorner.CornerRadius = UDim.new(1, 0)
-		ringCorner.Parent = ring
-		local ringStroke = Instance.new("UIStroke")
-		ringStroke.Color = MapConfig.Colors.MinimapRing
-		ringStroke.Transparency = 0.7
-		ringStroke.Thickness = 1
-		ringStroke.Parent = ring
-	end
+	local chunkLayer = buildCoreFrame(mapFrame, UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), Color3.new(), 1)
+	chunkLayer.Name = "MiniChunkLayer"
 
-	local blips = buildCoreFrame(mapFrame, UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), Color3.new(), 1)
-	blips.Name = "Blips"
+	local regionLayer = buildCoreFrame(mapFrame, UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), Color3.new(), 1)
+	regionLayer.Name = "MiniRegionLayer"
 
-	local playerBlip = Instance.new("ImageLabel")
+	local markerLayer = buildCoreFrame(mapFrame, UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), Color3.new(), 1)
+	markerLayer.Name = "MiniMarkerLayer"
+
+	local playerBlip = buildCoreFrame(markerLayer, UDim2.fromOffset(32, 32), UDim2.fromScale(0.5, 0.5), Color3.new(1, 1, 1), 1)
 	playerBlip.Name = "PlayerBlip"
-	playerBlip.Size = UDim2.fromOffset(14, 16)
 	playerBlip.AnchorPoint = Vector2.new(0.5, 0.5)
-	playerBlip.Position = UDim2.fromScale(0.5, 0.5)
-	playerBlip.BackgroundTransparency = 1
-	playerBlip.Image = "rbxassetid://7072718362"
-	playerBlip.ImageColor3 = MapConfig.Colors.Player
 	playerBlip.ZIndex = 10
-	playerBlip.Parent = blips
-
-	local spawnBlip = buildCoreFrame(blips, UDim2.fromOffset(10, 10), UDim2.fromScale(0.5, 0.5), MapConfig.Colors.Spawn, 0)
-	spawnBlip.Name = "SpawnBlip"
-	spawnBlip.AnchorPoint = Vector2.new(0.5, 0.5)
-	spawnBlip.Visible = false
-	spawnBlip.ZIndex = 9
-	local spawnCorner = Instance.new("UICorner")
-	spawnCorner.CornerRadius = UDim.new(1, 0)
-	spawnCorner.Parent = spawnBlip
+	local playerCorner = Instance.new("UICorner")
+	playerCorner.CornerRadius = UDim.new(1, 0)
+	playerCorner.Parent = playerBlip
+	applyGlyphToFrame(playerBlip, getPlayerGlyph(player), MapConfig.Colors.Player, 28)
 
 	local coords = buildLabel(miniContainer, "X: 0  Z: 0", UDim2.new(1, -12, 0, 16), UDim2.fromOffset(8, miniH - 38), Enum.Font.GothamMedium, 11, MapConfig.Colors.TextPrimary)
 	coords.Name = "Coords"
@@ -346,9 +613,12 @@ local function createUI()
 
 	UI.minimapContainer = miniContainer
 	UI.minimapFrame = mapFrame
-	UI.minimapBlips = blips
+	UI.minimapBlips = markerLayer
 	UI.minimapPlayer = playerBlip
-	UI.minimapSpawn = spawnBlip
+	UI.minimapSpawn = nil
+	UI.minimapChunkLayer = chunkLayer
+	UI.minimapRegionLayer = regionLayer
+	UI.minimapMarkerLayer = markerLayer
 	UI.minimapCoords = coords
 	UI.minimapZoom = zoom
 
@@ -762,6 +1032,87 @@ local function colorForMarkerType(kind)
 	return MapConfig.Colors.TextPrimary
 end
 
+getMarkerGlyph = function(kind)
+	local cfg = kind
+	if type(kind) ~= "table" then
+		local glyphs = MapConfig.MarkerGlyphs or {}
+		cfg = glyphs[kind]
+	end
+	if type(cfg) ~= "table" then
+		return { Type = "emoji", Value = "?" }
+	end
+	local markerType = string.lower(tostring(cfg.Type or cfg.type or "emoji"))
+	local value = cfg.Value or cfg.value
+	if markerType == "emoji_pool" then
+		local values = cfg.Values or cfg.values
+		if type(values) == "table" and #values > 0 then
+			value = values[1]
+		end
+		markerType = "emoji"
+	end
+	if type(value) ~= "string" or value == "" then
+		value = "?"
+	end
+	if markerType ~= "icon" then
+		markerType = "emoji"
+	end
+	return {
+		Type = markerType,
+		Value = value,
+	}
+end
+
+applyGlyphToFrame = function(frame, glyphKey, color, textSize)
+	if not frame then return end
+	local glyph = getMarkerGlyph(glyphKey)
+
+	local emoji = frame:FindFirstChild("GlyphEmoji")
+	if not emoji then
+		emoji = Instance.new("TextLabel")
+		emoji.Name = "GlyphEmoji"
+		emoji.Size = UDim2.fromScale(1, 1)
+		emoji.Position = UDim2.fromOffset(0, 0)
+		emoji.BackgroundTransparency = 1
+		emoji.TextXAlignment = Enum.TextXAlignment.Center
+		emoji.TextYAlignment = Enum.TextYAlignment.Center
+		emoji.Font = Enum.Font.GothamBold
+		emoji.TextScaled = true
+		emoji.Parent = frame
+	end
+
+	local icon = frame:FindFirstChild("GlyphIcon")
+	if not icon then
+		icon = Instance.new("ImageLabel")
+		icon.Name = "GlyphIcon"
+		icon.Size = UDim2.fromScale(1, 1)
+		icon.Position = UDim2.fromOffset(0, 0)
+		icon.BackgroundTransparency = 1
+		icon.ScaleType = Enum.ScaleType.Fit
+		icon.Parent = frame
+	end
+
+	if glyph.Type == "icon" then
+		icon.Image = glyph.Value
+		icon.ImageColor3 = color or Color3.new(1, 1, 1)
+		icon.Visible = true
+		emoji.Visible = false
+	else
+		emoji.Text = glyph.Value
+		emoji.TextColor3 = color or Color3.new(1, 1, 1)
+		emoji.TextSize = textSize or 12
+		emoji.Visible = true
+		icon.Visible = false
+	end
+end
+
+clearGlyphFromFrame = function(frame)
+	if not frame then return end
+	local emoji = frame:FindFirstChild("GlyphEmoji")
+	if emoji then emoji.Visible = false end
+	local icon = frame:FindFirstChild("GlyphIcon")
+	if icon then icon.Visible = false end
+end
+
 local function getOptionalMarkers()
 	local now = os.clock()
 	if now - WORLD.lastOptionalScan < 0.8 then
@@ -816,27 +1167,14 @@ local function getOptionalMarkers()
 end
 
 local function setCaptureInput(enabled)
-	if enabled then
-		ContextActionService:BindActionAtPriority(
-			MAP_CAPTURE_ACTION,
-			function() return Enum.ContextActionResult.Sink end,
-			false,
-			3000,
-			Enum.KeyCode.W,
-			Enum.KeyCode.A,
-			Enum.KeyCode.S,
-			Enum.KeyCode.D,
-			Enum.KeyCode.Up,
-			Enum.KeyCode.Down,
-			Enum.KeyCode.Left,
-			Enum.KeyCode.Right,
-			Enum.KeyCode.Space,
-			Enum.KeyCode.ButtonA,
-			Enum.KeyCode.Thumbstick1
-		)
-	else
-		ContextActionService:UnbindAction(MAP_CAPTURE_ACTION)
-	end
+	-- Keep gameplay movement active even while map is open.
+	ContextActionService:UnbindAction(MAP_CAPTURE_ACTION)
+end
+
+local function markFullMapInteraction()
+	local duration = tonumber(MapConfig.Fullscreen.InteractionBoostDuration) or 0.2
+	duration = math.max(0, duration)
+	STATE.fullRenderBoostUntil = math.max(STATE.fullRenderBoostUntil or 0, os.clock() + duration)
 end
 
 local function setFullMapOpen(open)
@@ -846,6 +1184,7 @@ local function setFullMapOpen(open)
 	end
 	setCaptureInput(open)
 	if open then
+		markFullMapInteraction()
 		updateLegendButtons()
 	end
 end
@@ -882,6 +1221,7 @@ local function applyFullZoom(deltaSign, focusAbs)
 		end
 	end
 	clampPan()
+	markFullMapInteraction()
 end
 
 local function applyMinimapZoom(deltaSign)
@@ -896,6 +1236,12 @@ local function startDrag(input)
 	if not STATE.fullMapOpen then return end
 	INPUT.dragInput = input
 	INPUT.dragging = true
+	markFullMapInteraction()
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		INPUT.lastTouchPan = UserInputService:GetMouseLocation()
+	else
+		INPUT.lastTouchPan = input.Position
+	end
 end
 
 local function endDrag(input)
@@ -907,17 +1253,58 @@ local function endDrag(input)
 end
 
 local function updateDrag(input)
-	if not STATE.fullMapOpen or not INPUT.dragging or INPUT.dragInput ~= input then return end
+	if not STATE.fullMapOpen or not INPUT.dragging then return end
+	local dragInput = INPUT.dragInput
+	if not dragInput then return end
+	-- Mouse drag is handled in RenderStepped for reliability.
+	if dragInput.UserInputType == Enum.UserInputType.MouseButton1 then
+		return
+	end
+	if dragInput ~= input then
+		return
+	end
 	if not UI.fullCanvas then return end
 	local absSize = UI.fullCanvas.AbsoluteSize
 	local scale = mapScale(absSize, STATE.fullZoom)
 	if scale <= 0 then return end
 
-	local delta = input.Delta
+	local currentPos = input.Position
+	local prevPos = INPUT.lastTouchPan or currentPos
+	local delta = currentPos - prevPos
+	INPUT.lastTouchPan = currentPos
 	if delta.Magnitude == 0 then return end
 
-	STATE.panWorld = STATE.panWorld + Vector2.new(-delta.X / scale, delta.Y / scale)
+	STATE.panWorld = STATE.panWorld + Vector2.new(delta.X / scale, -delta.Y / scale)
 	clampPan()
+	markFullMapInteraction()
+end
+
+local function updateMouseDrag()
+	if not STATE.fullMapOpen or not INPUT.dragging then return end
+	local dragInput = INPUT.dragInput
+	if not dragInput or dragInput.UserInputType ~= Enum.UserInputType.MouseButton1 then
+		return
+	end
+	if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+		INPUT.dragInput = nil
+		INPUT.dragging = false
+		INPUT.lastTouchPan = nil
+		return
+	end
+	if not UI.fullCanvas then return end
+	local absSize = UI.fullCanvas.AbsoluteSize
+	local scale = mapScale(absSize, STATE.fullZoom)
+	if scale <= 0 then return end
+
+	local currentPos = UserInputService:GetMouseLocation()
+	local prevPos = INPUT.lastTouchPan or currentPos
+	local delta = currentPos - prevPos
+	INPUT.lastTouchPan = currentPos
+	if delta.Magnitude == 0 then return end
+
+	STATE.panWorld = STATE.panWorld + Vector2.new(delta.X / scale, -delta.Y / scale)
+	clampPan()
+	markFullMapInteraction()
 end
 
 local function bindInput()
@@ -939,30 +1326,38 @@ local function bindInput()
 	end
 
 	UserInputService.InputChanged:Connect(function(input, gameProcessed)
-		if gameProcessed then return end
-
 		if input.UserInputType == Enum.UserInputType.MouseWheel then
 			if STATE.fullMapOpen and UI.fullCanvas and getMouseOver(UI.fullCanvas) then
 				applyFullZoom(input.Position.Z > 0 and 1 or -1, UserInputService:GetMouseLocation())
 			elseif UI.minimapFrame and getMouseOver(UI.minimapFrame) then
 				applyMinimapZoom(input.Position.Z > 0 and 1 or -1)
 			end
-		elseif input.UserInputType == Enum.UserInputType.Gamepad1 and input.KeyCode == Enum.KeyCode.Thumbstick2 then
+		elseif not gameProcessed and input.UserInputType == Enum.UserInputType.Gamepad1 and input.KeyCode == Enum.KeyCode.Thumbstick2 then
 			INPUT.gamepadPan = Vector2.new(input.Position.X, input.Position.Y)
 		end
 
-		updateDrag(input)
+		-- Keep map drag responsive even when core scripts mark input as processed.
+		if not gameProcessed or INPUT.dragging then
+			updateDrag(input)
+		end
 	end)
 
 	UserInputService.InputEnded:Connect(function(input, gameProcessed)
-		if gameProcessed then return end
 		endDrag(input)
+		if gameProcessed then return end
 		if input.UserInputType == Enum.UserInputType.Gamepad1 and input.KeyCode == Enum.KeyCode.Thumbstick2 then
 			INPUT.gamepadPan = Vector2.new(0, 0)
 		end
 	end)
 
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch)
+			and STATE.fullMapOpen
+			and UI.fullCanvas
+			and getMouseOver(UI.fullCanvas) then
+			startDrag(input)
+		end
+
 		if gameProcessed then return end
 
 		if input.KeyCode == Enum.KeyCode.Escape and STATE.fullMapOpen then
@@ -1021,30 +1416,6 @@ local function hideUnusedMinimapBlips(fromIndex)
 	for i = fromIndex, #RENDER_CACHE.minimapBlips do
 		RENDER_CACHE.minimapBlips[i].Visible = false
 	end
-end
-
-local function worldToMinimap(worldPos, playerPos, playerRotation)
-	local offset = worldPos - playerPos
-	local dx = offset.X
-	local dz = offset.Z
-
-	if MapConfig.Minimap.RotateWithPlayer then
-		local c = math.cos(-playerRotation)
-		local s = math.sin(-playerRotation)
-		local rx = dx * c - dz * s
-		local rz = dx * s + dz * c
-		dx, dz = rx, rz
-	end
-
-	local maxPixel = MapConfig.Minimap.Size * 0.5 - 4
-	local scale = maxPixel / STATE.minimapRange
-	local x = dx * scale
-	local y = -dz * scale
-	local dist = math.sqrt(x * x + y * y)
-	if dist > maxPixel then
-		return nil, true
-	end
-	return x, y, false
 end
 
 local function getNearestRegionName(wx, wz)
@@ -1106,9 +1477,59 @@ local function acquireMarkerFrame(key)
 	return frame
 end
 
+local function acquireMinimapMarkerFrame(key)
+	local frame = RENDER_CACHE.minimapMarkerFrames[key]
+	if frame then return frame end
+
+	frame = Instance.new("Frame")
+	frame.Name = key
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Size = UDim2.fromOffset(10, 10)
+	frame.BorderSizePixel = 0
+	frame.BackgroundColor3 = MapConfig.Colors.TextPrimary
+	frame.Visible = true
+	frame.Parent = UI.minimapMarkerLayer
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(1, 0)
+	corner.Parent = frame
+
+	RENDER_CACHE.minimapMarkerFrames[key] = frame
+	return frame
+end
+
 local function hideUnusedNamedFrames(cacheTable, usedTable)
 	for key, frame in pairs(cacheTable) do
 		frame.Visible = usedTable[key] == true
+	end
+end
+
+local function styleMarkerFrame(frame, markerKind, rotation, markerSize, glyphKey)
+	if not frame then return end
+	frame.Size = UDim2.fromOffset(markerSize, markerSize)
+	frame.BackgroundColor3 = colorForMarkerType(markerKind)
+
+	if markerKind == "Players" or markerKind == "Enemies" or markerKind == "Spawn" then
+		frame.Rotation = markerRotationWithOffset(rotation or 0, markerKind)
+	else
+		frame.Rotation = (markerKind == "Objectives") and (rotation or 0) or 0
+	end
+
+	local direction = frame:FindFirstChild("Direction")
+	if direction then
+		direction:Destroy() -- remove legacy triangle symbol
+	end
+
+	if glyphKey then
+		applyGlyphToFrame(frame, glyphKey, colorForMarkerType(markerKind), math.max(12, markerSize - 1))
+		frame.BackgroundTransparency = 1
+	else
+		clearGlyphFromFrame(frame)
+		frame.BackgroundTransparency = 0
+	end
+
+	-- Player markers are glyph-only; never show a backing box.
+	if markerKind == "Players" then
+		frame.BackgroundTransparency = 1
 	end
 end
 
@@ -1153,16 +1574,17 @@ local function renderFullscreen(playerPos)
 					local frame = acquireNamedFrame(RENDER_CACHE.regionFrames, rk, UI.fullRegionLayer)
 					frame.Position = UDim2.fromOffset(math.floor(rx - rw * 0.5), math.floor(ry - rh * 0.5))
 					frame.Size = UDim2.fromOffset(math.ceil(rw), math.ceil(rh))
-					frame.BackgroundColor3 = MapConfig.Colors.RegionFill
-					frame.BackgroundTransparency = 0.9
+					local style = resolveRegionStyle(region.name)
+					frame.BackgroundColor3 = style.FillColor
+					frame.BackgroundTransparency = math.clamp(style.FillTransparency, 0, 1)
 					local stroke = frame:FindFirstChildOfClass("UIStroke")
 					if not stroke then
 						stroke = Instance.new("UIStroke")
 						stroke.Parent = frame
 						stroke.Thickness = 1
 					end
-					stroke.Color = MapConfig.Colors.TextMuted
-					stroke.Transparency = 0.55
+					stroke.Color = style.StrokeColor
+					stroke.Transparency = math.clamp(style.StrokeTransparency, 0, 1)
 
 					local label = frame:FindFirstChild("Label")
 					if not label then
@@ -1170,52 +1592,44 @@ local function renderFullscreen(playerPos)
 						label.Name = "Label"
 					end
 					label.Text = region.name
-					label.Visible = rw > 42 and rh > 18
+					label.TextColor3 = style.StrokeColor
+					label.Visible = style.ShowLabel and rw > 42 and rh > 18
+
+					local canShowGlyph = rw > 16 and rh > 16
+					if canShowGlyph and style.Glyph then
+						applyGlyphToFrame(frame, style.Glyph, style.StrokeColor, math.max(10, math.floor(math.min(rw, rh) * 0.33)))
+					else
+						clearGlyphFromFrame(frame)
+					end
 					RENDER_CACHE.usedRegionKeys[rk] = true
 				end
 			end
 		end
 	end
 
-	local function drawMarker(key, wx, wz, markerKind, rotation, size)
+	local function drawMarker(key, wx, wz, markerKind, rotation, size, glyphKey)
 		local px, py = worldToCanvas(wx, wz, canvasSize, STATE.fullZoom, STATE.panWorld)
 		if px < -20 or py < -20 or px > canvasSize.X + 20 or py > canvasSize.Y + 20 then
 			return
 		end
+		local markerSize = size
+		if markerKind == "Players" or markerKind == "Enemies" or markerKind == "Spawn" then
+			local zoomScale = math.clamp(STATE.fullZoom, 0.75, 2.5)
+			markerSize = math.max(10, math.floor(size * zoomScale + 0.5))
+		end
 		local frame = acquireMarkerFrame(key)
 		frame.Position = UDim2.fromOffset(px, py)
-		frame.Size = UDim2.fromOffset(size, size)
-		frame.BackgroundColor3 = colorForMarkerType(markerKind)
-		frame.Rotation = (markerKind == "Objectives" or markerKind == "Spawn") and (rotation or 0) or 0
-
-		local direction = frame:FindFirstChild("Direction")
-		if markerKind == "Players" or markerKind == "Enemies" then
-			if not direction then
-				direction = Instance.new("ImageLabel")
-				direction.Name = "Direction"
-				direction.AnchorPoint = Vector2.new(0.5, 0.5)
-				direction.Position = UDim2.fromScale(0.5, 0.5)
-				direction.Size = UDim2.fromScale(1, 1)
-				direction.BackgroundTransparency = 1
-				direction.Image = "rbxassetid://7072718362"
-				direction.Parent = frame
-			end
-			direction.Visible = true
-			direction.ImageColor3 = colorForMarkerType(markerKind)
-			direction.Rotation = rotation or 0
-			frame.BackgroundTransparency = 1
-		else
-			if direction then
-				direction.Visible = false
-			end
-			frame.BackgroundTransparency = 0
-		end
+		styleMarkerFrame(frame, markerKind, rotation, markerSize, glyphKey)
 		frame.Visible = true
 		RENDER_CACHE.usedMarkerKeys[key] = true
 	end
 
 	if STATE.markerVisibility.Spawn and STATE.spawnPosition then
-		drawMarker("spawn", STATE.spawnPosition.X, STATE.spawnPosition.Z, "Spawn", 45, 12)
+		local spawnRotation = 0
+		if playerPos and typeof(playerPos) == "Vector3" then
+			spawnRotation = headingDegFromPoints(STATE.spawnPosition, playerPos)
+		end
+		drawMarker("spawn", STATE.spawnPosition.X, STATE.spawnPosition.Z, "Spawn", spawnRotation, 28, "Spawn")
 	end
 
 	if STATE.markerVisibility.Structures or STATE.markerVisibility.Objectives then
@@ -1225,7 +1639,7 @@ local function renderFullscreen(playerPos)
 				if group and STATE.markerVisibility[group] then
 					local pos = getObjectPosition(inst)
 					if pos and isPositionExplored(pos) then
-						drawMarker("marker_" .. tostring(inst), pos.X, pos.Z, group, group == "Objectives" and 45 or 0, group == "Objectives" and 11 or 9)
+						drawMarker("marker_" .. tostring(inst), pos.X, pos.Z, group, group == "Objectives" and 45 or 0, group == "Objectives" and 11 or 9, glyphKeyForMapMarkerGroup(group))
 					end
 				end
 			end
@@ -1238,8 +1652,8 @@ local function renderFullscreen(playerPos)
 			if hrp then
 				local look = hrp.CFrame.LookVector
 				local heading = headingDegFromLook(look)
-				local size = plr == player and 13 or 11
-				drawMarker("player_" .. tostring(plr.UserId), hrp.Position.X, hrp.Position.Z, "Players", heading, size)
+				local size = plr == player and 26 or 22
+				drawMarker("player_" .. tostring(plr.UserId), hrp.Position.X, hrp.Position.Z, "Players", heading, size, getPlayerGlyph(plr))
 			end
 		end
 	end
@@ -1258,9 +1672,17 @@ local function renderFullscreen(playerPos)
 		for i = 1, #WORLD.enemyEntries do
 			local entry = WORLD.enemyEntries[i]
 			local pos = entry.position
+			local heading = entry.look and headingDegFromLook(entry.look) or 0
+			local enemyInst = entry.instance
+			if enemyInst and enemyInst.Parent then
+				local root = enemyInst:FindFirstChild("HumanoidRootPart") or enemyInst.PrimaryPart
+				if root and root:IsA("BasePart") then
+					pos = root.Position
+					heading = headingDegFromLook(root.CFrame.LookVector)
+				end
+			end
 			if pos and isPositionExplored(pos) then
-				local heading = entry.look and headingDegFromLook(entry.look) or 0
-				drawMarker("enemy_" .. tostring(entry.instance), pos.X, pos.Z, "Enemies", heading, 8)
+				drawMarker("enemy_" .. tostring(entry.instance), pos.X, pos.Z, "Enemies", heading, 20, getEnemyGlyph(entry.instance))
 			end
 		end
 	end
@@ -1304,22 +1726,150 @@ local function renderMinimap(playerRoot)
 	if not playerRoot then return end
 
 	local playerPos = playerRoot.Position
-	local playerRot = playerYawForRotatingMinimap(playerRoot)
-	local idx = 1
+	local playerMapX, playerMapZ = mapOrientedXZ(playerPos.X, playerPos.Z)
 
 	UI.minimapCoords.Text = string.format("X: %d  Z: %d", math.floor(playerPos.X), math.floor(playerPos.Z))
 	UI.minimapZoom.Text = string.format("Range: %dm", math.floor(STATE.minimapRange))
 
-	if STATE.markerVisibility.Spawn and STATE.spawnPosition then
-		local sx, sy = worldToMinimap(STATE.spawnPosition, playerPos, playerRot)
-		if sx then
-			UI.minimapSpawn.Position = UDim2.fromScale(0.5, 0.5) + UDim2.fromOffset(sx, sy)
-			UI.minimapSpawn.Visible = true
-		else
-			UI.minimapSpawn.Visible = false
+	local mapSize = UI.minimapFrame and UI.minimapFrame.AbsoluteSize or Vector2.new(0, 0)
+	if mapSize.X <= 0 or mapSize.Y <= 0 then return end
+
+	local radiusPx = math.max(8, math.min(mapSize.X, mapSize.Y) * 0.5 - 4)
+	local centerX = mapSize.X * 0.5
+	local centerY = mapSize.Y * 0.5
+	local scale = radiusPx / math.max(STATE.minimapRange, 1)
+	local miniZoomScale = math.clamp((MapConfig.Minimap.Range or STATE.minimapRange) / math.max(STATE.minimapRange, 1), 0.75, 2.5)
+	local minimapEmojiScale = math.clamp(tonumber(MapConfig.Minimap.EmojiScale) or 0.7, 0.4, 1.5)
+
+	tableClear(RENDER_CACHE.usedMinimapChunkKeys)
+	tableClear(RENDER_CACHE.usedMinimapRegionKeys)
+	tableClear(RENDER_CACHE.usedMinimapMarkerKeys)
+
+	local function worldToMiniPixels(worldX, worldZ, clampToEdge)
+		local mapX, mapZ = mapOrientedXZ(worldX, worldZ)
+		local dx = (mapX - playerMapX) * scale
+		local dy = -(mapZ - playerMapZ) * scale
+		local dist = math.sqrt(dx * dx + dy * dy)
+		if dist > radiusPx then
+			if clampToEdge and dist > 0 then
+				local f = radiusPx / dist
+				return centerX + (dx * f), centerY + (dy * f), true
+			end
+			return nil, nil, true
 		end
-	else
-		UI.minimapSpawn.Visible = false
+		return centerX + dx, centerY + dy, false
+	end
+
+	for key, chunk in pairs(WORLD.chunksByKey) do
+		if isChunkExplored(chunk.cx, chunk.cz) then
+			local cx, cz = chunkCenter(chunk.cx, chunk.cz)
+			local mx, my = worldToMiniPixels(cx, cz, false)
+			local sizePx = math.max(2, CHUNK_SIZE * scale)
+			local relX = (mx or centerX) - centerX
+			local relY = (my or centerY) - centerY
+			if math.abs(relX) <= (radiusPx + sizePx) and math.abs(relY) <= (radiusPx + sizePx) then
+				local frame = acquireNamedFrame(RENDER_CACHE.minimapChunkFrames, key, UI.minimapChunkLayer)
+				frame.Position = UDim2.fromOffset(math.floor((mx or centerX) - sizePx * 0.5), math.floor((my or centerY) - sizePx * 0.5))
+				frame.Size = UDim2.fromOffset(math.ceil(sizePx), math.ceil(sizePx))
+				frame.BackgroundColor3 = getBiomeColor(chunk.biome)
+				frame.BackgroundTransparency = 0.16
+				RENDER_CACHE.usedMinimapChunkKeys[key] = true
+			end
+		end
+	end
+
+	if STATE.markerVisibility.Regions then
+		for key, chunk in pairs(WORLD.chunksByKey) do
+			if isChunkExplored(chunk.cx, chunk.cz) then
+				for i = 1, #chunk.regions do
+					local region = chunk.regions[i]
+					local rk = key .. ":" .. tostring(i)
+					local mx, my = worldToMiniPixels(region.x, region.z, false)
+					local rw = math.max(3, region.sx * scale)
+					local rh = math.max(3, region.sz * scale)
+					local relX = (mx or centerX) - centerX
+					local relY = (my or centerY) - centerY
+					if math.abs(relX) <= (radiusPx + rw) and math.abs(relY) <= (radiusPx + rh) then
+						local frame = acquireNamedFrame(RENDER_CACHE.minimapRegionFrames, rk, UI.minimapRegionLayer)
+						frame.Position = UDim2.fromOffset(math.floor((mx or centerX) - rw * 0.5), math.floor((my or centerY) - rh * 0.5))
+						frame.Size = UDim2.fromOffset(math.ceil(rw), math.ceil(rh))
+						local style = resolveRegionStyle(region.name)
+						frame.BackgroundColor3 = style.FillColor
+						frame.BackgroundTransparency = math.clamp(style.FillTransparency, 0, 1)
+						local stroke = frame:FindFirstChildOfClass("UIStroke")
+						if not stroke then
+							stroke = Instance.new("UIStroke")
+							stroke.Parent = frame
+							stroke.Thickness = 1
+						end
+						stroke.Color = style.StrokeColor
+						stroke.Transparency = math.clamp(style.StrokeTransparency, 0, 1)
+
+						local label = frame:FindFirstChild("Label")
+						if not label then
+							label = buildLabel(frame, "", UDim2.new(1, -4, 0, 12), UDim2.fromOffset(2, 2), Enum.Font.Gotham, 10, MapConfig.Colors.TextMuted, Enum.TextXAlignment.Center)
+							label.Name = "Label"
+						end
+						label.Text = region.name
+						label.TextColor3 = style.StrokeColor
+						label.Visible = style.ShowLabel and rw > 42 and rh > 18
+
+						local canShowGlyph = rw > 16 and rh > 16
+						if canShowGlyph and style.Glyph then
+							applyGlyphToFrame(frame, style.Glyph, style.StrokeColor, math.max(10, math.floor(math.min(rw, rh) * 0.33)))
+						else
+							clearGlyphFromFrame(frame)
+						end
+
+						RENDER_CACHE.usedMinimapRegionKeys[rk] = true
+					end
+				end
+			end
+		end
+	end
+
+	local function drawMiniMarker(key, worldX, worldZ, markerKind, rotation, size, glyphKey, clampToEdge)
+		local mx, my = worldToMiniPixels(worldX, worldZ, clampToEdge)
+		if not mx then
+			return
+		end
+		local markerSize = size
+		if markerKind == "Players" or markerKind == "Enemies" or markerKind == "Spawn" then
+			markerSize = math.max(10, math.floor(size * miniZoomScale + 0.5))
+		end
+		if glyphKey then
+			markerSize = math.max(8, math.floor(markerSize * minimapEmojiScale + 0.5))
+		end
+		local frame = acquireMinimapMarkerFrame(key)
+		frame.Position = UDim2.fromOffset(mx, my)
+		styleMarkerFrame(frame, markerKind, rotation, markerSize, glyphKey)
+		frame.Visible = true
+		RENDER_CACHE.usedMinimapMarkerKeys[key] = true
+	end
+
+	-- Always center local player marker, styled like main map markers.
+	local playerHeading = headingDegFromLook(playerRoot.CFrame.LookVector)
+	local localPlayerSize = math.max(8, math.floor(26 * miniZoomScale * minimapEmojiScale + 0.5))
+	styleMarkerFrame(UI.minimapPlayer, "Players", playerHeading, localPlayerSize, getPlayerGlyph(player))
+	UI.minimapPlayer.Position = UDim2.fromOffset(centerX, centerY)
+
+	if STATE.markerVisibility.Spawn and STATE.spawnPosition then
+		local spawnRotation = headingDegFromPoints(STATE.spawnPosition, playerPos)
+		drawMiniMarker("spawn", STATE.spawnPosition.X, STATE.spawnPosition.Z, "Spawn", spawnRotation, 28, "Spawn", true)
+	end
+
+	if STATE.markerVisibility.Structures or STATE.markerVisibility.Objectives then
+		for inst, data in pairs(WORLD.markersByInstance) do
+			if inst.Parent then
+				local group = normalizeMarkerType(data.markerType)
+				if group and STATE.markerVisibility[group] then
+					local pos = getObjectPosition(inst)
+					if pos and isPositionExplored(pos) then
+						drawMiniMarker("marker_" .. tostring(inst), pos.X, pos.Z, group, group == "Objectives" and 45 or 0, group == "Objectives" and 11 or 9, glyphKeyForMapMarkerGroup(group), false)
+					end
+				end
+			end
+		end
 	end
 
 	if STATE.markerVisibility.Players then
@@ -1327,60 +1877,52 @@ local function renderMinimap(playerRoot)
 			if plr ~= player then
 				local hrp = getCharacterRoot(plr)
 				if hrp then
-					local x, y = worldToMinimap(hrp.Position, playerPos, playerRot)
-					if x then
-						local blip = acquireMinimapBlip(idx)
-						idx += 1
-						blip.Position = UDim2.fromScale(0.5, 0.5) + UDim2.fromOffset(x, y)
-						blip.Size = UDim2.fromOffset(8, 8)
-						blip.BackgroundColor3 = MapConfig.Colors.Teammate
-						blip.Rotation = 0
-						blip.Visible = true
-					end
+					local heading = headingDegFromLook(hrp.CFrame.LookVector)
+					drawMiniMarker("player_" .. tostring(plr.UserId), hrp.Position.X, hrp.Position.Z, "Players", heading, 22, getPlayerGlyph(plr), false)
 				end
 			end
 		end
 	end
 
-	for inst, data in pairs(WORLD.markersByInstance) do
-		if inst.Parent then
-			local group = normalizeMarkerType(data.markerType)
-			if group and STATE.markerVisibility[group] then
-				local pos = getObjectPosition(inst)
-				if pos and isPositionExplored(pos) then
-					local x, y = worldToMinimap(pos, playerPos, playerRot)
-					if x then
-						local blip = acquireMinimapBlip(idx)
-						idx += 1
-						blip.Position = UDim2.fromScale(0.5, 0.5) + UDim2.fromOffset(x, y)
-						blip.Size = UDim2.fromOffset(group == "Objectives" and 9 or 7, group == "Objectives" and 9 or 7)
-						blip.BackgroundColor3 = colorForMarkerType(group)
-						blip.Rotation = (group == "Objectives") and 45 or 0
-						blip.Visible = true
-					end
+	if STATE.markerVisibility.Enemies then
+		for i = 1, #WORLD.enemyEntries do
+			local entry = WORLD.enemyEntries[i]
+			local pos = entry.position
+			local heading = entry.look and headingDegFromLook(entry.look) or 0
+			local enemyInst = entry.instance
+			if enemyInst and enemyInst.Parent then
+				local root = enemyInst:FindFirstChild("HumanoidRootPart") or enemyInst.PrimaryPart
+				if root and root:IsA("BasePart") then
+					pos = root.Position
+					heading = headingDegFromLook(root.CFrame.LookVector)
 				end
+			end
+			if pos and isPositionExplored(pos) then
+				drawMiniMarker("enemy_" .. tostring(entry.instance), pos.X, pos.Z, "Enemies", heading, 20, getEnemyGlyph(entry.instance), false)
+			end
+		end
+	end
+
+	if STATE.markerVisibility.Resources then
+		for i = 1, #WORLD.resourceEntries do
+			local entry = WORLD.resourceEntries[i]
+			local pos = entry.position
+			if pos and isPositionExplored(pos) then
+				drawMiniMarker("resource_" .. tostring(entry.instance), pos.X, pos.Z, "Resources", 0, 6, nil, false)
 			end
 		end
 	end
 
 	for _, data in pairs(STATE.customBlips) do
 		if typeof(data.position) == "Vector3" and isPositionExplored(data.position) then
-			local x, y = worldToMinimap(data.position, playerPos, playerRot)
-			if x then
-				local blip = acquireMinimapBlip(idx)
-				idx += 1
-				blip.Position = UDim2.fromScale(0.5, 0.5) + UDim2.fromOffset(x, y)
-				blip.Size = UDim2.fromOffset(7, 7)
-				blip.BackgroundColor3 = (typeof(data.color) == "Color3") and data.color or MapConfig.Colors.Objective
-				blip.Rotation = 45
-				blip.Visible = true
-			end
+			drawMiniMarker("custom_" .. tostring(data.position), data.position.X, data.position.Z, "Objectives", 0, 8, nil, false)
 		end
 	end
 
-	hideUnusedMinimapBlips(idx)
-
-	UI.minimapPlayer.Rotation = 0
+	hideUnusedNamedFrames(RENDER_CACHE.minimapChunkFrames, RENDER_CACHE.usedMinimapChunkKeys)
+	hideUnusedNamedFrames(RENDER_CACHE.minimapRegionFrames, RENDER_CACHE.usedMinimapRegionKeys)
+	hideUnusedNamedFrames(RENDER_CACHE.minimapMarkerFrames, RENDER_CACHE.usedMinimapMarkerKeys)
+	hideUnusedMinimapBlips(1)
 end
 
 local function initSpawnCapture()
@@ -1412,6 +1954,7 @@ local function applyGamepadPan(dt)
 
 	STATE.panWorld = STATE.panWorld + Vector2.new(-deltaPixels.X / scale, deltaPixels.Y / scale)
 	clampPan()
+	markFullMapInteraction()
 end
 
 local lastMinimapRender = 0
@@ -1423,13 +1966,24 @@ local function update()
 	if root then
 		revealAround(root.Position)
 	end
+	if STATE.markerVisibility.Enemies or STATE.markerVisibility.Resources then
+		getOptionalMarkers()
+	end
 
 	if root and (now - lastMinimapRender) >= (MapConfig.Minimap.UpdateRate or 0.12) then
 		lastMinimapRender = now
 		renderMinimap(root)
 	end
 
-	if STATE.fullMapOpen and (now - lastFullRender) >= (MapConfig.Fullscreen.UpdateRate or 0.1) then
+	local fullRate = tonumber(MapConfig.Fullscreen.UpdateRate) or 0.1
+	local boostedRate = tonumber(MapConfig.Fullscreen.BoostedUpdateRate)
+	if boostedRate == nil then
+		boostedRate = 0 -- 0 = every RenderStepped while interacting
+	end
+	local interacting = now < (STATE.fullRenderBoostUntil or 0)
+	local fullInterval = interacting and math.max(0, boostedRate) or math.max(0, fullRate)
+
+	if STATE.fullMapOpen and (fullInterval <= 0 or (now - lastFullRender) >= fullInterval) then
 		lastFullRender = now
 		renderFullscreen(root and root.Position or nil)
 	end
@@ -1478,7 +2032,8 @@ function MinimapClient:SetZoom(range)
 end
 
 function MinimapClient:SetRotateWithPlayer(rotate)
-	MapConfig.Minimap.RotateWithPlayer = rotate == true
+	-- Minimap is intentionally north-up and non-rotating.
+	MapConfig.Minimap.RotateWithPlayer = false
 end
 
 function MinimapClient:SetFogEnabled(enabled)
@@ -1537,7 +2092,17 @@ local function init()
 	initSpawnCapture()
 	bindInput()
 
+	Players.PlayerRemoving:Connect(function(plr)
+		local userId = plr and plr.UserId
+		if type(userId) == "number" then
+			local emoji = STATE.playerEmojiByUserId[userId]
+			STATE.playerEmojiByUserId[userId] = nil
+			releaseEmoji(STATE.usedPlayerEmojis, emoji)
+		end
+	end)
+
 	RunService.RenderStepped:Connect(function(dt)
+		updateMouseDrag()
 		applyGamepadPan(dt)
 		update()
 	end)
