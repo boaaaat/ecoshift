@@ -3,6 +3,13 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local DEBUG = false
+
+local function dprint(...)
+	if DEBUG then
+		print(...)
+	end
+end
 
 local InventoryService = require(script.Parent.InventoryService)
 local ItemDropService = require(script.Parent.ItemDropService)
@@ -27,7 +34,7 @@ local DROP_VERTICAL_SPEED_MIN = 10
 local DROP_VERTICAL_SPEED_MAX = 20
 
 function DeathService:Init()
-	print("[DeathService] Init() called - starting...")
+	dprint("[DeathService] Init() called - starting...")
 	
 	Remotes = ReplicatedStorage:FindFirstChild("Remotes")
 	if not Remotes then
@@ -36,7 +43,7 @@ function DeathService:Init()
 		Remotes.Parent = ReplicatedStorage
 	end
 	
-	print("[DeathService] Remotes folder found/created")
+	dprint("[DeathService] Remotes folder found/created")
 	
 	-- Create remotes
 	DeathRemote = Remotes:FindFirstChild("Death") or Instance.new("RemoteEvent")
@@ -82,11 +89,11 @@ function DeathService:Init()
 	
 	-- Hook into Humanoid.Died for all players (catches all death sources)
 	Players.PlayerAdded:Connect(function(plr)
-		print("[DeathService] PlayerAdded:", plr.Name)
+		dprint("[DeathService] PlayerAdded:", plr.Name)
 		plr.CharacterAdded:Connect(function(char)
 			-- If player is marked dead, destroy the character (prevent respawn)
 			if plr:GetAttribute("IsDead") then
-				print("[DeathService] Player is dead, preventing respawn")
+				dprint("[DeathService] Player is dead, preventing respawn")
 				task.defer(function()
 					if char and char.Parent then
 						char:Destroy()
@@ -95,14 +102,14 @@ function DeathService:Init()
 				return
 			end
 			
-			print("[DeathService] CharacterAdded for", plr.Name)
+			dprint("[DeathService] CharacterAdded for", plr.Name)
 			local humanoid = char:WaitForChild("Humanoid", 5)
 			if humanoid then
-				print("[DeathService] Hooking Humanoid.HealthChanged for", plr.Name)
+				dprint("[DeathService] Hooking Humanoid.HealthChanged for", plr.Name)
 				-- Use HealthChanged instead of Died so we can clone before cleanup
 				humanoid.HealthChanged:Connect(function(health)
 					if health <= 0 and not self:IsDead(plr) then
-						print("[DeathService] Health hit 0 for", plr.Name)
+						dprint("[DeathService] Health hit 0 for", plr.Name)
 						self:KillPlayer(plr)
 					end
 				end)
@@ -112,15 +119,15 @@ function DeathService:Init()
 	
 	-- Handle existing players (for late initialization)
 	for _, plr in ipairs(Players:GetPlayers()) do
-		print("[DeathService] Handling existing player:", plr.Name)
+		dprint("[DeathService] Handling existing player:", plr.Name)
 		local char = plr.Character
 		if char then
 			local humanoid = char:FindFirstChildOfClass("Humanoid")
 			if humanoid then
-				print("[DeathService] Hooking existing Humanoid.HealthChanged for", plr.Name)
+				dprint("[DeathService] Hooking existing Humanoid.HealthChanged for", plr.Name)
 				humanoid.HealthChanged:Connect(function(health)
 					if health <= 0 and not self:IsDead(plr) then
-						print("[DeathService] Health hit 0 for", plr.Name)
+						dprint("[DeathService] Health hit 0 for", plr.Name)
 						self:KillPlayer(plr)
 					end
 				end)
@@ -129,7 +136,7 @@ function DeathService:Init()
 		plr.CharacterAdded:Connect(function(char)
 			-- If player is marked dead, destroy the character (prevent respawn)
 			if plr:GetAttribute("IsDead") then
-				print("[DeathService] Player is dead, preventing respawn")
+				dprint("[DeathService] Player is dead, preventing respawn")
 				task.defer(function()
 					if char and char.Parent then
 						char:Destroy()
@@ -138,13 +145,13 @@ function DeathService:Init()
 				return
 			end
 			
-			print("[DeathService] CharacterAdded (existing player) for", plr.Name)
+			dprint("[DeathService] CharacterAdded (existing player) for", plr.Name)
 			local hum = char:WaitForChild("Humanoid", 5)
 			if hum then
-				print("[DeathService] Hooking Humanoid.HealthChanged for", plr.Name)
+				dprint("[DeathService] Hooking Humanoid.HealthChanged for", plr.Name)
 				hum.HealthChanged:Connect(function(health)
 					if health <= 0 and not self:IsDead(plr) then
-						print("[DeathService] Health hit 0 for", plr.Name)
+						dprint("[DeathService] Health hit 0 for", plr.Name)
 						self:KillPlayer(plr)
 					end
 				end)
@@ -152,7 +159,7 @@ function DeathService:Init()
 		end)
 	end
 	
-	print("[DeathService] Initialized")
+	dprint("[DeathService] Initialized")
 end
 
 function DeathService:IsDead(player)
@@ -191,33 +198,33 @@ function DeathService:_dropPlayerInventory(player, deathPosition)
 end
 
 function DeathService:KillPlayer(player)
-	print("[DeathService] KillPlayer called for", player.Name)
+	dprint("[DeathService] KillPlayer called for", player.Name)
 	
 	if self:IsDead(player) then 
-		print("[DeathService] Player already dead, skipping")
+		dprint("[DeathService] Player already dead, skipping")
 		return 
 	end
 	
 	local character = player.Character
 	if not character then 
-		print("[DeathService] No character found")
+		dprint("[DeathService] No character found")
 		return 
 	end
 	
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if not humanoid then 
-		print("[DeathService] No humanoid found")
+		dprint("[DeathService] No humanoid found")
 		return 
 	end
 	
-	print("[DeathService] Creating ragdoll...")
+	dprint("[DeathService] Creating ragdoll...")
 	
 	-- Get position before anything changes
 	local deathPosition = character:GetPivot().Position
 	
 	-- Create ragdoll FIRST before character state changes
 	local ragdoll = self:_createRagdoll(character)
-	print("[DeathService] Ragdoll created:", ragdoll ~= nil)
+	dprint("[DeathService] Ragdoll created:", ragdoll ~= nil)
 	
 	-- Store death data
 	self._deadPlayers[player] = {
@@ -241,7 +248,7 @@ function DeathService:KillPlayer(player)
 	local otherPlayers = self:_getAlivePlayers(player)
 	local canSpectate = #otherPlayers > 0
 	
-	print("[DeathService] Firing DeathRemote to client, canSpectate:", canSpectate)
+	dprint("[DeathService] Firing DeathRemote to client, canSpectate:", canSpectate)
 	
 	-- Notify client of death
 	DeathRemote:FireClient(player, "Died", {
@@ -259,7 +266,7 @@ function DeathService:KillPlayer(player)
 		end
 	end
 	
-	print("[DeathService]", player.Name, "died successfully")
+	dprint("[DeathService]", player.Name, "died successfully")
 end
 
 function DeathService:RevivePlayer(player, reviver)
@@ -318,7 +325,7 @@ function DeathService:RevivePlayer(player, reviver)
 		end
 	end
 	
-	print("[DeathService]", player.Name, "was revived by", reviver and reviver.Name or "system")
+	dprint("[DeathService]", player.Name, "was revived by", reviver and reviver.Name or "system")
 	return true
 end
 
@@ -328,7 +335,7 @@ function DeathService:_createRagdoll(character)
 		return nil
 	end
 	
-	print("[DeathService] Attempting to clone character:", character.Name, "Parent:", character.Parent)
+	dprint("[DeathService] Attempting to clone character:", character.Name, "Parent:", character.Parent)
 	
 	-- Try to clone the character
 	local success, result = pcall(function()
@@ -342,7 +349,7 @@ function DeathService:_createRagdoll(character)
 	local ragdoll = nil
 	if success and result then
 		ragdoll = result
-		print("[DeathService] Clone successful")
+		dprint("[DeathService] Clone successful")
 	else
 		-- When pcall fails, 'result' contains the error message
 		local errorMsg = success and "Clone returned nil" or tostring(result)
@@ -515,7 +522,7 @@ function DeathService:_createSimpleRagdoll(character)
 				end
 			end
 			
-			print("[DeathService] Created ragdoll from copied parts")
+			dprint("[DeathService] Created ragdoll from copied parts")
 			return ragdoll
 		end
 	end
@@ -547,7 +554,7 @@ function DeathService:_createSimpleRagdoll(character)
 	
 	ragdoll.PrimaryPart = torso
 	
-	print("[DeathService] Created simple ragdoll at", position)
+	dprint("[DeathService] Created simple ragdoll at", position)
 	return ragdoll
 end
 

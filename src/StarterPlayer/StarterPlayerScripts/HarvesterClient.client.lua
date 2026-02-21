@@ -108,6 +108,17 @@ local holding = false
 local loopRunning = false
 local inputBeganConn = nil
 local inputEndedConn = nil
+local boundTools = setmetatable({}, { __mode = "k" })
+local characterConnections = {}
+
+local function disconnectCharacterConnections()
+	for _, conn in ipairs(characterConnections) do
+		if conn and conn.Connected then
+			conn:Disconnect()
+		end
+	end
+	table.clear(characterConnections)
+end
 
 local function hasWeaponType(tool)
 	if not tool or not tool:IsA("Tool") then return false end
@@ -198,6 +209,9 @@ end
 local function bindTool(tool)
 	if not tool:IsA("Tool") then return end
 	if not isHarvestTool(tool) then return end
+	if boundTools[tool] then return end
+	boundTools[tool] = true
+
 	tool.Equipped:Connect(function()
 		activeTool = tool
 	end)
@@ -226,14 +240,15 @@ inputEndedConn = UserInputService.InputEnded:Connect(function(input, processed)
 end)
 
 local function onCharacter(char)
+	disconnectCharacterConnections()
 	local backpack = player:WaitForChild("Backpack")
-	char.ChildRemoved:Connect(function(child)
+	characterConnections[#characterConnections + 1] = char.ChildRemoved:Connect(function(child)
 		if child == activeTool then
 			holding = false
 			activeTool = nil
 		end
 	end)
-	backpack.ChildAdded:Connect(function(child)
+	characterConnections[#characterConnections + 1] = backpack.ChildAdded:Connect(function(child)
 		if child:IsA("Tool") then
 			bindTool(child)
 		end
@@ -243,7 +258,7 @@ local function onCharacter(char)
 			bindTool(child)
 		end
 	end
-	char.ChildAdded:Connect(function(child)
+	characterConnections[#characterConnections + 1] = char.ChildAdded:Connect(function(child)
 		if child:IsA("Tool") then
 			bindTool(child)
 			if isHarvestTool(child) then

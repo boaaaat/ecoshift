@@ -10,6 +10,13 @@ local GuiService = game:GetService("GuiService")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
+local DEBUG = false
+
+local function dprint(...)
+	if DEBUG then
+		print(...)
+	end
+end
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -1380,12 +1387,12 @@ if rInventory then
 		inventorySnapshot = payload
 		
 		-- Debug: Log storage contents
-		print("[InventoryUI] Snapshot received:")
+		dprint("[InventoryUI] Snapshot received:")
 		if payload.Storage then
 			for i = 1, STORAGE_COLS * STORAGE_ROWS do
 				local slot = payload.Storage[i]
 				if slot then
-					print(string.format("  Storage[%d]: %s x%d", i, slot.Id, slot.N))
+					dprint(string.format("  Storage[%d]: %s x%d", i, slot.Id, slot.N))
 				end
 			end
 		end
@@ -1393,7 +1400,7 @@ if rInventory then
 			for i = 1, 4 do
 				local slot = payload.Hotbar[i]
 				if slot then
-					print(string.format("  Hotbar[%d]: %s x%d", i, slot.Id, slot.N))
+					dprint(string.format("  Hotbar[%d]: %s x%d", i, slot.Id, slot.N))
 				end
 			end
 		end
@@ -1402,4 +1409,4 @@ if rInventory then
 	end)
 end
 
-print("[InventoryUI] Polished inventory ready")
+dprint("[InventoryUI] Polished inventory ready")

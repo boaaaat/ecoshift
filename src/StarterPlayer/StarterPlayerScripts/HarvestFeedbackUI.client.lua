@@ -7,6 +7,13 @@ local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
+local DEBUG = false
+
+local function dprint(...)
+	if DEBUG then
+		print(...)
+	end
+end
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -91,6 +98,9 @@ end
 
 -- Create or update health bar for a node
 local function updateHealthBar(node, position, currentHealth, maxHealth, destroyed)
+	if typeof(position) ~= "Vector3" then
+		return
+	end
 	if destroyed then
 		-- Remove health bar if exists
 		if activeHealthBars[node] then
@@ -103,7 +113,9 @@ local function updateHealthBar(node, position, currentHealth, maxHealth, destroy
 		return
 	end
 	
-	local healthPercent = currentHealth / maxHealth
+	local safeMaxHealth = math.max(1, tonumber(maxHealth) or 0)
+	local safeCurrentHealth = math.max(0, tonumber(currentHealth) or 0)
+	local healthPercent = math.clamp(safeCurrentHealth / safeMaxHealth, 0, 1)
 	
 	-- Create health bar if doesn't exist
 	if not activeHealthBars[node] then
@@ -206,7 +218,7 @@ local function cleanupHealthBars()
 end
 
 local function handleFeedback(data)
-	print("[HarvestFeedbackUI] Received feedback:", data)
+	dprint("[HarvestFeedbackUI] Received feedback:", data)
 	if type(data) ~= "table" then return end
 
 	local node = data.Node
@@ -233,7 +245,7 @@ end
 
 if rFeedback then
 	rFeedback.OnClientEvent:Connect(handleFeedback)
-	print("[HarvestFeedbackUI] Connected to HarvestFeedback remote")
+	dprint("[HarvestFeedbackUI] Connected to HarvestFeedback remote")
 else
 	warn("[HarvestFeedbackUI] Missing HarvestFeedback remote:", Config.RemoteNames.HarvestFeedback)
 end
@@ -248,4 +260,4 @@ RunService.Heartbeat:Connect(function()
 	end
 end)
 
-print("[HarvestFeedbackUI] Ready")
+dprint("[HarvestFeedbackUI] Ready")

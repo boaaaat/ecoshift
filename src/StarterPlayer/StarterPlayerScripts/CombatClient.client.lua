@@ -16,6 +16,17 @@ local holdingPrimary = false
 local holdingSecondary = false
 local lastClientFire = 0
 local bowCharging = false
+local boundTools = setmetatable({}, { __mode = "k" })
+local characterConnections = {}
+
+local function disconnectCharacterConnections()
+	for _, conn in ipairs(characterConnections) do
+		if conn and conn.Connected then
+			conn:Disconnect()
+		end
+	end
+	table.clear(characterConnections)
+end
 
 local function raycastFromMouse(maxRange)
 	local camera = Workspace.CurrentCamera
@@ -112,6 +123,8 @@ end
 
 local function bindTool(tool)
 	if not tool:IsA("Tool") then return end
+	if boundTools[tool] then return end
+	boundTools[tool] = true
 	local weapon = WeaponFactory.Create(tool, player)
 	if not weapon then return end
 
@@ -133,9 +146,12 @@ local function bindTool(tool)
 end
 
 local function onCharacter(char)
+	disconnectCharacterConnections()
 	activeTool = nil
 	activeWeapon = nil
 	bowCharging = false
+	holdingPrimary = false
+	holdingSecondary = false
 	local backpack = player:WaitForChild("Backpack")
 	for _, child in ipairs(backpack:GetChildren()) do
 		if child:IsA("Tool") then
@@ -149,12 +165,12 @@ local function onCharacter(char)
 			activeWeapon = WeaponFactory.Create(child, player)
 		end
 	end
-	backpack.ChildAdded:Connect(function(child)
+	characterConnections[#characterConnections + 1] = backpack.ChildAdded:Connect(function(child)
 		if child:IsA("Tool") then
 			bindTool(child)
 		end
 	end)
-	char.ChildAdded:Connect(function(child)
+	characterConnections[#characterConnections + 1] = char.ChildAdded:Connect(function(child)
 		if child:IsA("Tool") then
 			bindTool(child)
 			activeTool = child
