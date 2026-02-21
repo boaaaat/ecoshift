@@ -26,6 +26,7 @@ local tier1Services = {
 	"BiomeService",
 	"GameStateService",
 	"RoleService",
+	"ProfileService",
 }
 
 -- TIER 2: Services needed for gameplay but can load after tier 1
@@ -42,6 +43,7 @@ local tier2Services = {
 	{ name = "SurvivalService", method = "Init" },
 	{ name = "RoundService", method = "Bind" },
 	{ name = "DropItemService", method = "Init" },
+	{ name = "InventoryService", method = "Init" },
 	{ name = "InventoryActionService", method = "Init" },
 	{ name = "ToolService", method = "Init" },
 	{ name = "ArmorService", method = "Init" },
@@ -54,7 +56,11 @@ local tier2Services = {
 
 -- TIER 3: Deferred/heavy services (world gen, etc.)
 local tier3Services = {
+	{ name = "ChunkStreamingService", method = "Init" },
 	{ name = "WorldGenController", method = "Init" },
+	{ name = "WorldBuilder", method = "Init" },
+	{ name = "ObjectiveBootstrap", method = "Init" },
+	{ name = "EnemySpawner", method = "Init" },
 	{ name = "SpawnerOrchestrator", method = "Bind" },
 	{ name = "GameLoopService", method = "Init" },
 	{ name = "ObjectiveRuntimeService", method = "Init" },

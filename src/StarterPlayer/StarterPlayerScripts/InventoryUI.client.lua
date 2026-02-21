@@ -66,6 +66,14 @@ gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = playerGui
 
+local dragOverlay = Instance.new("ScreenGui")
+dragOverlay.Name = "InventoryDragOverlay"
+dragOverlay.ResetOnSpawn = false
+dragOverlay.IgnoreGuiInset = true
+dragOverlay.DisplayOrder = 200
+dragOverlay.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+dragOverlay.Parent = playerGui
+
 -- Main container
 local mainContainer = Instance.new("Frame")
 mainContainer.Name = "MainContainer"
@@ -135,6 +143,20 @@ capacityLabel.TextSize = 12
 capacityLabel.Font = Enum.Font.Gotham
 capacityLabel.TextXAlignment = Enum.TextXAlignment.Right
 capacityLabel.Parent = header
+
+local transferStatusLabel = Instance.new("TextLabel")
+transferStatusLabel.Name = "TransferStatus"
+transferStatusLabel.Size = UDim2.new(0, 240, 0, 14)
+transferStatusLabel.AnchorPoint = Vector2.new(1, 1)
+transferStatusLabel.Position = UDim2.new(1, -MARGIN, 1, -4)
+transferStatusLabel.BackgroundTransparency = 1
+transferStatusLabel.Text = ""
+transferStatusLabel.TextColor3 = COLORS.TextMuted
+transferStatusLabel.TextSize = 11
+transferStatusLabel.Font = Enum.Font.Gotham
+transferStatusLabel.TextXAlignment = Enum.TextXAlignment.Right
+transferStatusLabel.Visible = false
+transferStatusLabel.Parent = header
 
 -- Armor section (inside inventory)
 local armorSection = Instance.new("Frame")
@@ -477,6 +499,26 @@ local inventoryOpen = false
 local contextMenu = nil
 local INVENTORY_TOGGLE_ACTION = "EcoshiftToggleInventory"
 local inventoryToggleActionBound = false
+local transferStatusToken = 0
+local cancelDrag = nil
+
+local function showTransferStatus(text, color, duration)
+	transferStatusToken += 1
+	local token = transferStatusToken
+	if type(text) ~= "string" or text == "" then
+		transferStatusLabel.Visible = false
+		transferStatusLabel.Text = ""
+		return
+	end
+	transferStatusLabel.Text = text
+	transferStatusLabel.TextColor3 = color or COLORS.TextMuted
+	transferStatusLabel.Visible = true
+	task.delay(tonumber(duration) or 1.0, function()
+		if token ~= transferStatusToken then return end
+		transferStatusLabel.Visible = false
+		transferStatusLabel.Text = ""
+	end)
+end
 
 local function isChestTransferLockActive()
 	return gui:GetAttribute("ChestOpen") == true
@@ -491,6 +533,10 @@ local function setInventoryOpen(open, force)
 	if not inventoryOpen then
 		if tooltip then tooltip.Visible = false end
 		if contextMenu then contextMenu.Visible = false end
+		showTransferStatus(nil)
+		if cancelDrag then
+			cancelDrag()
+		end
 	end
 end
 
@@ -526,6 +572,11 @@ end)
 gui:GetAttributeChangedSignal("ChestOpen"):Connect(function()
 	if gui:GetAttribute("ChestOpen") == true then
 		setInventoryOpen(true, true)
+	else
+		showTransferStatus(nil)
+		if cancelDrag then
+			cancelDrag()
+		end
 	end
 end)
 
@@ -536,6 +587,11 @@ local function hashColor(id)
 		hash = (hash * 33 + string.byte(id, i)) % 360
 	end
 	return Color3.fromHSV(hash / 360, 0.55, 0.85)
+end
+
+local function getItemStackSize(itemId)
+	local item = ItemDatabase:Get(itemId)
+	return (item and tonumber(item.StackSize)) or 99
 end
 
 local function getSlotData(slotType, index)
@@ -674,15 +730,17 @@ end
 
 local function findEmptySlot(slotType)
 	if not inventorySnapshot then return nil end
-	if slotType == "Hotbar" and inventorySnapshot.Hotbar then
+	if slotType == "Hotbar" then
+		local hotbar = inventorySnapshot.Hotbar or {}
 		for i = 1, HOTBAR_SLOTS do
-			if not inventorySnapshot.Hotbar[i] then
+			if not hotbar[i] then
 				return i
 			end
 		end
-	elseif slotType == "Storage" and inventorySnapshot.Storage then
+	elseif slotType == "Storage" then
+		local storage = inventorySnapshot.Storage or {}
 		for i = 1, STORAGE_COLS * STORAGE_ROWS do
-			if not inventorySnapshot.Storage[i] then
+			if not storage[i] then
 				return i
 			end
 		end
@@ -690,31 +748,138 @@ local function findEmptySlot(slotType)
 	return nil
 end
 
+local function isSameSlot(fromSlot, slotType, index)
+	return fromSlot and fromSlot.Type == slotType and fromSlot.Index == index
+end
+
+local function findStackSlot(slotType, itemId, fromSlot)
+	if not inventorySnapshot then return nil end
+	local maxStack = getItemStackSize(itemId)
+	if slotType == "Hotbar" then
+		local hotbar = inventorySnapshot.Hotbar or {}
+		for i = 1, HOTBAR_SLOTS do
+			local slotData = hotbar[i]
+			if slotData and slotData.Id == itemId and slotData.N < maxStack and not isSameSlot(fromSlot, slotType, i) then
+				return i
+			end
+		end
+	elseif slotType == "Storage" then
+		local storage = inventorySnapshot.Storage or {}
+		for i = 1, STORAGE_COLS * STORAGE_ROWS do
+			local slotData = storage[i]
+			if slotData and slotData.Id == itemId and slotData.N < maxStack and not isSameSlot(fromSlot, slotType, i) then
+				return i
+			end
+		end
+	end
+	return nil
+end
+
+local function findBestInventoryTarget(fromSlot, itemId)
+	local order = { "Storage", "Hotbar" }
+	if fromSlot and fromSlot.Type == "Storage" then
+		order = { "Hotbar", "Storage" }
+	end
+	for _, slotType in ipairs(order) do
+		local stackIndex = findStackSlot(slotType, itemId, fromSlot)
+		if stackIndex then
+			return slotType, stackIndex
+		end
+		local emptyIndex = findEmptySlot(slotType)
+		if emptyIndex then
+			return slotType, emptyIndex
+		end
+	end
+	return nil, nil
+end
+
+local function getOpenChestSlotsContainer()
+	if gui:GetAttribute("ChestOpen") ~= true then
+		return nil, nil
+	end
+	local chestId = gui:GetAttribute("ChestId")
+	if type(chestId) ~= "string" or chestId == "" then
+		return nil, nil
+	end
+	local chestGui = playerGui:FindFirstChild("ChestUI")
+	if not chestGui then return nil, nil end
+	local chestPanel = chestGui:FindFirstChild("ChestPanel")
+	if not chestPanel or not chestPanel:IsA("Frame") or not chestPanel.Visible then
+		return nil, nil
+	end
+	local chestSlots = chestPanel:FindFirstChild("Slots")
+	if not chestSlots then return nil, nil end
+	return chestId, chestSlots
+end
+
+local function findChestTargetSlot(itemId)
+	local _, chestSlots = getOpenChestSlotsContainer()
+	if not chestSlots then return nil end
+	local maxStack = getItemStackSize(itemId)
+	local stackTarget = nil
+	local emptyTarget = nil
+	for _, frame in ipairs(chestSlots:GetChildren()) do
+		if frame:IsA("Frame") then
+			local index = tonumber(frame:GetAttribute("ChestIndex"))
+			if index then
+				if frame:GetAttribute("HasItem") == true then
+					local frameItem = frame:GetAttribute("ItemId")
+					local count = tonumber(frame:GetAttribute("Count")) or 0
+					if frameItem == itemId and count < maxStack and (not stackTarget or index < stackTarget) then
+						stackTarget = index
+					end
+				elseif not emptyTarget or index < emptyTarget then
+					emptyTarget = index
+				end
+			end
+		end
+	end
+	return stackTarget or emptyTarget
+end
+
+local swapLocalSlots
+
 local function shiftMove(slot)
 	local data = getSlotData(slot.Type, slot.Index)
-	if not data or not rInventoryAction then return end
-	local targetType = nil
-	if slot.Type == "Hotbar" then
-		targetType = "Storage"
-	elseif slot.Type == "Storage" then
-		targetType = "Hotbar"
-	else
-		targetType = "Storage"
+	if not data then return end
+	local chestAttempted = false
+	if rChest then
+		local chestId = getOpenChestSlotsContainer()
+		if chestId then
+			chestAttempted = true
+			local chestTarget = findChestTargetSlot(data.Id)
+			if chestTarget then
+				rChest:FireServer("Put", {
+					ChestId = chestId,
+					FromType = slot.Type,
+					FromIndex = slot.Index,
+					ToIndex = chestTarget,
+					Amount = data.N,
+				})
+				showTransferStatus("Moved to chest", COLORS.Accent, 0.9)
+				return
+			end
+		end
 	end
-	local targetIndex = findEmptySlot(targetType)
-	if not targetIndex then
-		-- fallback to other container
-		targetType = (targetType == "Hotbar") and "Storage" or "Hotbar"
-		targetIndex = findEmptySlot(targetType)
+	if not rInventoryAction then return end
+	local targetType, targetIndex = findBestInventoryTarget(slot, data.Id)
+	if not targetType or not targetIndex then
+		if chestAttempted then
+			showTransferStatus("Chest full and no inventory slot", COLORS.Warning, 1.2)
+		else
+			showTransferStatus("No valid inventory slot", COLORS.Warning, 1.0)
+		end
+		return
 	end
-	if not targetIndex then return end
 	rInventoryAction:FireServer("Move", {
 		FromType = slot.Type,
 		FromIndex = slot.Index,
 		ToType = targetType,
 		ToIndex = targetIndex,
 	})
-	swapLocalSlots(slot, { Type = targetType, Index = targetIndex })
+	if chestAttempted then
+		showTransferStatus("Chest full for item, moved in inventory", COLORS.Warning, 1.1)
+	end
 end
 
 -- Context menu
@@ -836,7 +1001,7 @@ local function setLocalSlot(slotType, index, value)
 	end
 end
 
-local function swapLocalSlots(from, to)
+swapLocalSlots = function(from, to)
 	if not inventorySnapshot then return end
 	local a = getLocalSlot(from.Type, from.Index)
 	local b = getLocalSlot(to.Type, to.Index)
@@ -883,40 +1048,79 @@ local function createDragGhost(slot, data)
 	ghost.BackgroundColor3 = COLORS.SlotSelected
 	ghost.BackgroundTransparency = 0.3
 	ghost.BorderSizePixel = 0
-	ghost.ZIndex = 50
-	ghost.Parent = gui
+	ghost.ZIndex = 500
+	ghost.Parent = dragOverlay
 	
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 8)
 	corner.Parent = ghost
 	
-	local icon = Instance.new("ImageLabel")
-	icon.Size = UDim2.new(0, iconSize, 0, iconSize)
-	icon.Position = UDim2.new(0.5, 0, 0.5, 0)
-	icon.AnchorPoint = Vector2.new(0.5, 0.5)
-	icon.BackgroundTransparency = 1
-	icon.ZIndex = 51
-	icon.Parent = ghost
-	
 	local item = ItemDatabase:Get(data.Id)
 	local itemIcon = item and item.Icon
 	local iconColor = item and item.IconColor
 	if itemIcon and itemIcon ~= "" then
+		local icon = Instance.new("ImageLabel")
+		icon.Size = UDim2.new(0, iconSize, 0, iconSize)
+		icon.Position = UDim2.new(0.5, 0, 0.5, 0)
+		icon.AnchorPoint = Vector2.new(0.5, 0.5)
+		icon.BackgroundTransparency = 1
+		icon.ZIndex = 501
+		icon.Parent = ghost
 		icon.Image = itemIcon
 		icon.ImageColor3 = Color3.new(1, 1, 1)
 	else
-		local placeholder = (Config.UI and Config.UI.PlaceholderIcon) or ""
-		icon.Image = placeholder
-		icon.ImageColor3 = iconColor or hashColor(data.Id)
+		local nameText = item and item.Name or data.Id
+		local text = Instance.new("TextLabel")
+		text.Size = UDim2.new(1, -8, 1, -8)
+		text.Position = UDim2.new(0.5, 0, 0.5, 0)
+		text.AnchorPoint = Vector2.new(0.5, 0.5)
+		text.BackgroundTransparency = 1
+		text.TextWrapped = true
+		text.TextScaled = true
+		text.Font = Enum.Font.GothamBold
+		text.TextColor3 = iconColor or hashColor(data.Id)
+		text.Text = nameText
+		text.ZIndex = 501
+		text.Parent = ghost
+	end
+
+	if data.N > 1 then
+		local qty = Instance.new("TextLabel")
+		qty.Size = UDim2.new(0, 28, 0, 16)
+		qty.AnchorPoint = Vector2.new(1, 1)
+		qty.Position = UDim2.new(1, -4, 1, -4)
+		qty.BackgroundTransparency = 1
+		qty.Font = Enum.Font.GothamBold
+		qty.TextSize = 11
+		qty.TextColor3 = COLORS.Text
+		qty.TextXAlignment = Enum.TextXAlignment.Right
+		qty.Text = tostring(data.N)
+		qty.ZIndex = 502
+		qty.Parent = ghost
 	end
 	
 	return ghost
+end
+
+cancelDrag = function()
+	if dragging.From then
+		dragging.From.Frame.BackgroundTransparency = 0
+	end
+	if dragging.Ghost then
+		dragging.Ghost:Destroy()
+	end
+	dragging.Active = false
+	dragging.Pending = false
+	dragging.From = nil
+	dragging.Ghost = nil
+	dragging.StartPos = nil
 end
 
 local function beginDrag(slot)
 	local data = getSlotData(slot.Type, slot.Index)
 	if not data then return end
 	
+	showTransferStatus(nil)
 	selectedSlot = slot
 	dragging.Active = true
 	dragging.Pending = false
@@ -928,20 +1132,9 @@ end
 
 local function endDrag(targetSlot)
 	if not dragging.Active then return end
-	
-	if dragging.From then
-		dragging.From.Frame.BackgroundTransparency = 0
-	end
-	
-	if dragging.Ghost then
-		dragging.Ghost:Destroy()
-	end
-	
+
 	local from = dragging.From
-	dragging.Active = false
-	dragging.From = nil
-	dragging.Ghost = nil
-	
+	cancelDrag()
 	if not targetSlot or targetSlot == from then return end
 	if not rInventoryAction then return end
 	
@@ -958,20 +1151,7 @@ local function endDrag(targetSlot)
 end
 
 local function chestSlotFrameAtPoint(point)
-	if gui:GetAttribute("ChestOpen") ~= true then
-		return nil
-	end
-	local chestId = gui:GetAttribute("ChestId")
-	if type(chestId) ~= "string" or chestId == "" then
-		return nil
-	end
-	local chestGui = playerGui:FindFirstChild("ChestUI")
-	if not chestGui then return nil end
-	local chestPanel = chestGui:FindFirstChild("ChestPanel")
-	if not chestPanel or not chestPanel:IsA("Frame") or not chestPanel.Visible then
-		return nil
-	end
-	local chestSlots = chestPanel:FindFirstChild("Slots")
+	local _, chestSlots = getOpenChestSlotsContainer()
 	if not chestSlots then return nil end
 
 	local inset = GuiService:GetGuiInset()
@@ -990,18 +1170,9 @@ end
 
 local function endDragToChest(chestFrame)
 	if not dragging.Active then return end
-	if dragging.From then
-		dragging.From.Frame.BackgroundTransparency = 0
-	end
-	if dragging.Ghost then
-		dragging.Ghost:Destroy()
-	end
 
 	local from = dragging.From
-	dragging.Active = false
-	dragging.From = nil
-	dragging.Ghost = nil
-
+	cancelDrag()
 	if not from or not chestFrame or not rChest then return end
 	local chestId = gui:GetAttribute("ChestId")
 	if type(chestId) ~= "string" or chestId == "" then return end
@@ -1018,6 +1189,7 @@ local function endDragToChest(chestFrame)
 		ToIndex = toIndex,
 		Amount = data.N,
 	})
+	showTransferStatus("Moved to chest", COLORS.Accent, 0.9)
 end
 
 local function slotAtPoint(point)
@@ -1078,20 +1250,18 @@ UserInputService.InputEnded:Connect(function(input)
 				end
 			end
 		elseif dragging.Pending and dragging.From then
-			selectedSlot = dragging.From
+			local fromSlot = dragging.From
+			selectedSlot = fromSlot
 			renderAll()
 			-- Only send Equip for Hotbar slots (empty or filled)
-			if rInventoryAction and dragging.From.Type == "Hotbar" then
+			if rInventoryAction and fromSlot.Type == "Hotbar" then
 				rInventoryAction:FireServer("Equip", {
-					SlotType = dragging.From.Type,
-					SlotIndex = dragging.From.Index,
+					SlotType = fromSlot.Type,
+					SlotIndex = fromSlot.Index,
 				})
 			end
+			cancelDrag()
 		end
-		dragging.Active = false
-		dragging.Pending = false
-		dragging.From = nil
-		dragging.StartPos = nil
 	end
 end)
 
