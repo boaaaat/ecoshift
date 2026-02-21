@@ -1,1229 +1,1548 @@
 -- MinimapClient.client.lua
--- Circular minimap with fog of war exploration system
--- Shows player, teammates, enemies, resources, and structures
+-- Tactical minimap + fullscreen world map (M)
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
 local CollectionService = game:GetService("CollectionService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
-local DEBUG = false
+local HttpService = game:GetService("HttpService")
 
+local BiomeConfig = require(ReplicatedStorage.Shared.BiomeConfig)
+local MapConfig = require(ReplicatedStorage.Shared.MapConfig)
+
+local DEBUG = false
 local function dprint(...)
 	if DEBUG then
-		print(...)
+		print("[Map]", ...)
 	end
 end
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--------------------------------------------------------------------
--- CONFIGURATION
--------------------------------------------------------------------
-local CONFIG = {
-	-- Minimap size and position
-	Size = 200, -- pixels (slightly larger for detail)
-	Margin = 15, -- from screen edge
-	Position = "TopRight", -- TopRight, TopLeft, BottomRight, BottomLeft
-	
-	-- Radar settings
-	Range = 100, -- studs visible on minimap (default zoom)
-	MinRange = 50, -- minimum zoom (zoomed in)
-	MaxRange = 300, -- maximum zoom (zoomed out)
-	ZoomStep = 25, -- studs per zoom step
-	UpdateRate = 0.1, -- seconds between updates
-	RotateWithPlayer = true, -- minimap rotates with player facing
-	
-	-- Fog of War settings
-	FogEnabled = true,
-	FogCellSize = 20, -- studs per grid cell
-	ExploreRadius = 80, -- how far you reveal when walking (studs) - INCREASED
-	FogColor = Color3.fromRGB(10, 12, 15),
-	FogTransparency = 0.15, -- unexplored areas darker
-	
-	-- Visual settings
-	BackgroundColor = Color3.fromRGB(20, 25, 30),
-	BackgroundTransparency = 0.3,
-	BorderColor = Color3.fromRGB(60, 70, 80),
-	BorderWidth = 3,
-	
-	-- Blip colors
-	PlayerColor = Color3.fromRGB(100, 200, 255), -- cyan for self
-	TeammateColor = Color3.fromRGB(100, 255, 100), -- green
-	EnemyColor = Color3.fromRGB(255, 80, 80), -- red
-	ResourceColor = Color3.fromRGB(255, 200, 50), -- gold/yellow (default)
-	TreeColor = Color3.fromRGB(34, 139, 34), -- forest green for trees
-	RockColor = Color3.fromRGB(128, 128, 128), -- grey for rocks
-	OreColor = Color3.fromRGB(180, 100, 255), -- purple for ore
-	PlantColor = Color3.fromRGB(50, 205, 50), -- lime green for plants
-	StructureColor = Color3.fromRGB(150, 200, 255), -- light blue
-	ObjectiveColor = Color3.fromRGB(255, 150, 255), -- magenta
-	NeutralColor = Color3.fromRGB(180, 180, 180), -- grey
-	SpawnColor = Color3.fromRGB(255, 165, 0), -- orange for spawn point
-	
-	-- Spawn point marker
-	ShowSpawnMarker = true,
-	SpawnBlipSize = 10, -- larger for visibility
-	
-	-- Blip sizes
-	PlayerBlipSize = 12,
-	EntityBlipSize = 8,
-	ResourceBlipSize = 6,
-	StructureBlipSize = 7,
-	
-	-- What to show
-	ShowTeammates = true,
-	ShowEnemies = true,
-	ShowResources = true,
-	ShowStructures = true,
-	ShowObjectives = true,
-	MaxBlips = 200, -- increased for resources
-	
-	-- Resource scanning - scan ALL these folders
-	ResourceFolderNames = {"Resources", "WorldGen", "Terrain", "Nodes", "Chunks", "World", "Map"},
-	StructureFolderNames = {"Structures", "Buildings", "PlayerBuilds", "Builds"},
+local WORLD_RADIUS = (BiomeConfig.WORLD and BiomeConfig.WORLD.WorldRadius) or (BiomeConfig.world_radius or 1000)
+local CHUNK_SIZE = BiomeConfig.chunk_size or 240
+local GENERATED_FOLDER_NAME = MapConfig.GeneratedWorldFolderName or BiomeConfig.spawn_folder_name or "GeneratedWorld"
+
+local MAP_CAPTURE_ACTION = "EcoshiftMapCapture"
+local MAP_TOGGLE_ACTION = "EcoshiftToggleMap"
+
+local STATE = {
+	minimapRange = MapConfig.Minimap.Range,
+	minimapVisible = true,
+	fullMapOpen = false,
+	fullZoom = MapConfig.Fullscreen.DefaultZoom,
+	panWorld = Vector2.new(0, 0),
+	fogEnabled = true,
+	markerVisibility = {
+		Players = MapConfig.MarkerDefaults.Players,
+		Structures = MapConfig.MarkerDefaults.Structures,
+		Objectives = MapConfig.MarkerDefaults.Objectives,
+		Spawn = MapConfig.MarkerDefaults.Spawn,
+		Resources = MapConfig.MarkerDefaults.Resources,
+		Enemies = MapConfig.MarkerDefaults.Enemies,
+		Regions = MapConfig.MarkerDefaults.Regions,
+	},
+	spawnPosition = nil,
+	customBlips = {},
 }
 
--------------------------------------------------------------------
--- STATE
--------------------------------------------------------------------
-local minimapGui = nil
-local minimapFrame = nil
-local blipsContainer = nil
-local fogContainer = nil
-local playerBlip = nil
-local compassLabels = {}
-local blipPool = {} -- reusable blip instances
-local activeBlips = {} -- currently visible blips
-local updateConnection = nil
+local WORLD = {
+	chunksByKey = {}, -- ["cx,cz"] = { cx, cz, biome, regions = { {name, x, z, sx, sz, temp} }, folder }
+	chunkByFolder = {}, -- [Folder] = key
+	chunkConns = {}, -- [Folder] = { RBXScriptConnection }
+	markersByInstance = {}, -- [Instance] = { markerType, label }
+	markerConns = {}, -- [Instance] = { RBXScriptConnection }
+	exploredChunks = {}, -- ["cx,cz"] = true
+	generatedFolder = nil,
+	generatedFolderConns = {},
+	workspaceConns = {},
+	resourceEntries = {},
+	enemyEntries = {},
+	lastOptionalScan = 0,
+}
 
--- Fog of War state
-local exploredCells = {} -- [cellKey] = true
-local fogPixels = {} -- UI elements for fog
-local cachedResources = {} -- Cache of discovered resources { [instance] = {pos, type, name} }
-local cachedStructures = {} -- Cache of discovered structures
-local lastResourceScan = 0
-local RESOURCE_SCAN_INTERVAL = 2 -- seconds between full world scans
+local UI = {
+	gui = nil,
+	minimapContainer = nil,
+	minimapFrame = nil,
+	minimapBlips = nil,
+	minimapPlayer = nil,
+	minimapSpawn = nil,
+	minimapCoords = nil,
+	minimapZoom = nil,
+	fullRoot = nil,
+	fullCanvas = nil,
+	fullChunkLayer = nil,
+	fullRegionLayer = nil,
+	fullMarkerLayer = nil,
+	zoomLabel = nil,
+	cursorLabel = nil,
+	mapToggleButton = nil,
+	toggleButtons = {},
+}
 
--- Spawn point tracking
-local spawnPosition = nil -- Where the player spawned
-local spawnMarkerBlip = nil -- Special blip for spawn point
+local RENDER_CACHE = {
+	minimapBlips = {},
+	chunkFrames = {},
+	regionFrames = {},
+	markerFrames = {},
+	usedChunkKeys = {},
+	usedRegionKeys = {},
+	usedMarkerKeys = {},
+}
 
--------------------------------------------------------------------
--- UI CREATION
--------------------------------------------------------------------
-local function createMinimapUI()
-	local screenGui = Instance.new("ScreenGui")
-	screenGui.Name = "MinimapUI"
-	screenGui.ResetOnSpawn = false
-	screenGui.IgnoreGuiInset = true
-	screenGui.DisplayOrder = 5
-	
-	-- Calculate position
-	local posX, posY, anchorX, anchorY
-	if CONFIG.Position == "TopRight" then
-		posX, posY = 1, 0
-		anchorX, anchorY = 1, 0
-	elseif CONFIG.Position == "TopLeft" then
-		posX, posY = 0, 0
-		anchorX, anchorY = 0, 0
-	elseif CONFIG.Position == "BottomRight" then
-		posX, posY = 1, 1
-		anchorX, anchorY = 1, 1
-	else -- BottomLeft
-		posX, posY = 0, 1
-		anchorX, anchorY = 0, 1
+local INPUT = {
+	dragInput = nil,
+	dragging = false,
+	lastTouchPan = nil,
+	gamepadPan = Vector2.new(0, 0),
+}
+
+local function tableClear(t)
+	for k in pairs(t) do
+		t[k] = nil
 	end
-	
-	-- Main container (for margin)
-	local container = Instance.new("Frame")
-	container.Name = "Container"
-	container.Size = UDim2.new(0, CONFIG.Size + CONFIG.Margin * 2, 0, CONFIG.Size + CONFIG.Margin * 2 + 45) -- Extra height for spawn distance
-	container.Position = UDim2.new(posX, 0, posY, 0)
-	container.AnchorPoint = Vector2.new(anchorX, anchorY)
-	container.BackgroundTransparency = 1
-	container.Parent = screenGui
-	
-	-- Minimap frame (circular)
-	local mapFrame = Instance.new("Frame")
-	mapFrame.Name = "MapFrame"
-	mapFrame.Size = UDim2.new(0, CONFIG.Size, 0, CONFIG.Size)
-	mapFrame.Position = UDim2.new(0.5, 0, 0, CONFIG.Margin)
-	mapFrame.AnchorPoint = Vector2.new(0.5, 0)
-	mapFrame.BackgroundColor3 = CONFIG.BackgroundColor
-	mapFrame.BackgroundTransparency = CONFIG.BackgroundTransparency
-	mapFrame.ClipsDescendants = true
-	mapFrame.Parent = container
-	
-	-- Make it circular
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0.5, 0)
-	corner.Parent = mapFrame
-	
-	-- Border
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = CONFIG.BorderColor
-	stroke.Thickness = CONFIG.BorderWidth
-	stroke.Parent = mapFrame
-	
-	-- Inner glow/ring effect
-	local innerRing = Instance.new("Frame")
-	innerRing.Name = "InnerRing"
-	innerRing.Size = UDim2.new(1, -10, 1, -10)
-	innerRing.Position = UDim2.new(0.5, 0, 0.5, 0)
-	innerRing.AnchorPoint = Vector2.new(0.5, 0.5)
-	innerRing.BackgroundTransparency = 1
-	innerRing.Parent = mapFrame
-	
-	local innerCorner = Instance.new("UICorner")
-	innerCorner.CornerRadius = UDim.new(0.5, 0)
-	innerCorner.Parent = innerRing
-	
-	local innerStroke = Instance.new("UIStroke")
-	innerStroke.Color = Color3.fromRGB(40, 50, 60)
-	innerStroke.Thickness = 1
-	innerStroke.Transparency = 0.5
-	innerStroke.Parent = innerRing
-	
-	-- Grid lines (crosshair style)
-	local hLine = Instance.new("Frame")
-	hLine.Name = "HLine"
-	hLine.Size = UDim2.new(1, 0, 0, 1)
-	hLine.Position = UDim2.new(0, 0, 0.5, 0)
-	hLine.BackgroundColor3 = Color3.fromRGB(60, 70, 80)
-	hLine.BackgroundTransparency = 0.7
-	hLine.BorderSizePixel = 0
-	hLine.Parent = mapFrame
-	
-	local vLine = Instance.new("Frame")
-	vLine.Name = "VLine"
-	vLine.Size = UDim2.new(0, 1, 1, 0)
-	vLine.Position = UDim2.new(0.5, 0, 0, 0)
-	vLine.BackgroundColor3 = Color3.fromRGB(60, 70, 80)
-	vLine.BackgroundTransparency = 0.7
-	vLine.BorderSizePixel = 0
-	vLine.Parent = mapFrame
-	
-	-- Range rings
-	for i = 1, 2 do
-		local ring = Instance.new("Frame")
-		ring.Name = "RangeRing" .. i
-		local scale = i / 3
-		ring.Size = UDim2.new(scale, 0, scale, 0)
-		ring.Position = UDim2.new(0.5, 0, 0.5, 0)
-		ring.AnchorPoint = Vector2.new(0.5, 0.5)
-		ring.BackgroundTransparency = 1
-		ring.Parent = mapFrame
-		
-		local ringCorner = Instance.new("UICorner")
-		ringCorner.CornerRadius = UDim.new(0.5, 0)
-		ringCorner.Parent = ring
-		
-		local ringStroke = Instance.new("UIStroke")
-		ringStroke.Color = Color3.fromRGB(50, 60, 70)
-		ringStroke.Thickness = 1
-		ringStroke.Transparency = 0.6
-		ringStroke.Parent = ring
-	end
-	
-	-- Blips container (rotates with player)
-	local blips = Instance.new("Frame")
-	blips.Name = "Blips"
-	blips.Size = UDim2.new(1, 0, 1, 0)
-	blips.Position = UDim2.new(0.5, 0, 0.5, 0)
-	blips.AnchorPoint = Vector2.new(0.5, 0.5)
-	blips.BackgroundTransparency = 1
-	blips.Parent = mapFrame
-	
-	-- Player blip (center, always visible)
-	local pBlip = Instance.new("Frame")
-	pBlip.Name = "PlayerBlip"
-	pBlip.Size = UDim2.new(0, CONFIG.PlayerBlipSize, 0, CONFIG.PlayerBlipSize)
-	pBlip.Position = UDim2.new(0.5, 0, 0.5, 0)
-	pBlip.AnchorPoint = Vector2.new(0.5, 0.5)
-	pBlip.BackgroundColor3 = CONFIG.PlayerColor
-	pBlip.BorderSizePixel = 0
-	pBlip.ZIndex = 10
-	pBlip.Parent = blips
-	
-	-- Player direction indicator (triangle)
-	local dirIndicator = Instance.new("ImageLabel")
-	dirIndicator.Name = "Direction"
-	dirIndicator.Size = UDim2.new(0, 8, 0, 10)
-	dirIndicator.Position = UDim2.new(0.5, 0, 0, -6)
-	dirIndicator.AnchorPoint = Vector2.new(0.5, 1)
-	dirIndicator.BackgroundTransparency = 1
-	dirIndicator.Image = "rbxassetid://7072718362" -- triangle
-	dirIndicator.ImageColor3 = CONFIG.PlayerColor
-	dirIndicator.Parent = pBlip
-	
-	local pCorner = Instance.new("UICorner")
-	pCorner.CornerRadius = UDim.new(0.5, 0)
-	pCorner.Parent = pBlip
-	
-	-- Compass labels (now shows direction relative to player - "^" always at top = forward)
-	local compassDirs = {
-		{ label = "N", angle = 0 },
-		{ label = "E", angle = 90 },
-		{ label = "S", angle = 180 },
-		{ label = "W", angle = 270 },
-	}
-	
-	for _, dir in ipairs(compassDirs) do
-		local label = Instance.new("TextLabel")
-		label.Name = "Compass_" .. dir.label
-		label.Size = UDim2.new(0, 20, 0, 15)
-		label.BackgroundTransparency = 1
-		label.Text = dir.label
-		label.TextColor3 = Color3.fromRGB(150, 160, 170)
-		label.TextSize = 11
-		label.Font = Enum.Font.GothamBold
-		label.ZIndex = 5
-		label.Parent = mapFrame
-		
-		compassLabels[dir.label] = { frame = label, baseAngle = dir.angle }
-	end
-	
-	-- Spawn point marker (special blip, always visible)
-	local spawnBlip = Instance.new("Frame")
-	spawnBlip.Name = "SpawnMarker"
-	spawnBlip.Size = UDim2.new(0, CONFIG.SpawnBlipSize, 0, CONFIG.SpawnBlipSize)
-	spawnBlip.AnchorPoint = Vector2.new(0.5, 0.5)
-	spawnBlip.BackgroundColor3 = CONFIG.SpawnColor
-	spawnBlip.BorderSizePixel = 0
-	spawnBlip.Visible = false
-	spawnBlip.ZIndex = 8 -- High priority
-	spawnBlip.Parent = blips
-	
-	local spawnCorner = Instance.new("UICorner")
-	spawnCorner.CornerRadius = UDim.new(0.5, 0)
-	spawnCorner.Parent = spawnBlip
-	
-	-- Home icon indicator (diamond shape via rotation)
-	local spawnIcon = Instance.new("Frame")
-	spawnIcon.Name = "HomeIcon"
-	spawnIcon.Size = UDim2.new(0, 6, 0, 6)
-	spawnIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
-	spawnIcon.AnchorPoint = Vector2.new(0.5, 0.5)
-	spawnIcon.BackgroundColor3 = Color3.new(1, 1, 1)
-	spawnIcon.BorderSizePixel = 0
-	spawnIcon.Rotation = 45 -- Diamond shape
-	spawnIcon.Parent = spawnBlip
-	
-	-- Glow effect for spawn marker
-	local spawnGlow = Instance.new("UIStroke")
-	spawnGlow.Color = CONFIG.SpawnColor
-	spawnGlow.Thickness = 2
-	spawnGlow.Transparency = 0.3
-	spawnGlow.Parent = spawnBlip
-	
-	spawnMarkerBlip = spawnBlip
-	
-	-- Title/coordinates display
-	local titleFrame = Instance.new("Frame")
-	titleFrame.Name = "TitleFrame"
-	titleFrame.Size = UDim2.new(1, -20, 0, 50) -- Increased for spawn distance
-	titleFrame.Position = UDim2.new(0.5, 0, 1, 5)
-	titleFrame.AnchorPoint = Vector2.new(0.5, 0)
-	titleFrame.BackgroundTransparency = 1
-	titleFrame.Parent = container
-	
-	local coordsLabel = Instance.new("TextLabel")
-	coordsLabel.Name = "Coords"
-	coordsLabel.Size = UDim2.new(1, 0, 0, 15)
-	coordsLabel.BackgroundTransparency = 1
-	coordsLabel.Text = "X: 0 | Z: 0"
-	coordsLabel.TextColor3 = Color3.fromRGB(150, 160, 170)
-	coordsLabel.TextSize = 11
-	coordsLabel.Font = Enum.Font.GothamMedium
-	coordsLabel.Parent = titleFrame
-	
-	local zoomLabel = Instance.new("TextLabel")
-	zoomLabel.Name = "Zoom"
-	zoomLabel.Size = UDim2.new(1, 0, 0, 12)
-	zoomLabel.Position = UDim2.new(0, 0, 0, 15)
-	zoomLabel.BackgroundTransparency = 1
-	zoomLabel.Text = "Zoom: 100m | +/- or scroll"
-	zoomLabel.TextColor3 = Color3.fromRGB(120, 130, 140)
-	zoomLabel.TextSize = 9
-	zoomLabel.Font = Enum.Font.Gotham
-	zoomLabel.Parent = titleFrame
-	
-	-- Spawn distance indicator
-	local spawnDistLabel = Instance.new("TextLabel")
-	spawnDistLabel.Name = "SpawnDist"
-	spawnDistLabel.Size = UDim2.new(1, 0, 0, 12)
-	spawnDistLabel.Position = UDim2.new(0, 0, 0, 27)
-	spawnDistLabel.BackgroundTransparency = 1
-	spawnDistLabel.Text = ""
-	spawnDistLabel.TextColor3 = CONFIG.SpawnColor
-	spawnDistLabel.TextSize = 9
-	spawnDistLabel.Font = Enum.Font.GothamBold
-	spawnDistLabel.Parent = titleFrame
-	
-	screenGui.Parent = playerGui
-	
-	minimapGui = screenGui
-	minimapFrame = mapFrame
-	blipsContainer = blips
-	playerBlip = pBlip
-	
-	return screenGui
 end
 
--------------------------------------------------------------------
--- BLIP MANAGEMENT
--------------------------------------------------------------------
-local function createBlip()
-	local blip = Instance.new("Frame")
-	blip.Size = UDim2.new(0, CONFIG.EntityBlipSize, 0, CONFIG.EntityBlipSize)
-	blip.AnchorPoint = Vector2.new(0.5, 0.5)
-	blip.BackgroundColor3 = CONFIG.NeutralColor
-	blip.BorderSizePixel = 0
-	blip.Visible = false
-	blip.Parent = blipsContainer
-	
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0.5, 0)
-	corner.Parent = blip
-	
-	-- Glow effect
-	local glow = Instance.new("UIStroke")
-	glow.Color = Color3.new(1, 1, 1)
-	glow.Thickness = 1
-	glow.Transparency = 0.8
-	glow.Parent = blip
-	
-	return blip
+local function chunkKey(cx, cz)
+	return tostring(cx) .. "," .. tostring(cz)
 end
 
-local function getBlipFromPool()
-	for _, blip in ipairs(blipPool) do
-		if not blip.Visible then
-			return blip
-		end
-	end
-	
-	-- Create new blip if pool exhausted
-	if #blipPool < CONFIG.MaxBlips then
-		local newBlip = createBlip()
-		table.insert(blipPool, newBlip)
-		return newBlip
-	end
-	
-	return nil -- At max capacity
+local function worldToChunk(x, z)
+	local cx = math.floor(x / CHUNK_SIZE)
+	local cz = math.floor(z / CHUNK_SIZE)
+	return cx, cz
 end
 
-local function hideAllBlips()
-	for _, blip in ipairs(blipPool) do
-		blip.Visible = false
-	end
-	activeBlips = {}
+local function chunkCenter(cx, cz)
+	return cx * CHUNK_SIZE + CHUNK_SIZE * 0.5, cz * CHUNK_SIZE + CHUNK_SIZE * 0.5
 end
 
--------------------------------------------------------------------
--- WORLD SCANNING
--------------------------------------------------------------------
-local function getPlayerPosition()
-	local char = player.Character
+local function getCharacterRoot(plr)
+	local char = plr and plr.Character
 	if not char then return nil end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	return hrp and hrp.Position or nil
-end
-
-local function getPlayerRotation()
-	local char = player.Character
-	if not char then return 0 end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	if not hrp then return 0 end
-	
-	local lookVector = hrp.CFrame.LookVector
-	return math.atan2(lookVector.X, lookVector.Z)
-end
-
-local function worldToMinimap(worldPos, playerPos, playerRotation, clampToEdge)
-	-- Get offset from player
-	local offset = worldPos - playerPos
-	local dx = offset.X
-	local dz = offset.Z
-	
-	-- Always rotate based on player facing so "up" = forward direction
-	-- This makes the minimap oriented so top = where player is looking
-	local cos = math.cos(-playerRotation)
-	local sin = math.sin(-playerRotation)
-	local newDx = dx * cos - dz * sin
-	local newDz = dx * sin + dz * cos
-	dx, dz = newDx, newDz
-	
-	-- Scale to minimap
-	local scale = (CONFIG.Size / 2) / CONFIG.Range
-	local mapX = dx * scale
-	local mapY = -newDz * scale -- Negative Z = forward = UP on screen
-	
-	-- Check if within range (circular)
-	local dist = math.sqrt(mapX * mapX + mapY * mapY)
-	local maxDist = CONFIG.Size / 2 - 5
-	
-	if dist > maxDist then
-		if clampToEdge then
-			-- Clamp to edge of minimap (for spawn marker arrow)
-			local factor = maxDist / dist
-			mapX = mapX * factor
-			mapY = mapY * factor
-			return UDim2.new(0.5, mapX, 0.5, mapY), true -- true = clamped
-		else
-			return nil -- Outside minimap
-		end
-	end
-	
-	return UDim2.new(0.5, mapX, 0.5, mapY), false
-end
-
--------------------------------------------------------------------
--- FOG OF WAR SYSTEM
--------------------------------------------------------------------
-local function getCellKey(x, z)
-	local cellX = math.floor(x / CONFIG.FogCellSize)
-	local cellZ = math.floor(z / CONFIG.FogCellSize)
-	return cellX .. "_" .. cellZ
-end
-
-local function getCellFromKey(key)
-	local x, z = key:match("([%-?%d]+)_([%-?%d]+)")
-	return tonumber(x) * CONFIG.FogCellSize, tonumber(z) * CONFIG.FogCellSize
-end
-
-local function isExplored(worldX, worldZ)
-	if not CONFIG.FogEnabled then return true end
-	return exploredCells[getCellKey(worldX, worldZ)] == true
-end
-
-local function exploreAroundPosition(pos)
-	if not CONFIG.FogEnabled then return end
-	
-	local radius = CONFIG.ExploreRadius
-	local cellSize = CONFIG.FogCellSize
-	local cellsToExplore = math.ceil(radius / cellSize)
-	
-	local centerCellX = math.floor(pos.X / cellSize)
-	local centerCellZ = math.floor(pos.Z / cellSize)
-	
-	for dx = -cellsToExplore, cellsToExplore do
-		for dz = -cellsToExplore, cellsToExplore do
-			local cellX = centerCellX + dx
-			local cellZ = centerCellZ + dz
-			
-			-- Check if within circular radius
-			local worldX = cellX * cellSize + cellSize / 2
-			local worldZ = cellZ * cellSize + cellSize / 2
-			local dist = math.sqrt((worldX - pos.X)^2 + (worldZ - pos.Z)^2)
-			
-			if dist <= radius then
-				local key = cellX .. "_" .. cellZ
-				exploredCells[key] = true
-			end
-		end
-	end
-end
-
--------------------------------------------------------------------
--- RESOURCE & STRUCTURE SCANNING
--------------------------------------------------------------------
-local function classifyResource(name, parentName)
-	local nameLower = name:lower()
-	local parentLower = parentName and parentName:lower() or ""
-	local combined = nameLower .. " " .. parentLower
-	
-	-- Trees (check name and parent folder)
-	if combined:find("tree") or combined:find("palm") or combined:find("pine") 
-		or combined:find("oak") or combined:find("birch") or combined:find("willow")
-		or combined:find("redwood") or combined:find("spruce") or combined:find("maple")
-		or combined:find("forest") then
-		return "tree", CONFIG.TreeColor
-	end
-	
-	-- Rocks/Stone
-	if combined:find("rock") or combined:find("stone") or combined:find("boulder") 
-		or combined:find("sandstone") or combined:find("granite") or combined:find("cliff") then
-		return "rock", CONFIG.RockColor
-	end
-	
-	-- Ores/Minerals
-	if combined:find("ore") or combined:find("iron") or combined:find("gold") 
-		or combined:find("copper") or combined:find("coal") or combined:find("crystal")
-		or combined:find("gem") or combined:find("diamond") or combined:find("metal")
-		or combined:find("mineral") or combined:find("vein") then
-		return "ore", CONFIG.OreColor
-	end
-	
-	-- Plants/Bushes/Vegetation
-	if combined:find("bush") or combined:find("berry") or combined:find("plant")
-		or combined:find("flower") or combined:find("herb") or combined:find("mushroom")
-		or combined:find("cactus") or combined:find("fern") or combined:find("shrub")
-		or combined:find("vegetation") or combined:find("flora") then
-		return "plant", CONFIG.PlantColor
-	end
-	
-	-- Default resource (yellow)
-	return "resource", CONFIG.ResourceColor
+	return char:FindFirstChild("HumanoidRootPart")
 end
 
 local function getObjectPosition(obj)
+	if not obj or not obj.Parent then return nil end
+	if obj:IsA("BasePart") then
+		return obj.Position
+	end
 	if obj:IsA("Model") then
 		if obj.PrimaryPart then
 			return obj.PrimaryPart.Position
 		end
-		-- Try to get any part position
-		local part = obj:FindFirstChildWhichIsA("BasePart")
-		if part then
-			return part.Position
+		local anyPart = obj:FindFirstChildWhichIsA("BasePart", true)
+		if anyPart then
+			return anyPart.Position
 		end
-		local success, pivot = pcall(function() return obj:GetPivot() end)
-		if success then
+		local ok, pivot = pcall(function() return obj:GetPivot() end)
+		if ok then
 			return pivot.Position
 		end
-	elseif obj:IsA("BasePart") then
-		return obj.Position
 	end
 	return nil
 end
 
-local function isHarvestableObject(obj)
-	-- Check for ProximityPrompt (most reliable)
-	if obj:FindFirstChildOfClass("ProximityPrompt") then
-		return true
+local function headingDegFromLook(look)
+	-- 0 = north (-Z), 90 = east (+X)
+	return math.deg(math.atan2(look.X, -look.Z))
+end
+
+local function playerYawForRotatingMinimap(root)
+	if not root then return 0 end
+	local look = root.CFrame.LookVector
+	return math.atan2(look.X, look.Z)
+end
+
+local function getBiomeColor(biome)
+	local map = MapConfig.Colors.BiomeTile or {}
+	return map[biome] or map.Unknown or Color3.fromRGB(72, 78, 86)
+end
+
+local function clampPan()
+	local maxPan = WORLD_RADIUS * 1.35
+	STATE.panWorld = Vector2.new(
+		math.clamp(STATE.panWorld.X, -maxPan, maxPan),
+		math.clamp(STATE.panWorld.Y, -maxPan, maxPan)
+	)
+end
+
+local function mapScale(absSize, zoom)
+	local usable = math.min(absSize.X, absSize.Y)
+	if usable <= 0 then return 1 end
+	return (usable / (WORLD_RADIUS * 2)) * zoom
+end
+
+local function worldToCanvas(wx, wz, absSize, zoom, panWorld)
+	local scale = mapScale(absSize, zoom)
+	local cx = absSize.X * 0.5
+	local cy = absSize.Y * 0.5
+	local x = cx + (wx + panWorld.X) * scale
+	local y = cy - (wz + panWorld.Y) * scale
+	return x, y, scale
+end
+
+local function canvasToWorld(px, py, absSize, zoom, panWorld)
+	local scale = mapScale(absSize, zoom)
+	if scale <= 0 then
+		return 0, 0
 	end
-	if obj:IsA("Model") and obj:FindFirstChildWhichIsA("ProximityPrompt", true) then
-		return true
+	local cx = absSize.X * 0.5
+	local cy = absSize.Y * 0.5
+	local wx = ((px - cx) / scale) - panWorld.X
+	local wz = -((py - cy) / scale) - panWorld.Y
+	return wx, wz
+end
+
+local function safeJSONDecode(raw)
+	if type(raw) ~= "string" or raw == "" then
+		return {}
 	end
-	
-	-- Check attributes
-	if obj:GetAttribute("Harvestable") or obj:GetAttribute("Resource") 
-		or obj:GetAttribute("Mineable") or obj:GetAttribute("Choppable") then
-		return true
+	local ok, data = pcall(function()
+		return HttpService:JSONDecode(raw)
+	end)
+	if ok and type(data) == "table" then
+		return data
 	end
-	
-	-- Check if it looks like a resource by name patterns
-	local nameLower = obj.Name:lower()
-	local resourcePatterns = {
-		"tree", "rock", "stone", "ore", "bush", "plant", "node",
-		"resource", "deposit", "vein", "crystal", "mushroom", "cactus",
-		"palm", "pine", "oak", "boulder", "iron", "gold", "copper"
+	return {}
+end
+
+local function cleanupConnections(list)
+	if type(list) ~= "table" then return end
+	for i = 1, #list do
+		local conn = list[i]
+		if conn then
+			conn:Disconnect()
+		end
+	end
+	for i = #list, 1, -1 do
+		list[i] = nil
+	end
+end
+
+local function buildCoreFrame(parent, size, position, color, transparency)
+	local frame = Instance.new("Frame")
+	frame.Size = size
+	frame.Position = position
+	frame.BackgroundColor3 = color
+	frame.BackgroundTransparency = transparency or 0
+	frame.BorderSizePixel = 0
+	frame.Parent = parent
+	return frame
+end
+
+local function buildLabel(parent, text, size, position, font, textSize, color, xAlign)
+	local label = Instance.new("TextLabel")
+	label.Size = size
+	label.Position = position
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.Font = font or Enum.Font.Gotham
+	label.TextSize = textSize or 12
+	label.TextColor3 = color or MapConfig.Colors.TextPrimary
+	label.TextXAlignment = xAlign or Enum.TextXAlignment.Left
+	label.TextYAlignment = Enum.TextYAlignment.Center
+	label.Parent = parent
+	return label
+end
+
+local function styleCard(frame)
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 10)
+	corner.Parent = frame
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = MapConfig.Colors.UIBorder
+	stroke.Thickness = 1
+	stroke.Transparency = 0.2
+	stroke.Parent = frame
+end
+
+local function getPositionPreset()
+	local p = MapConfig.Minimap.Position or "TopRight"
+	if p == "TopLeft" then
+		return UDim2.new(0, MapConfig.Minimap.Margin, 0, MapConfig.Minimap.Margin)
+	elseif p == "BottomRight" then
+		return UDim2.new(1, -MapConfig.Minimap.Margin - MapConfig.Minimap.Size - 20, 1, -MapConfig.Minimap.Margin - MapConfig.Minimap.Size - 54)
+	elseif p == "BottomLeft" then
+		return UDim2.new(0, MapConfig.Minimap.Margin, 1, -MapConfig.Minimap.Margin - MapConfig.Minimap.Size - 54)
+	end
+	return UDim2.new(1, -MapConfig.Minimap.Margin - MapConfig.Minimap.Size - 20, 0, MapConfig.Minimap.Margin)
+end
+
+local function createUI()
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "MinimapUI"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
+	gui.DisplayOrder = 8
+	gui.Parent = playerGui
+
+	UI.gui = gui
+
+	-- Minimap card
+	local miniW = MapConfig.Minimap.Size + 20
+	local miniH = MapConfig.Minimap.Size + 54
+	local miniContainer = buildCoreFrame(gui, UDim2.fromOffset(miniW, miniH), getPositionPreset(), MapConfig.Colors.UIPanel, 0.18)
+	miniContainer.Name = "MinimapContainer"
+	styleCard(miniContainer)
+
+	local mapFrame = buildCoreFrame(miniContainer, UDim2.fromOffset(MapConfig.Minimap.Size, MapConfig.Minimap.Size), UDim2.fromOffset(10, 10), MapConfig.Colors.MinimapBackground, 0.1)
+	mapFrame.Name = "MinimapFrame"
+	mapFrame.ClipsDescendants = true
+	local mapCorner = Instance.new("UICorner")
+	mapCorner.CornerRadius = UDim.new(1, 0)
+	mapCorner.Parent = mapFrame
+	local mapStroke = Instance.new("UIStroke")
+	mapStroke.Color = MapConfig.Colors.MinimapRing
+	mapStroke.Thickness = 2
+	mapStroke.Transparency = 0.2
+	mapStroke.Parent = mapFrame
+
+	for i = 1, 2 do
+		local ring = buildCoreFrame(mapFrame, UDim2.fromScale(i / 3, i / 3), UDim2.fromScale(0.5 - (i / 6), 0.5 - (i / 6)), Color3.fromRGB(255, 255, 255), 1)
+		local ringCorner = Instance.new("UICorner")
+		ringCorner.CornerRadius = UDim.new(1, 0)
+		ringCorner.Parent = ring
+		local ringStroke = Instance.new("UIStroke")
+		ringStroke.Color = MapConfig.Colors.MinimapRing
+		ringStroke.Transparency = 0.7
+		ringStroke.Thickness = 1
+		ringStroke.Parent = ring
+	end
+
+	local blips = buildCoreFrame(mapFrame, UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), Color3.new(), 1)
+	blips.Name = "Blips"
+
+	local playerBlip = Instance.new("ImageLabel")
+	playerBlip.Name = "PlayerBlip"
+	playerBlip.Size = UDim2.fromOffset(14, 16)
+	playerBlip.AnchorPoint = Vector2.new(0.5, 0.5)
+	playerBlip.Position = UDim2.fromScale(0.5, 0.5)
+	playerBlip.BackgroundTransparency = 1
+	playerBlip.Image = "rbxassetid://7072718362"
+	playerBlip.ImageColor3 = MapConfig.Colors.Player
+	playerBlip.ZIndex = 10
+	playerBlip.Parent = blips
+
+	local spawnBlip = buildCoreFrame(blips, UDim2.fromOffset(10, 10), UDim2.fromScale(0.5, 0.5), MapConfig.Colors.Spawn, 0)
+	spawnBlip.Name = "SpawnBlip"
+	spawnBlip.AnchorPoint = Vector2.new(0.5, 0.5)
+	spawnBlip.Visible = false
+	spawnBlip.ZIndex = 9
+	local spawnCorner = Instance.new("UICorner")
+	spawnCorner.CornerRadius = UDim.new(1, 0)
+	spawnCorner.Parent = spawnBlip
+
+	local coords = buildLabel(miniContainer, "X: 0  Z: 0", UDim2.new(1, -12, 0, 16), UDim2.fromOffset(8, miniH - 38), Enum.Font.GothamMedium, 11, MapConfig.Colors.TextPrimary)
+	coords.Name = "Coords"
+	local zoom = buildLabel(miniContainer, "Range: " .. tostring(STATE.minimapRange), UDim2.new(1, -12, 0, 14), UDim2.fromOffset(8, miniH - 22), Enum.Font.Gotham, 10, MapConfig.Colors.TextMuted)
+	zoom.Name = "Zoom"
+
+	UI.minimapContainer = miniContainer
+	UI.minimapFrame = mapFrame
+	UI.minimapBlips = blips
+	UI.minimapPlayer = playerBlip
+	UI.minimapSpawn = spawnBlip
+	UI.minimapCoords = coords
+	UI.minimapZoom = zoom
+
+	-- Fullscreen map
+	local fullRoot = buildCoreFrame(gui, UDim2.fromScale(1, 1), UDim2.fromOffset(0, 0), Color3.fromRGB(5, 8, 12), 0.28)
+	fullRoot.Name = "WorldMapRoot"
+	fullRoot.Visible = false
+
+	local panel = buildCoreFrame(fullRoot, UDim2.fromScale(0.92, 0.9), UDim2.fromScale(0.04, 0.05), MapConfig.Colors.UIPanel, 0.05)
+	panel.Name = "Panel"
+	styleCard(panel)
+
+	local header = buildCoreFrame(panel, UDim2.new(1, -16, 0, 40), UDim2.fromOffset(8, 8), Color3.new(), 1)
+	buildLabel(header, "WORLD MAP", UDim2.new(1, -190, 1, 0), UDim2.fromOffset(0, 0), Enum.Font.GothamBlack, 18, MapConfig.Colors.TextPrimary)
+	buildLabel(header, "M/ESC close  |  Wheel/Triggers zoom  |  Drag/Stick pan", UDim2.new(0, 430, 1, 0), UDim2.new(1, -430, 0, 0), Enum.Font.Gotham, 11, MapConfig.Colors.TextMuted, Enum.TextXAlignment.Right)
+
+	local body = buildCoreFrame(panel, UDim2.new(1, -16, 1, -56), UDim2.fromOffset(8, 48), Color3.new(), 1)
+	local sidebarW = 210
+	local mapArea = buildCoreFrame(body, UDim2.new(1, -sidebarW - 10, 1, 0), UDim2.fromOffset(0, 0), Color3.fromRGB(12, 17, 23), 0)
+	styleCard(mapArea)
+
+	local canvas = buildCoreFrame(mapArea, UDim2.new(1, -14, 1, -14), UDim2.fromOffset(7, 7), Color3.fromRGB(8, 12, 16), 0)
+	canvas.Name = "Canvas"
+	canvas.ClipsDescendants = true
+	canvas.Active = true
+
+	local chunkLayer = buildCoreFrame(canvas, UDim2.fromScale(1, 1), UDim2.fromOffset(0, 0), Color3.new(), 1)
+	chunkLayer.Name = "ChunkLayer"
+	local regionLayer = buildCoreFrame(canvas, UDim2.fromScale(1, 1), UDim2.fromOffset(0, 0), Color3.new(), 1)
+	regionLayer.Name = "RegionLayer"
+	local markerLayer = buildCoreFrame(canvas, UDim2.fromScale(1, 1), UDim2.fromOffset(0, 0), Color3.new(), 1)
+	markerLayer.Name = "MarkerLayer"
+
+	local sidebar = buildCoreFrame(body, UDim2.new(0, sidebarW, 1, 0), UDim2.new(1, -sidebarW, 0, 0), Color3.fromRGB(16, 22, 29), 0)
+	styleCard(sidebar)
+
+	local y = 8
+	buildLabel(sidebar, "Legend", UDim2.new(1, -10, 0, 20), UDim2.fromOffset(10, y), Enum.Font.GothamBold, 14, MapConfig.Colors.TextPrimary)
+	y += 24
+
+	for _, name in ipairs({"Players", "Structures", "Objectives", "Spawn", "Regions", "Resources", "Enemies"}) do
+		local btn = Instance.new("TextButton")
+		btn.Name = name .. "Toggle"
+		btn.Size = UDim2.new(1, -20, 0, 24)
+		btn.Position = UDim2.fromOffset(10, y)
+		btn.BackgroundColor3 = Color3.fromRGB(34, 47, 60)
+		btn.BorderSizePixel = 0
+		btn.AutoButtonColor = false
+		btn.Font = Enum.Font.GothamMedium
+		btn.TextSize = 12
+		btn.TextColor3 = MapConfig.Colors.TextPrimary
+		btn.Parent = sidebar
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0, 6)
+		c.Parent = btn
+		UI.toggleButtons[name] = btn
+		y += 28
+	end
+
+	y += 8
+	local centerBtn = Instance.new("TextButton")
+	centerBtn.Size = UDim2.new(1, -20, 0, 26)
+	centerBtn.Position = UDim2.fromOffset(10, y)
+	centerBtn.BackgroundColor3 = Color3.fromRGB(46, 74, 96)
+	centerBtn.BorderSizePixel = 0
+	centerBtn.AutoButtonColor = false
+	centerBtn.Font = Enum.Font.GothamBold
+	centerBtn.TextSize = 12
+	centerBtn.TextColor3 = MapConfig.Colors.TextPrimary
+	centerBtn.Text = "Center On Player"
+	centerBtn.Parent = sidebar
+	local centerCorner = Instance.new("UICorner")
+	centerCorner.CornerRadius = UDim.new(0, 6)
+	centerCorner.Parent = centerBtn
+	y += 32
+
+	local resetZoomBtn = centerBtn:Clone()
+	resetZoomBtn.Position = UDim2.fromOffset(10, y)
+	resetZoomBtn.Text = "Reset Zoom"
+	resetZoomBtn.Parent = sidebar
+	y += 36
+
+	local zoomLabel = buildLabel(sidebar, "Zoom: 100%", UDim2.new(1, -20, 0, 18), UDim2.fromOffset(10, y), Enum.Font.GothamMedium, 12, MapConfig.Colors.TextPrimary)
+	y += 22
+	local cursorLabel = buildLabel(sidebar, "Cursor: -", UDim2.new(1, -20, 0, 56), UDim2.fromOffset(10, y), Enum.Font.Gotham, 11, MapConfig.Colors.TextMuted)
+	cursorLabel.TextWrapped = true
+	cursorLabel.TextYAlignment = Enum.TextYAlignment.Top
+
+	UI.fullRoot = fullRoot
+	UI.fullCanvas = canvas
+	UI.fullChunkLayer = chunkLayer
+	UI.fullRegionLayer = regionLayer
+	UI.fullMarkerLayer = markerLayer
+	UI.zoomLabel = zoomLabel
+	UI.cursorLabel = cursorLabel
+
+	-- Touch map toggle button
+	if UserInputService.TouchEnabled then
+		local mapButton = Instance.new("TextButton")
+		mapButton.Name = "MapToggleButton"
+		mapButton.Size = UDim2.fromOffset(60, 44)
+		mapButton.Position = UDim2.new(1, -72, 1, -56)
+		mapButton.BackgroundColor3 = Color3.fromRGB(32, 44, 56)
+		mapButton.BackgroundTransparency = 0.1
+		mapButton.BorderSizePixel = 0
+		mapButton.Font = Enum.Font.GothamBold
+		mapButton.TextSize = 16
+		mapButton.TextColor3 = MapConfig.Colors.TextPrimary
+		mapButton.Text = "MAP"
+		mapButton.Parent = gui
+		local bc = Instance.new("UICorner")
+		bc.CornerRadius = UDim.new(0, 8)
+		bc.Parent = mapButton
+		UI.mapToggleButton = mapButton
+	end
+
+	for name, btn in pairs(UI.toggleButtons) do
+		btn.MouseButton1Click:Connect(function()
+			STATE.markerVisibility[name] = not STATE.markerVisibility[name]
+		end)
+	end
+
+	centerBtn.MouseButton1Click:Connect(function()
+		STATE.panWorld = Vector2.new(0, 0)
+	end)
+
+	resetZoomBtn.MouseButton1Click:Connect(function()
+		STATE.fullZoom = MapConfig.Fullscreen.DefaultZoom
+		STATE.panWorld = Vector2.new(0, 0)
+	end)
+
+	if UI.mapToggleButton then
+		UI.mapToggleButton.MouseButton1Click:Connect(function()
+			STATE.fullMapOpen = not STATE.fullMapOpen
+		end)
+	end
+end
+
+local function updateLegendButtons()
+	for name, btn in pairs(UI.toggleButtons) do
+		local enabled = STATE.markerVisibility[name]
+		btn.Text = (enabled and "[ON] " or "[OFF] ") .. name
+		btn.BackgroundColor3 = enabled and Color3.fromRGB(55, 94, 120) or Color3.fromRGB(34, 47, 60)
+	end
+end
+
+local function registerMarkerInstance(inst)
+	if not inst or WORLD.markersByInstance[inst] then return end
+	local markerType = inst:GetAttribute("MapMarkerType")
+	if type(markerType) ~= "string" then
+		return
+	end
+
+	WORLD.markersByInstance[inst] = {
+		markerType = markerType,
+		label = inst:GetAttribute("MapMarkerLabel") or inst.Name,
 	}
-	for _, pattern in ipairs(resourcePatterns) do
-		if nameLower:find(pattern) then
-			return true
-		end
-	end
-	
-	return false
+
+	WORLD.markerConns[inst] = {
+		inst:GetAttributeChangedSignal("MapMarkerType"):Connect(function()
+			if not inst.Parent then
+				WORLD.markersByInstance[inst] = nil
+				cleanupConnections(WORLD.markerConns[inst])
+				WORLD.markerConns[inst] = nil
+				return
+			end
+			local entry = WORLD.markersByInstance[inst]
+			if not entry then return end
+			local updatedType = inst:GetAttribute("MapMarkerType")
+			if type(updatedType) ~= "string" then
+				WORLD.markersByInstance[inst] = nil
+				cleanupConnections(WORLD.markerConns[inst])
+				WORLD.markerConns[inst] = nil
+				return
+			end
+			entry.markerType = updatedType
+		end),
+		inst:GetAttributeChangedSignal("MapMarkerLabel"):Connect(function()
+			local entry = WORLD.markersByInstance[inst]
+			if entry then
+				entry.label = inst:GetAttribute("MapMarkerLabel") or inst.Name
+			end
+		end),
+	}
 end
 
-local function scanForResourcesInFolder(folder, depth)
+local function unregisterMarkerInstance(inst)
+	WORLD.markersByInstance[inst] = nil
+	cleanupConnections(WORLD.markerConns[inst])
+	WORLD.markerConns[inst] = nil
+end
+
+local function parseChunkFolder(folder)
+	local cx = folder:GetAttribute("MapChunkX")
+	local cz = folder:GetAttribute("MapChunkZ")
+	if type(cx) ~= "number" or type(cz) ~= "number" then
+		local rawCx = folder:GetAttribute("ChunkX")
+		local rawCz = folder:GetAttribute("ChunkZ")
+		if type(rawCx) == "number" and type(rawCz) == "number" then
+			cx, cz = rawCx, rawCz
+		else
+			local name = folder.Name
+			local fromNameX, fromNameZ = name:match("Chunk_([^,]+),([^,]+)")
+			cx = tonumber(fromNameX)
+			cz = tonumber(fromNameZ)
+		end
+	end
+
+	if type(cx) ~= "number" or type(cz) ~= "number" then
+		return nil
+	end
+
+	local key = chunkKey(cx, cz)
+	local biome = folder:GetAttribute("MapBiome")
+	if type(biome) ~= "string" then
+		biome = "Unknown"
+	end
+
+	local rawRegions = safeJSONDecode(folder:GetAttribute("MapRegionsJson"))
+	local regions = {}
+	for i = 1, #rawRegions do
+		local r = rawRegions[i]
+		if type(r) == "table" then
+			regions[#regions + 1] = {
+				name = tostring(r.name or "Region"),
+				x = tonumber(r.x) or 0,
+				z = tonumber(r.z) or 0,
+				sx = math.max(0, tonumber(r.sx) or 0),
+				sz = math.max(0, tonumber(r.sz) or 0),
+				temp = tonumber(r.temp),
+			}
+		end
+	end
+
+	WORLD.chunksByKey[key] = {
+		cx = cx,
+		cz = cz,
+		biome = biome,
+		regions = regions,
+		folder = folder,
+	}
+	WORLD.chunkByFolder[folder] = key
+
+	if not STATE.fogEnabled then
+		WORLD.exploredChunks[key] = true
+	end
+end
+
+local function bindChunkFolder(folder)
+	if not folder or not folder:IsA("Folder") then return end
+	if WORLD.chunkConns[folder] then
+		parseChunkFolder(folder)
+		return
+	end
+
+	parseChunkFolder(folder)
+
+	for _, d in ipairs(folder:GetDescendants()) do
+		registerMarkerInstance(d)
+	end
+
+	WORLD.chunkConns[folder] = {
+		folder:GetAttributeChangedSignal("MapChunkX"):Connect(function() parseChunkFolder(folder) end),
+		folder:GetAttributeChangedSignal("MapChunkZ"):Connect(function() parseChunkFolder(folder) end),
+		folder:GetAttributeChangedSignal("MapBiome"):Connect(function() parseChunkFolder(folder) end),
+		folder:GetAttributeChangedSignal("MapRegionsJson"):Connect(function() parseChunkFolder(folder) end),
+		folder.DescendantAdded:Connect(function(inst)
+			registerMarkerInstance(inst)
+		end),
+		folder.DescendantRemoving:Connect(function(inst)
+			unregisterMarkerInstance(inst)
+		end),
+	}
+end
+
+local function unbindChunkFolder(folder)
+	local key = WORLD.chunkByFolder[folder]
+	if key then
+		WORLD.chunksByKey[key] = nil
+		WORLD.chunkByFolder[folder] = nil
+	end
+	cleanupConnections(WORLD.chunkConns[folder])
+	WORLD.chunkConns[folder] = nil
+
+	for inst in pairs(WORLD.markersByInstance) do
+		local ok, isDescendant = pcall(function()
+			return inst:IsDescendantOf(folder)
+		end)
+		if ok and isDescendant then
+			unregisterMarkerInstance(inst)
+		end
+	end
+end
+
+local function bindGeneratedFolder(folder)
+	if WORLD.generatedFolder == folder then return end
+
+	local oldFolders = {}
+	for oldFolder in pairs(WORLD.chunkConns) do
+		oldFolders[#oldFolders + 1] = oldFolder
+	end
+	for i = 1, #oldFolders do
+		local oldFolder = oldFolders[i]
+		unbindChunkFolder(oldFolder)
+	end
+
+	cleanupConnections(WORLD.generatedFolderConns)
+	WORLD.generatedFolder = folder
+
 	if not folder then return end
-	depth = depth or 0
-	if depth > 10 then return end -- Prevent infinite recursion
-	
+
 	for _, child in ipairs(folder:GetChildren()) do
-		local pos = getObjectPosition(child)
-		
-		if pos and not cachedResources[child] then
-			-- Check if it's a harvestable resource
-			if isHarvestableObject(child) then
-				local parentName = child.Parent and child.Parent.Name or ""
-				local resourceType, color = classifyResource(child.Name, parentName)
-				cachedResources[child] = {
-					position = pos,
-					type = resourceType,
-					color = color,
-					name = child.Name,
-				}
-			end
+		if child:IsA("Folder") and child.Name:find("Chunk_") == 1 then
+			bindChunkFolder(child)
 		end
-		
-		-- Recurse into models/folders
-		if child:IsA("Model") or child:IsA("Folder") then
-			scanForResourcesInFolder(child, depth + 1)
+	end
+
+	WORLD.generatedFolderConns = {
+		folder.ChildAdded:Connect(function(child)
+			if child:IsA("Folder") and child.Name:find("Chunk_") == 1 then
+				bindChunkFolder(child)
+			end
+		end),
+		folder.ChildRemoved:Connect(function(child)
+			if child:IsA("Folder") then
+				unbindChunkFolder(child)
+			end
+		end),
+	}
+end
+
+local function refreshGeneratedFolderBinding()
+	bindGeneratedFolder(Workspace:FindFirstChild(GENERATED_FOLDER_NAME))
+end
+
+local function initWorldBindings()
+	refreshGeneratedFolderBinding()
+
+	WORLD.workspaceConns = {
+		Workspace.ChildAdded:Connect(function(child)
+			if child.Name == GENERATED_FOLDER_NAME and child:IsA("Folder") then
+				bindGeneratedFolder(child)
+			end
+		end),
+		Workspace.ChildRemoved:Connect(function(child)
+			if child == WORLD.generatedFolder then
+				bindGeneratedFolder(nil)
+			end
+		end),
+		Workspace.DescendantAdded:Connect(function(inst)
+			registerMarkerInstance(inst)
+		end),
+		Workspace.DescendantRemoving:Connect(function(inst)
+			unregisterMarkerInstance(inst)
+		end),
+	}
+
+	for _, inst in ipairs(Workspace:GetDescendants()) do
+		registerMarkerInstance(inst)
+	end
+end
+
+local function revealAround(pos)
+	if not STATE.fogEnabled then
+		for key in pairs(WORLD.chunksByKey) do
+			WORLD.exploredChunks[key] = true
+		end
+		return
+	end
+	local radius = math.max(0, MapConfig.Exploration.RevealChunkRadius or 0)
+	local cx, cz = worldToChunk(pos.X, pos.Z)
+	for dx = -radius, radius do
+		for dz = -radius, radius do
+			WORLD.exploredChunks[chunkKey(cx + dx, cz + dz)] = true
 		end
 	end
 end
 
-local function scanForStructuresInFolder(folder, results)
-	if not folder then return end
-	
-	for _, child in ipairs(folder:GetChildren()) do
-		local isStructure = child:GetAttribute("Structure") or child:GetAttribute("Building")
-			or child:GetAttribute("Placeable") or child:GetAttribute("Built")
-		
-		if isStructure or child.Name:lower():find("structure") or child.Name:lower():find("build") then
-			local pos = getObjectPosition(child)
-			if pos and not cachedStructures[child] then
-				cachedStructures[child] = {
-					position = pos,
-					type = "structure",
-					color = CONFIG.StructureColor,
-					name = child.Name,
-				}
+local function isChunkExplored(cx, cz)
+	if not STATE.fogEnabled then return true end
+	return WORLD.exploredChunks[chunkKey(cx, cz)] == true
+end
+
+local function isPositionExplored(pos)
+	if not STATE.fogEnabled then return true end
+	local cx, cz = worldToChunk(pos.X, pos.Z)
+	return isChunkExplored(cx, cz)
+end
+
+local function normalizeMarkerType(raw)
+	if type(raw) ~= "string" then return nil end
+	if raw == "Objective" then return "Objectives" end
+	if raw == "Structure" or raw == "PlayerBuiltStructure" then return "Structures" end
+	return nil
+end
+
+local function colorForMarkerType(kind)
+	if kind == "Objectives" then
+		return MapConfig.Colors.Objective
+	elseif kind == "Structures" then
+		return MapConfig.Colors.Structure
+	elseif kind == "Players" then
+		return MapConfig.Colors.Player
+	elseif kind == "Spawn" then
+		return MapConfig.Colors.Spawn
+	elseif kind == "Resources" then
+		return MapConfig.Colors.Resource
+	elseif kind == "Enemies" then
+		return MapConfig.Colors.Enemy
+	end
+	return MapConfig.Colors.TextPrimary
+end
+
+local function getOptionalMarkers()
+	local now = os.clock()
+	if now - WORLD.lastOptionalScan < 0.8 then
+		return
+	end
+	WORLD.lastOptionalScan = now
+
+	tableClear(WORLD.resourceEntries)
+	tableClear(WORLD.enemyEntries)
+
+	if STATE.markerVisibility.Resources then
+		local seen = {}
+		for _, tagName in ipairs({"Resource", "Harvestable"}) do
+			for _, inst in ipairs(CollectionService:GetTagged(tagName)) do
+				if not seen[inst] then
+					seen[inst] = true
+					local pos = getObjectPosition(inst)
+					if pos then
+						WORLD.resourceEntries[#WORLD.resourceEntries + 1] = { instance = inst, position = pos }
+						if #WORLD.resourceEntries >= 300 then
+							break
+						end
+					end
+				end
+			end
+			if #WORLD.resourceEntries >= 300 then
+				break
 			end
 		end
-		
-		-- Recurse
-		if child:IsA("Model") or child:IsA("Folder") then
-			scanForStructuresInFolder(child, results)
+	end
+
+	if STATE.markerVisibility.Enemies then
+		local seen = {}
+		for _, tagName in ipairs({"Enemy", "Monster", "Animal"}) do
+			for _, inst in ipairs(CollectionService:GetTagged(tagName)) do
+				if not seen[inst] then
+					seen[inst] = true
+					local root = inst:FindFirstChild("HumanoidRootPart") or inst.PrimaryPart
+					if root and root:IsA("BasePart") then
+						WORLD.enemyEntries[#WORLD.enemyEntries + 1] = { instance = inst, position = root.Position, look = root.CFrame.LookVector }
+						if #WORLD.enemyEntries >= 200 then
+							break
+						end
+					end
+				end
+			end
+			if #WORLD.enemyEntries >= 200 then
+				break
+			end
 		end
 	end
 end
 
-local function fullWorldScan()
-	-- Scan workspace for resource folders
-	for _, folderName in ipairs(CONFIG.ResourceFolderNames) do
-		local folder = Workspace:FindFirstChild(folderName)
-		if folder then
-			scanForResourcesInFolder(folder, 0)
-		end
-	end
-	
-	-- Scan ALL root folders that could contain resources
-	for _, child in ipairs(Workspace:GetChildren()) do
-		if child:IsA("Folder") then
-			-- Scan any folder that might have chunks/terrain/resources
-			local nameLower = child.Name:lower()
-			if nameLower:find("chunk") or nameLower:find("terrain") or nameLower:find("world")
-				or nameLower:find("resource") or nameLower:find("node") or nameLower:find("biome")
-				or nameLower:find("forest") or nameLower:find("desert") or nameLower:find("spawn") then
-				scanForResourcesInFolder(child, 0)
-			end
-		end
-	end
-	
-	-- Scan for structures
-	for _, folderName in ipairs(CONFIG.StructureFolderNames) do
-		local folder = Workspace:FindFirstChild(folderName)
-		if folder then
-			scanForStructuresInFolder(folder, nil)
-		end
-	end
-	
-	-- Scan CollectionService tags
-	for _, resource in ipairs(CollectionService:GetTagged("Resource")) do
-		if not cachedResources[resource] then
-			local pos = getObjectPosition(resource)
-			if pos then
-				local parentName = resource.Parent and resource.Parent.Name or ""
-				local resourceType, color = classifyResource(resource.Name, parentName)
-				cachedResources[resource] = {
-					position = pos,
-					type = resourceType,
-					color = color,
-					name = resource.Name,
-				}
-			end
-		end
-	end
-	
-	for _, resource in ipairs(CollectionService:GetTagged("Harvestable")) do
-		if not cachedResources[resource] then
-			local pos = getObjectPosition(resource)
-			if pos then
-				local parentName = resource.Parent and resource.Parent.Name or ""
-				local resourceType, color = classifyResource(resource.Name, parentName)
-				cachedResources[resource] = {
-					position = pos,
-					type = resourceType,
-					color = color,
-					name = resource.Name,
-				}
-			end
-		end
-	end
-	
-	-- Also scan ALL ProximityPrompts in workspace (catches everything)
-	for _, prompt in ipairs(CollectionService:GetTagged("ProximityPrompt")) do
-		-- Nope, can't tag prompts this way. Let's do a different approach below
-	end
-	
-	-- Clean up destroyed resources
-	for obj, _ in pairs(cachedResources) do
-		if not obj.Parent then
-			cachedResources[obj] = nil
-		end
-	end
-	
-	for obj, _ in pairs(cachedStructures) do
-		if not obj.Parent then
-			cachedStructures[obj] = nil
-		end
+local function setCaptureInput(enabled)
+	if enabled then
+		ContextActionService:BindActionAtPriority(
+			MAP_CAPTURE_ACTION,
+			function() return Enum.ContextActionResult.Sink end,
+			false,
+			3000,
+			Enum.KeyCode.W,
+			Enum.KeyCode.A,
+			Enum.KeyCode.S,
+			Enum.KeyCode.D,
+			Enum.KeyCode.Up,
+			Enum.KeyCode.Down,
+			Enum.KeyCode.Left,
+			Enum.KeyCode.Right,
+			Enum.KeyCode.Space,
+			Enum.KeyCode.ButtonA,
+			Enum.KeyCode.Thumbstick1
+		)
+	else
+		ContextActionService:UnbindAction(MAP_CAPTURE_ACTION)
 	end
 end
 
-local function scanEntities(playerPos, playerRotation)
-	local entities = {}
-	
-	-- Run full world scan periodically
-	local now = tick()
-	if now - lastResourceScan > RESOURCE_SCAN_INTERVAL then
-		lastResourceScan = now
-		fullWorldScan()
+local function setFullMapOpen(open)
+	STATE.fullMapOpen = open
+	if UI.fullRoot then
+		UI.fullRoot.Visible = open
 	end
-	
-	-- Scan other players (always visible, no fog)
-	if CONFIG.ShowTeammates then
-		for _, otherPlayer in ipairs(Players:GetPlayers()) do
-			if otherPlayer ~= player then
-				local char = otherPlayer.Character
-				if char then
-					local hrp = char:FindFirstChild("HumanoidRootPart")
-					local hum = char:FindFirstChildOfClass("Humanoid")
-					if hrp and hum and hum.Health > 0 then
-						table.insert(entities, {
-							position = hrp.Position,
-							type = "teammate",
-							color = CONFIG.TeammateColor,
-							name = otherPlayer.Name,
-							ignoreFog = true, -- Always show teammates
-						})
+	setCaptureInput(open)
+	if open then
+		updateLegendButtons()
+	end
+end
+
+local function toggleFullMap()
+	setFullMapOpen(not STATE.fullMapOpen)
+end
+
+local function getMouseOver(guiObject)
+	if not guiObject then return false end
+	local pos = UserInputService:GetMouseLocation()
+	local absPos = guiObject.AbsolutePosition
+	local absSize = guiObject.AbsoluteSize
+	return pos.X >= absPos.X and pos.X <= (absPos.X + absSize.X) and pos.Y >= absPos.Y and pos.Y <= (absPos.Y + absSize.Y)
+end
+
+local function applyFullZoom(deltaSign, focusAbs)
+	local oldZoom = STATE.fullZoom
+	local target = oldZoom + (MapConfig.Fullscreen.ZoomStep * deltaSign)
+	STATE.fullZoom = math.clamp(target, MapConfig.Fullscreen.MinZoom, MapConfig.Fullscreen.MaxZoom)
+	if oldZoom == STATE.fullZoom then
+		return
+	end
+
+	if UI.fullCanvas and focusAbs then
+		local canvasPos = UI.fullCanvas.AbsolutePosition
+		local canvasSize = UI.fullCanvas.AbsoluteSize
+		local localX = focusAbs.X - canvasPos.X
+		local localY = focusAbs.Y - canvasPos.Y
+		if localX >= 0 and localY >= 0 and localX <= canvasSize.X and localY <= canvasSize.Y then
+			local beforeX, beforeZ = canvasToWorld(localX, localY, canvasSize, oldZoom, STATE.panWorld)
+			local afterX, afterZ = canvasToWorld(localX, localY, canvasSize, STATE.fullZoom, STATE.panWorld)
+			STATE.panWorld = STATE.panWorld + Vector2.new(afterX - beforeX, afterZ - beforeZ)
+		end
+	end
+	clampPan()
+end
+
+local function applyMinimapZoom(deltaSign)
+	STATE.minimapRange = math.clamp(
+		STATE.minimapRange - (MapConfig.Minimap.ZoomStep * deltaSign),
+		MapConfig.Minimap.MinRange,
+		MapConfig.Minimap.MaxRange
+	)
+end
+
+local function startDrag(input)
+	if not STATE.fullMapOpen then return end
+	INPUT.dragInput = input
+	INPUT.dragging = true
+end
+
+local function endDrag(input)
+	if INPUT.dragInput == input then
+		INPUT.dragInput = nil
+		INPUT.dragging = false
+		INPUT.lastTouchPan = nil
+	end
+end
+
+local function updateDrag(input)
+	if not STATE.fullMapOpen or not INPUT.dragging or INPUT.dragInput ~= input then return end
+	if not UI.fullCanvas then return end
+	local absSize = UI.fullCanvas.AbsoluteSize
+	local scale = mapScale(absSize, STATE.fullZoom)
+	if scale <= 0 then return end
+
+	local delta = input.Delta
+	if delta.Magnitude == 0 then return end
+
+	STATE.panWorld = STATE.panWorld + Vector2.new(-delta.X / scale, delta.Y / scale)
+	clampPan()
+end
+
+local function bindInput()
+	ContextActionService:BindAction(MAP_TOGGLE_ACTION, function(_, inputState)
+		if inputState ~= Enum.UserInputState.Begin then
+			return Enum.ContextActionResult.Pass
+		end
+		toggleFullMap()
+		return Enum.ContextActionResult.Sink
+	end, false, Enum.KeyCode.M, Enum.KeyCode.ButtonSelect)
+
+	if UI.fullCanvas then
+		UI.fullCanvas.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+				startDrag(input)
+			end
+		end)
+		UI.fullCanvas.InputEnded:Connect(endDrag)
+	end
+
+	UserInputService.InputChanged:Connect(function(input, gameProcessed)
+		if gameProcessed then return end
+
+		if input.UserInputType == Enum.UserInputType.MouseWheel then
+			if STATE.fullMapOpen and UI.fullCanvas and getMouseOver(UI.fullCanvas) then
+				applyFullZoom(input.Position.Z > 0 and 1 or -1, UserInputService:GetMouseLocation())
+			elseif UI.minimapFrame and getMouseOver(UI.minimapFrame) then
+				applyMinimapZoom(input.Position.Z > 0 and 1 or -1)
+			end
+		elseif input.UserInputType == Enum.UserInputType.Gamepad1 and input.KeyCode == Enum.KeyCode.Thumbstick2 then
+			INPUT.gamepadPan = Vector2.new(input.Position.X, input.Position.Y)
+		end
+
+		updateDrag(input)
+	end)
+
+	UserInputService.InputEnded:Connect(function(input, gameProcessed)
+		if gameProcessed then return end
+		endDrag(input)
+		if input.UserInputType == Enum.UserInputType.Gamepad1 and input.KeyCode == Enum.KeyCode.Thumbstick2 then
+			INPUT.gamepadPan = Vector2.new(0, 0)
+		end
+	end)
+
+	UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed then return end
+
+		if input.KeyCode == Enum.KeyCode.Escape and STATE.fullMapOpen then
+			setFullMapOpen(false)
+			return
+		end
+
+		if input.KeyCode == Enum.KeyCode.Equals or input.KeyCode == Enum.KeyCode.Plus or input.KeyCode == Enum.KeyCode.RightBracket or input.KeyCode == Enum.KeyCode.ButtonR2 then
+			if STATE.fullMapOpen then
+				applyFullZoom(1, UserInputService:GetMouseLocation())
+			else
+				applyMinimapZoom(1)
+			end
+		elseif input.KeyCode == Enum.KeyCode.Minus or input.KeyCode == Enum.KeyCode.LeftBracket or input.KeyCode == Enum.KeyCode.ButtonL2 then
+			if STATE.fullMapOpen then
+				applyFullZoom(-1, UserInputService:GetMouseLocation())
+			else
+				applyMinimapZoom(-1)
+			end
+		end
+	end)
+
+	pcall(function()
+		UserInputService.TouchPinch:Connect(function(_, scale, _, state, gameProcessed)
+			if gameProcessed or not STATE.fullMapOpen then return end
+			if state == Enum.UserInputState.Change then
+				if scale > 1.01 then
+					applyFullZoom(1, UserInputService:GetMouseLocation())
+				elseif scale < 0.99 then
+					applyFullZoom(-1, UserInputService:GetMouseLocation())
+				end
+			end
+		end)
+	end)
+end
+
+local function acquireMinimapBlip(index)
+	local blip = RENDER_CACHE.minimapBlips[index]
+	if blip then
+		return blip
+	end
+	blip = Instance.new("Frame")
+	blip.AnchorPoint = Vector2.new(0.5, 0.5)
+	blip.Size = UDim2.fromOffset(8, 8)
+	blip.BorderSizePixel = 0
+	blip.Visible = false
+	blip.Parent = UI.minimapBlips
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(1, 0)
+	corner.Parent = blip
+	RENDER_CACHE.minimapBlips[index] = blip
+	return blip
+end
+
+local function hideUnusedMinimapBlips(fromIndex)
+	for i = fromIndex, #RENDER_CACHE.minimapBlips do
+		RENDER_CACHE.minimapBlips[i].Visible = false
+	end
+end
+
+local function worldToMinimap(worldPos, playerPos, playerRotation)
+	local offset = worldPos - playerPos
+	local dx = offset.X
+	local dz = offset.Z
+
+	if MapConfig.Minimap.RotateWithPlayer then
+		local c = math.cos(-playerRotation)
+		local s = math.sin(-playerRotation)
+		local rx = dx * c - dz * s
+		local rz = dx * s + dz * c
+		dx, dz = rx, rz
+	end
+
+	local maxPixel = MapConfig.Minimap.Size * 0.5 - 4
+	local scale = maxPixel / STATE.minimapRange
+	local x = dx * scale
+	local y = -dz * scale
+	local dist = math.sqrt(x * x + y * y)
+	if dist > maxPixel then
+		return nil, true
+	end
+	return x, y, false
+end
+
+local function getNearestRegionName(wx, wz)
+	local bestName = nil
+	local bestDist = math.huge
+	for key, chunk in pairs(WORLD.chunksByKey) do
+		if not STATE.fogEnabled or WORLD.exploredChunks[key] then
+			for i = 1, #chunk.regions do
+				local region = chunk.regions[i]
+				local halfX = region.sx * 0.5
+				local halfZ = region.sz * 0.5
+				local inside = (wx >= region.x - halfX and wx <= region.x + halfX and wz >= region.z - halfZ and wz <= region.z + halfZ)
+				if inside then
+					return region.name
+				end
+				local dx = wx - region.x
+				local dz = wz - region.z
+				local dist = dx * dx + dz * dz
+				if dist < bestDist then
+					bestDist = dist
+					bestName = region.name
+				end
+			end
+		end
+	end
+	return bestName
+end
+
+local function acquireNamedFrame(cacheTable, key, parent)
+	local frame = cacheTable[key]
+	if frame then
+		return frame
+	end
+	frame = Instance.new("Frame")
+	frame.BorderSizePixel = 0
+	frame.Visible = true
+	frame.Parent = parent
+	cacheTable[key] = frame
+	return frame
+end
+
+local function acquireMarkerFrame(key)
+	local frame = RENDER_CACHE.markerFrames[key]
+	if frame then return frame end
+
+	frame = Instance.new("Frame")
+	frame.Name = key
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Size = UDim2.fromOffset(10, 10)
+	frame.BorderSizePixel = 0
+	frame.BackgroundColor3 = MapConfig.Colors.TextPrimary
+	frame.Visible = true
+	frame.Parent = UI.fullMarkerLayer
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(1, 0)
+	corner.Parent = frame
+
+	RENDER_CACHE.markerFrames[key] = frame
+	return frame
+end
+
+local function hideUnusedNamedFrames(cacheTable, usedTable)
+	for key, frame in pairs(cacheTable) do
+		frame.Visible = usedTable[key] == true
+	end
+end
+
+local function renderFullscreen(playerPos)
+	if not UI.fullCanvas or not UI.fullRoot.Visible then return end
+
+	local canvasSize = UI.fullCanvas.AbsoluteSize
+	if canvasSize.X <= 0 or canvasSize.Y <= 0 then return end
+
+	tableClear(RENDER_CACHE.usedChunkKeys)
+	tableClear(RENDER_CACHE.usedRegionKeys)
+	tableClear(RENDER_CACHE.usedMarkerKeys)
+
+	updateLegendButtons()
+	getOptionalMarkers()
+
+	for key, chunk in pairs(WORLD.chunksByKey) do
+		if isChunkExplored(chunk.cx, chunk.cz) then
+			local cx, cz = chunkCenter(chunk.cx, chunk.cz)
+			local px, py, scale = worldToCanvas(cx, cz, canvasSize, STATE.fullZoom, STATE.panWorld)
+			local sizePx = math.max(2, CHUNK_SIZE * scale)
+			if px + sizePx >= -8 and py + sizePx >= -8 and px - sizePx <= canvasSize.X + 8 and py - sizePx <= canvasSize.Y + 8 then
+				local frame = acquireNamedFrame(RENDER_CACHE.chunkFrames, key, UI.fullChunkLayer)
+				frame.Position = UDim2.fromOffset(math.floor(px - sizePx * 0.5), math.floor(py - sizePx * 0.5))
+				frame.Size = UDim2.fromOffset(math.ceil(sizePx), math.ceil(sizePx))
+				frame.BackgroundColor3 = getBiomeColor(chunk.biome)
+				frame.BackgroundTransparency = 0.16
+				RENDER_CACHE.usedChunkKeys[key] = true
+			end
+		end
+	end
+
+	if STATE.markerVisibility.Regions then
+		for key, chunk in pairs(WORLD.chunksByKey) do
+			if isChunkExplored(chunk.cx, chunk.cz) then
+				for i = 1, #chunk.regions do
+					local region = chunk.regions[i]
+					local rk = key .. ":" .. tostring(i)
+					local rx, ry, scale = worldToCanvas(region.x, region.z, canvasSize, STATE.fullZoom, STATE.panWorld)
+					local rw = math.max(3, region.sx * scale)
+					local rh = math.max(3, region.sz * scale)
+					local frame = acquireNamedFrame(RENDER_CACHE.regionFrames, rk, UI.fullRegionLayer)
+					frame.Position = UDim2.fromOffset(math.floor(rx - rw * 0.5), math.floor(ry - rh * 0.5))
+					frame.Size = UDim2.fromOffset(math.ceil(rw), math.ceil(rh))
+					frame.BackgroundColor3 = MapConfig.Colors.RegionFill
+					frame.BackgroundTransparency = 0.9
+					local stroke = frame:FindFirstChildOfClass("UIStroke")
+					if not stroke then
+						stroke = Instance.new("UIStroke")
+						stroke.Parent = frame
+						stroke.Thickness = 1
+					end
+					stroke.Color = MapConfig.Colors.TextMuted
+					stroke.Transparency = 0.55
+
+					local label = frame:FindFirstChild("Label")
+					if not label then
+						label = buildLabel(frame, "", UDim2.new(1, -4, 0, 12), UDim2.fromOffset(2, 2), Enum.Font.Gotham, 10, MapConfig.Colors.TextMuted, Enum.TextXAlignment.Center)
+						label.Name = "Label"
+					end
+					label.Text = region.name
+					label.Visible = rw > 42 and rh > 18
+					RENDER_CACHE.usedRegionKeys[rk] = true
+				end
+			end
+		end
+	end
+
+	local function drawMarker(key, wx, wz, markerKind, rotation, size)
+		local px, py = worldToCanvas(wx, wz, canvasSize, STATE.fullZoom, STATE.panWorld)
+		if px < -20 or py < -20 or px > canvasSize.X + 20 or py > canvasSize.Y + 20 then
+			return
+		end
+		local frame = acquireMarkerFrame(key)
+		frame.Position = UDim2.fromOffset(px, py)
+		frame.Size = UDim2.fromOffset(size, size)
+		frame.BackgroundColor3 = colorForMarkerType(markerKind)
+		frame.Rotation = (markerKind == "Objectives" or markerKind == "Spawn") and (rotation or 0) or 0
+
+		local direction = frame:FindFirstChild("Direction")
+		if markerKind == "Players" or markerKind == "Enemies" then
+			if not direction then
+				direction = Instance.new("ImageLabel")
+				direction.Name = "Direction"
+				direction.AnchorPoint = Vector2.new(0.5, 0.5)
+				direction.Position = UDim2.fromScale(0.5, 0.5)
+				direction.Size = UDim2.fromScale(1, 1)
+				direction.BackgroundTransparency = 1
+				direction.Image = "rbxassetid://7072718362"
+				direction.Parent = frame
+			end
+			direction.Visible = true
+			direction.ImageColor3 = colorForMarkerType(markerKind)
+			direction.Rotation = rotation or 0
+			frame.BackgroundTransparency = 1
+		else
+			if direction then
+				direction.Visible = false
+			end
+			frame.BackgroundTransparency = 0
+		end
+		frame.Visible = true
+		RENDER_CACHE.usedMarkerKeys[key] = true
+	end
+
+	if STATE.markerVisibility.Spawn and STATE.spawnPosition then
+		drawMarker("spawn", STATE.spawnPosition.X, STATE.spawnPosition.Z, "Spawn", 45, 12)
+	end
+
+	if STATE.markerVisibility.Structures or STATE.markerVisibility.Objectives then
+		for inst, data in pairs(WORLD.markersByInstance) do
+			if inst.Parent then
+				local group = normalizeMarkerType(data.markerType)
+				if group and STATE.markerVisibility[group] then
+					local pos = getObjectPosition(inst)
+					if pos and isPositionExplored(pos) then
+						drawMarker("marker_" .. tostring(inst), pos.X, pos.Z, group, group == "Objectives" and 45 or 0, group == "Objectives" and 11 or 9)
 					end
 				end
 			end
 		end
 	end
-	
-	-- Scan enemies (tagged with "Enemy")
-	if CONFIG.ShowEnemies then
-		for _, enemy in ipairs(CollectionService:GetTagged("Enemy")) do
-			local hrp = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChild("Root") or enemy.PrimaryPart
-			local hum = enemy:FindFirstChildOfClass("Humanoid")
-			if hrp and (not hum or hum.Health > 0) then
-				local pos = hrp.Position
-				-- Only show if explored
-				if isExplored(pos.X, pos.Z) then
-					table.insert(entities, {
-						position = pos,
-						type = "enemy",
-						color = CONFIG.EnemyColor,
-						name = enemy.Name,
-					})
-				end
-			end
-		end
-	end
-	
-	-- Add cached resources (only if explored)
-	if CONFIG.ShowResources then
-		for obj, data in pairs(cachedResources) do
-			if obj.Parent and data.position then
-				if isExplored(data.position.X, data.position.Z) then
-					table.insert(entities, {
-						position = data.position,
-						type = data.type,
-						color = data.color,
-						name = data.name,
-					})
-				end
-			end
-		end
-	end
-	
-	-- Add cached structures (only if explored)
-	if CONFIG.ShowStructures then
-		for obj, data in pairs(cachedStructures) do
-			if obj.Parent and data.position then
-				if isExplored(data.position.X, data.position.Z) then
-					table.insert(entities, {
-						position = data.position,
-						type = "structure",
-						color = data.color,
-						name = data.name,
-					})
-				end
-			end
-		end
-	end
-	
-	-- Scan objectives (tagged with "Objective") - always visible like waypoints
-	if CONFIG.ShowObjectives then
-		for _, objective in ipairs(CollectionService:GetTagged("Objective")) do
-			local pos = getObjectPosition(objective)
-			if pos then
-				table.insert(entities, {
-					position = pos,
-					type = "objective",
-					color = CONFIG.ObjectiveColor,
-					name = objective.Name,
-					ignoreFog = true, -- Objectives always visible
-				})
-			end
-		end
-	end
-	
-	return entities
-end
 
--------------------------------------------------------------------
--- UPDATE LOOP
--------------------------------------------------------------------
-local lastUpdate = 0
-
-local function updateMinimap()
-	local now = tick()
-	if now - lastUpdate < CONFIG.UpdateRate then return end
-	lastUpdate = now
-	
-	local playerPos = getPlayerPosition()
-	if not playerPos then return end
-	
-	local playerRotation = getPlayerRotation()
-	
-	-- Explore area around player (fog of war)
-	exploreAroundPosition(playerPos)
-	
-	-- Update compass labels position (rotate with player so N moves based on facing)
-	local compassRadius = CONFIG.Size / 2 - 12
-	for dir, data in pairs(compassLabels) do
-		-- Compass rotates opposite to player - if player faces East, N should be to the left
-		local angle = math.rad(data.baseAngle) - playerRotation
-		
-		local x = math.sin(angle) * compassRadius
-		local y = -math.cos(angle) * compassRadius
-		
-		data.frame.Position = UDim2.new(0.5, x - 10, 0.5, y - 7)
-	end
-	
-	-- Update spawn marker position (always visible, clamped to edge if far)
-	if CONFIG.ShowSpawnMarker and spawnPosition and spawnMarkerBlip then
-		local spawnMapPos, isClamped = worldToMinimap(spawnPosition, playerPos, playerRotation, true)
-		if spawnMapPos then
-			spawnMarkerBlip.Position = spawnMapPos
-			spawnMarkerBlip.Visible = true
-			
-			-- Make it pulse/glow more when clamped (far away)
-			local stroke = spawnMarkerBlip:FindFirstChildOfClass("UIStroke")
-			if stroke then
-				stroke.Thickness = isClamped and 3 or 2
-				stroke.Transparency = isClamped and 0 or 0.3
+	if STATE.markerVisibility.Players then
+		for _, plr in ipairs(Players:GetPlayers()) do
+			local hrp = getCharacterRoot(plr)
+			if hrp then
+				local look = hrp.CFrame.LookVector
+				local heading = headingDegFromLook(look)
+				local size = plr == player and 13 or 11
+				drawMarker("player_" .. tostring(plr.UserId), hrp.Position.X, hrp.Position.Z, "Players", heading, size)
 			end
-			
-			-- Calculate distance to spawn
-			local distToSpawn = (spawnPosition - playerPos).Magnitude
-			if distToSpawn < 15 then
-				-- Hide when very close to spawn
-				spawnMarkerBlip.Visible = false
+		end
+	end
+
+	if STATE.markerVisibility.Resources then
+		for i = 1, #WORLD.resourceEntries do
+			local entry = WORLD.resourceEntries[i]
+			local pos = entry.position
+			if pos and isPositionExplored(pos) then
+				drawMarker("resource_" .. tostring(entry.instance), pos.X, pos.Z, "Resources", 0, 6)
+			end
+		end
+	end
+
+	if STATE.markerVisibility.Enemies then
+		for i = 1, #WORLD.enemyEntries do
+			local entry = WORLD.enemyEntries[i]
+			local pos = entry.position
+			if pos and isPositionExplored(pos) then
+				local heading = entry.look and headingDegFromLook(entry.look) or 0
+				drawMarker("enemy_" .. tostring(entry.instance), pos.X, pos.Z, "Enemies", heading, 8)
+			end
+		end
+	end
+
+	for name, data in pairs(STATE.customBlips) do
+		local pos = data.position
+		if typeof(pos) == "Vector3" and isPositionExplored(pos) then
+			drawMarker("custom_" .. name, pos.X, pos.Z, "Objectives", 0, 8)
+		end
+	end
+
+	hideUnusedNamedFrames(RENDER_CACHE.chunkFrames, RENDER_CACHE.usedChunkKeys)
+	hideUnusedNamedFrames(RENDER_CACHE.regionFrames, RENDER_CACHE.usedRegionKeys)
+	hideUnusedNamedFrames(RENDER_CACHE.markerFrames, RENDER_CACHE.usedMarkerKeys)
+
+	if UI.zoomLabel then
+		UI.zoomLabel.Text = string.format("Zoom: %d%%", math.floor(STATE.fullZoom * 100 + 0.5))
+	end
+
+	if UI.cursorLabel then
+		if getMouseOver(UI.fullCanvas) then
+			local mouse = UserInputService:GetMouseLocation()
+			local localPos = mouse - UI.fullCanvas.AbsolutePosition
+			local wx, wz = canvasToWorld(localPos.X, localPos.Y, canvasSize, STATE.fullZoom, STATE.panWorld)
+			local region = getNearestRegionName(wx, wz)
+			if region then
+				UI.cursorLabel.Text = string.format("Cursor: X %d, Z %d\nRegion: %s", math.floor(wx), math.floor(wz), region)
+			else
+				UI.cursorLabel.Text = string.format("Cursor: X %d, Z %d\nRegion: -", math.floor(wx), math.floor(wz))
 			end
 		else
-			spawnMarkerBlip.Visible = false
-		end
-	end
-	
-	-- Update coordinates display
-	local container = minimapGui:FindFirstChild("Container")
-	if container then
-		local titleFrame = container:FindFirstChild("TitleFrame")
-		if titleFrame then
-			local coordsLabel = titleFrame:FindFirstChild("Coords")
-			if coordsLabel then
-				coordsLabel.Text = string.format("X: %d | Z: %d", 
-					math.floor(playerPos.X), math.floor(playerPos.Z))
-			end
-			
-			local zoomLabel = titleFrame:FindFirstChild("Zoom")
-			if zoomLabel then
-				local resourceCount = 0
-				for _ in pairs(cachedResources) do resourceCount = resourceCount + 1 end
-				zoomLabel.Text = string.format("Range: %dm | %d resources", CONFIG.Range, resourceCount)
-			end
-			
-			-- Update spawn distance display
-			local spawnDistLabel = titleFrame:FindFirstChild("SpawnDist")
-			if spawnDistLabel and spawnPosition then
-				local distToSpawn = math.floor((spawnPosition - playerPos).Magnitude)
-				if distToSpawn > 15 then
-					spawnDistLabel.Text = string.format("🏠 Spawn: %dm", distToSpawn)
-				else
-					spawnDistLabel.Text = "🏠 At Spawn"
-				end
-			elseif spawnDistLabel then
-				spawnDistLabel.Text = ""
-			end
-		end
-	end
-	
-	-- Player blip direction indicator always points up (forward)
-	-- The map rotates so player's forward = top, so we don't need to rotate the blip
-	playerBlip.Rotation = 0
-	
-	-- Blips container doesn't rotate - positions are already calculated relative to player facing
-	blipsContainer.Rotation = 0
-	
-	-- Hide all existing blips
-	hideAllBlips()
-	
-	-- Scan and display entities
-	local entities = scanEntities(playerPos, playerRotation)
-	
-	-- Sort by type priority, then distance (resources first, then others)
-	table.sort(entities, function(a, b)
-		-- Priority: resources < structures < enemies < teammates < objectives
-		local priority = { tree = 1, rock = 1, ore = 1, plant = 1, resource = 1, 
-			structure = 2, enemy = 3, teammate = 4, objective = 5 }
-		local prioA = priority[a.type] or 0
-		local prioB = priority[b.type] or 0
-		if prioA ~= prioB then
-			return prioA < prioB -- Lower priority drawn first (underneath)
-		end
-		-- Same priority: farther away drawn first
-		local distA = (a.position - playerPos).Magnitude
-		local distB = (b.position - playerPos).Magnitude
-		return distA > distB
-	end)
-	
-	-- Display blips
-	for i, entity in ipairs(entities) do
-		if i > CONFIG.MaxBlips then break end
-		
-		local mapPos = worldToMinimap(entity.position, playerPos, playerRotation)
-		if mapPos then
-			local blip = getBlipFromPool()
-			if blip then
-				blip.Position = mapPos
-				blip.Visible = true
-				
-				-- Use entity's color if provided, else default by type
-				local color = entity.color
-				local size = CONFIG.ResourceBlipSize
-				
-				if entity.type == "teammate" then
-					color = color or CONFIG.TeammateColor
-					size = CONFIG.EntityBlipSize
-				elseif entity.type == "enemy" then
-					color = color or CONFIG.EnemyColor
-					size = CONFIG.EntityBlipSize
-				elseif entity.type == "tree" then
-					color = color or CONFIG.TreeColor
-					size = CONFIG.ResourceBlipSize
-				elseif entity.type == "rock" then
-					color = color or CONFIG.RockColor
-					size = CONFIG.ResourceBlipSize
-				elseif entity.type == "ore" then
-					color = color or CONFIG.OreColor
-					size = CONFIG.ResourceBlipSize
-				elseif entity.type == "plant" or entity.type == "resource" then
-					color = color or CONFIG.ResourceColor
-					size = CONFIG.ResourceBlipSize
-				elseif entity.type == "structure" then
-					color = color or CONFIG.StructureColor
-					size = CONFIG.StructureBlipSize
-				elseif entity.type == "objective" then
-					color = color or CONFIG.ObjectiveColor
-					size = CONFIG.EntityBlipSize + 2
-				else
-					color = color or CONFIG.NeutralColor
-					size = CONFIG.ResourceBlipSize
-				end
-				
-				blip.BackgroundColor3 = color
-				blip.Size = UDim2.new(0, size, 0, size)
-				
-				table.insert(activeBlips, blip)
-			end
+			UI.cursorLabel.Text = "Cursor: -"
 		end
 	end
 end
 
+local function renderMinimap(playerRoot)
+	if not UI.minimapContainer then return end
+	UI.minimapContainer.Visible = STATE.minimapVisible
+	if not STATE.minimapVisible then return end
+	if not playerRoot then return end
+
+	local playerPos = playerRoot.Position
+	local playerRot = playerYawForRotatingMinimap(playerRoot)
+	local idx = 1
+
+	UI.minimapCoords.Text = string.format("X: %d  Z: %d", math.floor(playerPos.X), math.floor(playerPos.Z))
+	UI.minimapZoom.Text = string.format("Range: %dm", math.floor(STATE.minimapRange))
+
+	if STATE.markerVisibility.Spawn and STATE.spawnPosition then
+		local sx, sy = worldToMinimap(STATE.spawnPosition, playerPos, playerRot)
+		if sx then
+			UI.minimapSpawn.Position = UDim2.fromScale(0.5, 0.5) + UDim2.fromOffset(sx, sy)
+			UI.minimapSpawn.Visible = true
+		else
+			UI.minimapSpawn.Visible = false
+		end
+	else
+		UI.minimapSpawn.Visible = false
+	end
+
+	if STATE.markerVisibility.Players then
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr ~= player then
+				local hrp = getCharacterRoot(plr)
+				if hrp then
+					local x, y = worldToMinimap(hrp.Position, playerPos, playerRot)
+					if x then
+						local blip = acquireMinimapBlip(idx)
+						idx += 1
+						blip.Position = UDim2.fromScale(0.5, 0.5) + UDim2.fromOffset(x, y)
+						blip.Size = UDim2.fromOffset(8, 8)
+						blip.BackgroundColor3 = MapConfig.Colors.Teammate
+						blip.Rotation = 0
+						blip.Visible = true
+					end
+				end
+			end
+		end
+	end
+
+	for inst, data in pairs(WORLD.markersByInstance) do
+		if inst.Parent then
+			local group = normalizeMarkerType(data.markerType)
+			if group and STATE.markerVisibility[group] then
+				local pos = getObjectPosition(inst)
+				if pos and isPositionExplored(pos) then
+					local x, y = worldToMinimap(pos, playerPos, playerRot)
+					if x then
+						local blip = acquireMinimapBlip(idx)
+						idx += 1
+						blip.Position = UDim2.fromScale(0.5, 0.5) + UDim2.fromOffset(x, y)
+						blip.Size = UDim2.fromOffset(group == "Objectives" and 9 or 7, group == "Objectives" and 9 or 7)
+						blip.BackgroundColor3 = colorForMarkerType(group)
+						blip.Rotation = (group == "Objectives") and 45 or 0
+						blip.Visible = true
+					end
+				end
+			end
+		end
+	end
+
+	for _, data in pairs(STATE.customBlips) do
+		if typeof(data.position) == "Vector3" and isPositionExplored(data.position) then
+			local x, y = worldToMinimap(data.position, playerPos, playerRot)
+			if x then
+				local blip = acquireMinimapBlip(idx)
+				idx += 1
+				blip.Position = UDim2.fromScale(0.5, 0.5) + UDim2.fromOffset(x, y)
+				blip.Size = UDim2.fromOffset(7, 7)
+				blip.BackgroundColor3 = (typeof(data.color) == "Color3") and data.color or MapConfig.Colors.Objective
+				blip.Rotation = 45
+				blip.Visible = true
+			end
+		end
+	end
+
+	hideUnusedMinimapBlips(idx)
+
+	UI.minimapPlayer.Rotation = 0
+end
+
+local function initSpawnCapture()
+	local function onCharacter(character)
+		task.defer(function()
+			local hrp = character:FindFirstChild("HumanoidRootPart") or character:WaitForChild("HumanoidRootPart", 5)
+			if hrp and not STATE.spawnPosition then
+				STATE.spawnPosition = hrp.Position
+				dprint("Spawn set", STATE.spawnPosition)
+			end
+		end)
+	end
+
+	player.CharacterAdded:Connect(onCharacter)
+	if player.Character then
+		onCharacter(player.Character)
+	end
+end
+
+local function applyGamepadPan(dt)
+	if not STATE.fullMapOpen then return end
+	if INPUT.gamepadPan.Magnitude < 0.08 then return end
+	if not UI.fullCanvas then return end
+
+	local pixelPerSec = MapConfig.Fullscreen.GamepadPanPixelsPerSecond
+	local deltaPixels = INPUT.gamepadPan * pixelPerSec * dt
+	local scale = mapScale(UI.fullCanvas.AbsoluteSize, STATE.fullZoom)
+	if scale <= 0 then return end
+
+	STATE.panWorld = STATE.panWorld + Vector2.new(-deltaPixels.X / scale, deltaPixels.Y / scale)
+	clampPan()
+end
+
+local lastMinimapRender = 0
+local lastFullRender = 0
+
+local function update()
+	local now = os.clock()
+	local root = getCharacterRoot(player)
+	if root then
+		revealAround(root.Position)
+	end
+
+	if root and (now - lastMinimapRender) >= (MapConfig.Minimap.UpdateRate or 0.12) then
+		lastMinimapRender = now
+		renderMinimap(root)
+	end
+
+	if STATE.fullMapOpen and (now - lastFullRender) >= (MapConfig.Fullscreen.UpdateRate or 0.1) then
+		lastFullRender = now
+		renderFullscreen(root and root.Position or nil)
+	end
+end
+
 -------------------------------------------------------------------
--- PUBLIC API
+-- Public API (kept compatible with prior script)
 -------------------------------------------------------------------
 local MinimapClient = {}
 
 function MinimapClient:SetRange(range)
-	CONFIG.Range = range
+	if type(range) ~= "number" then return end
+	STATE.minimapRange = math.clamp(range, MapConfig.Minimap.MinRange, MapConfig.Minimap.MaxRange)
 end
 
 function MinimapClient:SetVisible(visible)
-	if minimapGui then
-		minimapGui.Enabled = visible
+	STATE.minimapVisible = visible == true
+	if UI.minimapContainer then
+		UI.minimapContainer.Visible = STATE.minimapVisible
 	end
 end
 
 function MinimapClient:Toggle()
-	if minimapGui then
-		minimapGui.Enabled = not minimapGui.Enabled
-	end
+	toggleFullMap()
 end
 
 function MinimapClient:ZoomIn()
-	CONFIG.Range = math.max(CONFIG.MinRange, CONFIG.Range - CONFIG.ZoomStep)
-	dprint("[Minimap] Zoom:", CONFIG.Range, "studs")
+	if STATE.fullMapOpen then
+		applyFullZoom(1, UserInputService:GetMouseLocation())
+	else
+		applyMinimapZoom(1)
+	end
 end
 
 function MinimapClient:ZoomOut()
-	CONFIG.Range = math.min(CONFIG.MaxRange, CONFIG.Range + CONFIG.ZoomStep)
-	dprint("[Minimap] Zoom:", CONFIG.Range, "studs")
+	if STATE.fullMapOpen then
+		applyFullZoom(-1, UserInputService:GetMouseLocation())
+	else
+		applyMinimapZoom(-1)
+	end
 end
 
 function MinimapClient:SetZoom(range)
-	CONFIG.Range = math.clamp(range, CONFIG.MinRange, CONFIG.MaxRange)
+	if type(range) ~= "number" then return end
+	STATE.minimapRange = math.clamp(range, MapConfig.Minimap.MinRange, MapConfig.Minimap.MaxRange)
 end
 
 function MinimapClient:SetRotateWithPlayer(rotate)
-	CONFIG.RotateWithPlayer = rotate
+	MapConfig.Minimap.RotateWithPlayer = rotate == true
 end
 
 function MinimapClient:SetFogEnabled(enabled)
-	CONFIG.FogEnabled = enabled
+	STATE.fogEnabled = enabled == true
+	if not STATE.fogEnabled then
+		for key in pairs(WORLD.chunksByKey) do
+			WORLD.exploredChunks[key] = true
+		end
+	end
 end
 
 function MinimapClient:RevealAll()
-	-- Cheat/debug: reveal entire map
-	CONFIG.FogEnabled = false
+	STATE.fogEnabled = false
+	for key in pairs(WORLD.chunksByKey) do
+		WORLD.exploredChunks[key] = true
+	end
 end
 
 function MinimapClient:ResetExploration()
-	-- Clear all explored areas
-	exploredCells = {}
+	tableClear(WORLD.exploredChunks)
 end
 
 function MinimapClient:SetSpawnPoint(position)
-	-- Set a custom spawn point
-	spawnPosition = position
-	dprint("[Minimap] Spawn point set to:", position)
+	if typeof(position) == "Vector3" then
+		STATE.spawnPosition = position
+	end
 end
 
 function MinimapClient:GetSpawnPoint()
-	return spawnPosition
+	return STATE.spawnPosition
 end
 
 function MinimapClient:GetExploredCount()
-	local count = 0
-	for _ in pairs(exploredCells) do count = count + 1 end
-	return count
+	local c = 0
+	for _ in pairs(WORLD.exploredChunks) do
+		c += 1
+	end
+	return c
 end
 
 function MinimapClient:AddCustomBlip(name, worldPosition, color)
-	-- For adding custom markers (waypoints, etc.)
-	-- Implementation left for future expansion
+	if type(name) ~= "string" or typeof(worldPosition) ~= "Vector3" then return end
+	STATE.customBlips[name] = { position = worldPosition, color = color }
 end
 
 function MinimapClient:ForceRescan()
-	-- Force immediate resource scan
-	lastResourceScan = 0
-	fullWorldScan()
+	refreshGeneratedFolderBinding()
+	for _, inst in ipairs(Workspace:GetDescendants()) do
+		registerMarkerInstance(inst)
+	end
 end
 
--- Helper function
-local function tableSize(t)
-	local count = 0
-	for _ in pairs(t) do count = count + 1 end
-	return count
-end
-
--------------------------------------------------------------------
--- INITIALIZATION
--------------------------------------------------------------------
 local function init()
-	dprint("[MinimapClient] Initializing...")
-	
-	createMinimapUI()
-	
-	-- Pre-populate blip pool (larger pool for resources)
-	for i = 1, 80 do
-		local blip = createBlip()
-		table.insert(blipPool, blip)
-	end
-	
-	-- Initial world scan
-	task.spawn(function()
-		task.wait(1) -- Wait for world to load
-		fullWorldScan()
-		dprint("[MinimapClient] Initial scan found", 
-			"resources:", tableSize(cachedResources), 
-			"structures:", tableSize(cachedStructures))
+	createUI()
+	initWorldBindings()
+	initSpawnCapture()
+	bindInput()
+
+	RunService.RenderStepped:Connect(function(dt)
+		applyGamepadPan(dt)
+		update()
 	end)
-	
-	-- Start update loop
-	updateConnection = RunService.Heartbeat:Connect(updateMinimap)
-	
-	-- Input handling
-	local UserInputService = game:GetService("UserInputService")
-	
-	-- Toggle minimap with M, zoom with +/- or [ ]
-	UserInputService.InputBegan:Connect(function(input, gameProcessed)
-		if gameProcessed then return end
-		
-		if input.KeyCode == Enum.KeyCode.M then
-			MinimapClient:Toggle()
-		elseif input.KeyCode == Enum.KeyCode.Equals or input.KeyCode == Enum.KeyCode.Plus 
-			or input.KeyCode == Enum.KeyCode.RightBracket then
-			-- Zoom in (decrease range)
-			MinimapClient:ZoomIn()
-		elseif input.KeyCode == Enum.KeyCode.Minus or input.KeyCode == Enum.KeyCode.LeftBracket then
-			-- Zoom out (increase range)
-			MinimapClient:ZoomOut()
-		end
-	end)
-	
-	-- Mouse wheel zoom when hovering over minimap
-	UserInputService.InputChanged:Connect(function(input, gameProcessed)
-		if input.UserInputType == Enum.UserInputType.MouseWheel then
-			-- Check if mouse is over minimap
-			local mousePos = UserInputService:GetMouseLocation()
-			if minimapFrame then
-				local mapPos = minimapFrame.AbsolutePosition
-				local mapSize = minimapFrame.AbsoluteSize
-				
-				if mousePos.X >= mapPos.X and mousePos.X <= mapPos.X + mapSize.X
-					and mousePos.Y >= mapPos.Y and mousePos.Y <= mapPos.Y + mapSize.Y then
-					if input.Position.Z > 0 then
-						MinimapClient:ZoomIn()
-					else
-						MinimapClient:ZoomOut()
-					end
-				end
-			end
-		end
-	end)
-	
-	-- Listen for new chunks/resources being added
-	Workspace.DescendantAdded:Connect(function(descendant)
-		-- Check if it's a harvestable resource (ProximityPrompt added)
-		if descendant:IsA("ProximityPrompt") then
-			local parent = descendant.Parent
-			if parent and not cachedResources[parent] then
-				local pos = getObjectPosition(parent)
-				if pos then
-					local parentName = parent.Parent and parent.Parent.Name or ""
-					local resourceType, color = classifyResource(parent.Name, parentName)
-					cachedResources[parent] = {
-						position = pos,
-						type = resourceType,
-						color = color,
-						name = parent.Name,
-					}
-				end
-			end
-		end
-	end)
-	
-	-- Track spawn point when character is added
-	local function onCharacterAdded(character)
-		task.wait(0.1) -- Wait for character to be positioned
-		local hrp = character:WaitForChild("HumanoidRootPart", 5)
-		if hrp and not spawnPosition then
-			-- Only set spawn on first spawn (or if manually reset)
-			spawnPosition = hrp.Position
-			dprint("[MinimapClient] Spawn point recorded:", spawnPosition)
-		end
-	end
-	
-	player.CharacterAdded:Connect(onCharacterAdded)
-	
-	-- Set initial spawn point if character already exists
-	if player.Character then
-		onCharacterAdded(player.Character)
-	end
-	
-	dprint("[MinimapClient] Initialized - M=toggle | +/-=zoom | Scroll over map to zoom")
-	dprint("[MinimapClient] Fog of war:", CONFIG.FogEnabled and "ON" or "OFF", "| Explore radius:", CONFIG.ExploreRadius)
-	dprint("[MinimapClient] Spawn marker: ON - Orange marker always points to spawn")
+
+	dprint("Initialized", GENERATED_FOLDER_NAME)
 end
 
 init()

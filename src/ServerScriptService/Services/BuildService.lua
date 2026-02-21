@@ -177,6 +177,8 @@ function BuildService:Place(plr, buildType, worldPos)
 	inst:SetAttribute("GridX", gx)
 	inst:SetAttribute("GridZ", gz)
 	inst:SetAttribute("BuildType", buildType)
+	inst:SetAttribute("MapMarkerType", "PlayerBuiltStructure")
+	inst:SetAttribute("MapMarkerLabel", tostring(buildType))
 	applyDurability(inst)
 	pcall(function() CollectionService:AddTag(inst, "Structure") end)
 

@@ -5,6 +5,7 @@ local Workspace = game:GetService("Workspace")
 local ServerStorage = game:GetService("ServerStorage")
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
 
 local WorldGenConfig = require(ReplicatedStorage.Shared.BiomeConfig)
 local BiomeService = require(script.Parent.BiomeService)
@@ -602,6 +603,45 @@ local function chunkToWorld(cx, cz)
 	local x = cx * CHUNK_SIZE + CHUNK_SIZE * 0.5
 	local z = cz * CHUNK_SIZE + CHUNK_SIZE * 0.5
 	return x, z
+end
+
+local function serializeRegionsForMap(regions)
+	if type(regions) ~= "table" then
+		return "[]"
+	end
+	local payload = {}
+	for i = 1, #regions do
+		local region = regions[i]
+		local center = region and region.Center
+		local size = region and region.Size
+		payload[#payload + 1] = {
+			name = region and region.Name or "",
+			x = center and center.X or 0,
+			z = center and center.Z or 0,
+			sx = size and size.X or 0,
+			sz = size and size.Y or 0,
+			temp = region and region.Temp,
+		}
+	end
+	local ok, encoded = pcall(function()
+		return HttpService:JSONEncode(payload)
+	end)
+	if ok and type(encoded) == "string" then
+		return encoded
+	end
+	return "[]"
+end
+
+local function setMapMarkerAttributes(instance, markerType, markerLabel)
+	if not instance or type(markerType) ~= "string" then
+		return
+	end
+	instance:SetAttribute("MapMarkerType", markerType)
+	if type(markerLabel) == "string" and markerLabel ~= "" then
+		instance:SetAttribute("MapMarkerLabel", markerLabel)
+	else
+		instance:SetAttribute("MapMarkerLabel", instance.Name)
+	end
 end
 
 local function getChunkDistance(cx1, cz1, cx2, cz2)
@@ -1341,6 +1381,8 @@ function ChunkStreamingService:_getOrCreateChunkFolder(cx, cz)
 	folder.Parent = self._worldFolder
 	folder:SetAttribute("ChunkX", cx)
 	folder:SetAttribute("ChunkZ", cz)
+	folder:SetAttribute("MapChunkX", cx)
+	folder:SetAttribute("MapChunkZ", cz)
 	
 	self._chunkFolders[key] = folder
 	return folder
@@ -1415,7 +1457,7 @@ function ChunkStreamingService:_loadChunk(cx, cz)
 		local step = makeStep()
 		
 		-- Generate chunk content
-		local regions = self:_generateChunkContent(cx, cz, chunkCenter, chunkFolder, step)
+		local regions, biomeName = self:_generateChunkContent(cx, cz, chunkCenter, chunkFolder, step)
 		
 		self._loadedChunks[key] = {
 			folder = chunkFolder,
@@ -1424,6 +1466,10 @@ function ChunkStreamingService:_loadChunk(cx, cz)
 			cz = cz,
 			regions = regions or {},
 		}
+		chunkFolder:SetAttribute("MapChunkX", cx)
+		chunkFolder:SetAttribute("MapChunkZ", cz)
+		chunkFolder:SetAttribute("MapBiome", tostring(biomeName or self._currentBiome or "Unknown"))
+		chunkFolder:SetAttribute("MapRegionsJson", serializeRegionsForMap(regions or {}))
 		self._loadingChunks[key] = nil
 		
 		-- Bind resource nodes in this chunk
@@ -1469,7 +1515,7 @@ function ChunkStreamingService:_generateChunkContent(cx, cz, chunkCenter, chunkF
 	if not biome then 
 		biome = self._biomes[1]
 	end
-	if not biome then return end
+	if not biome then return nil, nil end
 	step = step or makeStep()
 	
 	local biomeName = biome.name
@@ -1510,6 +1556,7 @@ function ChunkStreamingService:_generateChunkContent(cx, cz, chunkCenter, chunkF
 			local regionCenter = computeRegionCenter(chunkCenter, regionSize, rng)
 			local regionTemp = getRegionTemp(regionDef)
 			regions[#regions + 1] = {
+				Name = regionDef.name or regionDef.Name or (biomeName .. " Region"),
 				Center = regionCenter,
 				Size = regionSize,
 				Temp = regionTemp,
@@ -1592,7 +1639,7 @@ function ChunkStreamingService:_generateChunkContent(cx, cz, chunkCenter, chunkF
 		)
 	end
 
-	return regions
+	return regions, biomeName
 end
 
 function ChunkStreamingService:_scatterCategory(categoryName, regionCenter, regionSize, regionDef, parent, prefabs, count, rng, distance_t, step, placementState, seed)
@@ -1680,6 +1727,11 @@ function ChunkStreamingService:_placeStructure(biomeName, chunkCenter, names, pa
 			local position = Vector3.new(x, BASE_Y, z)
 			local clone = self:_placePrefab(prefab, position, parent, step)
 			if clone then
+				if categoryName == "Structures" then
+					setMapMarkerAttributes(clone, "Structure", prefab.Name)
+				elseif categoryName == "Objectives" then
+					setMapMarkerAttributes(clone, "Objective", prefab.Name)
+				end
 				self:_registerRect(placementState, categoryName, rect)
 				self:_registerPoint(placementState, categoryName, x, z)
 				if categoryName == "Structures" and parent and parent.Name == "Structures" then

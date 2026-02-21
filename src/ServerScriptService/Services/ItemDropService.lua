@@ -122,7 +122,7 @@ local function attachPrompt(model)
 	end
 	prompt.ActionText = "Pick Up"
 	prompt.ObjectText = getPromptObjectText(itemId, count)
-	prompt.RequiresLineOfSight = true
+	prompt.RequiresLineOfSight = false
 	prompt.HoldDuration = 0
 	prompt.MaxActivationDistance = 10
 	prompt.Triggered:Connect(function(plr)
