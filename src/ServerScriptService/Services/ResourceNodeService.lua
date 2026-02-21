@@ -10,15 +10,49 @@ ResourceNodeService._bound = setmetatable({}, { __mode = "k" }) -- [Instance] = 
 ResourceNodeService._attachedCount = 0
 ResourceNodeService._lastReport = 0
 
-local function getPrimary(instance)
-	if instance:IsA("BasePart") then return instance end
-	if instance:IsA("Model") then
-		if instance.PrimaryPart then return instance.PrimaryPart end
-		for _, d in ipairs(instance:GetDescendants()) do
-			if d:IsA("BasePart") then return d end
+local function getPromptAnchor(instance)
+	if instance:IsA("BasePart") then
+		local y = instance.Position.Y - (instance.Size.Y * 0.5) + math.min(2, instance.Size.Y * 0.5)
+		return instance, Vector3.new(instance.Position.X, y, instance.Position.Z)
+	end
+	if not instance:IsA("Model") then
+		return nil, nil
+	end
+
+	local parts = {}
+	for _, d in ipairs(instance:GetDescendants()) do
+		if d:IsA("BasePart") then
+			parts[#parts + 1] = d
 		end
 	end
-	return nil
+	if #parts == 0 then
+		return nil, nil
+	end
+
+	local boundsCf, boundsSize = instance:GetBoundingBox()
+	local center = boundsCf.Position
+	local targetY = (center.Y - boundsSize.Y * 0.5) + math.clamp(boundsSize.Y * 0.2, 1.5, 3)
+	local targetPoint = Vector3.new(center.X, targetY, center.Z)
+
+	local bestPart = nil
+	local bestWorldPoint = nil
+	local bestDist = math.huge
+
+	for _, part in ipairs(parts) do
+		local worldPoint = part.Position
+		local ok, closest = pcall(part.GetClosestPointOnSurface, part, targetPoint)
+		if ok and typeof(closest) == "Vector3" then
+			worldPoint = closest
+		end
+		local dist = (worldPoint - targetPoint).Magnitude
+		if dist < bestDist then
+			bestDist = dist
+			bestPart = part
+			bestWorldPoint = worldPoint
+		end
+	end
+
+	return bestPart, bestWorldPoint
 end
 
 local function getValueObject(instance, name)
@@ -74,21 +108,32 @@ end
 
 local function attachDurationPrompt(instance)
 	if not instance or not instance.Parent then return end
-	local part = getPrimary(instance)
+	local part, anchorPoint = getPromptAnchor(instance)
 	if not part then return end
-	if instance:IsA("Model") then
+	if instance:IsA("Model") and not instance.PrimaryPart then
 		instance.PrimaryPart = part
 	end
 	local duration = tonumber(getAttr(instance, "Duration")) or tonumber(getAttr(instance, "HarvestDuration")) or 0
 	if duration <= 0 then return end
-	local prompt = part:FindFirstChildOfClass("ProximityPrompt")
+	local prompt = instance:FindFirstChildWhichIsA("ProximityPrompt", true)
+	local attachment = part:FindFirstChild("HarvestPromptAttachment")
+	if not attachment then
+		attachment = Instance.new("Attachment")
+		attachment.Name = "HarvestPromptAttachment"
+		attachment.Parent = part
+	end
+	if typeof(anchorPoint) == "Vector3" then
+		attachment.WorldPosition = anchorPoint
+	else
+		attachment.Position = Vector3.new(0, 1.5, 0)
+	end
 	if not prompt then
 		prompt = Instance.new("ProximityPrompt")
 		prompt.ActionText = "Harvest"
 		prompt.ObjectText = instance.Name
 		prompt.RequiresLineOfSight = true
-		prompt.Parent = part
 	end
+	prompt.Parent = attachment
 	prompt.MaxActivationDistance = 10
 	prompt.HoldDuration = duration
 	ResourceNodeService._attachedCount += 1

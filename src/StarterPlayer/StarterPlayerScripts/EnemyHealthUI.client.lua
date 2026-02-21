@@ -4,6 +4,7 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local CollectionService = game:GetService("CollectionService")
 
 local player = Players.LocalPlayer
 
@@ -46,8 +47,8 @@ local function createHealthBar(model)
 	-- Health fill
 	local fill = Instance.new("Frame")
 	fill.Name = "Fill"
-	fill.Size = UDim2.new(1, -4, 1, -4)
-	fill.Position = UDim2.new(0, 2, 0, 2)
+	fill.Size = UDim2.new(1, 0, 1, 0)
+	fill.Position = UDim2.new(0, 0, 0, 0)
 	fill.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
 	fill.BorderSizePixel = 0
 	fill.Parent = bg
@@ -99,7 +100,7 @@ local function updateHealthBar(model, data)
 	
 	-- Animate fill
 	TweenService:Create(data.fill, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		Size = UDim2.new(percent, -4, 1, -4)
+		Size = UDim2.new(percent, 0, 1, 0)
 	}):Play()
 	
 	-- Color based on health
@@ -160,7 +161,6 @@ local function getOrCreateHealthBar(model)
 	return data
 end
 
--- Scan workspace for enemies
 local function scanForEnemies(folder)
 	for _, child in ipairs(folder:GetChildren()) do
 		if child:IsA("Model") and child:FindFirstChildOfClass("Humanoid") then
@@ -174,8 +174,14 @@ local function scanForEnemies(folder)
 	end
 end
 
--- Watch for new enemies spawning
+local watchedFolders = setmetatable({}, { __mode = "k" })
+
 local function watchFolder(folder)
+	if not folder or watchedFolders[folder] then
+		return
+	end
+	watchedFolders[folder] = true
+
 	folder.ChildAdded:Connect(function(child)
 		if child:IsA("Model") then
 			task.wait(0.1) -- Wait for humanoid to be added
@@ -191,36 +197,41 @@ local function watchFolder(folder)
 			scanForEnemies(child)
 		end
 	end)
+
+	scanForEnemies(folder)
 end
 
 -- Initialize
 local function init()
-	-- Scan existing
-	scanForEnemies(Workspace)
-	
-	-- Watch GeneratedWorld for new enemies
-	local genWorld = Workspace:FindFirstChild("GeneratedWorld")
-	if genWorld then
-		watchFolder(genWorld)
-		scanForEnemies(genWorld)
-	end
-	
-	-- Watch for GeneratedWorld being created
-	Workspace.ChildAdded:Connect(function(child)
-		if child.Name == "GeneratedWorld" then
-			watchFolder(child)
-			scanForEnemies(child)
+	-- Prefer tag-driven enemy discovery (no full Workspace scan).
+	local function bindTag(tagName)
+		for _, inst in ipairs(CollectionService:GetTagged(tagName)) do
+			if inst:IsA("Model") then
+				getOrCreateHealthBar(inst)
+			end
 		end
-	end)
-	
-	-- Also watch EnemySpawns
-	local enemySpawns = Workspace:FindFirstChild("EnemySpawns")
-	if enemySpawns then
-		watchFolder(enemySpawns)
+		CollectionService:GetInstanceAddedSignal(tagName):Connect(function(inst)
+			if inst:IsA("Model") then
+				getOrCreateHealthBar(inst)
+			end
+		end)
 	end
-	
+
+	bindTag("Monster")
+	bindTag("Animal")
+
+	-- Fallback for untagged enemies spawned into known folders.
+	local enemies = Workspace:FindFirstChild("Enemies")
+	if enemies then
+		watchFolder(enemies)
+	end
+	local animals = Workspace:FindFirstChild("Animals")
+	if animals then
+		watchFolder(animals)
+	end
+
 	Workspace.ChildAdded:Connect(function(child)
-		if child.Name == "EnemySpawns" then
+		if child.Name == "Enemies" or child.Name == "Animals" then
 			watchFolder(child)
 		end
 	end)

@@ -16,16 +16,18 @@ InteractService._conns = {}
 local _lastInteract = setmetatable({}, { __mode = "k" })
 local _feedbackRemote = nil
 
-local HARVEST_MARKERS = {
-	Health = true,
-	MaxHealth = true,
-	Duration = true,
-	HarvestDuration = true,
-	DropItemId = true,
-	DropItemID = true,
-	DropCount = true,
-	LootCount = true,
+local HARVEST_MARKER_NAMES = {
+	"Health",
+	"MaxHealth",
+	"Duration",
+	"HarvestDuration",
+	"DropItemId",
+	"DropItemID",
+	"DropCount",
+	"LootCount",
 }
+local _hasHarvestMarkerCache = setmetatable({}, { __mode = "k" })
+local _markedDescendantCache = setmetatable({}, { __mode = "k" })
 
 local function getFeedbackRemote()
 	if _feedbackRemote then
@@ -121,42 +123,92 @@ local function getClosestNodePoint(node, worldPoint)
 	return bestPoint, bestDistance
 end
 
-local function hasMarker(node, name)
+local function hasMarker(node, name, allowRecursive)
 	if node:GetAttribute(name) ~= nil then
 		return true
 	end
-	local child = node:FindFirstChild(name, true)
+	local child = node:FindFirstChild(name, allowRecursive == true)
 	return child ~= nil
 end
 
-local function hasHarvestMarker(node)
+local function hasHarvestMarker(node, allowRecursive)
 	if typeof(node) ~= "Instance" then
 		return false
 	end
-	for name in pairs(HARVEST_MARKERS) do
-		if hasMarker(node, name) then
+	if allowRecursive ~= false then
+		local cached = _hasHarvestMarkerCache[node]
+		if cached ~= nil then
+			return cached
+		end
+	end
+
+	for _, name in ipairs(HARVEST_MARKER_NAMES) do
+		if hasMarker(node, name, false) then
+			if allowRecursive ~= false then
+				_hasHarvestMarkerCache[node] = true
+			end
 			return true
 		end
 	end
 	if node:IsA("Model") and node.PrimaryPart then
-		for name in pairs(HARVEST_MARKERS) do
+		for _, name in ipairs(HARVEST_MARKER_NAMES) do
 			if node.PrimaryPart:GetAttribute(name) ~= nil or node.PrimaryPart:FindFirstChild(name) then
+				if allowRecursive ~= false then
+					_hasHarvestMarkerCache[node] = true
+				end
 				return true
 			end
 		end
 	end
-	return false
+
+	local found = false
+	if allowRecursive ~= false then
+		for _, name in ipairs(HARVEST_MARKER_NAMES) do
+			if hasMarker(node, name, true) then
+				found = true
+				break
+			end
+		end
+		if not found and node:IsA("Model") and node.PrimaryPart then
+			for _, name in ipairs(HARVEST_MARKER_NAMES) do
+				if node.PrimaryPart:GetAttribute(name) ~= nil or node.PrimaryPart:FindFirstChild(name, true) then
+					found = true
+					break
+				end
+			end
+		end
+	end
+
+	if allowRecursive ~= false then
+		_hasHarvestMarkerCache[node] = found
+	end
+	return found
 end
 
 local function findMarkedDescendant(root, hintPosition)
 	if typeof(root) ~= "Instance" then
 		return nil
 	end
+
+	local cached = _markedDescendantCache[root]
 	local bestNode = nil
 	local bestDist = math.huge
+	if cached and cached.Parent and cached:IsDescendantOf(root) and hasHarvestMarker(cached, false) then
+		bestNode = cached
+		if hintPosition then
+			local cachedPos = getNodePosition(cached)
+			if cachedPos then
+				bestDist = (cachedPos - hintPosition).Magnitude
+			end
+		else
+			return cached
+		end
+	end
+
 	for _, inst in ipairs(root:GetDescendants()) do
-		if (inst:IsA("Model") or inst:IsA("BasePart")) and hasHarvestMarker(inst) then
+		if (inst:IsA("Model") or inst:IsA("BasePart")) and hasHarvestMarker(inst, false) then
 			if not hintPosition then
+				_markedDescendantCache[root] = inst
 				return inst
 			end
 			local pos = getNodePosition(inst)
@@ -170,6 +222,31 @@ local function findMarkedDescendant(root, hintPosition)
 				bestNode = inst
 			end
 		end
+	end
+
+	if not bestNode then
+		for _, inst in ipairs(root:GetDescendants()) do
+			if (inst:IsA("Model") or inst:IsA("BasePart")) and hasHarvestMarker(inst, true) then
+				if not hintPosition then
+					bestNode = inst
+					break
+				end
+				local pos = getNodePosition(inst)
+				if pos then
+					local dist = (pos - hintPosition).Magnitude
+					if dist < bestDist then
+						bestDist = dist
+						bestNode = inst
+					end
+				elseif not bestNode then
+					bestNode = inst
+				end
+			end
+		end
+	end
+
+	if bestNode then
+		_markedDescendantCache[root] = bestNode
 	end
 	return bestNode
 end

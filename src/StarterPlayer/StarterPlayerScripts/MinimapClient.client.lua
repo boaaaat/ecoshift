@@ -6,6 +6,13 @@ local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 local Workspace = game:GetService("Workspace")
+local DEBUG = false
+
+local function dprint(...)
+	if DEBUG then
+		print(...)
+	end
+end
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -1045,12 +1052,12 @@ end
 
 function MinimapClient:ZoomIn()
 	CONFIG.Range = math.max(CONFIG.MinRange, CONFIG.Range - CONFIG.ZoomStep)
-	print("[Minimap] Zoom:", CONFIG.Range, "studs")
+	dprint("[Minimap] Zoom:", CONFIG.Range, "studs")
 end
 
 function MinimapClient:ZoomOut()
 	CONFIG.Range = math.min(CONFIG.MaxRange, CONFIG.Range + CONFIG.ZoomStep)
-	print("[Minimap] Zoom:", CONFIG.Range, "studs")
+	dprint("[Minimap] Zoom:", CONFIG.Range, "studs")
 end
 
 function MinimapClient:SetZoom(range)
@@ -1078,7 +1085,7 @@ end
 function MinimapClient:SetSpawnPoint(position)
 	-- Set a custom spawn point
 	spawnPosition = position
-	print("[Minimap] Spawn point set to:", position)
+	dprint("[Minimap] Spawn point set to:", position)
 end
 
 function MinimapClient:GetSpawnPoint()
@@ -1113,7 +1120,7 @@ end
 -- INITIALIZATION
 -------------------------------------------------------------------
 local function init()
-	print("[MinimapClient] Initializing...")
+	dprint("[MinimapClient] Initializing...")
 	
 	createMinimapUI()
 	
@@ -1127,7 +1134,7 @@ local function init()
 	task.spawn(function()
 		task.wait(1) -- Wait for world to load
 		fullWorldScan()
-		print("[MinimapClient] Initial scan found", 
+		dprint("[MinimapClient] Initial scan found", 
 			"resources:", tableSize(cachedResources), 
 			"structures:", tableSize(cachedStructures))
 	end)
@@ -1203,7 +1210,7 @@ local function init()
 		if hrp and not spawnPosition then
 			-- Only set spawn on first spawn (or if manually reset)
 			spawnPosition = hrp.Position
-			print("[MinimapClient] Spawn point recorded:", spawnPosition)
+			dprint("[MinimapClient] Spawn point recorded:", spawnPosition)
 		end
 	end
 	
@@ -1214,9 +1221,9 @@ local function init()
 		onCharacterAdded(player.Character)
 	end
 	
-	print("[MinimapClient] Initialized - M=toggle | +/-=zoom | Scroll over map to zoom")
-	print("[MinimapClient] Fog of war:", CONFIG.FogEnabled and "ON" or "OFF", "| Explore radius:", CONFIG.ExploreRadius)
-	print("[MinimapClient] Spawn marker: ON - Orange marker always points to spawn")
+	dprint("[MinimapClient] Initialized - M=toggle | +/-=zoom | Scroll over map to zoom")
+	dprint("[MinimapClient] Fog of war:", CONFIG.FogEnabled and "ON" or "OFF", "| Explore radius:", CONFIG.ExploreRadius)
+	dprint("[MinimapClient] Spawn marker: ON - Orange marker always points to spawn")
 end
 
 init()

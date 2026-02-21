@@ -34,6 +34,7 @@ CombatService._remoteFeedback = nil
 CombatService._lastUse = setmetatable({}, { __mode = "k" }) -- [tool] = time
 CombatService._chargeStart = setmetatable({}, { __mode = "k" }) -- [player] = time
 CombatService._blocking = setmetatable({}, { __mode = "k" }) -- [player] = tool
+local COMBAT_FEEDBACK_RANGE = 180
 
 local function ensureRemotes(self)
 	if self._remoteDamage and self._remoteAction and self._remoteFeedback then return end
@@ -60,6 +61,22 @@ local function canHit(plr)
 	if now - last < 0.06 then return false end -- ~16/s cap
 	_lastHit[plr] = now
 	return true
+end
+
+local function fireCombatFeedbackNear(position, remote, payload)
+	if not remote or typeof(position) ~= "Vector3" then
+		return
+	end
+	local maxDistSq = COMBAT_FEEDBACK_RANGE * COMBAT_FEEDBACK_RANGE
+	for _, plr in ipairs(Players:GetPlayers()) do
+		local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+		if root then
+			local delta = root.Position - position
+			if delta:Dot(delta) <= maxDistSq then
+				remote:FireClient(plr, payload)
+			end
+		end
+	end
 end
 
 local function distanceOK(plr, target, maxDist)
@@ -229,7 +246,7 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 				end
 				if typeof(newHealth) ~= "number" then return end
 				if typeof(maxHealth) ~= "number" then maxHealth = math.max(oldHealth, newHealth) end
-				self._remoteFeedback:FireAllClients({
+				fireCombatFeedbackNear(pos, self._remoteFeedback, {
 					Node = target,
 					Position = pos,
 					Damage = math.floor(amount),
@@ -276,6 +293,30 @@ local function getRoot(model)
 	return model.PrimaryPart or model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart")
 end
 
+local function setToolAmmo(tool, value)
+	if not tool or not tool:IsA("Tool") then return end
+	local clamped = math.max(0, math.floor(tonumber(value) or 0))
+
+	if tool:GetAttribute("Ammo") ~= nil then
+		tool:SetAttribute("Ammo", clamped)
+	end
+
+	local ammoObj = tool:FindFirstChild("Ammo")
+	if ammoObj and ammoObj:IsA("ValueBase") then
+		if typeof(ammoObj.Value) == "number" then
+			ammoObj.Value = clamped
+		elseif ammoObj:IsA("StringValue") then
+			ammoObj.Value = tostring(clamped)
+		end
+	end
+end
+
+local function consumeToolAmmo(tool, amount)
+	local current = WeaponUtil.GetNumber(tool, "Ammo", 0)
+	local delta = tonumber(amount) or 0
+	setToolAmmo(tool, current - delta)
+end
+
 local function raycastFromPlayer(plr, origin, dir, maxRange)
 	local char = plr.Character
 	if not char then return nil end
@@ -310,12 +351,9 @@ end
 function CombatService:_handleGun(plr, tool, weapon, data)
 	local cooldown = weapon:GetCooldown()
 	if not self:_canUseTool(tool, cooldown) then return end
-	local ammoVal = tool:FindFirstChild("Ammo")
 	local ammo = weapon:GetAmmo()
 	if ammo <= 0 then return end
-	if ammoVal and ammoVal:IsA("ValueBase") then
-		ammoVal.Value = math.max(0, ammoVal.Value - 1)
-	end
+	consumeToolAmmo(tool, 1)
 	local maxRange = weapon:GetNumber("Range", 200)
 	local origin = data and data.Origin
 	local dir = data and data.Dir
