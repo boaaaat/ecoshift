@@ -205,7 +205,7 @@ local function bindTool(tool)
 		holding = false
 		activeTool = nil
 	end)
-	tool.Activated:Connect(function()`
+	tool.Activated:Connect(function()
 		-- Single click still works
 		holding = true
 		startLoop(tool)
