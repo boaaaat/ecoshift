@@ -133,6 +133,7 @@ local function createDeathUI()
 	lobbyBtn.TextSize = 18
 	lobbyBtn.Font = Enum.Font.GothamBold
 	lobbyBtn.AutoButtonColor = true
+	lobbyBtn.Visible = RunService:IsStudio()
 	lobbyBtn.Parent = buttonsFrame
 	
 	local lobbyCorner = Instance.new("UICorner")
@@ -466,6 +467,13 @@ local function onDeathRemote(action, data)
 			originalCameraType = Enum.CameraType.Custom
 			originalCameraSubject = humanoid or char
 		end)
+	elseif action == "LobbyDisabled" then
+		local ui = playerGui:FindFirstChild("DeathUI")
+		local subtitle = ui and ui:FindFirstChild("Container")
+			and ui.Container:FindFirstChild("Subtitle")
+		if subtitle then
+			subtitle.Text = "Return to lobby is only available in Studio."
+		end
 		
 	elseif action == "PlayerDied" then
 		-- Another player died - could show notification

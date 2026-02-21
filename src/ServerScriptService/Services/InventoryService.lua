@@ -126,6 +126,39 @@ function InventoryService:Reset(plr)
 	self:Sync(plr)
 end
 
+function InventoryService:Clear(plr)
+	local inv = {
+		Hotbar = emptySlots(HOTBAR_SLOTS),
+		Storage = emptySlots(STORAGE_SLOTS),
+		Armor = nil,
+	}
+	self._inventories[plr] = inv
+	self:Sync(plr)
+	return inv
+end
+
+function InventoryService:DrainAll(plr)
+	local inv = getInv(plr)
+	local drops = {}
+	for i = 1, HOTBAR_SLOTS do
+		local slot = inv.Hotbar[i]
+		if slot and slot.Id and slot.N and slot.N > 0 then
+			drops[#drops + 1] = { Id = slot.Id, N = slot.N }
+		end
+	end
+	for i = 1, STORAGE_SLOTS do
+		local slot = inv.Storage[i]
+		if slot and slot.Id and slot.N and slot.N > 0 then
+			drops[#drops + 1] = { Id = slot.Id, N = slot.N }
+		end
+	end
+	if inv.Armor and inv.Armor.Id and inv.Armor.N and inv.Armor.N > 0 then
+		drops[#drops + 1] = { Id = inv.Armor.Id, N = inv.Armor.N }
+	end
+	self:Clear(plr)
+	return drops
+end
+
 function InventoryService:GetAll(plr)
 	return getInv(plr)
 end

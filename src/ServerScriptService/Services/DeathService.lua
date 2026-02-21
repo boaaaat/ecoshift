@@ -4,6 +4,9 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local InventoryService = require(script.Parent.InventoryService)
+local ItemDropService = require(script.Parent.ItemDropService)
+
 local DeathService = {}
 DeathService._deadPlayers = {} -- [player] = { ragdoll: Model, deathTime: number }
 DeathService._spectating = {} -- [player] = targetPlayer
@@ -17,6 +20,11 @@ local SpectateRemote = nil -- Client -> Server spectate requests
 local REVIVAL_TIME = 3 -- seconds to hold E to revive
 local REVIVAL_RANGE = 8 -- studs from body
 local REVIVAL_HP_PERCENT = 0.25 -- revive with 25% HP
+local DROP_RADIUS = 3
+local DROP_HORIZONTAL_SPEED_MIN = 10
+local DROP_HORIZONTAL_SPEED_MAX = 24
+local DROP_VERTICAL_SPEED_MIN = 10
+local DROP_VERTICAL_SPEED_MAX = 20
 
 function DeathService:Init()
 	print("[DeathService] Init() called - starting...")
@@ -156,6 +164,32 @@ function DeathService:GetRagdoll(player)
 	return data and data.ragdoll or nil
 end
 
+function DeathService:_dropPlayerInventory(player, deathPosition)
+	local drops = InventoryService:DrainAll(player)
+	if #drops == 0 then
+		return
+	end
+	local rng = Random.new()
+	for _, entry in ipairs(drops) do
+		local angle = rng:NextNumber(0, math.pi * 2)
+		local radius = rng:NextNumber(0, DROP_RADIUS)
+		local spawnPos = deathPosition + Vector3.new(
+			math.cos(angle) * radius,
+			2 + rng:NextNumber(0, 1.5),
+			math.sin(angle) * radius
+		)
+		local speed = rng:NextNumber(DROP_HORIZONTAL_SPEED_MIN, DROP_HORIZONTAL_SPEED_MAX)
+		local velocity = Vector3.new(
+			math.cos(angle) * speed,
+			rng:NextNumber(DROP_VERTICAL_SPEED_MIN, DROP_VERTICAL_SPEED_MAX),
+			math.sin(angle) * speed
+		)
+		ItemDropService:SpawnDrop(entry.Id, entry.N, spawnPos, {
+			InitialVelocity = velocity,
+		})
+	end
+end
+
 function DeathService:KillPlayer(player)
 	print("[DeathService] KillPlayer called for", player.Name)
 	
@@ -191,6 +225,9 @@ function DeathService:KillPlayer(player)
 		deathTime = os.clock(),
 		deathPosition = deathPosition,
 	}
+
+	-- Drop all carried inventory stacks with random toss directions.
+	self:_dropPlayerInventory(player, deathPosition)
 	
 	-- Mark player as dead (prevents auto-respawn in CharacterAdded handler)
 	player:SetAttribute("IsDead", true)
@@ -242,6 +279,9 @@ function DeathService:RevivePlayer(player, reviver)
 	-- Clear death state
 	self._deadPlayers[player] = nil
 	self._spectating[player] = nil
+
+	-- Revived players come back empty-handed.
+	InventoryService:Clear(player)
 	
 	-- Clear dead flag and respawn
 	player:SetAttribute("IsDead", false)
@@ -577,20 +617,36 @@ function DeathService:_cancelRevive(player)
 end
 
 function DeathService:_returnToLobby(player)
-	-- Teleport player to lobby or reset
-	-- For now, just respawn at normal spawn
-	if self:IsDead(player) then
-		local data = self._deadPlayers[player]
-		if data and data.ragdoll then
-			data.ragdoll:Destroy()
-		end
-		self._deadPlayers[player] = nil
-		self._spectating[player] = nil
+	if not RunService:IsStudio() then
+		DeathRemote:FireClient(player, "LobbyDisabled")
+		return
 	end
+
+	if not self:IsDead(player) then
+		return
+	end
+
+	local data = self._deadPlayers[player]
+	local respawnPosition = data and data.deathPosition or nil
+	if data and data.ragdoll then
+		data.ragdoll:Destroy()
+	end
+	self._deadPlayers[player] = nil
+	self._spectating[player] = nil
 	
-	-- Clear dead flag and respawn
+	-- Clear dead flag and respawn with no inventory.
+	InventoryService:Clear(player)
 	player:SetAttribute("IsDead", false)
 	player:LoadCharacter()
+	if respawnPosition then
+		task.defer(function()
+			local character = player.Character or player.CharacterAdded:Wait()
+			local hrp = character:FindFirstChild("HumanoidRootPart") or character:WaitForChild("HumanoidRootPart", 5)
+			if hrp then
+				hrp.CFrame = CFrame.new(respawnPosition + Vector3.new(0, 3, 0))
+			end
+		end)
+	end
 	
 	-- Notify client
 	DeathRemote:FireClient(player, "ReturnedToLobby")

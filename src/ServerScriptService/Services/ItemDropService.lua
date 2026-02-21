@@ -74,6 +74,19 @@ local function setAnchoredRecursive(instance, anchored)
 	end
 end
 
+local function applyInitialVelocity(model, velocity)
+	if not model or typeof(velocity) ~= "Vector3" then return end
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.AssemblyLinearVelocity = velocity
+		end
+	end
+	local primary = model.PrimaryPart or getPrimary(model)
+	if primary then
+		primary.AssemblyLinearVelocity = velocity
+	end
+end
+
 local function cloneFallbackResourceModel(sourceModel, itemId, dropScale)
 	if typeof(sourceModel) ~= "Instance" then return nil end
 	if not sourceModel:IsA("Model") and not sourceModel:IsA("BasePart") then return nil end
@@ -150,6 +163,7 @@ function ItemDropService:SpawnDrop(itemId, count, position, options)
 	model:SetAttribute("Count", count)
 	model:PivotTo(CFrame.new(position))
 	model.Parent = ensureFolder()
+	applyInitialVelocity(model, options and options.InitialVelocity)
 	PromptQueueService:Enqueue(function()
 		attachPrompt(model)
 	end)
