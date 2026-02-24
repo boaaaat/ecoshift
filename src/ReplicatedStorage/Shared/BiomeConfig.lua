@@ -1,7 +1,7 @@
 local Config = {}
 
 Config.seed = Random.new():NextInteger(10000, 99999)
-Config.world_radius = 1000
+Config.world_radius = 1500
 Config.center_exclusion_radius = 260
 Config.base_y = 0
 Config.chunk_size = 240
