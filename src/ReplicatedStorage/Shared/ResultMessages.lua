@@ -26,6 +26,7 @@ ResultMessages.Craft = {
 	MissingItems = "Missing required materials.",
 	ConsumeFailed = "Could not consume crafting materials.",
 	InventoryFull = "Inventory full.",
+	CraftInProgress = "You are already crafting an item.",
 	Unknown = "Crafting failed.",
 }
 

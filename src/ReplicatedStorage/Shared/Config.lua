@@ -42,7 +42,7 @@ Config.GRID = {
 	BuildMaxDistance = 45,
 }
 
-Config.STARTER_ITEMS = {{Id = "Sword", N = 1}}
+Config.STARTER_ITEMS = {}
 
 Config.UI = {
 	PlaceholderIcon = "rbxasset://textures/ui/GuiImagePlaceholder.png",
@@ -123,17 +123,22 @@ Config.BUILD = {
 		Furnace = true,
 		Anvil = true,
 		Loom = true,
+		DryingRack = true,
+		AlchemyTable = true,
+		Kiln = true,
+		Refinery = true,
+		SurveyBench = true,
 		Campfire = true,
 		Chest = true,
 	},
 	Costs = {
-		Wall = { { Id = "Wood", N = 2 } },
-		Floor = { { Id = "Wood", N = 2 } },
-		Ramp = { { Id = "Wood", N = 3 } },
-		Gate = { { Id = "Wood", N = 4 }, { Id = "Stone", N = 2 } },
-		Tower = { { Id = "Wood", N = 6 }, { Id = "Stone", N = 4 } },
-		Trap = { { Id = "Stone", N = 2 } },
-		Machine = { { Id = "Stone", N = 6 } },
+		Wall = { { Id = "ForestWood", N = 2 } },
+		Floor = { { Id = "ForestWood", N = 2 } },
+		Ramp = { { Id = "ForestWood", N = 3 } },
+		Gate = { { Id = "ForestWood", N = 4 }, { Id = "ForestStone", N = 2 } },
+		Tower = { { Id = "ForestWood", N = 6 }, { Id = "ForestStone", N = 4 } },
+		Trap = { { Id = "ForestStone", N = 2 } },
+		Machine = { { Id = "ForestStone", N = 6 } },
 		-- Crafting stations are placed from inventory items, no direct cost
 		-- (player must craft the item first, then place it)
 	},
@@ -145,6 +150,11 @@ Config.BUILD = {
 		Furnace = true,
 		Anvil = true,
 		Loom = true,
+		DryingRack = true,
+		AlchemyTable = true,
+		Kiln = true,
+		Refinery = true,
+		SurveyBench = true,
 		Campfire = true,
 		Chest = true,
 	},

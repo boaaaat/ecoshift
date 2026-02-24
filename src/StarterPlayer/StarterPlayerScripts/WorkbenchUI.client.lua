@@ -48,7 +48,7 @@ local COLORS = {
 
 local MARGIN = 16
 local RECIPE_HEIGHT = 90
-local CRAFT_REQUEST_TIMEOUT = 2
+local CRAFT_REQUEST_TIMEOUT = 90
 local CRAFT_MESSAGES = ResultMessages.Craft or {}
 
 -- State

@@ -16,13 +16,12 @@ local MOD_ID_ARMOR = "ArmorEquip"
 local MOD_ID_TEMPRES = "TempResEquip"
 
 local ARMOR_STATS = {
-	ClothSet = { Armor = 5, TempRes = 1 },
-	LeatherArmor = { Armor = 10, TempRes = 2 },
-	IronArmor = { Armor = 20, TempRes = 3 },
-	DiamondArmor = { Armor = 30, TempRes = 4 },
-	BoneArmor = { Armor = 12, TempRes = 2 },
-	SanditeArmor = { Armor = 18, TempRes = 3 },
-	DesertCloak = { Armor = 8, TempRes = 4 },
+	DesertCloak = { Armor = 12, TempRes = 4 },
+	SwampWaders = { Armor = 16, TempRes = 2 },
+	FrostParka = { Armor = 20, TempRes = 6 },
+	VolcanicPlate = { Armor = 26, TempRes = 5 },
+	CrystalWeave = { Armor = 24, TempRes = 4 },
+	AdaptiveSurvivalSuit = { Armor = 34, TempRes = 7 },
 }
 
 local function isArmor(itemId)

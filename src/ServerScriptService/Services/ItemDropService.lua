@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local InventoryService = require(script.Parent.InventoryService)
 local PromptQueueService = require(script.Parent.PromptQueueService)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
+local ResourceItemMap = require(ReplicatedStorage.Shared.ResourceItemMap)
 
 local ItemDropService = {}
 
@@ -126,7 +127,7 @@ local function attachPrompt(model)
 	prompt.HoldDuration = 0
 	prompt.MaxActivationDistance = 10
 	prompt.Triggered:Connect(function(plr)
-		local id = model:GetAttribute("ItemId")
+		local id = ResourceItemMap.Normalize(model:GetAttribute("ItemId"))
 		local count = model:GetAttribute("Count") or 1
 		if not id then return end
 		local added = InventoryService:Give(plr, id, count, true)
@@ -137,6 +138,7 @@ local function attachPrompt(model)
 end
 
 function ItemDropService:SpawnDrop(itemId, count, position, options)
+	itemId = ResourceItemMap.Normalize(itemId)
 	count = math.max(1, math.floor(tonumber(count) or 1))
 	local itemsFolder = ServerStorage:FindFirstChild("GameItems")
 	local prefab = itemsFolder and itemsFolder:FindFirstChild(itemId)

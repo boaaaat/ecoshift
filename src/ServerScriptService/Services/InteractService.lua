@@ -6,6 +6,7 @@ local Workspace = game:GetService("Workspace")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local ToolConfig = require(ReplicatedStorage.Modules.ToolConfig)
+local ResourceItemMap = require(ReplicatedStorage.Shared.ResourceItemMap)
 local ItemDropService = require(script.Parent.ItemDropService)
 
 local InteractService = {}
@@ -365,6 +366,7 @@ end
 local function destroyNodeWithDrop(node, plr)
 	local explicitDropItemId = getNodeAttr(node, "DropItemId") or getNodeAttr(node, "DropItemID")
 	local itemId = explicitDropItemId or getNodeAttr(node, "ItemId") or getNodeAttr(node, "PickupItemId") or node.Name
+	itemId = ResourceItemMap.Normalize(itemId)
 	local dropScale = tonumber(getNodeAttr(node, "DropScale"))
 	local count = parseDropCount(node)
 	local roleMult = tonumber(plr:GetAttribute("Role_Gather")) or 1.0

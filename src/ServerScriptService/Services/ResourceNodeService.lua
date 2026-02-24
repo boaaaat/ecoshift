@@ -1,9 +1,11 @@
 -- ResourceNodeService.lua
 -- Adds prompts for duration-based resources.
 local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local InventoryService = require(script.Parent.InventoryService)
 local PromptQueueService = require(script.Parent.PromptQueueService)
+local ResourceItemMap = require(ReplicatedStorage.Shared.ResourceItemMap)
 
 local ResourceNodeService = {}
 ResourceNodeService._bound = setmetatable({}, { __mode = "k" }) -- [Instance] = true
@@ -148,6 +150,7 @@ local function attachDurationPrompt(instance)
 	prompt.Triggered:Connect(function(plr)
 		print(string.format("[ResourceNodeService] Prompt triggered by %s on %s", plr.Name, instance.Name))
 		local itemId = getAttr(instance, "DropItemId") or getAttr(instance, "DropItemID") or getAttr(instance, "ItemId") or instance.Name
+		itemId = ResourceItemMap.Normalize(itemId)
 		local count = parseDropCount(instance)
 		local roleMult = tonumber(plr:GetAttribute("Role_Gather")) or 1.0
 		count = math.max(1, math.floor(count * roleMult))

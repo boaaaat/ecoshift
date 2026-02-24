@@ -12,12 +12,10 @@ local ToolService = require(script.Parent.ToolService)
 local InventoryActionService = {}
 
 local FOOD_RESTORE = {
-	RawMeat = 10,
-	CookedMeat = 25,
-	CactusFlesh = 8,
-	Meal_Stew = 40,
-	CactusJuice = 15,
-	DesertSalve = 5,
+	BrownMushroom = 6,
+	CactusStem = 8,
+	StaminaRation = 24,
+	ReinforcedRation = 40,
 }
 
 local function canConsume(item)
@@ -34,6 +32,55 @@ local function applyFood(plr, itemId)
 	local newHunger = math.min(maxHunger, curHunger + restore)
 	StatsService:SetBase(plr, "Hunger", newHunger)
 	return true
+end
+
+local function applyTimedCharacterResist(char, key, delta, duration)
+	if not char or type(key) ~= "string" then return end
+	local cur = tonumber(char:GetAttribute(key)) or 0
+	local nextValue = math.clamp(cur + (tonumber(delta) or 0), -0.9, 0.9)
+	char:SetAttribute(key, nextValue)
+	task.delay(duration, function()
+		if not char.Parent then return end
+		local now = tonumber(char:GetAttribute(key)) or 0
+		char:SetAttribute(key, math.clamp(now - (tonumber(delta) or 0), -0.9, 0.9))
+	end)
+end
+
+local function applyTimedStatModifier(plr, stat, delta, duration, idPrefix)
+	if not StatsService or not StatsService.AddModifier then return end
+	local id = string.format("%s_%s_%d", idPrefix or "Consumable", stat, math.floor(os.clock() * 1000))
+	StatsService:AddModifier(plr, stat, delta, "Add", duration, id)
+end
+
+local function applyConsumableEffects(plr, itemId)
+	local char = plr.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if itemId == "Bandage" then
+		if hum then
+			hum.Health = math.min(hum.MaxHealth, hum.Health + 25)
+		end
+		return
+	end
+	if itemId == "AntitoxinTonic" then
+		applyTimedCharacterResist(char, "Res_Toxin", 0.35, 120)
+		return
+	end
+	if itemId == "HeatTonic" then
+		applyTimedStatModifier(plr, "TemperatureResistance", 2.5, 120, "HeatTonic")
+		return
+	end
+	if itemId == "ColdTonic" then
+		applyTimedStatModifier(plr, "TemperatureResistance", 2.5, 120, "ColdTonic")
+		return
+	end
+	if itemId == "ToxinFilter" then
+		applyTimedCharacterResist(char, "Res_Toxin", 0.25, 90)
+		return
+	end
+	if itemId == "ThermalPatch" then
+		applyTimedStatModifier(plr, "TemperatureResistance", 3.0, 90, "ThermalPatch")
+		applyTimedCharacterResist(char, "Res_Wet", 0.2, 90)
+	end
 end
 
 function InventoryActionService:Init()
@@ -64,6 +111,7 @@ function InventoryActionService:Init()
 			if not canConsume(item) then return end
 			if InventoryService:TakeFromSlot(plr, slotType, slotIndex, 1) then
 				applyFood(plr, slot.Id)
+				applyConsumableEffects(plr, slot.Id)
 			end
 			return
 		end
@@ -94,6 +142,7 @@ function InventoryActionService:Init()
 			if item and canConsume(item) then
 				if InventoryService:TakeFromSlot(plr, "Hotbar", slotIndex, 1) then
 					applyFood(plr, slot.Id)
+					applyConsumableEffects(plr, slot.Id)
 				end
 				return
 			end

@@ -13,6 +13,7 @@ local ItemDropService = require(script.Parent.ItemDropService)
 local PromptQueueService = require(script.Parent.PromptQueueService)
 local LootTableService = require(script.Parent.LootTableService)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
+local MonsterDropConfig = require(ReplicatedStorage.Shared.MonsterDropConfig)
 
 local LootService = {}
 LootService._chests = {} -- [Instance] = { Id, Tier, Table, Slots }
@@ -322,6 +323,36 @@ local function dropLoot(model, tier, tableName, destroyModel)
 	end
 end
 
+local function randomIntRange(min, max)
+	local lo = math.floor(tonumber(min) or 1)
+	local hi = math.floor(tonumber(max) or lo)
+	if hi < lo then hi = lo end
+	return math.random(lo, hi)
+end
+
+local function dropConfiguredMonsterLoot(monster)
+	if not monster or not monster.Parent then return false end
+	local cfg = MonsterDropConfig and MonsterDropConfig.Monsters and MonsterDropConfig.Monsters[monster.Name]
+	if not cfg or type(cfg.Drops) ~= "table" then return false end
+	local root = getPrimary(monster)
+	local pos = root and root.Position or monster:GetPivot().Position
+	for _, drop in ipairs(cfg.Drops) do
+		local chance = tonumber(drop.Chance) or 1
+		if math.random() <= chance then
+			local count = randomIntRange(drop.Min or 1, drop.Max or drop.Min or 1)
+			if count > 0 and drop.ItemId then
+				local offset = Vector3.new(
+					DROP_RNG:NextNumber() * 4 - 2,
+					2,
+					DROP_RNG:NextNumber() * 4 - 2
+				)
+				ItemDropService:SpawnDrop(drop.ItemId, count, pos + offset)
+			end
+		end
+	end
+	return true
+end
+
 local function findHealthValue(model)
 	if not model or not model.Parent then return nil end
 	local health = model:FindFirstChild("Health", true)
@@ -339,6 +370,12 @@ function LootService:_bindMonster(monster, opts)
 	local hum = monster:FindFirstChildOfClass("Humanoid")
 	local health = findHealthValue(monster)
 	local function handleDeath()
+		if dropConfiguredMonsterLoot(monster) then
+			if monster and monster.Parent then
+				monster:Destroy()
+			end
+			return
+		end
 		local tableName = requireExplicit and getExplicitLootTableName(monster) or getLootTableName(monster)
 		if requireExplicit and not tableName then
 			if monster and monster.Parent then
