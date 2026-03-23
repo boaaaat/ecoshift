@@ -35,6 +35,7 @@ EventService._nextMajor = 0
 EventService._tickInterval = 0.25
 EventService._started = false
 EventService._dropThreads = {}
+EventService._requestConn = nil
 
 ---------------------------------------------------------------------------
 -- _G callback registry (backward compat)
@@ -232,6 +233,16 @@ function EventService:GetActive(evType)
 	return self._active[evType]
 end
 
+function EventService:SendActiveToPlayer(plr)
+	if not plr or not self._remote then return end
+	for _, evType in ipairs({ "Minor", "Major" }) do
+		local active = self._active[evType]
+		if active and active.Id then
+			self._remote:FireClient(plr, evType .. "_Start", active.Id, active.Data)
+		end
+	end
+end
+
 ---------------------------------------------------------------------------
 -- Drop spawning
 ---------------------------------------------------------------------------
@@ -297,6 +308,13 @@ end
 function EventService:Init()
 	if self._started then return end
 	self._started = true
+	if self._remote and not self._requestConn then
+		self._requestConn = self._remote.OnServerEvent:Connect(function(plr, action)
+			if action == "RequestActive" then
+				self:SendActiveToPlayer(plr)
+			end
+		end)
+	end
 
 	local cadence = EventsConfig.Cadence
 	self._nextMinor = scheduleWindow(cadence.MinorCadence)

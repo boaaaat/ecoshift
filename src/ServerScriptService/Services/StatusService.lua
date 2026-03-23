@@ -54,7 +54,8 @@ function StatusService:_tickPlayer(plr)
 	-- wet shock synergy is handled by your weapon scripts; here we can apply stamina penalty via Attribute
 	if wet > 0 then
 		local cur = char:GetAttribute("WetStacks") or 0
-		cur = math.clamp(cur + wet, 0, 5)
+		local adjustedWet = wet * (1 - rWet)
+		cur = math.clamp(cur + adjustedWet, 0, 5)
 		char:SetAttribute("WetStacks", cur)
 	else
 		char:SetAttribute("WetStacks", math.max(0, (char:GetAttribute("WetStacks") or 0) - 1))

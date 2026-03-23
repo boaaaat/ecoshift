@@ -555,6 +555,11 @@ if rInventory then
 			refreshItems()
 		end
 	end)
+	task.defer(function()
+		pcall(function()
+			rInventory:FireServer("RequestSnapshot")
+		end)
+	end)
 end
 
 if rBuild then

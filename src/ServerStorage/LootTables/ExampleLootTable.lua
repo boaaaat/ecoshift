@@ -12,10 +12,10 @@ return {
 
 	-- Legacy fields (used only if Rarities is omitted)
 	Items = {
-		{ Id = "Wood", Min = 2, Max = 5, Weight = 5 },
-		{ Id = "Stone", Min = 1, Max = 4, Weight = 3 },
+		{ Id = "ForestWood", Min = 2, Max = 5, Weight = 5 },
+		{ Id = "ForestStone", Min = 1, Max = 4, Weight = 3 },
 		{ Tag = "Resource", Min = 1, Max = 2, Weight = 2 },
-		{ Id = "GoldIngot", Min = 1, Max = 1, Weight = 0.4, MinTier = 3 },
+		{ Id = "SanditeIngot", Min = 1, Max = 1, Weight = 0.4, MinTier = 3 },
 	},
 	Guaranteed = {
 		{ Id = "Torch", Min = 1, Max = 1 },
@@ -27,8 +27,8 @@ return {
 			Unique = false,
 			AllowDuplicates = true,
 			Items = {
-				{ Id = "Wood", Min = 2, Max = 6, Weight = 4 },
-				{ Id = "Stone", Min = 1, Max = 4, Weight = 3 },
+				{ Id = "ForestWood", Min = 2, Max = 6, Weight = 4 },
+				{ Id = "ForestStone", Min = 1, Max = 4, Weight = 3 },
 				{ Tag = "Resource", Min = 1, Max = 3, Weight = 2 },
 				{ Tag = "Material", Min = 1, Max = 2, Weight = 1 },
 			},
@@ -41,13 +41,13 @@ return {
 			Unique = true,
 			AllowDuplicates = false,
 			Items = {
-				{ Id = "IronIngot", Min = 1, Max = 2, Weight = 2 },
-				{ Id = "GoldIngot", Min = 1, Max = 2, Weight = 1 },
+				{ Id = "SanditeIngot", Min = 1, Max = 2, Weight = 2 },
+				{ Id = "ResonantCrystal", Min = 1, Max = 2, Weight = 1 },
 				{ Tag = "Weapon", Min = 1, Max = 1, Weight = 0.5 },
 				{ Tag = "Armor", Min = 1, Max = 1, Weight = 0.3 },
 			},
 			Guaranteed = {
-				{ Id = "Arrow", Min = 5, Max = 12 },
+				{ Id = "StaminaRation", Min = 2, Max = 4 },
 			},
 		},
 		Legendary = {
@@ -56,12 +56,12 @@ return {
 			Unique = true,
 			AllowDuplicates = false,
 			Items = {
-				{ Id = "Diamond", Min = 1, Max = 2, Weight = 1 },
-				{ Id = "DiamondSword", Min = 1, Max = 1, Weight = 0.6 },
+				{ Id = "ResonantCrystal", Min = 1, Max = 2, Weight = 1 },
+				{ Id = "CrystalBow", Min = 1, Max = 1, Weight = 0.6 },
 				{ Tag = "Weapon", Min = 1, Max = 1, Weight = 0.3 },
 			},
 			Guaranteed = {
-				{ Id = "CookedMeat", Min = 1, Max = 2 },
+				{ Id = "ReinforcedRation", Min = 1, Max = 2 },
 			},
 		},
 		Celestial = {
@@ -70,11 +70,11 @@ return {
 			Unique = true,
 			AllowDuplicates = false,
 			Items = {
-				{ Id = "DiamondArmor", Min = 1, Max = 1, Weight = 1 },
-				{ Id = "EnchantedBow", Min = 1, Max = 1, Weight = 0.6 },
+				{ Id = "AdaptiveSurvivalSuit", Min = 1, Max = 1, Weight = 1 },
+				{ Id = "VoidEdge", Min = 1, Max = 1, Weight = 0.6 },
 			},
 			Guaranteed = {
-				{ Id = "Crystal", Min = 2, Max = 4 },
+				{ Id = "ResonantCrystal", Min = 2, Max = 4 },
 			},
 		},
 	},

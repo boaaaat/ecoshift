@@ -12,6 +12,7 @@ ProfileService._profiles = {}
 ProfileService._store = DataStoreService:GetDataStore(Config.DATASTORE.ProfileStore)
 ProfileService._remote = nil
 ProfileService._loadCallbacks = {}
+ProfileService._requestConn = nil
 
 local function defaultProfile()
 	local unlocked = {}
@@ -93,9 +94,16 @@ local function unionSets(a, b)
 end
 
 function ProfileService:Init()
-	if self._remote then return end
+	if self._remote and self._requestConn then return end
 	local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
 	self._remote = Util.GetRemote(remotesFolder, Config.RemoteNames.ProfileUpdate)
+	if self._remote and not self._requestConn then
+		self._requestConn = self._remote.OnServerEvent:Connect(function(plr, action)
+			if action == "RequestProfile" then
+				self:Send(plr)
+			end
+		end)
+	end
 end
 
 function ProfileService:GetProfile(plr)

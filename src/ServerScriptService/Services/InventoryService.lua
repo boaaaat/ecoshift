@@ -11,6 +11,7 @@ local InventoryService = {}
 InventoryService._inventories = {} -- [player] = { Hotbar = {}, Storage = {}, Armor = nil }
 InventoryService._remote = nil
 InventoryService._callbacks = {}
+InventoryService._requestConn = nil
 
 local HOTBAR_SLOTS = 4
 local STORAGE_SLOTS = 18
@@ -101,7 +102,7 @@ local function snapshot(inv)
 end
 
 function InventoryService:Init()
-	if self._remote then return end
+	if self._remote and self._requestConn then return end
 	-- OPTIMIZED: Try immediate lookup first
 	local remotesFolder = Util.GetDescendant(Config.Paths.Remotes)
 	if not remotesFolder then
@@ -109,6 +110,13 @@ function InventoryService:Init()
 	end
 	if remotesFolder then
 		self._remote = Util.GetRemote(remotesFolder, Config.RemoteNames.InventoryUpdate)
+	end
+	if self._remote and not self._requestConn then
+		self._requestConn = self._remote.OnServerEvent:Connect(function(plr, action)
+			if action == "RequestSnapshot" then
+				self:Sync(plr)
+			end
+		end)
 	end
 end
 

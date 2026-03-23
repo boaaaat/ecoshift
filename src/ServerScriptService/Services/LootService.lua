@@ -25,6 +25,7 @@ LootService._monsterConns = setmetatable({}, { __mode = "k" })
 LootService._chestCleanupConns = setmetatable({}, { __mode = "k" })
 LootService._chestPromptConns = setmetatable({}, { __mode = "k" })
 LootService._remote = nil
+LootService._missingTableWarnAt = {}
 
 local CHEST_TAGS = {
 	Common_Chest = 1,
@@ -43,6 +44,7 @@ local MONSTER_TAGS = {
 local PROMPT_BOUND_ATTR = "LootServiceBound"
 local DROP_RNG = Random.new()
 local DEFAULT_CHEST_SLOT_COUNT = 10
+local MISSING_TABLE_WARN_WINDOW = 30
 
 local function getTierFromTags(instance, map)
 	for tag, tier in pairs(map) do
@@ -73,7 +75,11 @@ local function getLootTableName(instance)
 		return val.Value
 	end
 	local cfg = Config.LOOT or {}
-	return cfg.DefaultTable or "Default"
+	local defaultTable = cfg.DefaultTable
+	if type(defaultTable) == "string" and defaultTable ~= "" then
+		return defaultTable
+	end
+	return nil
 end
 
 local function getExplicitLootTableName(instance)
@@ -162,6 +168,31 @@ local function canPlayerOpenChest(plr, chest)
 	return (root.Position - primary.Position).Magnitude <= 12
 end
 
+function LootService:_warnMissingChestTable(chest, tableName)
+	local key = tableName
+	if type(key) ~= "string" or key == "" then
+		key = "__DEFAULT_UNSET__"
+	end
+	local now = os.clock()
+	local lastWarn = self._missingTableWarnAt[key] or 0
+	if now - lastWarn < MISSING_TABLE_WARN_WINDOW then
+		return
+	end
+	self._missingTableWarnAt[key] = now
+	if key == "__DEFAULT_UNSET__" then
+		warn(string.format(
+			"[LootService] Chest %s has no loot table configured and Config.LOOT.DefaultTable is unset. Chest will open empty until a loot table is configured.",
+			chest and chest.Name or "UnknownChest"
+		))
+	else
+		warn(string.format(
+			"[LootService] Chest %s requested missing loot table %q. Chest will open empty until that table is authored.",
+			chest and chest.Name or "UnknownChest",
+			tableName
+		))
+	end
+end
+
 function LootService:_ensureRemote()
 	if self._remote then
 		return self._remote
@@ -208,7 +239,12 @@ function LootService:_ensureChestData(chest)
 	local id = HttpService:GenerateGUID(false)
 	local tier = getTierFromTags(chest, CHEST_TAGS)
 	local tableName = getLootTableName(chest)
-	local items = LootTableService:Roll(tableName, tier)
+	local items = {}
+	if tableName and LootTableService:Get(tableName) then
+		items = LootTableService:Roll(tableName, tier)
+	else
+		self:_warnMissingChestTable(chest, tableName)
+	end
 	local slotCount = getChestSlotCount(chest)
 	local slots = {}
 	local cursor = 1
@@ -220,11 +256,11 @@ function LootService:_ensureChestData(chest)
 	data = {
 		Id = id,
 		Tier = tier,
-		Table = tableName,
+		Table = tableName or "",
 		SlotCount = slotCount,
 		Slots = normalizeChestSlots(slots, slotCount),
 	}
-	print(string.format("[LootService] Chest %s -> table %s tier %d items %d", chest.Name, tableName, tier, #data.Slots))
+	print(string.format("[LootService] Chest %s -> table %s tier %d items %d", chest.Name, tostring(tableName or "none"), tier, #items))
 	self._chests[chest] = data
 	self._chestById[id] = chest
 	return data
@@ -635,8 +671,7 @@ function LootService:Init()
 				local added = 0
 				if toType and toIndex then
 					added = InventoryService:TryAddToSlot(plr, toType, toIndex, slot.Id, take)
-				end
-				if added <= 0 then
+				else
 					added = InventoryService:Give(plr, slot.Id, take, true)
 				end
 				if added <= 0 then

@@ -305,48 +305,58 @@ end
 -------------------------------------------------------------------
 -- SPECTATE CAMERA
 -------------------------------------------------------------------
-local function startSpectateCamera(target)
-	if not target then return end
-	
-	spectateTarget = target
-	isSpectating = true
-	
-	-- Store original camera settings
-	originalCameraType = camera.CameraType
-	originalCameraSubject = camera.CameraSubject
-	
-	-- Set camera to follow target
-	local targetChar = target.Character
-	if targetChar then
-		camera.CameraType = Enum.CameraType.Custom
-		camera.CameraSubject = targetChar:FindFirstChildOfClass("Humanoid") or targetChar
+local function bindSpectateTarget(target)
+	if spectateConnection then
+		spectateConnection:Disconnect()
+		spectateConnection = nil
 	end
-	
-	-- Update spectate UI
+
+	spectateTarget = target
+
+	if target and target.Character then
+		camera.CameraType = Enum.CameraType.Custom
+		camera.CameraSubject = target.Character:FindFirstChildOfClass("Humanoid") or target.Character
+	end
+
+	if target then
+		spectateConnection = target.CharacterAdded:Connect(function(newChar)
+			if isSpectating and spectateTarget == target then
+				camera.CameraSubject = newChar:FindFirstChildOfClass("Humanoid") or newChar
+			end
+		end)
+	end
+
 	local spectateUI = playerGui:FindFirstChild("SpectateUI")
 	if spectateUI then
 		spectateUI.Enabled = true
 		local targetLabel = spectateUI:FindFirstChild("TopBar") and spectateUI.TopBar:FindFirstChild("TargetLabel")
 		if targetLabel then
-			targetLabel.Text = target.Name
+			targetLabel.Text = target and target.Name or "No target"
 		end
 	end
+end
+
+local function startSpectateCamera(target)
+	if not target then return end
+	if not isSpectating then
+		originalCameraType = camera.CameraType
+		originalCameraSubject = camera.CameraSubject
+	end
+	isSpectating = true
+
+	bindSpectateTarget(target)
 	
 	-- Hide death UI while spectating
 	local deathUIRef = playerGui:FindFirstChild("DeathUI")
 	if deathUIRef then
 		deathUIRef.Enabled = false
 	end
-	
-	-- Update camera if target character changes
-	spectateConnection = target.CharacterAdded:Connect(function(newChar)
-		if isSpectating and spectateTarget == target then
-			camera.CameraSubject = newChar:FindFirstChildOfClass("Humanoid") or newChar
-		end
-	end)
 end
 
 local function stopSpectateCamera()
+	local restoreType = originalCameraType
+	local restoreSubject = originalCameraSubject
+
 	isSpectating = false
 	spectateTarget = nil
 	
@@ -356,12 +366,14 @@ local function stopSpectateCamera()
 	end
 	
 	-- Restore camera
-	if originalCameraType then
-		camera.CameraType = originalCameraType
+	if restoreType then
+		camera.CameraType = restoreType
 	end
-	if originalCameraSubject then
-		camera.CameraSubject = originalCameraSubject
+	if restoreSubject then
+		camera.CameraSubject = restoreSubject
 	end
+	originalCameraType = nil
+	originalCameraSubject = nil
 	
 	-- Hide spectate UI
 	local spectateUI = playerGui:FindFirstChild("SpectateUI")
@@ -380,21 +392,8 @@ end
 
 local function updateSpectateTarget(target)
 	if not isSpectating then return end
-	
-	spectateTarget = target
-	
-	if target and target.Character then
-		camera.CameraSubject = target.Character:FindFirstChildOfClass("Humanoid") or target.Character
-	end
-	
-	-- Update UI
-	local spectateUI = playerGui:FindFirstChild("SpectateUI")
-	if spectateUI then
-		local targetLabel = spectateUI:FindFirstChild("TopBar") and spectateUI.TopBar:FindFirstChild("TargetLabel")
-		if targetLabel then
-			targetLabel.Text = target and target.Name or "No target"
-		end
-	end
+
+	bindSpectateTarget(target)
 end
 
 -------------------------------------------------------------------
@@ -565,7 +564,11 @@ end
 local function onSpectateRemote(action, data)
 	if action == "SpectateTarget" then
 		if data and typeof(data) == "Instance" and data:IsA("Player") then
-			startSpectateCamera(data)
+			if isSpectating then
+				updateSpectateTarget(data)
+			else
+				startSpectateCamera(data)
+			end
 		end
 	elseif action == "StopSpectate" then
 		stopSpectateCamera()

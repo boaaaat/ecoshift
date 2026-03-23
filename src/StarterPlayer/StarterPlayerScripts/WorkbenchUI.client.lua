@@ -809,6 +809,11 @@ if rInventory then
 			refreshRecipes()
 		end
 	end)
+	task.defer(function()
+		pcall(function()
+			rInventory:FireServer("RequestSnapshot")
+		end)
+	end)
 end
 
 print("[WorkbenchUI] Ready - interact with placed workbenches to craft")

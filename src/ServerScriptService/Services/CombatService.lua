@@ -36,6 +36,7 @@ CombatService._lastUse = setmetatable({}, { __mode = "k" }) -- [tool] = time
 CombatService._chargeStart = setmetatable({}, { __mode = "k" }) -- [player] = time
 CombatService._blocking = setmetatable({}, { __mode = "k" }) -- [player] = tool
 local COMBAT_FEEDBACK_RANGE = 180
+local TOOL_ORIGIN_NAMES = { "MuzzleAttachment", "Muzzle", "Barrel", "Tip" }
 
 local function ensureRemotes(self)
 	if self._remoteDamage and self._remoteAction and self._remoteFeedback then return end
@@ -297,6 +298,49 @@ local function getRoot(model)
 	return model.PrimaryPart or model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart")
 end
 
+local function getToolOrigin(plr, tool)
+	local char = plr and plr.Character
+	if tool then
+		for _, name in ipairs(TOOL_ORIGIN_NAMES) do
+			local node = tool:FindFirstChild(name, true)
+			if node then
+				if node:IsA("Attachment") then
+					return node.WorldPosition
+				end
+				if node:IsA("BasePart") then
+					return node.Position
+				end
+			end
+		end
+		local handle = tool:FindFirstChild("Handle")
+		if handle and handle:IsA("BasePart") then
+			return handle.Position
+		end
+	end
+	if char then
+		local head = char:FindFirstChild("Head")
+		if head and head:IsA("BasePart") then
+			return head.Position
+		end
+		local root = getRoot(char)
+		if root then
+			return root.Position
+		end
+	end
+	return nil
+end
+
+local function getValidatedAimDirection(data)
+	local dir = data and data.Dir
+	if typeof(dir) ~= "Vector3" then
+		return nil
+	end
+	if dir.Magnitude < 0.001 then
+		return nil
+	end
+	return dir.Unit
+end
+
 local function setToolAmmo(tool, value)
 	if not tool or not tool:IsA("Tool") then return end
 	local clamped = math.max(0, math.floor(tonumber(value) or 0))
@@ -323,11 +367,11 @@ end
 
 local function raycastFromPlayer(plr, origin, dir, maxRange)
 	local char = plr.Character
-	if not char then return nil end
+	if not char or typeof(origin) ~= "Vector3" or typeof(dir) ~= "Vector3" then return nil end
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { char, Workspace.Terrain }
-	local direction = dir.Unit * maxRange
+	local direction = dir * maxRange
 	local res = Workspace:Raycast(origin, direction, params)
 	return res
 end
@@ -357,11 +401,11 @@ function CombatService:_handleGun(plr, tool, weapon, data)
 	if not self:_canUseTool(tool, cooldown) then return end
 	local ammo = weapon:GetAmmo()
 	if ammo <= 0 then return end
+	local origin = getToolOrigin(plr, tool)
+	local dir = getValidatedAimDirection(data)
+	if not origin or not dir then return end
 	consumeToolAmmo(tool, 1)
 	local maxRange = weapon:GetNumber("Range", 200)
-	local origin = data and data.Origin
-	local dir = data and data.Dir
-	if not origin or not dir then return end
 	local hit = raycastFromPlayer(plr, origin, dir, maxRange)
 	if hit and hit.Instance then
 		local model = hit.Instance:FindFirstAncestorOfClass("Model")
@@ -382,8 +426,8 @@ function CombatService:_handleBow(plr, tool, weapon, data)
 	if not self:_canUseTool(tool, cooldown) then return end
 
 	local maxRange = weapon:GetRange()
-	local origin = data and data.Origin
-	local dir = data and data.Dir
+	local origin = getToolOrigin(plr, tool)
+	local dir = getValidatedAimDirection(data)
 	if not origin or not dir then return end
 	local hit = raycastFromPlayer(plr, origin, dir, maxRange)
 	if hit and hit.Instance then
@@ -397,8 +441,8 @@ end
 function CombatService:_handleThrowable(plr, tool, weapon, data)
 	local cooldown = math.max(weapon:GetThrowTime(), 0.2)
 	if not self:_canUseTool(tool, cooldown) then return end
-	local origin = data and data.Origin
-	local dir = data and data.Dir
+	local origin = getToolOrigin(plr, tool)
+	local dir = getValidatedAimDirection(data)
 	if not origin or not dir then return end
 	local maxRange = weapon:GetRange()
 	local damage = weapon:GetDamage()

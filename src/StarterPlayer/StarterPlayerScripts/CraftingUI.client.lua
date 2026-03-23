@@ -662,6 +662,11 @@ if rInventory then
 		end
 	end)
 	print("[CraftingUI] Listening for inventory updates")
+	task.defer(function()
+		pcall(function()
+			rInventory:FireServer("RequestSnapshot")
+		end)
+	end)
 end
 
 print("[CraftingUI] Ready - Press C for hand crafting (basic items)")

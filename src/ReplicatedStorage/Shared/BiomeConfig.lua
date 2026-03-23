@@ -192,7 +192,6 @@ Config.structure_chests = {
 	-- Example:
 	CabinRuin = {
 		count = { min = 1, max = 1 },
-		loot_table = "CommonChest",
 		tier_weights = {
 			Common = { Weight = 1.0, DistanceWeight = 0.6 },
 			Rare = { Weight = 0.35, DistanceWeight = 1.2 },

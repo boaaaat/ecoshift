@@ -56,23 +56,22 @@ function Wolf:AttackTarget()
 
 	local dmg = math.max(0, tonumber(self.Config.Damage) or 0)
 	if dmg <= 0 then return end
-	local hum = self.Target and self.Target.Character and self.Target.Character:FindFirstChildOfClass("Humanoid")
-	if hum and hum.Health > 0 then
-		hum:TakeDamage(dmg)
+	self:DealDamageToCurrentTarget(dmg, "Melee")
+end
+
+function Wolf:GetMoveSpeed()
+	local baseSpeed = tonumber(self.Config.Speed) or 12
+	local packSpeedBoost = tonumber(self.Config.PackSpeedBoost) or 0
+	if self.PackCount > 0 then
+		return baseSpeed * (1 + packSpeedBoost)
 	end
+	return baseSpeed
 end
 
 function Wolf:Step(dt)
 	if not self:IsAlive() or not self.Root then return end
 
 	self.PackCount = self:_countPack()
-	local baseSpeed = tonumber(self.Config.Speed) or 12
-	local packSpeedBoost = tonumber(self.Config.PackSpeedBoost) or 0
-	local speed = baseSpeed
-	if self.PackCount > 0 then
-		speed = baseSpeed * (1 + packSpeedBoost)
-	end
-	self:SetSpeed(speed)
 
 	if not self:IsTargetValid() then
 		self:AcquireTarget()

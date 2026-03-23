@@ -70,6 +70,10 @@ function EntityBase:SetSpeed(speed)
 	end
 end
 
+function EntityBase:GetMoveSpeed()
+	return tonumber(self.Config.Speed) or 0
+end
+
 function EntityBase:GetDetection()
 	return self.Config.DetectionAngle or 120,
 		self.Config.DetectionDistance or 80,
@@ -82,7 +86,7 @@ function EntityBase:CanDetectTarget(targetChar)
 	local hum = targetChar:FindFirstChildOfClass("Humanoid")
 	if not hrp or not hum or hum.Health <= 0 then return false end
 	local angle, distMax, autoRadius = self:GetDetection()
-	angle = math.clamp(tonumber(angle) or 0, 0, 180)
+	angle = math.clamp(tonumber(angle) or 0, 0, 360)
 	distMax = math.max(0, tonumber(distMax) or 0)
 	autoRadius = math.max(0, tonumber(autoRadius) or 0)
 	local dir = hrp.Position - self.Root.Position
@@ -94,7 +98,7 @@ function EntityBase:CanDetectTarget(targetChar)
 		if dist == 0 then
 			return true, dist
 		end
-		if angle >= 180 then
+		if angle >= 360 then
 			return true, dist
 		end
 		local look = self.Root.CFrame.LookVector
@@ -105,6 +109,24 @@ function EntityBase:CanDetectTarget(targetChar)
 		end
 	end
 	return false, dist
+end
+
+function EntityBase:DealDamageToCurrentTarget(amount, dmgType)
+	local dmg = math.max(0, tonumber(amount) or 0)
+	if dmg <= 0 then
+		return false
+	end
+	local targetChar = self.Target and self.Target.Character
+	local hum = targetChar and targetChar:FindFirstChildOfClass("Humanoid")
+	if not hum or hum.Health <= 0 then
+		return false
+	end
+	if _G.Ecoshift and type(_G.Ecoshift.ApplyDamage) == "function" then
+		_G.Ecoshift.ApplyDamage(self.Model, targetChar, dmg, dmgType or "Melee")
+	else
+		hum:TakeDamage(dmg)
+	end
+	return true
 end
 
 function EntityBase:HasLineOfSight(targetChar)
@@ -244,14 +266,7 @@ function EntityBase:AttackTarget()
 	self.NextAttack = now + (self.Config.AttackCooldown or 1.2)
 	local dmg = math.max(0, tonumber(self.Config.Damage) or 0)
 	if dmg <= 0 then return end
-	local hum = self.Target and self.Target.Character and self.Target.Character:FindFirstChildOfClass("Humanoid")
-	if hum and hum.Health > 0 then
-		if _G.Ecoshift and type(_G.Ecoshift.ApplyDamage) == "function" then
-			_G.Ecoshift.ApplyDamage(self.Model, self.Target.Character, dmg, "Melee")
-		else
-			hum:TakeDamage(dmg)
-		end
-	end
+	self:DealDamageToCurrentTarget(dmg, "Melee")
 end
 
 function EntityBase:MoveTo(position)
@@ -370,7 +385,7 @@ end
 function EntityBase:Step(dt)
 	if not self:IsAlive() then return end
 	if not self.Root then return end
-	self:SetSpeed(self.Config.Speed)
+	self:SetSpeed(self:GetMoveSpeed())
 
 	-- Stuck detection (works for direct + path movement)
 	if self._lastPos then

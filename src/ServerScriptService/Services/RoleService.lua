@@ -10,6 +10,7 @@ local ProfileService = require(script.Parent.ProfileService)
 local RoleService = {}
 RoleService._remote = nil
 RoleService._selectRemoteConn = nil
+RoleService._requestConn = nil
 RoleService._initialized = false
 RoleService._profileLoadedHooked = false
 
@@ -45,15 +46,33 @@ function RoleService:Init()
 			end
 		end)
 	end
+	if self._remote and not self._requestConn then
+		self._requestConn = self._remote.OnServerEvent:Connect(function(plr, action)
+			if action == "RequestRole" then
+				self:SendToPlayer(plr)
+			end
+		end)
+	end
+end
+
+function RoleService:SendToPlayer(plr)
+	if not plr then return nil end
+	local roleId = plr:GetAttribute("Role")
+	if type(roleId) ~= "string" or roleId == "" then
+		local profile = ProfileService:GetProfile(plr)
+		roleId = profile and profile.Role or Config.ROLES.Default
+	end
+	if self._remote then
+		self._remote:FireClient(plr, roleId)
+	end
+	return roleId
 end
 
 function RoleService:SetRole(plr, roleId)
 	if not Config.ROLES.Definitions[roleId] then return false end
 	ProfileService:SetRole(plr, roleId)
 	applyAttributes(plr, roleId)
-	if self._remote then
-		self._remote:FireClient(plr, roleId)
-	end
+	self:SendToPlayer(plr)
 	return true
 end
 
@@ -67,9 +86,7 @@ function RoleService:ApplyFromProfile(plr)
 	end
 	local roleId = profile and profile.Role or Config.ROLES.Default
 	applyAttributes(plr, roleId)
-	if self._remote then
-		self._remote:FireClient(plr, roleId)
-	end
+	self:SendToPlayer(plr)
 end
 
 Players.PlayerAdded:Connect(function(plr)

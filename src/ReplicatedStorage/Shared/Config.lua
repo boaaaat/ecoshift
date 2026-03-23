@@ -54,7 +54,6 @@ Config.PROMPTS = {
 }
 
 Config.LOOT = {
-	DefaultTable = "Default",
 	DropSpread = 4,
 	DropHeight = 2,
 	TierWeightMult = {
@@ -130,6 +129,7 @@ Config.BUILD = {
 		SurveyBench = true,
 		Campfire = true,
 		Chest = true,
+		Torch = true,
 	},
 	Costs = {
 		Wall = { { Id = "ForestWood", N = 2 } },
@@ -157,6 +157,7 @@ Config.BUILD = {
 		SurveyBench = true,
 		Campfire = true,
 		Chest = true,
+		Torch = true,
 	},
 }
 

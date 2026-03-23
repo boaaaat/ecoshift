@@ -59,17 +59,39 @@ local Hooks = {
 	OnEvent = nil,            -- function(kind, id, payload) end
 	OnObjective = nil,        -- function(kind, id, data) end
 }
+local CachedState = {
+	BiomeName = nil,
+	BiomeData = nil,
+	Events = {},
+	Objectives = {},
+}
 
 -- Expose a simple bind so your UI scripts can attach
 _G.EcoshiftClient = _G.EcoshiftClient or {}
 _G.EcoshiftClient.Bind = function(tbl)
 	for k,v in pairs(tbl) do
-		if Hooks[k] ~= nil and type(v) == "function" then Hooks[k] = v end
+		if Hooks[k] ~= nil and type(v) == "function" then
+			Hooks[k] = v
+			if k == "OnBiomeChanged" and CachedState.BiomeName ~= nil then
+				v(CachedState.BiomeName, CachedState.BiomeData)
+			elseif k == "OnEvent" then
+				for id, entry in pairs(CachedState.Events) do
+					v(entry.Kind, id, entry.Payload)
+				end
+			elseif k == "OnObjective" then
+				for id, entry in pairs(CachedState.Objectives) do
+					v("Start", id, entry.StartData)
+					v("Progress", id, entry.Progress or 0)
+				end
+			end
+		end
 	end
 end
 
 if rBiome then
 	rBiome.OnClientEvent:Connect(function(biomeName, biomeData)
+		CachedState.BiomeName = biomeName
+		CachedState.BiomeData = biomeData
 		if Hooks.OnBiomeChanged then
 			Hooks.OnBiomeChanged(biomeName, biomeData)
 		end
@@ -78,12 +100,29 @@ end
 
 if rEvent then
 	rEvent.OnClientEvent:Connect(function(kind, id, payload)
+		if kind == "Minor_Start" or kind == "Major_Start" then
+			CachedState.Events[id] = { Kind = kind, Payload = payload }
+		elseif kind == "Minor_End" or kind == "Major_End" then
+			CachedState.Events[id] = nil
+		end
 		if Hooks.OnEvent then Hooks.OnEvent(kind, id, payload) end
 	end)
 end
 
 if rObjective then
 	rObjective.OnClientEvent:Connect(function(kind, id, data)
+		if kind == "Start" then
+			CachedState.Objectives[id] = {
+				StartData = data,
+				Progress = data and data.Data and data.Data.Progress or 0,
+			}
+		elseif kind == "Progress" then
+			local entry = CachedState.Objectives[id] or { StartData = nil, Progress = 0 }
+			entry.Progress = data or 0
+			CachedState.Objectives[id] = entry
+		elseif kind == "End" then
+			CachedState.Objectives[id] = nil
+		end
 		if Hooks.OnObjective then Hooks.OnObjective(kind, id, data) end
 	end)
 end

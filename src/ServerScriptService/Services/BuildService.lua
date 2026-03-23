@@ -61,6 +61,44 @@ local function getPrefab(buildType)
 end
 
 local function createFallbackPart(buildType, position)
+	if buildType == "Torch" then
+		local model = Instance.new("Model")
+		model.Name = "Build_" .. buildType
+		model:SetAttribute("BuildType", buildType)
+
+		local post = Instance.new("Part")
+		post.Name = "Post"
+		post.Size = Vector3.new(0.5, 3.5, 0.5)
+		post.Anchored = true
+		post.CanCollide = true
+		post.Material = Enum.Material.Wood
+		post.Color = Color3.fromRGB(94, 70, 44)
+		post.Parent = model
+
+		local flame = Instance.new("Part")
+		flame.Name = "Flame"
+		flame.Shape = Enum.PartType.Ball
+		flame.Size = Vector3.new(0.8, 0.8, 0.8)
+		flame.Anchored = true
+		flame.CanCollide = false
+		flame.Material = Enum.Material.Neon
+		flame.Color = Color3.fromRGB(255, 186, 80)
+		flame.Parent = model
+
+		local light = Instance.new("PointLight")
+		light.Name = "TorchLight"
+		light.Brightness = 2
+		light.Range = 16
+		light.Color = Color3.fromRGB(255, 214, 138)
+		light.Shadows = true
+		light.Parent = flame
+
+		model.PrimaryPart = post
+		post.CFrame = CFrame.new(position + Vector3.new(0, post.Size.Y * 0.5, 0))
+		flame.CFrame = CFrame.new(position + Vector3.new(0, post.Size.Y + flame.Size.Y * 0.3, 0))
+		return model
+	end
+
 	local part = Instance.new("Part")
 	part.Size = Vector3.new(Config.GRID.Size, Config.GRID.Size, Config.GRID.Size)
 	part.Anchored = true

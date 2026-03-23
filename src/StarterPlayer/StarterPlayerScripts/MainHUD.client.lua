@@ -179,3 +179,26 @@ if rObjective then
 		renderObjectives()
 	end)
 end
+
+task.defer(function()
+	if rProfile then
+		pcall(function()
+			rProfile:FireServer("RequestProfile")
+		end)
+	end
+	if rRole then
+		pcall(function()
+			rRole:FireServer("RequestRole")
+		end)
+	end
+	if rEvent then
+		pcall(function()
+			rEvent:FireServer("RequestActive")
+		end)
+	end
+	if rObjective then
+		pcall(function()
+			rObjective:FireServer("RequestActive")
+		end)
+	end
+end)

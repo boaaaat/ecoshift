@@ -13,6 +13,7 @@ ObjectiveService._remote = Util.GetRemote(ObjectiveService._remotesFolder, Confi
 ObjectiveService._active = {} -- [id] = {StartedAt, EndsAt, State, Biome, Data}
 ObjectiveService._tickInterval = 0.25
 ObjectiveService._started = false
+ObjectiveService._requestConn = nil
 
 local function now() return os.clock() end
 local function withinWindow(range)
@@ -89,6 +90,18 @@ function ObjectiveService:EndAll(state, opts)
 	end
 end
 
+function ObjectiveService:GetActiveSnapshot()
+	return Util.DeepCopy(self._active)
+end
+
+function ObjectiveService:SendActiveToPlayer(plr)
+	if not plr or not self._remote then return end
+	for id, entry in pairs(self._active) do
+		self._remote:FireClient(plr, "Start", id, entry)
+		self._remote:FireClient(plr, "Progress", id, entry.Data and entry.Data.Progress or 0)
+	end
+end
+
 function ObjectiveService:_tick()
 	if GameStateService:IsGameOver() then
 		return
@@ -117,6 +130,13 @@ function ObjectiveService:Init()
 	if self._started then return end
 	self._started = true
 	self._t0 = now()
+	if self._remote and not self._requestConn then
+		self._requestConn = self._remote.OnServerEvent:Connect(function(plr, action)
+			if action == "RequestActive" then
+				self:SendActiveToPlayer(plr)
+			end
+		end)
+	end
 	_G.Ecoshift = _G.Ecoshift or {}
 	_G.Ecoshift.ObjectiveCallbacks = _G.Ecoshift.ObjectiveCallbacks or { Start = {}, End = {}, Progress = {} }
 	_G.Ecoshift.OnObjectiveStartAdd = function(cb) if type(cb) == "function" then table.insert(_G.Ecoshift.ObjectiveCallbacks.Start, cb) end end

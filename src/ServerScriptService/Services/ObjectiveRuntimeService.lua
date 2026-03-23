@@ -157,6 +157,9 @@ function ObjectiveRuntimeService:Init()
 				_G.Ecoshift.OnObjectiveEndAdd(function(id)
 					ObjectiveRuntimeService:OnEnd(id)
 				end)
+				for id in pairs(ObjectiveService:GetActiveSnapshot()) do
+					ObjectiveRuntimeService:OnStart(id)
+				end
 				return
 			end
 			task.wait(0.1)

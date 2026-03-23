@@ -1505,6 +1505,11 @@ if rInventory then
 		
 		renderAll()
 	end)
+	task.defer(function()
+		pcall(function()
+			rInventory:FireServer("RequestSnapshot")
+		end)
+	end)
 end
 
 dprint("[InventoryUI] Polished inventory ready")
