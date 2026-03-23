@@ -12,6 +12,7 @@ local InventoryService = require(script.Parent.InventoryService)
 local ItemDropService = require(script.Parent.ItemDropService)
 local PromptQueueService = require(script.Parent.PromptQueueService)
 local LootTableService = require(script.Parent.LootTableService)
+local GameStateService = require(script.Parent.GameStateService)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local MonsterDropConfig = require(ReplicatedStorage.Shared.MonsterDropConfig)
 
@@ -330,9 +331,29 @@ local function randomIntRange(min, max)
 	return math.random(lo, hi)
 end
 
+local function resolveMonsterDropConfig(monster)
+	local monsters = MonsterDropConfig and MonsterDropConfig.Monsters
+	if type(monsters) ~= "table" or not monster then
+		return nil
+	end
+	local entityId = monster:GetAttribute("EntityId")
+	if type(entityId) == "string" and monsters[entityId] then
+		return monsters[entityId]
+	end
+	local name = monster.Name
+	if type(name) == "string" then
+		local prefix = string.match(name, "^(.*)_%d+$")
+		if prefix and monsters[prefix] then
+			return monsters[prefix]
+		end
+		return monsters[name]
+	end
+	return nil
+end
+
 local function dropConfiguredMonsterLoot(monster)
 	if not monster or not monster.Parent then return false end
-	local cfg = MonsterDropConfig and MonsterDropConfig.Monsters and MonsterDropConfig.Monsters[monster.Name]
+	local cfg = resolveMonsterDropConfig(monster)
 	if not cfg or type(cfg.Drops) ~= "table" then return false end
 	local root = getPrimary(monster)
 	local pos = root and root.Position or monster:GetPivot().Position
@@ -360,6 +381,52 @@ local function findHealthValue(model)
 		return health
 	end
 	return nil
+end
+
+function LootService:GetChestContents(chest)
+	local data = self._chests[chest]
+	if not data then
+		return {}
+	end
+	data.SlotCount = getChestSlotCount(chest)
+	data.Slots = normalizeChestSlots(data.Slots, data.SlotCount)
+	local slots = {}
+	for i = 1, data.SlotCount do
+		local slot = data.Slots[i]
+		if slot then
+			slots[#slots + 1] = { Id = slot.Id, N = slot.N }
+		end
+	end
+	return slots
+end
+
+function LootService:SpillChestContents(chest, position)
+	local data = self._chests[chest]
+	if not data then
+		return 0
+	end
+	data.SlotCount = getChestSlotCount(chest)
+	data.Slots = normalizeChestSlots(data.Slots, data.SlotCount)
+	local root = getPrimary(chest)
+	local basePos = typeof(position) == "Vector3" and position
+		or (root and root.Position)
+		or chest:GetPivot().Position
+	local droppedStacks = 0
+	for i = 1, data.SlotCount do
+		local slot = data.Slots[i]
+		if slot and slot.Id and slot.N > 0 then
+			local offset = Vector3.new(
+				DROP_RNG:NextNumber() * 4 - 2,
+				2,
+				DROP_RNG:NextNumber() * 4 - 2
+			)
+			ItemDropService:SpawnDrop(slot.Id, slot.N, basePos + offset)
+			droppedStacks += 1
+			data.Slots[i] = nil
+		end
+	end
+	self:_clearChestData(chest)
+	return droppedStacks
 end
 
 function LootService:_bindMonster(monster, opts)
@@ -405,6 +472,9 @@ function LootService:Init()
 	if remote then
 		remote.OnServerEvent:Connect(function(plr, action, payload)
 			print(string.format("[LootService] ChestEvent %s from %s", tostring(action), plr.Name))
+			if GameStateService:IsGameOver() then
+				return
+			end
 			if action == "Open" then
 				local chest = resolveChestFromPayload(payload)
 				if not chest or not chest.Parent then return end

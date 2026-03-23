@@ -15,6 +15,7 @@ local Util = require(ReplicatedStorage.Shared.Util)
 local EventsConfig = require(ReplicatedStorage.Shared.EventsConfig)
 local ThreatService = require(script.Parent.ThreatService)
 local BiomeService = require(script.Parent.BiomeService)
+local GameStateService = require(script.Parent.GameStateService)
 
 local ItemDropService = nil
 local function getItemDropService()
@@ -155,6 +156,9 @@ function EventService:SelectEvent(biomeName, poolType)
 end
 
 function EventService:TriggerEvent(eventId, biomeName, optionalOverrides)
+	if GameStateService:IsGameOver() then
+		return nil
+	end
 	local resolved = self:ResolveEvent(eventId, biomeName, optionalOverrides)
 	if not resolved then return nil end
 
@@ -219,6 +223,11 @@ function EventService:EndEvent(evType)
 	self._active[evType] = nil
 end
 
+function EventService:EndAll()
+	self:EndEvent("Minor")
+	self:EndEvent("Major")
+end
+
 function EventService:GetActive(evType)
 	return self._active[evType]
 end
@@ -244,6 +253,9 @@ end
 -- Tick loop
 ---------------------------------------------------------------------------
 function EventService:_tick()
+	if GameStateService:IsGameOver() then
+		return
+	end
 	local cadence = EventsConfig.Cadence
 	local currentBiome = BiomeService:GetCurrent()
 

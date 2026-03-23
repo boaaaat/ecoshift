@@ -10,14 +10,14 @@ local RewardsObserver = {}
 RewardsObserver._initialized = false
 
 local REWARDS = {
-	RelayRepair    = { {Id="Steel",N=4}, {Id="Gear",N=1} },
-	InfectionPurge = { {Id="Potion_Antidote",N=2}, {Id="Reed",N=5} },
-	CrystalHarvest = { {Id="VoidQuartz",N=3}, {Id="PrismShard",N=1} },
-	LostResearcher = { {Id="PerkToken",N=1} },
-	CommsUplink    = { {Id="FavorToken",N=3} },
-	BeastCull      = { {Id="Hide",N=8}, {Id="Bone",N=6} },
-	SupplyHeist    = { {Id="Circuit",N=1}, {Id="Steel",N=6} },
-	DamSluice      = { {Id="Fish",N=5}, {Id="Salt",N=4} },
+	RelayRepair    = { {Id="SanditeIngot",N=4}, {Id="TemperedGlass",N=1} },
+	InfectionPurge = { {Id="AntitoxinTonic",N=2}, {Id="ReedFiber",N=5} },
+	CrystalHarvest = { {Id="PhaseQuartz",N=3}, {Id="CrystalShard",N=1} },
+	LostResearcher = { {Id="FieldClock",N=1} },
+	CommsUplink    = { {Id="PhaseCircuit",N=2} },
+	BeastCull      = { {Id="WolfPelt",N=8}, {Id="DriedBone",N=6} },
+	SupplyHeist    = { {Id="PhaseCircuit",N=1}, {Id="SanditeIngot",N=6} },
+	DamSluice      = { {Id="StaminaRation",N=5}, {Id="SaltCrystal",N=4} },
 }
 
 local function giveAll(rewardList)

@@ -12,9 +12,11 @@ ResultMessages.Build = {
 	Occupied = "That spot is already occupied.",
 	MissingPlaceableItem = "You do not have that placeable item.",
 	MissingCost = "Not enough materials.",
+	InventoryFull = "Inventory full.",
 	NotStructure = "That target is not a removable structure.",
 	NotOwner = "You can only remove your own structure.",
 	RemoveOutOfRange = "Move closer to remove that structure.",
+	GameOver = "The run has already ended.",
 	Unknown = "Build action failed.",
 }
 
@@ -27,6 +29,7 @@ ResultMessages.Craft = {
 	ConsumeFailed = "Could not consume crafting materials.",
 	InventoryFull = "Inventory full.",
 	CraftInProgress = "You are already crafting an item.",
+	GameOver = "The run has already ended.",
 	Unknown = "Crafting failed.",
 }
 

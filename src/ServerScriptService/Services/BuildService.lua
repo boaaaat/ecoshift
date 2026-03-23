@@ -11,6 +11,8 @@ local Util = require(ReplicatedStorage.Shared.Util)
 local WorkbenchConfig = require(ReplicatedStorage.Shared.WorkbenchConfig)
 local GridService = require(script.Parent.GridService)
 local InventoryService = require(script.Parent.InventoryService)
+local LootService = require(script.Parent.LootService)
+local GameStateService = require(script.Parent.GameStateService)
 
 local BuildService = {}
 BuildService._remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
@@ -29,6 +31,18 @@ end
 
 local function isPlaceableItem(t)
 	return Config.BUILD.PlaceableItems and Config.BUILD.PlaceableItems[t] == true
+end
+
+local function isChestStructure(inst, buildType)
+	if buildType == "Chest" then
+		return true
+	end
+	for tag in pairs(CHEST_TAGS) do
+		if CollectionService:HasTag(inst, tag) then
+			return true
+		end
+	end
+	return false
 end
 
 local function withinRange(plr, worldPos)
@@ -125,6 +139,9 @@ function BuildService:Place(plr, buildType, worldPos)
 	if type(buildType) ~= "string" or typeof(worldPos) ~= "Vector3" then
 		return false, "InvalidPayload"
 	end
+	if GameStateService:IsGameOver() then
+		return false, "GameOver"
+	end
 	if not isAllowedType(buildType) then return false, "InvalidType" end
 	if not withinRange(plr, worldPos) then return false, "OutOfRange" end
 	local dist = math.sqrt(worldPos.X * worldPos.X + worldPos.Z * worldPos.Z)
@@ -201,6 +218,9 @@ end
 
 function BuildService:Remove(plr, target)
 	if typeof(target) ~= "Instance" or not target.Parent then return false, "InvalidPayload" end
+	if GameStateService:IsGameOver() then
+		return false, "GameOver"
+	end
 	local placed = target
 	if placed:IsA("BasePart") then
 		local maybeModel = placed:FindFirstAncestorOfClass("Model")
@@ -217,10 +237,20 @@ function BuildService:Remove(plr, target)
 	local pos = placed:IsA("Model") and placed:GetPivot().Position or placed.Position
 	if not withinRange(plr, pos) then return false, "RemoveOutOfRange" end
 	
-	-- Return placeable item to player's inventory
 	local buildType = placed:GetAttribute("BuildType")
 	if buildType and isPlaceableItem(buildType) then
-		InventoryService:Give(plr, buildType, 1)
+		if not InventoryService:CanFit(plr, buildType, 1) then
+			return false, "InventoryFull"
+		end
+		if isChestStructure(placed, buildType) then
+			local contents = LootService:GetChestContents(placed)
+			if #contents > 0 then
+				LootService:SpillChestContents(placed, pos)
+			end
+		end
+		if InventoryService:Give(plr, buildType, 1, true) ~= 1 then
+			return false, "InventoryFull"
+		end
 		print(string.format("[BuildService] Returned %s to %s's inventory", buildType, plr.Name))
 	end
 	

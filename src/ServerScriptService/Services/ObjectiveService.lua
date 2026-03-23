@@ -5,6 +5,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local BiomeService = require(script.Parent.BiomeService)
 local ThreatService = require(script.Parent.ThreatService)
+local GameStateService = require(script.Parent.GameStateService)
 
 local ObjectiveService = {}
 ObjectiveService._remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
@@ -40,6 +41,9 @@ function ObjectiveService:_eligiblePool(minute)
 end
 
 function ObjectiveService:_start(id)
+	if GameStateService:IsGameOver() then
+		return
+	end
 	local dur = withinWindow(Config.OBJECTIVES.DurationSeconds)
 	self._active[id] = {
 		State = "Active",
@@ -52,17 +56,22 @@ function ObjectiveService:_start(id)
 	hook("Start", id, self._active[id])
 end
 
-function ObjectiveService:_end(id, state)
+function ObjectiveService:_end(id, state, opts)
 	local entry = self._active[id]
 	if not entry then return end
 	entry.State = state
 	if self._remote and self._remote.FireAllClients then self._remote:FireAllClients("End", id, entry) end
-	if state == "Failed" then ThreatService:OnObjectiveFailed() end
+	if state == "Failed" and not (opts and opts.SuppressThreat) then
+		ThreatService:OnObjectiveFailed()
+	end
 	hook("End", id, entry)
 	self._active[id] = nil
 end
 
 function ObjectiveService:Advance(id, progressDelta)
+	if GameStateService:IsGameOver() then
+		return false, "GameOver"
+	end
 	local entry = self._active[id]; if not entry or entry.State ~= "Active" then return end
 	entry.Data.Progress = math.clamp((entry.Data.Progress or 0) + (progressDelta or 0), 0, 1)
 	if self._remote and self._remote.FireAllClients then self._remote:FireAllClients("Progress", id, entry.Data.Progress) end
@@ -70,7 +79,20 @@ function ObjectiveService:Advance(id, progressDelta)
 	if entry.Data.Progress >= 1 then self:_end(id, "Completed") end
 end
 
+function ObjectiveService:EndAll(state, opts)
+	local ids = {}
+	for id in pairs(self._active) do
+		ids[#ids + 1] = id
+	end
+	for _, id in ipairs(ids) do
+		self:_end(id, state or "Failed", opts)
+	end
+end
+
 function ObjectiveService:_tick()
+	if GameStateService:IsGameOver() then
+		return
+	end
 	local minute = math.floor((now() - (self._t0 or now())) / 60)
 	local need = Config.OBJECTIVES.MaxConcurrent - (function() local c=0 for _ in pairs(self._active) do c+=1 end return c end)()
 	if need > 0 then

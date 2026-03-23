@@ -14,13 +14,17 @@ local Remotes = ReplicatedStorage:WaitForChild("Remotes", 10)
 local DeathRemote = Remotes and Remotes:WaitForChild("Death", 5)
 local SpectateRemote = Remotes and Remotes:WaitForChild("Spectate", 5)
 local ReviveRemote = Remotes and Remotes:WaitForChild("Revive", 5)
+local GameStateRemote = Remotes and Remotes:WaitForChild("GameStateUpdate", 5)
 
 -- State
 local isDead = false
+local isGameOver = false
 local isSpectating = false
 local spectateTarget = nil
 local spectateConnection = nil
 local deathUI = nil
+local canReturnToLobby = RunService:IsStudio()
+local lastCanSpectate = false
 
 -- Camera
 local camera = workspace.CurrentCamera
@@ -221,6 +225,83 @@ local function createSpectateUI()
 	return screenGui
 end
 
+local function updateDeathUI(canSpectate)
+	lastCanSpectate = canSpectate == true
+	local ui = playerGui:FindFirstChild("DeathUI")
+	if not ui then return end
+	local container = ui:FindFirstChild("Container")
+	if not container then return end
+	local deathText = container:FindFirstChild("DeathText")
+	local subtitle = container:FindFirstChild("Subtitle")
+	local buttons = container:FindFirstChild("Buttons")
+	local spectateBtn = buttons and buttons:FindFirstChild("SpectateButton")
+	local lobbyBtn = buttons and buttons:FindFirstChild("LobbyButton")
+
+	if deathText then
+		deathText.Text = isGameOver and "GAME OVER" or "YOU DIED"
+	end
+
+	if subtitle then
+		if isGameOver then
+			if canReturnToLobby then
+				subtitle.Text = "The run ended in a full wipe. Return when ready."
+			else
+				subtitle.Text = "The run ended in a full wipe. Return is only available in Studio."
+			end
+		else
+			subtitle.Text = "Wait for a teammate to revive you..."
+		end
+	end
+
+	if spectateBtn then
+		spectateBtn.Visible = (not isGameOver) and canSpectate == true
+	end
+
+	if lobbyBtn then
+		if isGameOver then
+			lobbyBtn.Visible = true
+			lobbyBtn.Active = canReturnToLobby
+			lobbyBtn.Selectable = canReturnToLobby
+			lobbyBtn.AutoButtonColor = canReturnToLobby
+			lobbyBtn.BackgroundColor3 = canReturnToLobby and Color3.fromRGB(80, 80, 85) or Color3.fromRGB(55, 55, 60)
+			lobbyBtn.Text = canReturnToLobby and "RETURN TO LOBBY" or "RETURN UNAVAILABLE"
+		else
+			lobbyBtn.Visible = RunService:IsStudio()
+			lobbyBtn.Active = RunService:IsStudio()
+			lobbyBtn.Selectable = RunService:IsStudio()
+			lobbyBtn.AutoButtonColor = RunService:IsStudio()
+			lobbyBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 85)
+			lobbyBtn.Text = "RETURN TO LOBBY"
+		end
+	end
+end
+
+local function showOverlayUI(canSpectate)
+	if not playerGui:FindFirstChild("DeathUI") then
+		createDeathUI()
+	end
+	if not playerGui:FindFirstChild("SpectateUI") then
+		createSpectateUI()
+	end
+
+	local ui = playerGui:FindFirstChild("DeathUI")
+	if ui then
+		updateDeathUI(canSpectate)
+		ui.Enabled = true
+
+		local overlay = ui:FindFirstChild("Overlay")
+		local container = ui:FindFirstChild("Container")
+		if overlay then
+			overlay.BackgroundTransparency = 1
+			TweenService:Create(overlay, TweenInfo.new(0.5), {BackgroundTransparency = 0.4}):Play()
+		end
+		if container then
+			container.Position = UDim2.new(0.5, 0, 0.6, 0)
+			TweenService:Create(container, TweenInfo.new(0.3, Enum.EasingStyle.Back), {Position = UDim2.new(0.5, 0, 0.5, 0)}):Play()
+		end
+	end
+end
+
 -------------------------------------------------------------------
 -- SPECTATE CAMERA
 -------------------------------------------------------------------
@@ -321,44 +402,23 @@ end
 -------------------------------------------------------------------
 local function showDeathUI(canSpectate)
 	isDead = true
-	
-	-- Create UI if needed
-	if not playerGui:FindFirstChild("DeathUI") then
-		createDeathUI()
+	showOverlayUI(canSpectate)
+end
+
+local function showGameOverUI()
+	if isSpectating then
+		stopSpectateCamera()
 	end
-	if not playerGui:FindFirstChild("SpectateUI") then
-		createSpectateUI()
-	end
-	
-	local ui = playerGui:FindFirstChild("DeathUI")
-	if ui then
-		ui.Enabled = true
-		
-		-- Show/hide spectate button based on available targets
-		local spectateBtn = ui:FindFirstChild("Container") 
-			and ui.Container:FindFirstChild("Buttons")
-			and ui.Container.Buttons:FindFirstChild("SpectateButton")
-		if spectateBtn then
-			spectateBtn.Visible = canSpectate
-		end
-		
-		-- Fade in animation
-		local overlay = ui:FindFirstChild("Overlay")
-		local container = ui:FindFirstChild("Container")
-		if overlay then
-			overlay.BackgroundTransparency = 1
-			TweenService:Create(overlay, TweenInfo.new(0.5), {BackgroundTransparency = 0.4}):Play()
-		end
-		if container then
-			container.Position = UDim2.new(0.5, 0, 0.6, 0)
-			TweenService:Create(container, TweenInfo.new(0.3, Enum.EasingStyle.Back), {Position = UDim2.new(0.5, 0, 0.5, 0)}):Play()
-		end
-	end
+	showOverlayUI(false)
 end
 
 local function hideDeathUI()
 	isDead = false
 	stopSpectateCamera()
+	if isGameOver then
+		showGameOverUI()
+		return
+	end
 	
 	local ui = playerGui:FindFirstChild("DeathUI")
 	if ui then
@@ -368,6 +428,26 @@ local function hideDeathUI()
 	local spectateUI = playerGui:FindFirstChild("SpectateUI")
 	if spectateUI then
 		spectateUI.Enabled = false
+	end
+end
+
+local function onGameStateRemote(state)
+	if type(state) ~= "table" then
+		return
+	end
+	canReturnToLobby = state.CanReturnToLobby == true
+	local wasGameOver = isGameOver
+	isGameOver = state.MatchState == "GameOver"
+	if isGameOver then
+		showGameOverUI()
+	elseif wasGameOver then
+		updateDeathUI(lastCanSpectate)
+		if not isDead then
+			local ui = playerGui:FindFirstChild("DeathUI")
+			if ui then
+				ui.Enabled = false
+			end
+		end
 	end
 end
 
@@ -546,6 +626,10 @@ local function init()
 		DeathRemote.OnClientEvent:Connect(onDeathRemote)
 	else
 		warn("[DeathClient] DeathRemote NOT FOUND!")
+	end
+
+	if GameStateRemote then
+		GameStateRemote.OnClientEvent:Connect(onGameStateRemote)
 	end
 	
 	if SpectateRemote then

@@ -8,6 +8,7 @@ local RunService = game:GetService("RunService")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local SpawnService = require(script.Parent.SpawnService)
+local GameStateService = require(script.Parent.GameStateService)
 local EntityConfig = require(script.Parent.Parent.AI.EntityConfig)
 
 local SpawnerOrchestrator = {}
@@ -31,6 +32,10 @@ function SpawnerOrchestrator:Bind()
 	-- OPTIMIZED: Use task.spawn with sleep instead of Heartbeat
 	task.spawn(function()
 		while true do
+			if GameStateService:IsGameOver() then
+				task.wait(1)
+				continue
+			end
 			local now = os.clock()
 			if now >= self._nextTime then
 				self._nextTime = now + self._period

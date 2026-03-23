@@ -8,6 +8,7 @@ local Util = require(ReplicatedStorage.Shared.Util)
 local ToolConfig = require(ReplicatedStorage.Modules.ToolConfig)
 local ResourceItemMap = require(ReplicatedStorage.Shared.ResourceItemMap)
 local ItemDropService = require(script.Parent.ItemDropService)
+local GameStateService = require(script.Parent.GameStateService)
 
 local InteractService = {}
 InteractService._remotesFolder = nil
@@ -396,6 +397,9 @@ local function destroyNodeWithDrop(node, plr)
 end
 
 local function handleHarvest(plr, payload)
+	if GameStateService:IsGameOver() then
+		return
+	end
 	local node = resolveHarvestNode(payload)
 	if not node or not isAllowedResourceNode(node) then
 		return

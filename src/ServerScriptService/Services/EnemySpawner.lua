@@ -188,15 +188,40 @@ local function copyTags(fromInst, toInst)
 end
 
 local function applyHealthScaling(model, playerCount)
-	local healthValue = model:FindFirstChild("Health")
+	local healthValue = model:FindFirstChild("Health", true)
+	local maxHealthValue = model:FindFirstChild("MaxHealth", true) or model:FindFirstChild("_MaxHealth", true)
 	local humanoid = model:FindFirstChildOfClass("Humanoid")
-	if healthValue and humanoid then
-		local baseHp = humanoid.MaxHealth
+	local baseHp = nil
+	if humanoid then
+		baseHp = humanoid.MaxHealth
+	elseif healthValue and typeof(healthValue.Value) == "number" then
+		baseHp = healthValue.Value
+	else
+		baseHp = tonumber(model:GetAttribute("MaxHealth")) or tonumber(model:GetAttribute("_MaxHealth"))
+	end
+	if baseHp and baseHp > 0 then
 		local scaledHp = baseHp * (1 + (playerCount - 1) * 0.25)
 		local nightMult = (_G.Ecoshift and _G.Ecoshift.GetEnemyMultiplier) and _G.Ecoshift.GetEnemyMultiplier() or 1
 		scaledHp = scaledHp * nightMult
-		healthValue.Value = scaledHp
-		humanoid.Health = scaledHp
+		if humanoid then
+			humanoid.MaxHealth = scaledHp
+			humanoid.Health = scaledHp
+		end
+		if healthValue and typeof(healthValue.Value) == "number" then
+			healthValue.Value = scaledHp
+		end
+		if maxHealthValue and typeof(maxHealthValue.Value) == "number" then
+			maxHealthValue.Value = scaledHp
+		end
+		if model:GetAttribute("Health") ~= nil then
+			model:SetAttribute("Health", scaledHp)
+		end
+		if model:GetAttribute("MaxHealth") ~= nil then
+			model:SetAttribute("MaxHealth", scaledHp)
+		end
+		if model:GetAttribute("_MaxHealth") ~= nil then
+			model:SetAttribute("_MaxHealth", scaledHp)
+		end
 	end
 end
 

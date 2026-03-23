@@ -8,6 +8,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local WorkbenchConfig = require(ReplicatedStorage.Shared.WorkbenchConfig)
 local InventoryService = require(script.Parent.InventoryService)
+local GameStateService = require(script.Parent.GameStateService)
 
 local CraftingService = {}
 CraftingService._initialized = false
@@ -85,6 +86,9 @@ function CraftingService:FindNearbyStation(plr, stationType)
 end
 
 function CraftingService:CanCraft(plr, recipeId, stationType)
+	if GameStateService:IsGameOver() then
+		return false, "GameOver"
+	end
 	local recipe = resolveRecipe(recipeId)
 	if not recipe then
 		return false, "NoRecipe"
@@ -123,6 +127,10 @@ function CraftingService:_completeCraft(plr, context)
 		return
 	end
 	self._activeCrafts[plr] = nil
+	if GameStateService:IsGameOver() then
+		emitResult(self, plr, context.RecipeId, context.StationType, false, "GameOver")
+		return
+	end
 
 	local outputCount = math.max(1, math.floor(tonumber(context.OutputCount) or 1))
 	if (tonumber(context.ExtraYieldChance) or 0) > 0 then

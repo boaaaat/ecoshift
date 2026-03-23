@@ -9,6 +9,7 @@ local Util = require(ReplicatedStorage.Shared.Util)
 local WeaponFactory = require(ReplicatedStorage.Shared.Weapons.WeaponFactory)
 local WeaponUtil = require(ReplicatedStorage.Shared.Weapons.WeaponUtil)
 local StatsService = require(script.Parent.StatsService)
+local GameStateService = require(script.Parent.GameStateService)
 
 -- Lazy-loaded to avoid circular dependency
 local DeathService = nil
@@ -140,6 +141,9 @@ local function getMaxHealthFromTarget(target, fallback)
 end
 
 function CombatService:ApplyDamage(attacker, target, amount, dmgType)
+	if GameStateService:IsGameOver() then
+		return
+	end
 	amount = tonumber(amount) or 0
 	if amount <= 0 or amount > 2000 then return end
 	if not target or not target.Parent then return end
@@ -425,6 +429,9 @@ function CombatService:Bind()
 
 	if self._remoteAction then
 		self._remoteAction.OnServerEvent:Connect(function(plr, action, data)
+			if GameStateService:IsGameOver() then
+				return
+			end
 			local tool = getEquippedTool(plr)
 			if not tool then return end
 			if hasToolType(tool) then return end
