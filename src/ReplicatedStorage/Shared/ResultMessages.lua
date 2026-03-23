@@ -12,6 +12,7 @@ ResultMessages.Build = {
 	Occupied = "That spot is already occupied.",
 	MissingPlaceableItem = "You do not have that placeable item.",
 	MissingCost = "Not enough materials.",
+	PlacementFailed = "Could not place that structure.",
 	InventoryFull = "Inventory full.",
 	NotStructure = "That target is not a removable structure.",
 	NotOwner = "You can only remove your own structure.",

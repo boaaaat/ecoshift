@@ -132,6 +132,7 @@ local currentChestId = nil
 local lastOpenRequestAt = 0
 local dragging = { Active = false, Source = nil, ChestIndex = nil, Inv = nil, Ghost = nil, InvFrames = nil, ChestFrames = nil }
 local transferStatusToken = 0
+local contextChestIndex = nil
 
 local function isShiftDown()
 	return UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
@@ -167,6 +168,46 @@ local function showTransferStatus(text, color, duration)
 		transferStatusLabel.Text = ""
 	end)
 end
+
+local contextMenu = Instance.new("Frame")
+contextMenu.Name = "ContextMenu"
+contextMenu.Size = UDim2.new(0, 128, 0, 92)
+contextMenu.BackgroundColor3 = COLORS.Panel
+contextMenu.BorderSizePixel = 0
+contextMenu.Visible = false
+contextMenu.ZIndex = 40
+contextMenu.Parent = gui
+
+local contextCorner = Instance.new("UICorner")
+contextCorner.CornerRadius = UDim.new(0, 6)
+contextCorner.Parent = contextMenu
+
+local contextStroke = Instance.new("UIStroke")
+contextStroke.Color = COLORS.Border
+contextStroke.Thickness = 1
+contextStroke.Parent = contextMenu
+
+local function makeContextButton(text, order)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1, -8, 0, 24)
+	btn.Position = UDim2.new(0, 4, 0, 4 + (order - 1) * 28)
+	btn.BackgroundColor3 = Color3.fromRGB(38, 38, 48)
+	btn.BorderSizePixel = 0
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 12
+	btn.TextColor3 = COLORS.Text
+	btn.Text = text
+	btn.ZIndex = 41
+	btn.Parent = contextMenu
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 4)
+	corner.Parent = btn
+	return btn
+end
+
+local contextTake = makeContextButton("Take", 1)
+local contextToHotbar = makeContextButton("To Hotbar", 2)
+local contextToStorage = makeContextButton("To Storage", 3)
 
 local function isChestTagged(inst)
 	if typeof(inst) ~= "Instance" then return false end
@@ -244,11 +285,28 @@ local function slotAtPoint(point, frames)
 	return nil
 end
 
+local function isPointInsideGui(guiObject, point)
+	if not guiObject then return false end
+	local inset = GuiService:GetGuiInset()
+	local adjusted = Vector2.new(point.X - inset.X, point.Y - inset.Y)
+	local pos = guiObject.AbsolutePosition
+	local size = guiObject.AbsoluteSize
+	return adjusted.X >= pos.X
+		and adjusted.X <= pos.X + size.X
+		and adjusted.Y >= pos.Y
+		and adjusted.Y <= pos.Y + size.Y
+end
+
 local function clearSlots()
 	for _, slot in ipairs(slots) do
 		slot.Frame:Destroy()
 	end
 	slots = {}
+end
+
+local function hideContextMenu()
+	contextChestIndex = nil
+	contextMenu.Visible = false
 end
 
 local function renderSlot(slot)
@@ -472,6 +530,13 @@ local function chestSlotData(index)
 	return nil
 end
 
+local function showContextMenu(index, position)
+	if not chestSlotData(index) then return end
+	contextChestIndex = index
+	contextMenu.Position = UDim2.fromOffset(position.X + 6, position.Y + 6)
+	contextMenu.Visible = true
+end
+
 local function quickTakeFromChest(index, preferStorage)
 	local data = chestSlotData(index)
 	if not data then return end
@@ -483,6 +548,25 @@ local function quickTakeFromChest(index, preferStorage)
 		showTransferStatus("No direct slot, auto-placing", COLORS.Warning, 1.1)
 	end
 end
+
+contextTake.MouseButton1Click:Connect(function()
+	if not contextChestIndex then return end
+	takeFromChestSlot(contextChestIndex, nil)
+	showTransferStatus("Auto-placing in inventory", COLORS.Accent, 0.9)
+	hideContextMenu()
+end)
+
+contextToHotbar.MouseButton1Click:Connect(function()
+	if not contextChestIndex then return end
+	quickTakeFromChest(contextChestIndex, false)
+	hideContextMenu()
+end)
+
+contextToStorage.MouseButton1Click:Connect(function()
+	if not contextChestIndex then return end
+	quickTakeFromChest(contextChestIndex, true)
+	hideContextMenu()
+end)
 
 local function createSlot(index, x, y)
 	local slot = Instance.new("Frame")
@@ -563,7 +647,13 @@ local function createSlot(index, x, y)
 			quickTakeFromChest(index, true)
 			return
 		end
+		hideContextMenu()
 		beginChestDrag(index)
+	end)
+	button.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton2 then
+			showContextMenu(index, input.Position)
+		end
 	end)
 
 	return {
@@ -605,6 +695,7 @@ local function closeChest(sendCloseEvent)
 	dragging.InvFrames = nil
 	dragging.ChestFrames = nil
 	showTransferStatus(nil)
+	hideContextMenu()
 	panel.Visible = false
 	currentChestId = nil
 	setInventoryChestState(false, nil)
@@ -625,7 +716,7 @@ if chestRemote then
 			currentChestId = payload.ChestId
 			title.Text = payload.Title or "Chest"
 			slotData = normalizeSlots(payload.Slots or {})
-			slotCount = FIXED_SLOTS
+			slotCount = tonumber(payload.SlotCount) or FIXED_SLOTS
 			ensureSlotCount(slotCount)
 			renderAll()
 			panel.Visible = true
@@ -633,7 +724,7 @@ if chestRemote then
 		elseif action == "Update" then
 			if type(payload) ~= "table" or payload.ChestId ~= currentChestId then return end
 			slotData = normalizeSlots(payload.Slots or {})
-			slotCount = FIXED_SLOTS
+			slotCount = tonumber(payload.SlotCount) or FIXED_SLOTS
 			ensureSlotCount(slotCount)
 			renderAll()
 		elseif action == "Close" then
@@ -658,6 +749,9 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 UserInputService.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 and contextMenu.Visible and not isPointInsideGui(contextMenu, input.Position) then
+		hideContextMenu()
+	end
 	if input.KeyCode ~= Enum.KeyCode.G then return end
 	if UserInputService:GetFocusedTextBox() then return end
 	if currentChestId then

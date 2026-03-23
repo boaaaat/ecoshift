@@ -497,6 +497,8 @@ local selectedSlot = nil
 local hoveredSlot = nil
 local inventoryOpen = false
 local contextMenu = nil
+local equippedToolName = nil
+local characterConnections = {}
 local INVENTORY_TOGGLE_ACTION = "EcoshiftToggleInventory"
 local inventoryToggleActionBound = false
 local transferStatusToken = 0
@@ -594,6 +596,17 @@ local function getItemStackSize(itemId)
 	return (item and tonumber(item.StackSize)) or 99
 end
 
+local function isPlaceableItem(itemId)
+	return Config.BUILD.PlaceableItems and Config.BUILD.PlaceableItems[itemId] == true
+end
+
+local function requestBuildPlacement(itemId)
+	if type(itemId) ~= "string" or itemId == "" then return end
+	local nonce = (tonumber(player:GetAttribute("BuildPlaceItemRequestNonce")) or 0) + 1
+	player:SetAttribute("BuildPlaceItemRequestItem", itemId)
+	player:SetAttribute("BuildPlaceItemRequestNonce", nonce)
+end
+
 local function getSlotData(slotType, index)
 	if not inventorySnapshot then return nil end
 	if slotType == "Hotbar" then
@@ -645,8 +658,38 @@ local function hideTooltip()
 	tooltip.Visible = false
 end
 
+local function isPointInsideGui(guiObject, point)
+	if not guiObject then return false end
+	local inset = GuiService:GetGuiInset()
+	local adjustedPoint = Vector2.new(point.X - inset.X, point.Y - inset.Y)
+	local pos = guiObject.AbsolutePosition
+	local size = guiObject.AbsoluteSize
+	return adjustedPoint.X >= pos.X
+		and adjustedPoint.X <= pos.X + size.X
+		and adjustedPoint.Y >= pos.Y
+		and adjustedPoint.Y <= pos.Y + size.Y
+end
+
+local function getEquippedHotbarIndex()
+	if not inventorySnapshot or not equippedToolName then
+		return nil
+	end
+	local hotbar = inventorySnapshot.Hotbar or {}
+	for i = 1, HOTBAR_SLOTS do
+		local slot = hotbar[i]
+		if slot and slot.Id == equippedToolName then
+			return i
+		end
+	end
+	return nil
+end
+
 local function setSlotSelected(slot, selected)
-	if selected then
+	local shouldSelect = selected
+	if slot.Type == "Hotbar" then
+		shouldSelect = getEquippedHotbarIndex() == slot.Index
+	end
+	if shouldSelect then
 		slot.Stroke.Color = COLORS.SlotSelected
 		slot.Stroke.Thickness = 2
 		slot.Stroke.Transparency = 0
@@ -722,6 +765,52 @@ local function renderAll()
 		setSlotSelected(slot, selectedSlot == slot)
 	end
 	updateCapacity()
+end
+
+local function disconnectCharacterConnections()
+	for _, conn in ipairs(characterConnections) do
+		if conn and conn.Connected then
+			conn:Disconnect()
+		end
+	end
+	table.clear(characterConnections)
+end
+
+local function syncEquippedToolName()
+	local nextName = nil
+	local char = player.Character
+	if char then
+		for _, child in ipairs(char:GetChildren()) do
+			if child:IsA("Tool") then
+				nextName = child.Name
+				break
+			end
+		end
+	end
+	if equippedToolName ~= nextName then
+		equippedToolName = nextName
+		renderAll()
+	end
+end
+
+local function bindCharacter(char)
+	disconnectCharacterConnections()
+	if not char then
+		equippedToolName = nil
+		renderAll()
+		return
+	end
+	characterConnections[#characterConnections + 1] = char.ChildAdded:Connect(function(child)
+		if child:IsA("Tool") then
+			task.defer(syncEquippedToolName)
+		end
+	end)
+	characterConnections[#characterConnections + 1] = char.ChildRemoved:Connect(function(child)
+		if child:IsA("Tool") then
+			task.defer(syncEquippedToolName)
+		end
+	end)
+	task.defer(syncEquippedToolName)
 end
 
 local function isShiftDown()
@@ -885,7 +974,7 @@ end
 -- Context menu
 contextMenu = Instance.new("Frame")
 contextMenu.Name = "ContextMenu"
-contextMenu.Size = UDim2.new(0, 120, 0, 92)
+contextMenu.Size = UDim2.new(0, 120, 0, 120)
 contextMenu.BackgroundColor3 = COLORS.Background
 contextMenu.BorderSizePixel = 0
 contextMenu.Visible = false
@@ -922,6 +1011,7 @@ end
 local contextUse = makeMenuButton("Use", 1)
 local contextDrop = makeMenuButton("Drop", 2)
 local contextSplit = makeMenuButton("Split", 3)
+local contextPlace = makeMenuButton("Place", 4)
 local contextSlot = nil
 
 local function showContextMenu(slot, position)
@@ -930,7 +1020,9 @@ local function showContextMenu(slot, position)
 	local data = getSlotData(slot.Type, slot.Index)
 	local item = data and ItemDatabase:Get(data.Id) or nil
 	local canUse = item and (item:HasTag("Food") or item:HasTag("Consumable")) or false
+	local canPlace = data and isPlaceableItem(data.Id) and not isChestTransferLockActive() or false
 	contextUse.Visible = canUse
+	contextPlace.Visible = canPlace
 	contextMenu.Visible = true
 end
 
@@ -971,6 +1063,14 @@ contextUse.MouseButton1Click:Connect(function()
 		SlotType = contextSlot.Type,
 		SlotIndex = contextSlot.Index,
 	})
+	hideContextMenu()
+end)
+
+contextPlace.MouseButton1Click:Connect(function()
+	if not contextSlot then return end
+	local data = getSlotData(contextSlot.Type, contextSlot.Index)
+	if not data or not isPlaceableItem(data.Id) then return end
+	requestBuildPlacement(data.Id)
 	hideContextMenu()
 end)
 
@@ -1251,14 +1351,17 @@ UserInputService.InputEnded:Connect(function(input)
 			end
 		elseif dragging.Pending and dragging.From then
 			local fromSlot = dragging.From
-			selectedSlot = fromSlot
-			renderAll()
 			-- Only send Equip for Hotbar slots (empty or filled)
 			if rInventoryAction and fromSlot.Type == "Hotbar" then
+				selectedSlot = nil
+				renderAll()
 				rInventoryAction:FireServer("Equip", {
 					SlotType = fromSlot.Type,
 					SlotIndex = fromSlot.Index,
 				})
+			else
+				selectedSlot = fromSlot
+				renderAll()
 			end
 			cancelDrag()
 		end
@@ -1275,7 +1378,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
 		-- Hide context menu when clicking elsewhere
-		if contextMenu.Visible then
+		if contextMenu.Visible and not isPointInsideGui(contextMenu, input.Position) then
 			hideContextMenu()
 		end
 	end
@@ -1332,17 +1435,12 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	elseif input.KeyCode == Enum.KeyCode.Four then keyNum = 4
 	end
 	if keyNum and rInventoryAction then
+		selectedSlot = nil
+		renderAll()
 		rInventoryAction:FireServer("Equip", {
 			SlotType = "Hotbar",
 			SlotIndex = keyNum,
 		})
-		for _, slot in ipairs(slots) do
-			if slot.Type == "Hotbar" and slot.Index == keyNum then
-				selectedSlot = slot
-				renderAll()
-				break
-			end
-		end
 	end
 end)
 
@@ -1410,3 +1508,10 @@ if rInventory then
 end
 
 dprint("[InventoryUI] Polished inventory ready")
+
+if player.Character then
+	bindCharacter(player.Character)
+else
+	syncEquippedToolName()
+end
+player.CharacterAdded:Connect(bindCharacter)

@@ -11,6 +11,7 @@ local RoleService = {}
 RoleService._remote = nil
 RoleService._selectRemoteConn = nil
 RoleService._initialized = false
+RoleService._profileLoadedHooked = false
 
 local function applyAttributes(plr, roleId)
 	local def = Config.ROLES.Definitions[roleId]
@@ -29,6 +30,12 @@ function RoleService:Init()
 	local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
 	self._remote = Util.GetRemote(remotesFolder, Config.RemoteNames.RoleUpdate)
 	self._selectRemote = Util.GetRemote(remotesFolder, Config.RemoteNames.RoleSelect)
+	if not self._profileLoadedHooked then
+		self._profileLoadedHooked = true
+		ProfileService:OnLoaded(function(plr)
+			self:ApplyFromProfile(plr)
+		end, true)
+	end
 	if self._selectRemote then
 		self._selectRemoteConn = self._selectRemote.OnServerEvent:Connect(function(plr, roleId)
 			local profile = ProfileService:GetProfile(plr)

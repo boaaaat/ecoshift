@@ -9,6 +9,7 @@ local Util = require(ReplicatedStorage.Shared.Util)
 local WorkbenchConfig = require(ReplicatedStorage.Shared.WorkbenchConfig)
 local InventoryService = require(script.Parent.InventoryService)
 local GameStateService = require(script.Parent.GameStateService)
+local ItemDropService = require(script.Parent.ItemDropService)
 
 local CraftingService = {}
 CraftingService._initialized = false
@@ -45,6 +46,22 @@ local function emitResult(self, plr, recipeId, stationType, success, reason, ext
 		Extra = extra,
 		StationType = stationType or "Hand",
 	})
+end
+
+local function refundIngredients(plr, ingredients)
+	local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+	local basePos = root and root.Position or nil
+	for _, entry in ipairs(ingredients or {}) do
+		local itemId = entry and entry.Id
+		local amount = math.max(0, math.floor(tonumber(entry and entry.N) or 0))
+		if itemId and amount > 0 then
+			local added = InventoryService:Give(plr, itemId, amount)
+			local remaining = amount - added
+			if remaining > 0 and basePos then
+				ItemDropService:SpawnDrop(itemId, remaining, basePos + Vector3.new(0, 2, 0))
+			end
+		end
+	end
 end
 
 -- Find nearest workbench of a specific type within range
@@ -128,6 +145,7 @@ function CraftingService:_completeCraft(plr, context)
 	end
 	self._activeCrafts[plr] = nil
 	if GameStateService:IsGameOver() then
+		refundIngredients(plr, context.Ingredients)
 		emitResult(self, plr, context.RecipeId, context.StationType, false, "GameOver")
 		return
 	end
@@ -141,9 +159,7 @@ function CraftingService:_completeCraft(plr, context)
 
 	local added = InventoryService:Give(plr, context.OutputId, outputCount, true)
 	if added ~= outputCount then
-		for _, entry in ipairs(context.Ingredients or {}) do
-			InventoryService:Give(plr, entry.Id, entry.N)
-		end
+		refundIngredients(plr, context.Ingredients)
 		emitResult(self, plr, context.RecipeId, context.StationType, false, "InventoryFull")
 		return
 	end

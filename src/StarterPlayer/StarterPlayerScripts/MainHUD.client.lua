@@ -75,6 +75,16 @@ end
 table.sort(roleList)
 local roleIndex = 1
 
+local function syncRoleIndex(roleId)
+	if type(roleId) ~= "string" then return end
+	for i, id in ipairs(roleList) do
+		if id == roleId then
+			roleIndex = i
+			return
+		end
+	end
+end
+
 local function formatTime(sec)
 	sec = math.floor(sec)
 	local m = math.floor(sec / 60)
@@ -107,6 +117,7 @@ if rProfile then
 	rProfile.OnClientEvent:Connect(function(data)
 		if type(data) == "table" then
 			profile = data
+			syncRoleIndex(profile.Role)
 			lblRole.Text = string.format("Role: %s  |  Lv %d", profile.Role or "", profile.Level or 1)
 		end
 	end)
@@ -116,6 +127,7 @@ if rRole then
 	rRole.OnClientEvent:Connect(function(roleId)
 		if roleId then
 			profile.Role = roleId
+			syncRoleIndex(roleId)
 			lblRole.Text = string.format("Role: %s  |  Lv %d", profile.Role or "", profile.Level or 1)
 		end
 	end)

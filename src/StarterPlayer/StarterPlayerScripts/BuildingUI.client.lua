@@ -47,7 +47,9 @@ local COLORS = {
 
 local GRID_SIZE = Config.GRID.Size or 6
 local BUILD_MESSAGES = ResultMessages.Build or {}
-local DEFAULT_HINT_TEXT = "Click to place • Right-click to cancel"
+local DEFAULT_HINT_TEXT = "Left-click to place • Right-click to cancel • R to salvage hovered"
+local PLACE_REQUEST_ITEM_ATTR = "BuildPlaceItemRequestItem"
+local PLACE_REQUEST_NONCE_ATTR = "BuildPlaceItemRequestNonce"
 
 -- State
 local isPlacementMode = false
@@ -56,6 +58,7 @@ local inventorySnapshot = nil
 local previewPart = nil
 local canPlace = false
 local hintMessageToken = 0
+local startPlacement
 
 -- Create GUI
 local gui = Instance.new("ScreenGui")
@@ -156,7 +159,7 @@ local panelTitle = Instance.new("TextLabel")
 panelTitle.Name = "Title"
 panelTitle.Size = UDim2.new(1, 0, 0, 30)
 panelTitle.BackgroundTransparency = 1
-panelTitle.Text = "🏗️ Place Item (B to toggle)"
+panelTitle.Text = "🏗️ Place Item (B to toggle • R salvage hovered)"
 panelTitle.TextColor3 = COLORS.Text
 panelTitle.TextSize = 14
 panelTitle.Font = Enum.Font.GothamBold
@@ -202,6 +205,11 @@ local function getPlaceableItems()
 	return items
 end
 
+local function isPlaceableItem(itemId)
+	local placeableTypes = Config.BUILD.PlaceableItems or {}
+	return itemId ~= nil and placeableTypes[itemId] == true
+end
+
 -- Helper: Snap to grid
 local function snapToGrid(position)
 	local gx = math.floor((position.X / GRID_SIZE) + 0.5)
@@ -222,6 +230,31 @@ local function getPlacementPosition()
 	local result = workspace:Raycast(unitRay.Origin, unitRay.Direction * 100, raycastParams)
 	if result then
 		return snapToGrid(result.Position + Vector3.new(0, GRID_SIZE / 2, 0))
+	end
+	return nil
+end
+
+local function getHoveredBuildTarget()
+	local camera = workspace.CurrentCamera
+	if not camera then return nil end
+
+	local unitRay = camera:ViewportPointToRay(mouse.X, mouse.Y)
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+	raycastParams.FilterDescendantsInstances = { player.Character, previewPart }
+
+	local result = workspace:Raycast(unitRay.Origin, unitRay.Direction * 120, raycastParams)
+	local hit = result and result.Instance or mouse.Target
+	if not hit then
+		return nil
+	end
+
+	local structure = hit:FindFirstAncestorOfClass("Model")
+	if structure and structure:GetAttribute("BuildType") then
+		return structure
+	end
+	if hit:IsA("BasePart") and hit:GetAttribute("BuildType") then
+		return hit
 	end
 	return nil
 end
@@ -344,15 +377,7 @@ local function createItemButton(itemId, count)
 	countLabel.Parent = btn
 	
 	btn.MouseButton1Click:Connect(function()
-		selectedItem = itemId
-		local itemData = ItemDatabase:Get(itemId)
-		indicatorLabel.Text = "🔨 Placing: " .. (itemData and itemData.Name or itemId)
-		isPlacementMode = true
-		modeIndicator.Visible = true
-		hintLabel.Visible = true
-		hintLabel.Text = DEFAULT_HINT_TEXT
-		hintLabel.TextColor3 = COLORS.TextMuted
-		refreshItems()
+		startPlacement(itemId)
 	end)
 	
 	btn.MouseEnter:Connect(function()
@@ -410,6 +435,28 @@ local function togglePanel()
 	end
 end
 
+startPlacement = function(itemId)
+	if not isPlaceableItem(itemId) then
+		showHintStatus(BUILD_MESSAGES.InvalidType or BUILD_MESSAGES.Unknown or "That item cannot be placed.", COLORS.Danger, 1.2)
+		return
+	end
+	local placeableItems = getPlaceableItems()
+	if (placeableItems[itemId] or 0) <= 0 then
+		showHintStatus(BUILD_MESSAGES.MissingPlaceableItem or BUILD_MESSAGES.Unknown or "You do not have that placeable item.", COLORS.Danger, 1.2)
+		return
+	end
+	selectedItem = itemId
+	local itemData = ItemDatabase:Get(itemId)
+	indicatorLabel.Text = "🔨 Placing: " .. (itemData and itemData.Name or itemId)
+	isPlacementMode = true
+	modeIndicator.Visible = true
+	hintLabel.Visible = true
+	hintLabel.Text = DEFAULT_HINT_TEXT
+	hintLabel.TextColor3 = COLORS.TextMuted
+	selectionPanel.Visible = false
+	refreshItems()
+end
+
 -- Cancel placement
 local function cancelPlacement()
 	isPlacementMode = false
@@ -420,6 +467,18 @@ local function cancelPlacement()
 		previewPart:Destroy()
 		previewPart = nil
 	end
+end
+
+local function removeHoveredStructure()
+	if not rBuild then return end
+	local target = getHoveredBuildTarget()
+	if not target then
+		showHintStatus("No player-built structure under cursor", COLORS.Warning, 1.0)
+		return
+	end
+	rBuild:FireServer("Remove", {
+		Target = target,
+	})
 end
 
 -- Place item
@@ -448,6 +507,8 @@ UserInputService.InputBegan:Connect(function(input, processed)
 		else
 			togglePanel()
 		end
+	elseif input.KeyCode == Enum.KeyCode.R then
+		removeHoveredStructure()
 	elseif input.KeyCode == Enum.KeyCode.Escape and isPlacementMode then
 		cancelPlacement()
 	elseif input.UserInputType == Enum.UserInputType.MouseButton1 and isPlacementMode then
@@ -503,13 +564,23 @@ if rBuild then
 		local success = payload.Success == true
 		local reason = tostring(payload.Reason or (success and "Success" or "Unknown"))
 		if success then
-			showHintStatus(BUILD_MESSAGES.Success or "Build action complete.", COLORS.Success, 0.8)
+			local successText = payload.Action == "Remove"
+				and "Structure salvaged."
+				or (BUILD_MESSAGES.Success or "Build action complete.")
+			showHintStatus(successText, COLORS.Success, 0.8)
 		else
 			showHintStatus(BUILD_MESSAGES[reason] or BUILD_MESSAGES.Unknown or "Build action failed.", COLORS.Danger, 1.2)
 		end
 		task.delay(0.2, refreshItems)
 	end)
 end
+
+player:GetAttributeChangedSignal(PLACE_REQUEST_NONCE_ATTR):Connect(function()
+	local itemId = player:GetAttribute(PLACE_REQUEST_ITEM_ATTR)
+	if type(itemId) == "string" and itemId ~= "" then
+		startPlacement(itemId)
+	end
+end)
 
 print("[BuildingUI] Ready - Press B to open building menu")
 print("[BuildingUI] Craft workbenches (Press C) then place them!")

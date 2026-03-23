@@ -13,6 +13,7 @@ local GridService = require(script.Parent.GridService)
 local InventoryService = require(script.Parent.InventoryService)
 local LootService = require(script.Parent.LootService)
 local GameStateService = require(script.Parent.GameStateService)
+local ItemDropService = require(script.Parent.ItemDropService)
 
 local BuildService = {}
 BuildService._remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
@@ -67,6 +68,22 @@ local function createFallbackPart(buildType, position)
 	part.Name = "Build_" .. buildType
 	part:SetAttribute("BuildType", buildType)
 	return part
+end
+
+local function refundItems(plr, entries)
+	local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+	local basePos = root and root.Position or nil
+	for _, entry in ipairs(entries or {}) do
+		local itemId = entry and entry.Id
+		local amount = math.max(0, math.floor(tonumber(entry and entry.N) or 0))
+		if itemId and amount > 0 then
+			local added = InventoryService:Give(plr, itemId, amount)
+			local remaining = amount - added
+			if remaining > 0 and basePos then
+				ItemDropService:SpawnDrop(itemId, remaining, basePos + Vector3.new(0, 2, 0))
+			end
+		end
+	end
 end
 
 local function applyDurability(inst)
@@ -152,6 +169,7 @@ function BuildService:Place(plr, buildType, worldPos)
 	if GridService:IsOccupied(gx, gz) then return false, "Occupied" end
 
 	-- Check if this is a placeable item (uses item from inventory)
+	local refundEntries = nil
 	if isPlaceableItem(buildType) then
 		-- Check if player has the item
 		if not InventoryService:HasItem(plr, buildType, 1) then
@@ -163,6 +181,7 @@ function BuildService:Place(plr, buildType, worldPos)
 			print(string.format("[BuildService] Failed to consume %s from %s", buildType, plr.Name))
 			return false, "MissingPlaceableItem"
 		end
+		refundEntries = { { Id = buildType, N = 1 } }
 	else
 		-- Traditional building with resource costs
 		local cost = Config.BUILD.Costs[buildType] or {}
@@ -173,44 +192,63 @@ function BuildService:Place(plr, buildType, worldPos)
 			adjusted[#adjusted + 1] = { Id = entry.Id, N = n }
 		end
 		if not InventoryService:PayCost(plr, adjusted) then return false, "MissingCost" end
+		refundEntries = adjusted
 	end
 
 	local pos = GridService:GridToWorld(gx, gz, worldPos.Y)
-	local prefab = getPrefab(buildType)
 	local inst
-	if prefab then
-		inst = prefab:Clone()
-		if inst:IsA("Model") then
-			inst:PivotTo(CFrame.new(pos))
-		elseif inst:IsA("BasePart") then
-			inst.CFrame = CFrame.new(pos)
+	local placeOk, placeErr = pcall(function()
+		local prefab = getPrefab(buildType)
+		if prefab then
+			inst = prefab:Clone()
+			if inst:IsA("Model") then
+				inst:PivotTo(CFrame.new(pos))
+			elseif inst:IsA("BasePart") then
+				inst.CFrame = CFrame.new(pos)
+			end
+		else
+			inst = createFallbackPart(buildType, pos)
 		end
-	else
-		inst = createFallbackPart(buildType, pos)
+
+		inst.Parent = workspace
+		inst:SetAttribute("OwnerUserId", plr.UserId)
+		inst:SetAttribute("GridX", gx)
+		inst:SetAttribute("GridZ", gz)
+		inst:SetAttribute("BuildType", buildType)
+		inst:SetAttribute("MapMarkerType", "PlayerBuiltStructure")
+		inst:SetAttribute("MapMarkerLabel", tostring(buildType))
+		applyDurability(inst)
+		pcall(function() CollectionService:AddTag(inst, "Structure") end)
+
+		-- Setup workbench interaction if this is a crafting station
+		local stationDef = WorkbenchConfig.STATIONS[buildType]
+		if stationDef and stationDef.BuildType then
+			setupWorkbenchInteraction(inst, buildType)
+		end
+
+		-- Placed chests must be tagged so LootService binds prompts and UI events.
+		if buildType == "Chest" then
+			setupChestInteraction(inst)
+		end
+
+		if not GridService:Reserve(gx, gz, plr.UserId, inst) then
+			error("Occupied")
+		end
+	end)
+	if not placeOk then
+		if inst then
+			pcall(function()
+				GridService:ReleaseByInstance(inst)
+				inst:Destroy()
+			end)
+		end
+		refundItems(plr, refundEntries)
+		if string.find(tostring(placeErr), "Occupied", 1, true) then
+			return false, "Occupied"
+		end
+		warn("[BuildService] Placement failed:", placeErr)
+		return false, "PlacementFailed"
 	end
-
-	inst.Parent = workspace
-	inst:SetAttribute("OwnerUserId", plr.UserId)
-	inst:SetAttribute("GridX", gx)
-	inst:SetAttribute("GridZ", gz)
-	inst:SetAttribute("BuildType", buildType)
-	inst:SetAttribute("MapMarkerType", "PlayerBuiltStructure")
-	inst:SetAttribute("MapMarkerLabel", tostring(buildType))
-	applyDurability(inst)
-	pcall(function() CollectionService:AddTag(inst, "Structure") end)
-
-	-- Setup workbench interaction if this is a crafting station
-	local stationDef = WorkbenchConfig.STATIONS[buildType]
-	if stationDef and stationDef.BuildType then
-		setupWorkbenchInteraction(inst, buildType)
-	end
-
-	-- Placed chests must be tagged so LootService binds prompts and UI events.
-	if buildType == "Chest" then
-		setupChestInteraction(inst)
-	end
-
-	GridService:Reserve(gx, gz, plr.UserId, inst)
 	
 	print(string.format("[BuildService] %s placed %s at (%d, %d)", plr.Name, buildType, gx, gz))
 	return true, "Success"

@@ -11,6 +11,7 @@ local ProfileService = {}
 ProfileService._profiles = {}
 ProfileService._store = DataStoreService:GetDataStore(Config.DATASTORE.ProfileStore)
 ProfileService._remote = nil
+ProfileService._loadCallbacks = {}
 
 local function defaultProfile()
 	local unlocked = {}
@@ -101,6 +102,22 @@ function ProfileService:GetProfile(plr)
 	return self._profiles[plr]
 end
 
+function ProfileService:OnLoaded(callback, replayExisting)
+	if type(callback) ~= "function" then
+		return
+	end
+	table.insert(self._loadCallbacks, callback)
+	if replayExisting then
+		for plr, profile in pairs(self._profiles) do
+			if profile then
+				task.defer(function()
+					pcall(callback, plr, profile)
+				end)
+			end
+		end
+	end
+end
+
 function ProfileService:Send(plr)
 	self:Init()
 	local profile = self._profiles[plr]
@@ -121,6 +138,9 @@ function ProfileService:Load(plr)
 	local profile = sanitize(data)
 	self._profiles[plr] = profile
 	self:Send(plr)
+	for _, callback in ipairs(self._loadCallbacks) do
+		pcall(callback, plr, profile)
+	end
 	return profile
 end
 

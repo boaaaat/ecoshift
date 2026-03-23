@@ -1,6 +1,7 @@
 -- LootService.lua
 -- Handles chest prompts, chest UI sync, and monster loot drops.
 local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
@@ -161,6 +162,46 @@ local function canPlayerOpenChest(plr, chest)
 	return (root.Position - primary.Position).Magnitude <= 12
 end
 
+function LootService:_ensureRemote()
+	if self._remote then
+		return self._remote
+	end
+	local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
+	self._remote = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.ChestEvent) or nil
+	return self._remote
+end
+
+function LootService:_getChestViewers(chestId)
+	local viewers = {}
+	for plr, openChestId in pairs(self._openByPlayer) do
+		if openChestId == chestId then
+			viewers[#viewers + 1] = plr
+		end
+	end
+	return viewers
+end
+
+function LootService:_closeChestForPlayer(plr, chestId)
+	if not plr then return end
+	if chestId and self._openByPlayer[plr] ~= chestId then
+		return
+	end
+	self._openByPlayer[plr] = nil
+	local remote = self:_ensureRemote()
+	if remote then
+		remote:FireClient(plr, "Close", {
+			ChestId = chestId,
+		})
+	end
+end
+
+function LootService:_closeChestViewers(chestId)
+	if not chestId then return end
+	for _, plr in ipairs(self:_getChestViewers(chestId)) do
+		self:_closeChestForPlayer(plr, chestId)
+	end
+end
+
 function LootService:_ensureChestData(chest)
 	local data = self._chests[chest]
 	if data then return data end
@@ -192,12 +233,8 @@ end
 function LootService:_clearChestData(chest)
 	local data = self._chests[chest]
 	if data and data.Id then
+		self:_closeChestViewers(data.Id)
 		self._chestById[data.Id] = nil
-		for plr, openChestId in pairs(self._openByPlayer) do
-			if openChestId == data.Id then
-				self._openByPlayer[plr] = nil
-			end
-		end
 	end
 	self._chests[chest] = nil
 	local conn = self._chestCleanupConns[chest]
@@ -218,12 +255,7 @@ function LootService:_sendChest(plr, chest)
 	local data = self:_ensureChestData(chest)
 	data.SlotCount = getChestSlotCount(chest)
 	data.Slots = normalizeChestSlots(data.Slots, data.SlotCount)
-	local remote = self._remote
-	if not remote then
-		local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
-		remote = Util.GetRemote(remotesFolder, Config.RemoteNames.ChestEvent)
-		self._remote = remote
-	end
+	local remote = self:_ensureRemote()
 	if not remote then return end
 	self._openByPlayer[plr] = data.Id
 	print(string.format("[LootService] Open chest %s for %s (items %d)", chest.Name, plr.Name, #data.Slots))
@@ -237,21 +269,23 @@ function LootService:_sendChest(plr, chest)
 	})
 end
 
-function LootService:_updateChest(plr, data)
-	data.SlotCount = DEFAULT_CHEST_SLOT_COUNT
+function LootService:_updateChest(data)
+	local chest = self._chestById[data.Id]
+	data.SlotCount = chest and getChestSlotCount(chest) or DEFAULT_CHEST_SLOT_COUNT
 	data.Slots = normalizeChestSlots(data.Slots, data.SlotCount)
-	local remote = self._remote
-	if not remote then
-		local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
-		remote = Util.GetRemote(remotesFolder, Config.RemoteNames.ChestEvent)
-		self._remote = remote
-	end
+	local remote = self:_ensureRemote()
 	if not remote then return end
-	remote:FireClient(plr, "Update", {
-		ChestId = data.Id,
-		SlotCount = data.SlotCount,
-		Slots = encodeChestSlotsForClient(data.Slots, data.SlotCount),
-	})
+	for _, plr in ipairs(self:_getChestViewers(data.Id)) do
+		if chest and chest.Parent and canPlayerOpenChest(plr, chest) then
+			remote:FireClient(plr, "Update", {
+				ChestId = data.Id,
+				SlotCount = data.SlotCount,
+				Slots = encodeChestSlotsForClient(data.Slots, data.SlotCount),
+			})
+		else
+			self:_closeChestForPlayer(plr, data.Id)
+		end
+	end
 end
 
 local function attachChestPrompt(chest)
@@ -496,6 +530,10 @@ function LootService:Init()
 				local chest = self._chestById[chestId]
 				if not chest or not chest.Parent then return end
 				if self._openByPlayer[plr] ~= chestId then return end
+				if not canPlayerOpenChest(plr, chest) then
+					self:_closeChestForPlayer(plr, chestId)
+					return
+				end
 				local data = self._chests[chest]
 				if not data then return end
 				if fromIndex < 1 or fromIndex > data.SlotCount or toIndex < 1 or toIndex > data.SlotCount then return end
@@ -518,7 +556,7 @@ function LootService:Init()
 					data.Slots[fromIndex], data.Slots[toIndex] = data.Slots[toIndex], data.Slots[fromIndex]
 				end
 
-				self:_updateChest(plr, data)
+				self:_updateChest(data)
 				return
 			end
 			if action == "Put" and type(payload) == "table" then
@@ -531,6 +569,10 @@ function LootService:Init()
 				local chest = self._chestById[chestId]
 				if not chest or not chest.Parent then return end
 				if self._openByPlayer[plr] ~= chestId then return end
+				if not canPlayerOpenChest(plr, chest) then
+					self:_closeChestForPlayer(plr, chestId)
+					return
+				end
 				local data = self._chests[chest]
 				if not data then return end
 				if toIndex < 1 or toIndex > data.SlotCount then return end
@@ -566,7 +608,7 @@ function LootService:Init()
 				else
 					data.Slots[toIndex] = { Id = itemId, N = amount }
 				end
-				self:_updateChest(plr, data)
+				self:_updateChest(data)
 				return
 			end
 			if action == "Take" and type(payload) == "table" then
@@ -580,6 +622,10 @@ function LootService:Init()
 				local chest = self._chestById[chestId]
 				if not chest or not chest.Parent then return end
 				if self._openByPlayer[plr] ~= chestId then return end
+				if not canPlayerOpenChest(plr, chest) then
+					self:_closeChestForPlayer(plr, chestId)
+					return
+				end
 				local data = self._chests[chest]
 				if not data then return end
 				if fromIndex < 1 or fromIndex > data.SlotCount then return end
@@ -602,7 +648,7 @@ function LootService:Init()
 					data.Slots[fromIndex] = nil
 				end
 				print(string.format("[LootService] Took %s x%d (remaining %d)", slot.Id, added, #data.Slots))
-				self:_updateChest(plr, data)
+				self:_updateChest(data)
 				return
 			end
 		end)
@@ -632,6 +678,10 @@ function LootService:Init()
 	end
 	CollectionService:GetInstanceAddedSignal("Monster"):Connect(function(inst)
 		self:_bindMonster(inst, { Tier = 1, RequireExplicit = true })
+	end)
+
+	Players.PlayerRemoving:Connect(function(plr)
+		self._openByPlayer[plr] = nil
 	end)
 end
 

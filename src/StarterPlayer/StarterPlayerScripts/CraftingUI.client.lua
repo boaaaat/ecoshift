@@ -43,7 +43,6 @@ local COLORS = {
 
 local MARGIN = 16
 local RECIPE_HEIGHT = 70
-local CRAFT_REQUEST_TIMEOUT = 2
 local CRAFT_MESSAGES = ResultMessages.Craft or {}
 
 -- State
@@ -248,6 +247,12 @@ local function beginCraftPending()
 	craftBtn.BackgroundColor3 = COLORS.Accent
 	craftBtnStroke.Color = COLORS.Accent
 	return token
+end
+
+local function getCraftRequestTimeout(recipeId)
+	local recipe = recipeId and WorkbenchConfig.RECIPES[recipeId] or nil
+	local baseTime = recipe and tonumber(recipe.BaseCraftTime) or 0
+	return math.max(8, baseTime + 5)
 end
 
 local function getItemCount(itemId)
@@ -581,7 +586,7 @@ craftBtn.MouseButton1Click:Connect(function()
 	-- Send craft request (Hand crafting)
 	rCraft:FireServer(selectedRecipe, "Hand")
 	
-	task.delay(CRAFT_REQUEST_TIMEOUT, function()
+	task.delay(getCraftRequestTimeout(selectedRecipe), function()
 		if not isCraftPending then return end
 		if requestToken ~= pendingRequestToken then return end
 		isCraftPending = false
