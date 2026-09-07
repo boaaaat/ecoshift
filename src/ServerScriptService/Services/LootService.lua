@@ -46,6 +46,10 @@ local DROP_RNG = Random.new()
 local DEFAULT_CHEST_SLOT_COUNT = 10
 local MISSING_TABLE_WARN_WINDOW = 30
 
+local function positiveInteger(value)
+	return type(value) == "number" and value > 0 and value < math.huge and value % 1 == 0
+end
+
 local function getTierFromTags(instance, map)
 	for tag, tier in pairs(map) do
 		if CollectionService:HasTag(instance, tag) then
@@ -161,10 +165,13 @@ local function resolveChestFromPayload(payload)
 end
 
 local function canPlayerOpenChest(plr, chest)
-	if not plr or not chest or not chest.Parent then return false end
-	local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+	if not plr or plr.Parent ~= Players or not chest or not chest:IsDescendantOf(Workspace)
+		or GameStateService:IsGameOver() or plr:GetAttribute("IsDead") then return false end
+	local char = plr.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local root = char and char:FindFirstChild("HumanoidRootPart")
 	local primary = getPrimary(chest)
-	if not root or not primary then return false end
+	if not hum or hum.Health <= 0 or not root or not primary then return false end
 	return (root.Position - primary.Position).Magnitude <= 12
 end
 
@@ -240,7 +247,10 @@ function LootService:_ensureChestData(chest)
 	local tier = getTierFromTags(chest, CHEST_TAGS)
 	local tableName = getLootTableName(chest)
 	local items = {}
-	if tableName and LootTableService:Get(tableName) then
+	if chest:GetAttribute("BuildType") == "Chest" then
+		-- Crafted storage starts empty, even when a default world loot table exists.
+		tableName = nil
+	elseif tableName and LootTableService:Get(tableName) then
 		items = LootTableService:Roll(tableName, tier)
 	else
 		self:_warnMissingChestTable(chest, tableName)
@@ -288,6 +298,7 @@ function LootService:_clearChestData(chest)
 end
 
 function LootService:_sendChest(plr, chest)
+	if not canPlayerOpenChest(plr, chest) then return end
 	local data = self:_ensureChestData(chest)
 	data.SlotCount = getChestSlotCount(chest)
 	data.Slots = normalizeChestSlots(data.Slots, data.SlotCount)
@@ -536,6 +547,8 @@ function LootService:_bindMonster(monster, opts)
 end
 
 function LootService:Init()
+	if self._initialized then return end
+	self._initialized = true
 	local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
 	local remote = Util.GetRemote(remotesFolder, Config.RemoteNames.ChestEvent)
 	self._remote = remote
@@ -562,7 +575,7 @@ function LootService:Init()
 				local chestId = payload.ChestId
 				local fromIndex = tonumber(payload.FromIndex)
 				local toIndex = tonumber(payload.ToIndex)
-				if not chestId or not fromIndex or not toIndex then return end
+				if type(chestId) ~= "string" or not positiveInteger(fromIndex) or not positiveInteger(toIndex) then return end
 				local chest = self._chestById[chestId]
 				if not chest or not chest.Parent then return end
 				if self._openByPlayer[plr] ~= chestId then return end
@@ -600,7 +613,7 @@ function LootService:Init()
 				local toIndex = tonumber(payload.ToIndex)
 				local fromType = payload.FromType
 				local fromIndex = tonumber(payload.FromIndex)
-				if not chestId or not toIndex or not fromType or not fromIndex then return end
+				if type(chestId) ~= "string" or not positiveInteger(toIndex) or not positiveInteger(fromIndex) then return end
 
 				local chest = self._chestById[chestId]
 				if not chest or not chest.Parent then return end
@@ -619,8 +632,7 @@ function LootService:Init()
 				local itemId = sourceSlot.Id
 
 				local amount = tonumber(payload.Amount) or sourceSlot.N
-				amount = math.floor(amount)
-				if amount <= 0 then return end
+				if not positiveInteger(amount) then return end
 				if amount > sourceSlot.N then amount = sourceSlot.N end
 
 				local targetSlot = data.Slots[toIndex]
@@ -653,8 +665,8 @@ function LootService:Init()
 				local toType = payload.ToType
 				local toIndex = tonumber(payload.ToIndex)
 				local amount = tonumber(payload.Amount) or 0
-				if not chestId or not fromIndex then return end
-				if amount <= 0 then return end
+				if type(chestId) ~= "string" or not positiveInteger(fromIndex) or not positiveInteger(amount) then return end
+				if (toType ~= nil or toIndex ~= nil) and (type(toType) ~= "string" or not positiveInteger(toIndex)) then return end
 				local chest = self._chestById[chestId]
 				if not chest or not chest.Parent then return end
 				if self._openByPlayer[plr] ~= chestId then return end
@@ -717,6 +729,18 @@ function LootService:Init()
 
 	Players.PlayerRemoving:Connect(function(plr)
 		self._openByPlayer[plr] = nil
+	end)
+	local function bindPlayer(plr)
+		plr:GetAttributeChangedSignal("IsDead"):Connect(function()
+			if plr:GetAttribute("IsDead") then self:_closeChestForPlayer(plr) end
+		end)
+	end
+	Players.PlayerAdded:Connect(bindPlayer)
+	for _, plr in ipairs(Players:GetPlayers()) do bindPlayer(plr) end
+	GameStateService:OnStateChanged(function(state)
+		if state.MatchState == "GameOver" then
+			for _, plr in ipairs(Players:GetPlayers()) do self:_closeChestForPlayer(plr) end
+		end
 	end)
 end
 

@@ -32,6 +32,12 @@ The user requested gameplay testing. These were live Studio interactions and a t
 
 All temporary diagnostic Scripts, LocalScripts, and grant/remoting helpers were removed before committing. No computer-use tools were needed; changes synced through Rojo.
 
+## Follow-up storage and catalog review
+
+The follow-up storage check opened a crafted chest with the normal E prompt, deposited six wood, shifted biomes, and recovered all six. Fractional slot moves and NaN quantities were rejected without changing either inventory. Death closed the active chest session. Heat and Cold Tonics were consumed through the normal inventory remote and applied only their corresponding 35% resistance channel. These fixes also keep crafted storage empty when a default world loot table exists. The temporary setup/readback helper was removed afterward.
+
+A static catalog audit found valid canonical IDs and sources for all 84 recipes: 45 gatherable material IDs, 24 monster-drop IDs, and all 12 station types are reachable with six biomes enabled. This establishes dependency reachability, not balanced quantities or run duration.
+
 ## Remaining design and validation work
 
 - The six proposed biome display names and 45–60 versus 20–30 minute progression pace await the player's choice. FrozenTundra, Volcanic, and CrystalWastes have prototype generation/resource data but remain disabled in random selection until their introduction gates and weights are agreed.

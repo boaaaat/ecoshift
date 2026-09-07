@@ -67,11 +67,11 @@ local function applyConsumableEffects(plr, itemId)
 		return
 	end
 	if itemId == "HeatTonic" then
-		applyTimedStatModifier(plr, "TemperatureResistance", 2.5, 120, "HeatTonic")
+		applyTimedCharacterResist(char, "Res_Heat", 0.35, 120)
 		return
 	end
 	if itemId == "ColdTonic" then
-		applyTimedStatModifier(plr, "TemperatureResistance", 2.5, 120, "ColdTonic")
+		applyTimedCharacterResist(char, "Res_Cold", 0.35, 120)
 		return
 	end
 	if itemId == "ToxinFilter" then
