@@ -1,6 +1,6 @@
 # Ecoshift — survival and progression plan
 
-This is the proposed content direction. Display names, overall run pacing, exact quantities, encounter tuning, and device limits below are provisional until the player confirms them. Existing internal IDs remain stable so inventory, saves, templates, and scripts need no content migration. A planned feature here is not a claim that it is implemented.
+The approved scope is 16 biomes: eight playable now and eight on the future roadmap. Powerful world-control equipment targets a 60–90 minute cooperative run, with endless survival afterward. Existing internal IDs remain stable. Recipe quantities, encounter tuning, and device limits are adjustable balance values; future content is explicitly separated below.
 
 ## Confirmed rules
 
@@ -12,6 +12,8 @@ This is the proposed content direction. Display names, overall run pacing, exact
 - Fallen players leave a ragdoll, spectate, and can return through a teammate's crafted revive kit. A full-team wipe ends the run.
 - Temporary Roblox Creator Store models support playtesting; original Blender models come later.
 - The UI direction is a clean animated field kit, with a distinct Ecoshift identity.
+- Approved playable roster: Verdant Reach, Sunscar Dunes, Mirefen, Frostfall, Cinder Rift, Prism Barrens, Aurora Vale, and Starfall Crater.
+- Eight additional biomes remain future content, outside generation, forecasts, and world-control voting.
 
 ## Five-minute team rhythm
 
@@ -23,7 +25,7 @@ The clock advances without forcing an expedition to every resource node. Common 
 
 ## Biome roster
 
-The six display names below are proposals. The internal IDs in parentheses remain unchanged.
+These eight biomes have generation, resource, monster, weather, and crafting data. Internal IDs appear in parentheses.
 
 | Biome | Survival identity and weather | Materials that stay useful | Encounter roles |
 | --- | --- | --- | --- |
@@ -33,8 +35,27 @@ The six display names below are proposals. The internal IDs in parentheses remai
 | Frostfall (`FrozenTundra`) | Cold and exposure, snowfall and whiteouts | Frostwood, FrozenReed, SnowLichen, ChillBloom; IceCrystal optics and PermafrostOre cooling alloys; fur and essence | FrostWolf coordinated flanker; IceWraith fast visible attack windup followed by recovery |
 | Cinder Rift (`Volcanic`) | Severe heat and ash, ashfall and emberstorms | BasaltChunk, SulfurOre, ObsidianShard, EmberBloom, AshFiber, LavaSalt, ScoriaRock; MagmaCore and GolemFragment for powerful machinery | MagmaHound chase pressure; LavaGolem slow telegraphed siege elite, not merely a bigger wolf |
 | Prism Barrens (`CrystalWastes`) | Unstable visibility and energy, crystal haze and static storms | CrystalShard, VoidResidue, AlloyDust, PhaseQuartz, PrismSand, EchoBloom, LatticeFiber; SentinelCore/NullFragment for precise control | CrystalStalker repositioning skirmisher; VoidSentinel deliberate arena-control elite |
+| Aurora Vale (`AuroraVale`) | Warm dawn surges alternate with polar cold every minute; protection against both matters | AuroraFiber and DawnBloom form treated lining; PolarQuartz becomes AuroraLens; AuroraAntler supports adaptive clothing | AuroraStag is a fast, lighter-hitting pursuer with a longer recovery window |
+| Starfall Crater (`StarfallCrater`) | Heat, meteor showers, and cosmic dust haze | MeteorIron and CosmicDust combine with cooling/heating alloys; ImpactGlass reinforces armor; MeteorCore powers exact world selection | CometCrawler is a slow, heavy-hitting pursuer with a long attack recovery |
 
 Enemy roles are the target behavior, not a description of current AI: the existing catalog mostly shares Wolf AI. Each needs a recognizable silhouette, windup, attack window, and recovery before extra attack patterns are added. Preserve the existing species IDs while models and behaviors improve.
+
+## Eight future biomes
+
+These complete the 16-biome plan. They are design proposals only: there are no active generation entries or craftable dependencies on their materials. The shared `future_biomes` catalog explicitly marks each as unimplemented.
+
+| Future biome | World condition | Planned materials and equipment purpose | Planned monster roles |
+| --- | --- | --- | --- |
+| Saltglass Coast | Tidal flooding, sea mist, wind | BrinePearl, ShellPlate, KelpCord; waterproof storage and buoyant structures using Mirefen sealants | TideCrab guards resource beds; FoamRay patrols flooded routes |
+| Stormspire Highlands | Gusts and charged storms | CopperSpine, Stormglass, CloudFleece; grounding rods and weather-control fuel combined with Prism optics | GaleRaptor pressures exposed travel; ThunderRam telegraphs straight charges |
+| Mycelium Hollow | Spore blooms and nutrient cycles | MyceliumCord, SporeHeart, RemedyCap; longer-lasting medicines using Verdant herbs and Aurora lining | SporeMite swarms; Bloomkeeper defends medicine-rich groves |
+| Ironroot Badlands | Dust storms and abrasive heat | FerricRoot, RedClay, RustCrystal; reinforced camps and machinery using Starfall alloys | Rustback is armored at the front; Drillmaw attacks stationary camps after warning |
+| Sunken Archive | Flooded ruins, pressure, low visibility | ArchiveGlass, PressurePearl, SalvageFilament; diving protection and remote survey devices | LanternEel lures explorers; ArchiveGuardian protects salvage chambers |
+| Canopy Sea | Vertical travel, rainfall, fragile bridges | CanopySilk, FloatSeed, Heartwood; gliders and rope transport using Frostfall insulation | Branchstalker ambushes isolated players; SailMoth moves between canopy routes |
+| Umbral Depths | Darkness and sound-sensitive hazards | LumenOre, EchoChitin, DeepMoss; camp lighting and acoustic scouts using Prism circuitry | EchoHunter follows noise; LanternGrazer creates temporary safe light pockets |
+| Shattermoon Expanse | Intermittent low gravity and vacuum gusts | LunarBasalt, GravityShard, MoonThread; expensive world anchors combining Aurora optics and meteor cores | OrbitWarden controls movement lanes; RiftSkipper telegraphs displacement attacks |
+
+Future biomes should extend survival options after the eight-biome equipment path is stable. They must not become surprise prerequisites for today's recipes. Adding their mechanics will require their own implementation and playtesting pass.
 
 ## Progression and recipes
 
@@ -46,7 +67,9 @@ Proposed stage gates depend on materials and achievements rather than character 
 | Adapt | Add FieldClock, DesertCloak, SwampWaders, medicine, improved food, and Sandite tools; construct AlchemyTable | Two biome inputs for protective kits and countdown access; Forest supplies still consumed |
 | Coordinate | AdvancedWorkbench; forecast equipment; choose whether to delay or force the next shift | Forest + Desert + Swamp processing; monster-derived catalysts give hunting a purpose |
 | Endure | FrostParka, VolcanicPlate, Cryo tools; Refinery; stronger specialized weapons | Three to four biomes; cooling and heat materials complement one another |
-| Direct | Exact-biome selector and adaptive equipment; keep a shared fuel reserve | Five to six biomes plus elite cores; world control remains costly |
+| Direct | Exact-biome selector and adaptive equipment; keep a shared fuel reserve | All eight biomes plus elite cores; world control remains costly |
+
+The implemented final tier now extends to all eight biomes: AuroraLens and MeteorAlloy/MeteorCore join BiomeSelector; AdaptiveSurvivalSuit combines the six-biome suit path with AuroraMantle and MeteorAlloy. MeteorPike and StarforgedPlate provide late combat options. Every new raw resource has a current recipe use.
 
 Keep existing stations for compatibility initially, but simplify onboarding: show the next useful station and hide unavailable recipe detail behind clear requirements. DryingRack, Kiln, and Refinery can improve throughput; they should not create arbitrary extra steps for basic medicine. Decide later whether all twelve station types deserve distinct models and UI space.
 
@@ -67,7 +90,7 @@ Protection has separate heat, cold, toxin, and wetness channels. Armor still red
 - CrystalWeave: crystal glass + quantum thread + marsh fiber; balanced protection and future energy-hazard specialization.
 - AdaptiveSurvivalSuit: components from every biome, including Swamp filtration; broad protection but less specialized resistance than the strongest dedicated suit.
 
-These ingredient descriptions are the target revision, not a claim all recipe changes are already applied. Weather begins with readable ambient variants and incremental exposure; lightning attacks, invisible damage zones, and complex thermal simulations can wait. Wetness should matter most when it amplifies cold. Fog must reduce visibility without obscuring essential prompts or the HUD.
+The cross-biome armor revisions above are implemented. AuroraMantle adds balanced heat/cold protection; StarforgedPlate combines meteor alloy, aurora lining, impact glass, and SwampWaders. Higher-tier tools and weapons similarly keep earlier biomes useful. Weather uses readable ambient variants and exposure; meteor-shower visuals currently accompany heat/dust exposure rather than independent impact attacks. Wetness amplifies cold. Fog must keep essential prompts and the HUD readable.
 
 ## Monster levels and escalating difficulty
 
@@ -75,19 +98,21 @@ Assign an immutable level when each monster spawns. Species determines behavior 
 
 Provisional formula: health multiplier `1 + 0.16 × (level - 1)` and damage multiplier `1 + 0.10 × (level - 1)`. Keep speed and attack cadence primarily species-driven so leveling does not remove dodge windows. Show level beside the name and give elite status a separate marker. Party size primarily affects count and encounter composition, not hidden large damage jumps.
 
-The exact minutes-per-level, first-appearance times of later biomes, and weight ramp depend on the pending pace decision. Gradually increase later biome weights; retain a positive floor for early biomes so ingredients remain obtainable. A forecast or selector must use the same eligible pool as random shifts. Selection should not bypass a biome's introduction gate.
+Monsters gain one level per 450 seconds (7.5 minutes), with the level fixed at spawn. Biome eligibility begins at 0/5/10/20/30/40/45/55 minutes for Verdant Reach/Sunscar Dunes/Mirefen/Frostfall/Cinder Rift/Prism Barrens/Aurora Vale/Starfall Crater. Eligibility is the earliest possible visit, not a guaranteed arrival. Later biome weights rise with elapsed time; an early-biome weight floor of 0.4 preserves revisits. Forecasts and selectors use the same eligibility rules, and advancing a shift cannot bypass a future biome's introduction gate.
+
+The 60–90 minute target includes gathering, hunting, processing, and infrastructure after biome visits. Team preparation and random shifts affect actual completion time. This is a balance target, not a hard time lock on crafting or a maximum run length.
 
 ## Proposed world-control equipment
 
-The root implementation should use authoritative server state for schedules, votes, ownership, and fuel. Exact values in this table are proposed balance, awaiting the final pace choice.
+The implementation uses authoritative server state for schedules, votes, ownership, and fuel. These values are the initial balance for the approved 60–90 minute progression.
 
 | Equipment | Construction proposal | Effect and ongoing cost | Constraint |
 | --- | --- | --- | --- |
 | FieldClock | Workbench; TemperedGlass ×2, SanditeIngot ×1, ForestPlank ×2 | Unlocks the shift countdown for its owner; no vote or fuel for reading | Countdown stays hidden without an intel device; FieldClock alone does not reveal the next biome or weather |
-| BiomePredictor / WeatherPredictor | Later SurveyBench upgrades consume the previous device plus refined multi-biome materials | BiomePredictor retains the countdown and reveals the next biome; WeatherPredictor retains both and adds the next weather | Forecast must be truthful; no reroll by reopening UI; upgrading never removes earlier information |
+| BiomePredictor / WeatherPredictor | BiomePredictor: AdvancedWorkbench; FieldClock ×1, IceLens ×2, BioGel ×2, SanditeIngot ×2. WeatherPredictor: later SurveyBench upgrade | BiomePredictor retains the countdown and reveals the next biome; WeatherPredictor retains both and adds weather on arrival | Forecast must be truthful; no reroll by reopening UI; upgrading never removes earlier information. Aurora can cycle after arrival |
 | Shift Stabilizer | New ID; AdvancedWorkbench; SanditeIngot ×3, TemperedGlass ×2, BioGel ×2 | Majority-approved +60 seconds; consumes Coal ×2 and SapResin ×2 | Once per normal shift; never stack delays indefinitely; five-minute team cooldown |
-| Shift Trigger | New ID; AdvancedWorkbench; SanditeIngot ×3, SunShard ×2, BioGel ×1 | Majority-approved early transition with a visible 15-second warning; consumes SunShard ×1 and Coal ×2 | At least 60 seconds spent in the current biome; five-minute team cooldown |
-| Biome Selector | New ID; SurveyBench; PhaseCircuit ×2, CryoAlloy ×2, ObsiditeIngot ×2, SentinelCore ×1 | Majority-approved choice of next eligible biome; consumes ResonantCrystal ×2 and BioGel ×1 | One committed destination per shift, ten-minute team cooldown; choosing a biome does not also advance the timer |
+| Shift Trigger | AdvancedWorkbench; SanditeIngot ×3, SunShard ×2, BioGel ×1, MagmaCore ×1 | Majority-approved early transition with a visible 15-second warning; consumes SunShard ×1 and Coal ×2 | At least 60 seconds spent in the current biome; five-minute team cooldown |
+| Biome Selector | SurveyBench; PhaseCircuit ×2, CryoAlloy ×2, ObsiditeIngot ×2, SentinelCore ×1, AuroraLens ×1, MeteorAlloy ×2, MeteorCore ×1 | Majority-approved choice of next eligible biome; consumes ResonantCrystal ×2 and BioGel ×1 | One committed destination per shift, ten-minute team cooldown; choosing a biome does not also advance the timer |
 
 Devices are reusable as confirmed; fuel is consumed only when an approved action successfully commits. Count a strict majority, `floor(eligible voters / 2) + 1`; single-player becomes one approval. Proposed ballot duration: 20 seconds, one ballot active at a time. Define eligible voters consistently, preferably connected run participants including spectating teammates; disconnections must never produce a duplicate execution. The proposer contributes fuel unless shared-storage payment is explicitly added. Revalidate item ownership, materials, chosen biome, and schedule version at commitment. Failed/rejected ballots consume no fuel.
 
@@ -99,10 +124,8 @@ Use the catalog visual pack as temporary meshes only: remove imported scripts, n
 
 The field-kit UI should expose current danger and the next actionable craft, then reveal the countdown and forecasts as the corresponding devices are acquired. Use biome accents, clear material silhouettes, restrained motion, and consistent spacing. Craft feedback, damage alerts, votes, and shift warnings should animate with different priorities so important information stays readable.
 
-## Decisions still open
+## Later design work
 
-1. Are the six display names/identities above approved, and should a full progression take roughly 45–60 minutes or 20–30 minutes? This sets later biome introduction and monster leveling pace; endless survival can continue afterward.
-2. Approve the proposed device fuel, cooldowns, delay duration, forecast tier, and voter membership, or adjust after the first cooperative playthrough.
-3. Should station specialization remain broad, or should several stations merge after the prototype?
+The eight future biome concepts, differentiated monster attacks, station consolidation, live lobby/replay flow, and final Blender art remain separate future decisions. Fuel costs, resistances, and recipe quantities should be tuned from cooperative sessions without changing the confirmed run rules.
 
 Balance proposals remain editable. Implement and play through one complete gathering → crafting → fight → rescue → shift loop before expanding enemy attack variety or final art.

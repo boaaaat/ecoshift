@@ -13,6 +13,7 @@ local colors = {
 	Forest = Color3.fromRGB(102, 138, 78), Desert = Color3.fromRGB(202, 161, 92),
 	Swamp = Color3.fromRGB(107, 133, 94), FrozenTundra = Color3.fromRGB(142, 203, 217),
 	Volcanic = Color3.fromRGB(192, 102, 71), CrystalWastes = Color3.fromRGB(163, 139, 217),
+	AuroraVale = Color3.fromRGB(134, 203, 204), StarfallCrater = Color3.fromRGB(153, 136, 179),
 }
 local function folder(parent, name)
 	local result = parent:FindFirstChild(name)
@@ -92,7 +93,7 @@ end
 local toolPower = { Harvester = 20, StoneHatchet = 30, StonePickaxe = 30, SanditePickaxe = 45,
 	MireSickle = 45, CryoPickaxe = 60, ObsidianAxe = 75, PhaseMultitool = 100 }
 local weaponPower = { StoneSpear = 18, BoneSpear = 18, SanditeBlade = 27, MireDagger = 23, FrostLance = 38,
-	MagmaHammer = 50, CrystalBow = 44, VoidEdge = 65 }
+	MagmaHammer = 50, CrystalBow = 44, VoidEdge = 65, MeteorPike = 82 }
 local function makeTool(parent, item)
 	if parent:FindFirstChild(item.Id) then return end
 	local tool = Instance.new("Tool")

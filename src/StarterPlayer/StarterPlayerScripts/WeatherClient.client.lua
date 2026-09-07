@@ -38,6 +38,10 @@ local styles = {
 	Emberstorm = {0.38, 2.3, Color3.fromRGB(225, 159, 105), 100},
 	CrystalHaze = {0.32, 2, Color3.fromRGB(198, 183, 225), 25},
 	StaticStorm = {0.38, 2.2, Color3.fromRGB(174, 163, 220), 80},
+	DawnSurge = {0.27, 1.8, Color3.fromRGB(174, 233, 189), 25},
+	PolarNight = {0.33, 2, Color3.fromRGB(143, 173, 224), 50},
+	MeteorShower = {0.31, 2, Color3.fromRGB(230, 177, 123), 65},
+	CosmicHaze = {0.38, 2.3, Color3.fromRGB(174, 150, 207), 40},
 }
 local current
 ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("GameStateUpdate").OnClientEvent:Connect(function(state)

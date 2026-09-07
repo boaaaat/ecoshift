@@ -9,6 +9,8 @@ SurvivalConfig.ARMOR = {
 	VolcanicPlate = { Armor = 26, HeatResistance = 0.85, ColdResistance = 0.20, ToxinResistance = 0.45, WetResistance = 0.25 },
 	CrystalWeave = { Armor = 24, HeatResistance = 0.40, ColdResistance = 0.40, ToxinResistance = 0.55, WetResistance = 0.55 },
 	AdaptiveSurvivalSuit = { Armor = 34, HeatResistance = 0.75, ColdResistance = 0.75, ToxinResistance = 0.75, WetResistance = 0.75 },
+	AuroraMantle = { Armor = 28, HeatResistance = 0.70, ColdResistance = 0.70, ToxinResistance = 0, WetResistance = 0.50 },
+	StarforgedPlate = { Armor = 38, HeatResistance = 0.80, ColdResistance = 0.70, ToxinResistance = 0.70, WetResistance = 0.60 },
 }
 
 SurvivalConfig.WEATHER_BY_BIOME = {
@@ -41,6 +43,16 @@ SurvivalConfig.WEATHER_BY_BIOME = {
 		{ Id = "Clear", Name = "Prismatic calm", Weight = 4, Temp = 0, Toxin = 0, Wet = 0 },
 		{ Id = "CrystalHaze", Name = "Crystal haze", Weight = 2, Temp = -0.2, Toxin = 0.3, Wet = 0 },
 		{ Id = "StaticStorm", Name = "Static storm", Weight = 1, Temp = 0.3, Toxin = 0.35, Wet = 0.2 },
+	},
+	AuroraVale = {
+		{ Id = "Clear", Name = "Aurora calm", Weight = 4, Temp = 0, Toxin = 0, Wet = 0 },
+		{ Id = "DawnSurge", Name = "Dawn surge", Weight = 2, Temp = 0.7, Toxin = 0, Wet = 0 },
+		{ Id = "PolarNight", Name = "Polar night", Weight = 1, Temp = -0.8, Toxin = 0, Wet = 0.1 },
+	},
+	StarfallCrater = {
+		{ Id = "Clear", Name = "Starfall calm", Weight = 4, Temp = 0.2, Toxin = 0, Wet = 0 },
+		{ Id = "MeteorShower", Name = "Meteor shower", Weight = 2, Temp = 0.7, Toxin = 0.15, Wet = 0 },
+		{ Id = "CosmicHaze", Name = "Cosmic haze", Weight = 1, Temp = -0.3, Toxin = 0.3, Wet = 0 },
 	},
 }
 

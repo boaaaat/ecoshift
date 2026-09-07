@@ -32,7 +32,7 @@ function BiomeService:_pickNext(elapsed)
 			(data.TimeScaledWeight or data.timeScaledWeight or 0) * elapsed /
 			math.max(1, (BiomeConfig.BIOME_SHIFT or {}).TimeScaleSeconds or 900)
 		if name ~= self._current then
-			table.insert(pool, { Id = name, Weight = math.max(0.05, weight) })
+			table.insert(pool, { Id = name, Weight = math.max((BiomeConfig.BIOME_SHIFT or {}).MinimumWeight or 0.4, weight) })
 		end
 	end
 	local pick = Util.ChooseWeighted(pool, "Weight")
@@ -87,6 +87,7 @@ function BiomeService:SetCurrent(name, reason)
 	self._current, self._data = name, BiomeConfig.BIOMES[name]
 	self._weather = forecast or weatherFor(name)
 	self._lastChangedAt = os.clock()
+	self._nextWeatherChange = self._data.WeatherCycle and (os.clock() + (self._data.WeatherCycleSeconds or 60)) or nil
 	if wasStarted then self._shiftCount += 1 end
 	self:_scheduleNext()
 	self:_broadcast()
@@ -147,6 +148,15 @@ function BiomeService:Init()
 	task.spawn(function()
 		while not self._pausedAt do
 			if os.clock() >= self._nextShift then self:SetCurrent(self._upcomingBiome, "Timer") end
+			if self._nextWeatherChange and os.clock() >= self._nextWeatherChange then
+				local cycle = self._data.WeatherCycle
+				local index = table.find(cycle, self._weather.Id) or 0
+				local nextId = cycle[index % #cycle + 1]
+				for _, weather in ipairs(SurvivalConfig.WEATHER_BY_BIOME[self._current] or {}) do
+					if weather.Id == nextId then self._weather = weather; break end
+				end
+				self._nextWeatherChange = os.clock() + (self._data.WeatherCycleSeconds or 60)
+			end
 			task.wait(0.25)
 		end
 	end)

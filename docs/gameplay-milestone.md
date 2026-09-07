@@ -36,13 +36,26 @@ All temporary diagnostic Scripts, LocalScripts, and grant/remoting helpers were 
 
 The follow-up storage check opened a crafted chest with the normal E prompt, deposited six wood, shifted biomes, and recovered all six. Fractional slot moves and NaN quantities were rejected without changing either inventory. Death closed the active chest session. Heat and Cold Tonics were consumed through the normal inventory remote and applied only their corresponding 35% resistance channel. These fixes also keep crafted storage empty when a default world loot table exists. The temporary setup/readback helper was removed afterward.
 
-A static catalog audit found valid canonical IDs and sources for all 84 recipes: 45 gatherable material IDs, 24 monster-drop IDs, and all 12 station types are reachable with six biomes enabled. This establishes dependency reachability, not balanced quantities or run duration.
+A static catalog audit of the initial milestone found valid canonical IDs and sources for its 84 recipes. The expanded catalog now has 89 reachable recipes, 51 gatherable material IDs, and all 12 station types reachable across eight biomes. This establishes dependency reachability, not balanced quantities or run duration.
+
+## Eight playable biomes and the expanded roadmap
+
+- The approved names are now displayed in the HUD. Frostfall, Cinder Rift, and Prism Barrens join random progression alongside the new Aurora Vale and Starfall Crater. Eligibility begins at 0/5/10/20/30/40/45/55 minutes; later biome weights rise over time while earlier biomes retain a revisit weight floor.
+- Aurora Vale alternates Dawn Surge and Polar Night every minute. Starfall Crater adds meteor materials and heat/dust weather. Aurora Stag and Comet Crawler have different movement, damage, and recovery settings, plus guaranteed signature drops. They use prototype Wolf AI and temporary models.
+- Thirteen new item IDs and five new recipes add Aurora Lens, Aurora Mantle, Meteor Alloy, Meteor Pike, and Starforged Plate. The final selector and adaptive suit require both new biomes. Earlier armor and weapon recipes now retain more cross-biome inputs; early forging and optics no longer depend on later-biome materials.
+- Monster levels advance every 7.5 minutes. The revised target is powerful world-control gear at 60–90 minutes; this is a balance target, not a guaranteed completion time.
+- Eight future biome concepts complete the 16-biome plan. They are explicitly unimplemented and excluded from generation, forecasts, voting, and recipe dependencies.
+
+Live Studio checks used accelerated elapsed time and supplied crafting ingredients to inspect late progression. Aurora resources generated, normal prompt gathering yielded Aurora Fiber, and consecutive weather cycles changed temperature without changing the scheduled destination. Starfall generated Meteor Iron, Impact Glass, and Cosmic Dust; old Aurora monsters disappeared, and a level-eight Comet Crawler had 270.3 maximum health. Crafting Biome Predictor consumed Field Clock while retaining the countdown and adding only the biome forecast. The expanded Biome Selector recipe completed at a placed Survey Bench. These checks do not replace a full-length balance playthrough.
+
+A request for Starfall before its unlock gate was rejected without spending fuel. After unlocking, selection plus the trigger's 15-second transition arrived in Aurora with exactly the forecast weather. Both fuel costs were charged once, and both devices remained. Frostfall, Cinder Rift, and Prism Barrens each generated all seven configured material IDs; the placed Survey Bench survived those shifts.
+
+The longer session exposed a HUD event-label error: Lua's `gsub` returned a second value that was incorrectly passed into `table.insert`. The formatting helper now returns only the text. A fresh helper-free session displayed an Aurora Surge announcement correctly and showed no game-script errors in the inspected output. The final Rojo build succeeded.
 
 ## Remaining design and validation work
 
-- The six proposed biome display names and 45–60 versus 20–30 minute progression pace await the player's choice. FrozenTundra, Volcanic, and CrystalWastes have prototype generation/resource data but remain disabled in random selection until their introduction gates and weights are agreed.
 - Fuel quantities, cooldowns, monster scaling, armor resistance, and recipes are initial tunable values. A full-length cooperative balance playthrough remains necessary.
-- The new content plan describes intended differentiated monster attacks and revised armor recipes. Most species still share the existing Wolf-style AI; these behavior/recipe proposals are not all implemented.
+- The content plan describes intended differentiated monster attacks. Most species still share the existing Wolf-style AI; the attack-pattern proposals remain future work. The cross-biome armor revisions are implemented.
 - Some loose items still use fallback pickup geometry; armor visuals and all final models remain for the later art pass. Stations use generic temporary geometry.
 - Live lobby destination and replay flow have not been specified. The run ends with results; the existing development-only respawn is clearly labeled for Studio and does not reset a finished run.
 - Touch/gamepad play and small-screen layouts need device-specific playtesting. UI scales and clickable controls are present, but desktop Studio is the environment checked here.

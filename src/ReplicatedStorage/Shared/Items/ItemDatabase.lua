@@ -83,7 +83,21 @@ local raw = {
 	{ Id = "StalkerTalon", Name = "Stalker Talon", StackSize = 99, Tags = { "Resource", "MonsterDrop", "CrystalWastes" } },
 	{ Id = "NullFragment", Name = "Null Fragment", StackSize = 99, Tags = { "Resource", "MonsterDrop", "CrystalWastes" } },
 
+	-- Aurora Vale raw
+	{ Id = "AuroraFiber", Name = "Aurora Fiber", StackSize = 99, Tags = { "Resource", "Raw", "AuroraVale", "Fiber" } },
+	{ Id = "DawnBloom", Name = "Dawn Bloom", StackSize = 99, Tags = { "Resource", "Raw", "AuroraVale" } },
+	{ Id = "PolarQuartz", Name = "Polar Quartz", StackSize = 99, Tags = { "Resource", "Raw", "AuroraVale", "Crystal" } },
+	{ Id = "AuroraAntler", Name = "Aurora Antler", StackSize = 99, Tags = { "Resource", "MonsterDrop", "AuroraVale" } },
+
+	-- Starfall Crater raw
+	{ Id = "MeteorIron", Name = "Meteor Iron", StackSize = 99, Tags = { "Resource", "Raw", "StarfallCrater", "Ore" } },
+	{ Id = "ImpactGlass", Name = "Impact Glass", StackSize = 99, Tags = { "Resource", "Raw", "StarfallCrater", "Glass" } },
+	{ Id = "CosmicDust", Name = "Cosmic Dust", StackSize = 99, Tags = { "Resource", "Raw", "StarfallCrater" } },
+	{ Id = "MeteorCore", Name = "Meteor Core", StackSize = 99, Tags = { "Resource", "MonsterDrop", "StarfallCrater" } },
+
 	-- Refined materials
+	{ Id = "AuroraLens", Name = "Aurora Lens", StackSize = 99, Tags = { "Material", "Refined", "Lens" } },
+	{ Id = "MeteorAlloy", Name = "Meteor Alloy", StackSize = 99, Tags = { "Material", "Refined", "Alloy" } },
 	{ Id = "ForestPlank", Name = "Forest Plank", StackSize = 99, Tags = { "Material", "Refined" } },
 	{ Id = "FiberCloth", Name = "Fiber Cloth", StackSize = 99, Tags = { "Material", "Refined", "Fiber" } },
 	{ Id = "HerbalPaste", Name = "Herbal Paste", StackSize = 99, Tags = { "Material", "Refined", "Alchemy" } },
@@ -147,6 +161,7 @@ local raw = {
 	{ Id = "PhaseMultitool", Name = "Phase Multitool", StackSize = 1, Tags = { "Tool", "Holdable" } },
 
 	-- Weapons
+	{ Id = "MeteorPike", Name = "Meteor Pike", StackSize = 1, Tags = { "Weapon", "Holdable" } },
 	{ Id = "StoneSpear", Name = "Stone Spear", StackSize = 1, Tags = { "Weapon", "Holdable" } },
 	{ Id = "BoneSpear", Name = "Bone Spear", StackSize = 1, Tags = { "Weapon", "Holdable" } },
 	{ Id = "SanditeBlade", Name = "Sandite Blade", StackSize = 1, Tags = { "Weapon", "Holdable" } },
@@ -157,6 +172,8 @@ local raw = {
 	{ Id = "VoidEdge", Name = "Void Edge", StackSize = 1, Tags = { "Weapon", "Holdable" } },
 
 	-- Armor
+	{ Id = "AuroraMantle", Name = "Aurora Mantle", StackSize = 1, Tags = { "Armor" } },
+	{ Id = "StarforgedPlate", Name = "Starforged Plate", StackSize = 1, Tags = { "Armor" } },
 	{ Id = "DesertCloak", Name = "Desert Cloak", StackSize = 1, Tags = { "Armor" } },
 	{ Id = "SwampWaders", Name = "Swamp Waders", StackSize = 1, Tags = { "Armor" } },
 	{ Id = "FrostParka", Name = "Frost Parka", StackSize = 1, Tags = { "Armor" } },

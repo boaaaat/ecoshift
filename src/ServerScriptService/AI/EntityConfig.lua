@@ -61,6 +61,41 @@ EntityConfig.Defaults = {
 --   GroupRadius: cluster radius for group members.
 --   MaxGroupsPerRegion / MaxCountPerRegion: optional caps per region.
 EntityConfig.Entities = {
+	-- Prototype late-biome encounters; levels are applied independently at spawn.
+	AuroraStag = {
+		Type = "Monster",
+		AIClass = "Wolf",
+		AI = {
+			Damage = 13, Speed = 20, AttackRange = 5, AttackCooldown = 1.6,
+			DetectionAngle = 150, DetectionDistance = 110, AutoDetectRadius = 16,
+			PlayerPriority = "Closest", RepathInterval = 1.0, RepathDistance = 12,
+			PackSpeedBoost = 0, PackAttackBoost = 0,
+			WanderRadius = 32, WanderInterval = 2.0,
+		},
+		Spawn = {
+			Weight = 1.0, TimeScaledWeight = 0,
+			GroupSize = { min = 1, max = 2 }, GroupRadius = 10, MaxPerWave = 2,
+			MinPlayerDistance = 60,
+			Biomes = { AuroraVale = { Weight = 1.0 } },
+		},
+	},
+	CometCrawler = {
+		Type = "Monster",
+		AIClass = "Wolf",
+		AI = {
+			Damage = 32, Speed = 9, AttackRange = 6, AttackCooldown = 2.4,
+			DetectionAngle = 120, DetectionDistance = 95, AutoDetectRadius = 14,
+			PlayerPriority = "Closest", RepathInterval = 1.6, RepathDistance = 10,
+			PackSpeedBoost = 0, PackAttackBoost = 0,
+			WanderRadius = 18, WanderInterval = 3.5,
+		},
+		Spawn = {
+			Weight = 1.0, TimeScaledWeight = 0,
+			GroupSize = { min = 1, max = 2 }, GroupRadius = 12, MaxPerWave = 2,
+			MinPlayerDistance = 60,
+			Biomes = { StarfallCrater = { Weight = 1.0 } },
+		},
+	},
 	-- FOREST ENEMIES
 	Wolf = {
 		Type = "Monster",
@@ -358,6 +393,12 @@ EntityConfig.EnemyWaves = {
 		CountMultMax = 1.5,
 	},
 	Tables = {
+		AuroraCommon = {
+			{ Id = "AuroraStag", Weight = 1.0, MaxPerWave = 2 },
+		},
+		StarfallCommon = {
+			{ Id = "CometCrawler", Weight = 1.0, MaxPerWave = 2 },
+		},
 		-- Forest enemies
 		ForestCommon = {
 			{ Id = "Wolf", Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 1.5 } },

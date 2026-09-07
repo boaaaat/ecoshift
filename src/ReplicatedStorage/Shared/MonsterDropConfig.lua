@@ -1,6 +1,22 @@
 local MonsterDropConfig = {}
 
 MonsterDropConfig.Monsters = {
+	AuroraStag = {
+		Boss = false,
+		Drops = {
+			{ ItemId = "AuroraAntler", Min = 1, Max = 2, Chance = 1.0 },
+			{ ItemId = "DawnBloom", Min = 1, Max = 1, Chance = 0.4 },
+		},
+		CraftUnlocks = { "AuroraMantle", "AuroraLens" },
+	},
+	CometCrawler = {
+		Boss = false,
+		Drops = {
+			{ ItemId = "MeteorCore", Min = 1, Max = 1, Chance = 1.0 },
+			{ ItemId = "MeteorIron", Min = 1, Max = 2, Chance = 0.5 },
+		},
+		CraftUnlocks = { "MeteorPike", "StarforgedPlate", "BiomeSelector" },
+	},
 	Wolf = {
 		Boss = false,
 		Drops = {

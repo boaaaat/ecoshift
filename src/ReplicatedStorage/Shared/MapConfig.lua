@@ -119,6 +119,8 @@ MapConfig.Colors = {
 		FrozenTundra = Color3.fromRGB(151, 167, 178),
 		Volcanic = Color3.fromRGB(107, 72, 65),
 		CrystalWastes = Color3.fromRGB(112, 103, 134),
+		AuroraVale = Color3.fromRGB(107, 167, 163),
+		StarfallCrater = Color3.fromRGB(138, 114, 141),
 		Unknown = Color3.fromRGB(72, 78, 86),
 	},
 }

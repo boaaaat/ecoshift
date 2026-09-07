@@ -2,6 +2,8 @@
 
 This guide is for developers extending game systems and content in this repo.
 
+The current prototype has eight playable biomes and eight future biome concepts. Aurora Vale and Starfall Crater complete the current material progression, targeting powerful world-control gear in a 60–90 minute cooperative run.
+
 ## Quick Start
 
 1. Run `scripts/rojo-serve.ps1` and connect the Studio Rojo plugin to the server. `default.project.json` preserves authored Studio assets outside the mapped source tree.

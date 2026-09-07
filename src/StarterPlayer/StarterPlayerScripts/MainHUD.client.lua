@@ -102,7 +102,8 @@ local roles, roleIndex = {}, 1
 for roleId in pairs(Config.ROLES.Definitions or {}) do table.insert(roles, roleId) end
 table.sort(roles)
 local function readable(value)
-	return tostring(value):gsub("_", " "):gsub("(%l)(%u)", "%1 %2")
+	-- gsub also returns a replacement count; callers need only the label.
+	return (tostring(value):gsub("_", " "):gsub("(%l)(%u)", "%1 %2"))
 end
 local function updateRole()
 	for index, id in ipairs(roles) do if id == profile.Role then roleIndex = index end end
@@ -127,7 +128,7 @@ end
 local deadline, shiftDuration, elapsed, receivedAt = nil, 300, 0, os.clock()
 if rGame then rGame.OnClientEvent:Connect(function(state)
 	if type(state) ~= "table" then return end
-	if state.Biome then biomeLabel.Text = readable(state.Biome) end
+	if state.Biome then biomeLabel.Text = state.BiomeDisplayName or readable(state.Biome) end
 	if type(state.Elapsed) == "number" then elapsed = state.Elapsed; receivedAt = os.clock() end
 	if state.HasFieldClock == false then
 		deadline = nil

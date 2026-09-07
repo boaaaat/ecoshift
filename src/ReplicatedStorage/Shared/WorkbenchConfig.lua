@@ -337,7 +337,7 @@ WorkbenchConfig.RECIPES = {
 	IceLens = {
 		Ingredients = {
 			{ Id = "IceCrystal", N = 2 },
-			{ Id = "PrismSand", N = 1 },
+			{ Id = "TemperedGlass", N = 1 },
 		},
 		Output = { Id = "IceLens", N = 1 },
 		AllowedStations = { "Kiln", "Refinery" },
@@ -487,6 +487,32 @@ WorkbenchConfig.RECIPES = {
 		BaseCraftTime = 11,
 	},
 
+	AuroraLens = {
+		Ingredients = {
+			{ Id = "PolarQuartz", N = 2 },
+			{ Id = "IceLens", N = 1 },
+			{ Id = "BioGel", N = 1 },
+		},
+		Output = { Id = "AuroraLens", N = 1 },
+		AllowedStations = { "AdvancedWorkbench" },
+		Category = "Materials",
+		ProcessKind = "Glass",
+		BaseCraftTime = 12,
+	},
+	MeteorAlloy = {
+		Ingredients = {
+			{ Id = "MeteorIron", N = 2 },
+			{ Id = "ObsiditeIngot", N = 1 },
+			{ Id = "CryoAlloy", N = 1 },
+			{ Id = "CosmicDust", N = 1 },
+		},
+		Output = { Id = "MeteorAlloy", N = 1 },
+		AllowedStations = { "Refinery" },
+		Category = "Materials",
+		ProcessKind = "Alloy",
+		BaseCraftTime = 14,
+	},
+
 	-- Utility placeables
 	Torch = {
 		Ingredients = {
@@ -604,7 +630,7 @@ WorkbenchConfig.RECIPES = {
 	Anvil = {
 		Ingredients = {
 			{ Id = "SanditeIngot", N = 8 },
-			{ Id = "BasaltChunk", N = 6 },
+			{ Id = "ForestStone", N = 6 },
 		},
 		Output = { Id = "Anvil", N = 1 },
 		AllowedStations = { "AdvancedWorkbench" },
@@ -784,7 +810,7 @@ WorkbenchConfig.RECIPES = {
 		Ingredients = {
 			{ Id = "SanditeIngot", N = 3 },
 			{ Id = "ForestWood", N = 2 },
-			{ Id = "HeatPlate", N = 1 },
+			{ Id = "TemperedGlass", N = 1 },
 		},
 		Output = { Id = "SanditePickaxe", N = 1 },
 		AllowedStations = { "Anvil" },
@@ -794,7 +820,7 @@ WorkbenchConfig.RECIPES = {
 	MireSickle = {
 		Ingredients = {
 			{ Id = "MireComposite", N = 3 },
-			{ Id = "MangroveWood", N = 2 },
+			{ Id = "ForestPlank", N = 2 },
 			{ Id = "BioGel", N = 1 },
 		},
 		Output = { Id = "MireSickle", N = 1 },
@@ -807,6 +833,7 @@ WorkbenchConfig.RECIPES = {
 			{ Id = "CryoAlloy", N = 3 },
 			{ Id = "Frostwood", N = 2 },
 			{ Id = "IceLens", N = 1 },
+			{ Id = "MireComposite", N = 1 },
 		},
 		Output = { Id = "CryoPickaxe", N = 1 },
 		AllowedStations = { "Anvil" },
@@ -816,8 +843,9 @@ WorkbenchConfig.RECIPES = {
 	ObsidianAxe = {
 		Ingredients = {
 			{ Id = "ObsiditeIngot", N = 3 },
-			{ Id = "BasaltChunk", N = 2 },
+			{ Id = "Frostwood", N = 2 },
 			{ Id = "HoundFang", N = 1 },
+			{ Id = "TanninOil", N = 1 },
 		},
 		Output = { Id = "ObsidianAxe", N = 1 },
 		AllowedStations = { "Anvil" },
@@ -829,6 +857,8 @@ WorkbenchConfig.RECIPES = {
 			{ Id = "VoidAlloy", N = 3 },
 			{ Id = "PhaseCircuit", N = 2 },
 			{ Id = "ResonantCrystal", N = 2 },
+			{ Id = "ThermalGel", N = 1 },
+			{ Id = "MireComposite", N = 1 },
 		},
 		Output = { Id = "PhaseMultitool", N = 1 },
 		AllowedStations = { "MasterWorkbench" },
@@ -873,7 +903,7 @@ WorkbenchConfig.RECIPES = {
 		Ingredients = {
 			{ Id = "MireComposite", N = 2 },
 			{ Id = "LeechVenomSac", N = 1 },
-			{ Id = "RootFiber", N = 2 },
+			{ Id = "SanditeIngot", N = 1 },
 		},
 		Output = { Id = "MireDagger", N = 1 },
 		AllowedStations = { "AdvancedWorkbench" },
@@ -883,7 +913,7 @@ WorkbenchConfig.RECIPES = {
 	FrostLance = {
 		Ingredients = {
 			{ Id = "CryoAlloy", N = 2 },
-			{ Id = "IceCrystal", N = 3 },
+			{ Id = "MireComposite", N = 1 },
 			{ Id = "FrostWolfFur", N = 1 },
 		},
 		Output = { Id = "FrostLance", N = 1 },
@@ -895,7 +925,8 @@ WorkbenchConfig.RECIPES = {
 		Ingredients = {
 			{ Id = "ObsiditeIngot", N = 3 },
 			{ Id = "MagmaCore", N = 1 },
-			{ Id = "BasaltChunk", N = 4 },
+			{ Id = "GlacialStone", N = 2 },
+			{ Id = "TanninOil", N = 1 },
 		},
 		Output = { Id = "MagmaHammer", N = 1 },
 		AllowedStations = { "Anvil" },
@@ -906,7 +937,9 @@ WorkbenchConfig.RECIPES = {
 		Ingredients = {
 			{ Id = "QuantumThread", N = 2 },
 			{ Id = "ResonantCrystal", N = 2 },
-			{ Id = "LatticeFiber", N = 3 },
+			{ Id = "Frostwood", N = 2 },
+			{ Id = "ObsiditeIngot", N = 1 },
+			{ Id = "TanninOil", N = 1 },
 		},
 		Output = { Id = "CrystalBow", N = 1 },
 		AllowedStations = { "MasterWorkbench" },
@@ -918,11 +951,26 @@ WorkbenchConfig.RECIPES = {
 			{ Id = "VoidAlloy", N = 3 },
 			{ Id = "NullFragment", N = 2 },
 			{ Id = "SentinelCore", N = 1 },
+			{ Id = "CryoAlloy", N = 1 },
+			{ Id = "BioGel", N = 1 },
+			{ Id = "ForestPlank", N = 1 },
 		},
 		Output = { Id = "VoidEdge", N = 1 },
 		AllowedStations = { "MasterWorkbench" },
 		Category = "Weapons",
 		BaseCraftTime = 13,
+	},
+
+	MeteorPike = {
+		Ingredients = {
+			{ Id = "MeteorAlloy", N = 3 },
+			{ Id = "AuroraLens", N = 1 },
+			{ Id = "ForestPlank", N = 2 },
+		},
+		Output = { Id = "MeteorPike", N = 1 },
+		AllowedStations = { "MasterWorkbench" },
+		Category = "Weapons",
+		BaseCraftTime = 14,
 	},
 
 	DesertCloak = {
@@ -941,6 +989,7 @@ WorkbenchConfig.RECIPES = {
 			{ Id = "MarshThread", N = 4 },
 			{ Id = "BioGel", N = 2 },
 			{ Id = "MangroveWood", N = 2 },
+			{ Id = "SapResin", N = 2 },
 		},
 		Output = { Id = "SwampWaders", N = 1 },
 		AllowedStations = { "Loom" },
@@ -950,7 +999,8 @@ WorkbenchConfig.RECIPES = {
 	FrostParka = {
 		Ingredients = {
 			{ Id = "InsulatedCloth", N = 5 },
-			{ Id = "FrostWolfFur", N = 3 },
+			{ Id = "MarshThread", N = 2 },
+			{ Id = "TemperedGlass", N = 1 },
 			{ Id = "ThermalGel", N = 1 },
 		},
 		Output = { Id = "FrostParka", N = 1 },
@@ -963,6 +1013,7 @@ WorkbenchConfig.RECIPES = {
 			{ Id = "ObsiditeIngot", N = 5 },
 			{ Id = "HeatPlate", N = 2 },
 			{ Id = "VulcanLeather", N = 2 },
+			{ Id = "InsulatedCloth", N = 2 },
 		},
 		Output = { Id = "VolcanicPlate", N = 1 },
 		AllowedStations = { "Anvil" },
@@ -973,20 +1024,49 @@ WorkbenchConfig.RECIPES = {
 		Ingredients = {
 			{ Id = "QuantumThread", N = 4 },
 			{ Id = "PrismGlass", N = 2 },
-			{ Id = "LatticeFiber", N = 3 },
+			{ Id = "MarshThread", N = 2 },
+			{ Id = "CryoAlloy", N = 1 },
 		},
 		Output = { Id = "CrystalWeave", N = 1 },
 		AllowedStations = { "Loom" },
 		Category = "Armor",
 		BaseCraftTime = 10,
 	},
+	AuroraMantle = {
+		Ingredients = {
+			{ Id = "AuroraFiber", N = 4 },
+			{ Id = "InsulatedCloth", N = 2 },
+			{ Id = "HeatWrap", N = 2 },
+			{ Id = "AuroraAntler", N = 1 },
+			{ Id = "DawnBloom", N = 2 },
+		},
+		Output = { Id = "AuroraMantle", N = 1 },
+		AllowedStations = { "Loom" },
+		Category = "Armor",
+		BaseCraftTime = 12,
+	},
+	StarforgedPlate = {
+		Ingredients = {
+			{ Id = "MeteorAlloy", N = 4 },
+			{ Id = "AuroraFiber", N = 3 },
+			{ Id = "SwampWaders", N = 1 },
+			{ Id = "ImpactGlass", N = 2 },
+		},
+		Output = { Id = "StarforgedPlate", N = 1 },
+		AllowedStations = { "MasterWorkbench" },
+		Category = "Armor",
+		BaseCraftTime = 16,
+	},
 	AdaptiveSurvivalSuit = {
 		Ingredients = {
 			{ Id = "DesertCloak", N = 1 },
+			{ Id = "SwampWaders", N = 1 },
 			{ Id = "FrostParka", N = 1 },
 			{ Id = "VolcanicPlate", N = 1 },
 			{ Id = "CrystalWeave", N = 1 },
 			{ Id = "VoidAlloy", N = 2 },
+			{ Id = "AuroraMantle", N = 1 },
+			{ Id = "MeteorAlloy", N = 2 },
 		},
 		Output = { Id = "AdaptiveSurvivalSuit", N = 1 },
 		AllowedStations = { "MasterWorkbench" },
@@ -1001,12 +1081,20 @@ WorkbenchConfig.RECIPES = {
 		AllowedStations = { "AdvancedWorkbench" }, Category = "Intel", BaseCraftTime = 12,
 	},
 	ShiftTrigger = {
-		Ingredients = { { Id = "SanditeIngot", N = 3 }, { Id = "SunShard", N = 2 }, { Id = "BioGel", N = 1 } },
+		Ingredients = { { Id = "SanditeIngot", N = 3 }, { Id = "SunShard", N = 2 }, { Id = "BioGel", N = 1 }, { Id = "MagmaCore", N = 1 } },
 		Output = { Id = "ShiftTrigger", N = 1 },
 		AllowedStations = { "AdvancedWorkbench" }, Category = "Intel", BaseCraftTime = 12,
 	},
 	BiomeSelector = {
-		Ingredients = { { Id = "PhaseCircuit", N = 2 }, { Id = "CryoAlloy", N = 2 }, { Id = "ObsiditeIngot", N = 2 }, { Id = "SentinelCore", N = 1 } },
+		Ingredients = {
+			{ Id = "PhaseCircuit", N = 2 },
+			{ Id = "CryoAlloy", N = 2 },
+			{ Id = "ObsiditeIngot", N = 2 },
+			{ Id = "SentinelCore", N = 1 },
+			{ Id = "AuroraLens", N = 1 },
+			{ Id = "MeteorAlloy", N = 2 },
+			{ Id = "MeteorCore", N = 1 },
+		},
 		Output = { Id = "BiomeSelector", N = 1 },
 		AllowedStations = { "SurveyBench" }, Category = "Intel", BaseCraftTime = 16,
 	},
@@ -1024,12 +1112,12 @@ WorkbenchConfig.RECIPES = {
 	BiomePredictor = {
 		Ingredients = {
 			{ Id = "FieldClock", N = 1 },
-			{ Id = "PhaseCircuit", N = 2 },
-			{ Id = "CryoAlloy", N = 1 },
-			{ Id = "ObsiditeIngot", N = 1 },
+			{ Id = "IceLens", N = 2 },
+			{ Id = "BioGel", N = 2 },
+			{ Id = "SanditeIngot", N = 2 },
 		},
 		Output = { Id = "BiomePredictor", N = 1 },
-		AllowedStations = { "SurveyBench" },
+		AllowedStations = { "AdvancedWorkbench" },
 		Category = "Intel",
 		BaseCraftTime = 12,
 	},

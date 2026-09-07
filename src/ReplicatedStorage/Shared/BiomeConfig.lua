@@ -213,12 +213,14 @@ Config.biome_shift = {
 	MinSeconds = 300, -- A normal shift occurs every five minutes.
 	MaxSeconds = 300,
 	TimeScaleSeconds = 900, -- Time scaling factor for weight calculations
+	MinimumWeight = 0.4, -- Preserve access to early materials during long runs.
 }
 
 -- BIOME METADATA: Environment effects, resource tags, enemy tables
 -- Used by BiomeService for selection and SpawnService for enemy waves
 Config.biome_metadata = {
 	Forest = {
+		DisplayName = "Verdant Reach", MinElapsed = 0,
 		env = { Temp = 0, Toxin = 0, Wet = 0 },
 		resourceTags = { "Wood", "Plants", "Stone" },
 		enemyTables = { "ForestCommon" },
@@ -226,27 +228,43 @@ Config.biome_metadata = {
 	Desert = {
 		env = { Temp = 1, Toxin = 0, Wet = -1 },
 		resourceTags = { "Stone", "Ore", "Cactus" },
+		DisplayName = "Sunscar Dunes", MinElapsed = 5 * 60,
 		enemyTables = { "DesertCommon" },
 	},
 	Swamp = {
 		env = { Temp = 0, Toxin = 1, Wet = 2 },
 		resourceTags = { "Herb", "Reed", "Mud" },
+		DisplayName = "Mirefen", MinElapsed = 10 * 60,
 		enemyTables = { "SwampCommon" },
 	},
 	FrozenTundra = {
 		env = { Temp = -2, Toxin = 0, Wet = 0 },
 		resourceTags = { "Ice", "Stone", "Fur" },
+		DisplayName = "Frostfall", MinElapsed = 20 * 60,
 		enemyTables = { "TundraCommon" },
 	},
 	Volcanic = {
 		env = { Temp = 2, Toxin = 0, Wet = -1 },
 		resourceTags = { "Ore", "Sulfur", "Obsidian" },
+		DisplayName = "Cinder Rift", MinElapsed = 30 * 60,
 		enemyTables = { "VolcanicCommon" },
 	},
 	CrystalWastes = {
 		env = { Temp = 0, Toxin = 0, Wet = 0 },
 		resourceTags = { "Crystal", "Void", "Alloy" },
+		DisplayName = "Prism Barrens", MinElapsed = 40 * 60,
 		enemyTables = { "CrystalCommon" },
+	},
+	AuroraVale = {
+		DisplayName = "Aurora Vale", MinElapsed = 45 * 60,
+		WeatherCycle = { "DawnSurge", "PolarNight" }, WeatherCycleSeconds = 60,
+		env = { Temp = 0, Toxin = 0, Wet = 0.1 },
+		resourceTags = { "Aurora", "Fiber", "Quartz" }, enemyTables = { "AuroraCommon" },
+	},
+	StarfallCrater = {
+		DisplayName = "Starfall Crater", MinElapsed = 55 * 60,
+		env = { Temp = 0.6, Toxin = 0.1, Wet = 0 },
+		resourceTags = { "Meteor", "Metal", "Glass" }, enemyTables = { "StarfallCommon" },
 	},
 }
 
@@ -257,7 +275,7 @@ Config.biome_metadata = {
 Config.biomes = {
 	Forest = {
 		weight = 1.0,
-		timeScaledWeight = -0.2,
+		timeScaledWeight = -0.1,
 		region_count = { min = 1, max = 2 },
 		regions = {
 			{
@@ -384,8 +402,8 @@ Config.biomes = {
 		chest_count = 0.08,
 	},
 	Desert = {
-		weight = 0.8,
-		timeScaledWeight = -0.1,
+		weight = 1.0,
+		timeScaledWeight = -0.05,
 		region_count = { min = 1, max = 2 },
 		regions = {
 			{
@@ -519,8 +537,8 @@ Config.biomes = {
 		chest_count = 0.08,
 	},
 	Swamp = {
-		weight = 0.65,
-		timeScaledWeight = 0.05,
+		weight = 1.0,
+		timeScaledWeight = 0,
 		region_count = { min = 1, max = 2 },
 		regions = {
 			{
@@ -652,10 +670,10 @@ Config.biomes = {
 		},
 		chest_count = 0.08,
 	},
-	-- Region data is complete; the progression schedule sets introduction weights.
+	-- Later regions enter gradually; their weights keep rising during endless runs.
 	FrozenTundra = {
-		weight = 0,
-		timeScaledWeight = 0,
+		weight = 1.1,
+		timeScaledWeight = 0.55,
 		region_count = { min = 1, max = 2 },
 		regions = {
 			{
@@ -693,8 +711,8 @@ Config.biomes = {
 		chest_count = 0.08,
 	},
 	Volcanic = {
-		weight = 0,
-		timeScaledWeight = 0,
+		weight = 1.0,
+		timeScaledWeight = 0.65,
 		region_count = { min = 1, max = 2 },
 		regions = {
 			{
@@ -732,8 +750,8 @@ Config.biomes = {
 		chest_count = 0.08,
 	},
 	CrystalWastes = {
-		weight = 0,
-		timeScaledWeight = 0,
+		weight = 1.1,
+		timeScaledWeight = 0.85,
 		region_count = { min = 1, max = 2 },
 		regions = {
 			{
@@ -772,6 +790,71 @@ Config.biomes = {
 	},
 }
 
+-- The two newest playable biomes use the same gathering/AI/station pipeline.
+Config.biomes.AuroraVale = {
+	weight = 1.1, timeScaledWeight = 0.75,
+	region_count = { min = 1, max = 2 },
+	regions = {
+		{
+			name = "DawnMeadow", size = Vector2.new(105, 110),
+			resources = { AuroraFiber = { Weight = 1.4 }, DawnBloom = { Weight = 1.1 }, PolarQuartz = { Weight = 0.8 } },
+			props = { { Name = "AuroraTree", Weight = 1 }, { Name = "DawnBush", Weight = 1 } },
+			enemies = { { Name = "AuroraStag", Weight = 1 } },
+			resource_count = { min = 18, max = 28 }, prop_count = { min = 6, max = 10 }, enemy_count = { min = 0, max = 2 },
+		},
+		{
+			name = "PolarGrove", size = Vector2.new(100, 115),
+			resources = { PolarQuartz = { Weight = 1.4 }, AuroraFiber = { Weight = 1.1 }, DawnBloom = { Weight = 0.7 } },
+			props = { { Name = "AuroraTree", Weight = 1 }, { Name = "PolarRock", Weight = 1 } },
+			enemies = { { Name = "AuroraStag", Weight = 1 } },
+			resource_count = { min = 18, max = 28 }, prop_count = { min = 6, max = 10 }, enemy_count = { min = 0, max = 2 },
+		},
+	},
+	structures = {}, structure_count = 0, objectives = {}, objective_count = 0,
+	chests = { { Name = "Rare_Chest", Weight = 1 } }, chest_count = 0.08,
+}
+Config.biomes.StarfallCrater = {
+	weight = 1.2, timeScaledWeight = 0.85,
+	region_count = { min = 1, max = 2 },
+	regions = {
+		{
+			name = "ImpactBasin", size = Vector2.new(110, 105),
+			resources = { MeteorIron = { Weight = 1.4 }, ImpactGlass = { Weight = 1 }, CosmicDust = { Weight = 0.8 } },
+			props = { { Name = "MeteorBoulder", Weight = 1 }, { Name = "ImpactSpire", Weight = 1 } },
+			enemies = { { Name = "CometCrawler", Weight = 1 } },
+			resource_count = { min = 18, max = 28 }, prop_count = { min = 5, max = 9 }, enemy_count = { min = 0, max = 2 },
+		},
+		{
+			name = "GlassRim", size = Vector2.new(115, 100),
+			resources = { ImpactGlass = { Weight = 1.4 }, CosmicDust = { Weight = 1.1 }, MeteorIron = { Weight = 0.8 } },
+			props = { { Name = "ImpactSpire", Weight = 1 }, { Name = "CraterLog", Weight = 0.6 } },
+			enemies = { { Name = "CometCrawler", Weight = 1 } },
+			resource_count = { min = 18, max = 28 }, prop_count = { min = 5, max = 9 }, enemy_count = { min = 0, max = 2 },
+		},
+	},
+	structures = {}, structure_count = 0, objectives = {}, objective_count = 0,
+	chests = { { Name = "Rare_Chest", Weight = 1 } }, chest_count = 0.08,
+}
+
+-- Roadmap only: these eight entries never enter generation, forecasts or voting.
+Config.future_biomes = {
+	SaltglassCoast = { DisplayName = "Saltglass Coast", Implemented = false, Theme = "Tides, brine and shell composites" },
+	StormspireHighlands = { DisplayName = "Stormspire Highlands", Implemented = false, Theme = "Wind, storms and conductive ores" },
+	MyceliumHollow = { DisplayName = "Mycelium Hollow", Implemented = false, Theme = "Spores, medicines and living materials" },
+	IronrootBadlands = { DisplayName = "Ironroot Badlands", Implemented = false, Theme = "Metal roots, dust and reinforced machinery" },
+	SunkenArchive = { DisplayName = "Sunken Archive", Implemented = false, Theme = "Flooded ruins, salvage and pressure" },
+	CanopySea = { DisplayName = "Canopy Sea", Implemented = false, Theme = "Vertical forest, silk and gliding fauna" },
+	UmbralDepths = { DisplayName = "Umbral Depths", Implemented = false, Theme = "Darkness, acoustics and luminous minerals" },
+	ShattermoonExpanse = { DisplayName = "Shattermoon Expanse", Implemented = false, Theme = "Fractured gravity and lunar materials" },
+}
+
+Config.terrain_detail.materials_by_biome.AuroraVale = {
+	path = "Snow", patches = { { material = "Grass", threshold = 0.52 }, { material = "Ice", threshold = 0.82 } },
+}
+Config.terrain_detail.materials_by_biome.StarfallCrater = {
+	path = "Basalt", patches = { { material = "Rock", threshold = 0.54 }, { material = "CrackedLava", threshold = 0.86 } },
+}
+
 -- Shared gameplay config (moved from ReplicatedStorage/Shared/Config.lua)
 Config.BIOME_DEFAULT = Config.biome_default
 Config.BIOME_SHIFT = Config.biome_shift
@@ -791,6 +874,8 @@ Config.TERRAIN = {
 		FrozenTundra = "Snow",
 		Volcanic = "Basalt",
 		CrystalWastes = "Rock",
+		AuroraVale = "Snow",
+		StarfallCrater = "Basalt",
 	},
 }
 
