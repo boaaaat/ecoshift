@@ -11,6 +11,11 @@ local ResourceItemMap = require(ReplicatedStorage.Shared.ResourceItemMap)
 
 local ItemDropService = {}
 
+local function finiteVector(value)
+	return typeof(value) == "Vector3" and value.X == value.X and value.Y == value.Y
+		and value.Z == value.Z and value.Magnitude < math.huge
+end
+
 local function getPromptObjectText(itemId, count)
 	local item = ItemDatabase:Get(itemId)
 	local itemName = (item and item.Name) or itemId or "Item"
@@ -76,7 +81,7 @@ local function setAnchoredRecursive(instance, anchored)
 end
 
 local function applyInitialVelocity(model, velocity)
-	if not model or typeof(velocity) ~= "Vector3" then return end
+	if not model or not finiteVector(velocity) then return end
 	for _, d in ipairs(model:GetDescendants()) do
 		if d:IsA("BasePart") then
 			d.AssemblyLinearVelocity = velocity
@@ -126,20 +131,35 @@ local function attachPrompt(model)
 	prompt.RequiresLineOfSight = false
 	prompt.HoldDuration = 0
 	prompt.MaxActivationDistance = 10
+	local claimed = false
 	prompt.Triggered:Connect(function(plr)
+		if claimed or not model:IsDescendantOf(Workspace) then return end
+		local char = plr.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		local root = char and char:FindFirstChild("HumanoidRootPart")
+		if not hum or hum.Health <= 0 or not root or plr:GetAttribute("IsDead") then return end
+		if not ((root.Position - part.Position).Magnitude <= prompt.MaxActivationDistance) then return end
 		local id = ResourceItemMap.Normalize(model:GetAttribute("ItemId"))
 		local count = model:GetAttribute("Count") or 1
-		if not id then return end
+		if type(id) ~= "string" or not ItemDatabase:Get(id) then return end
+		if typeof(count) ~= "number" or count % 1 ~= 0 or count <= 0 or count == math.huge then return end
+		claimed = true
 		local added = InventoryService:Give(plr, id, count, true)
 		if added > 0 then
 			model:Destroy()
+		else
+			claimed = false
 		end
 	end)
 end
 
 function ItemDropService:SpawnDrop(itemId, count, position, options)
 	itemId = ResourceItemMap.Normalize(itemId)
-	count = math.max(1, math.floor(tonumber(count) or 1))
+	if type(itemId) ~= "string" or not ItemDatabase:Get(itemId) or not finiteVector(position) then return nil end
+	count = tonumber(count) or 1
+	if count ~= count or count <= 0 or count == math.huge then return nil end
+	count = math.max(1, math.floor(count))
+	if type(options) ~= "table" then options = nil end
 	local itemsFolder = ServerStorage:FindFirstChild("GameItems")
 	local prefab = itemsFolder and itemsFolder:FindFirstChild(itemId)
 	local fallbackModel = options and options.FallbackModel

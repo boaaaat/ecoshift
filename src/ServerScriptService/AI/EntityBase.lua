@@ -261,6 +261,7 @@ function EntityBase:InAttackRange()
 end
 
 function EntityBase:AttackTarget()
+	if not self:InAttackRange() or not self:HasLineOfSight(self.Target and self.Target.Character) then return end
 	local now = os.clock()
 	if now < (self.NextAttack or 0) then return end
 	self.NextAttack = now + (self.Config.AttackCooldown or 1.2)
@@ -351,6 +352,10 @@ function EntityBase:UpdatePath(targetPos)
 	if targetMoved and now < (self.NextRepath or 0) and self.Waypoints and self.WaypointIndex > 0 then
 		return
 	end
+	if now < (self.NextRepath or 0) then
+		if not self.Waypoints then self:_directMove(targetPos) end
+		return
+	end
 	self.NextRepath = now + repathInterval
 	local path = PathfindingService:CreatePath({
 		AgentRadius = self.Config.AgentRadius or 2,
@@ -360,6 +365,7 @@ function EntityBase:UpdatePath(targetPos)
 	local ok = pcall(function()
 		path:ComputeAsync(self.Root.Position, targetPos)
 	end)
+	if not self:IsAlive() then return end
 	if not ok or path.Status ~= Enum.PathStatus.Success then
 		self.Waypoints = nil
 		self.WaypointIndex = 0
@@ -388,7 +394,7 @@ function EntityBase:Step(dt)
 	self:SetSpeed(self:GetMoveSpeed())
 
 	-- Stuck detection (works for direct + path movement)
-	if self._lastPos then
+	if self._lastPos and self:IsTargetValid() and not self:InAttackRange() then
 		local moved = (self.Root.Position - self._lastPos).Magnitude
 		local minMove = tonumber(self.Config.StuckMinMove) or 0.08
 		local stuckThreshold = tonumber(self.Config.StuckJumpTime) or 0.1
@@ -403,6 +409,8 @@ function EntityBase:Step(dt)
 		else
 			self._stuckTime = 0
 		end
+	else
+		self._stuckTime = 0
 	end
 	self._lastPos = self.Root.Position
 
@@ -413,7 +421,7 @@ function EntityBase:Step(dt)
 	if self.Target and self.Target.Character then
 		local targetPos = self.Target.Character:FindFirstChild("HumanoidRootPart") and self.Target.Character.HumanoidRootPart.Position
 		if targetPos then
-			if self:InAttackRange() then
+			if self:InAttackRange() and self:HasLineOfSight(self.Target.Character) then
 				self:AttackTarget()
 			else
 				if self:HasLineOfSight(self.Target.Character) then

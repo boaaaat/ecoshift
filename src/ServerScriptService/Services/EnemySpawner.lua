@@ -7,6 +7,7 @@ local CollectionService = game:GetService("CollectionService")
 
 local BiomeService = require(script.Parent.BiomeService)
 local EntityConfig = require(script.Parent.Parent.AI.EntityConfig)
+local Progression = require(game.ReplicatedStorage.Shared.ProgressionConfig)
 
 local function withinPlayerDistance(point, minDist, maxDist)
 	local p = point:IsA("Attachment") and point.WorldPosition or point.Position
@@ -41,7 +42,7 @@ local function pickPoint(points, minDist, maxDist)
 			return pt
 		end
 	end
-	return shuffled[1]
+	return nil
 end
 
 local function findPrefabInFolder(root, biomeName, id)
@@ -252,6 +253,13 @@ getAnchorPosition = function(anchor)
 end
 
 spawnEnemyById = function(id, anchor, playerCount)
+	local limit = math.min(Progression.MaxActiveMonsters, math.max(1, #Players:GetPlayers()) * Progression.MaxActiveMonstersPerPlayer)
+	local active = 0
+	for _, entity in ipairs(ensureEnemiesFolder():GetChildren()) do
+		local hum = entity:FindFirstChildOfClass("Humanoid")
+		if hum and hum.Health > 0 then active += 1 end
+	end
+	if active >= limit then return end
 	local prefab = resolvePrefab(getEnemyPrefab(id), id)
 	if not prefab then
 		warn("[EnemySpawner] Missing prefab for", id)
@@ -301,12 +309,13 @@ spawnEnemyById = function(id, anchor, playerCount)
 	end
 	newEnemy:PivotTo(safeCFrame)
 
+	-- Finish health setup before parenting triggers the AI/level binding.
+	applyHealthScaling(newEnemy, playerCount or math.max(1, #Players:GetPlayers()))
 	newEnemy.Parent = ensureEnemiesFolder()
 	applyEntityTags(newEnemy, entityType)
 	if rootPart then
 		rootPart:SetNetworkOwner(nil)
 	end
-	applyHealthScaling(newEnemy, playerCount or math.max(1, #Players:GetPlayers()))
 end
 
 local EnemySpawner = {}

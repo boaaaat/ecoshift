@@ -1,11 +1,12 @@
 local MapConfig = {}
+local C = require(script.Parent.UI.UITheme).Colors
 
 MapConfig.GeneratedWorldFolderName = nil -- nil = read from BiomeConfig.spawn_folder_name
 
 MapConfig.Minimap = {
-	Size = 200,
+	Size = 150,
 	Margin = 14,
-	Position = "TopRight",
+	Position = "BottomRight",
 	Range = 500,
 	MinRange = 80,
 	MaxRange = 500,
@@ -58,19 +59,19 @@ MapConfig.MarkerRotation = {
 -- Type = "emoji" uses Value as text glyph
 -- Type = "icon" uses Value as Image (rbxassetid://...)
 MapConfig.MarkerGlyphs = {
-	PlayerSelf = { Type = "emoji", Value = "🧍" },
-	PlayerOther = { Type = "emoji", Value = "🙂" },
-	Spawn = { Type = "emoji", Value = "⬆️" },
-	Enemy = { Type = "emoji", Value = "👹" },
-	Structure = { Type = "emoji", Value = "🏠" },
-	Objective = { Type = "emoji", Value = "🎯" },
+	PlayerSelf = { Type = "emoji", Value = "▲" },
+	PlayerOther = { Type = "emoji", Value = "●" },
+	Spawn = { Type = "emoji", Value = "◆" },
+	Enemy = { Type = "emoji", Value = "!" },
+	Structure = { Type = "emoji", Value = "■" },
+	Objective = { Type = "emoji", Value = "+" },
 	PlayerUnique = {
 		Type = "emoji_pool",
-		Values = { "😀", "😃", "😄", "😁", "😆", "😎", "🥳", "🤠", "🙂", "😊", "😺", "😸" },
+		Values = { "●" },
 	},
 	EnemyUnique = {
 		Type = "emoji_pool",
-		Values = { "👹", "👺", "👻", "💀", "🧟", "🧌", "🕷️", "🦂", "🐍", "🐺", "🦇", "🪳" },
+		Values = { "!" },
 	},
 }
 
@@ -92,25 +93,25 @@ MapConfig.RegionStyles = {
 		ShowLabel = true,
 	},
 	ByName = {},
-	GlyphPool = { "🌲", "🌿", "🌾", "🏜️", "🪨", "🏕️", "🗿", "🌊", "🔥", "❄️", "🍄", "🏔️" },
+	GlyphPool = { "◇", "△", "+" },
 }
 
 MapConfig.Colors = {
-	UIBackground = Color3.fromRGB(11, 14, 18),
-	UIPanel = Color3.fromRGB(20, 26, 34),
-	UIBorder = Color3.fromRGB(62, 78, 96),
-	TextPrimary = Color3.fromRGB(230, 236, 242),
-	TextMuted = Color3.fromRGB(156, 170, 184),
-	MinimapBackground = Color3.fromRGB(10, 16, 20),
-	MinimapRing = Color3.fromRGB(72, 90, 108),
-	Player = Color3.fromRGB(100, 200, 255),
-	Teammate = Color3.fromRGB(116, 255, 170),
-	Structure = Color3.fromRGB(125, 204, 255),
-	Objective = Color3.fromRGB(255, 183, 77),
-	Spawn = Color3.fromRGB(255, 140, 60),
+	UIBackground = C.Background,
+	UIPanel = C.Panel,
+	UIBorder = C.Border,
+	TextPrimary = C.Text,
+	TextMuted = C.TextMuted,
+	MinimapBackground = C.Night,
+	MinimapRing = C.Amber,
+	Player = C.Paper,
+	Teammate = C.Sage,
+	Structure = C.Cold,
+	Objective = C.Amber,
+	Spawn = C.Amber,
 	RegionFill = Color3.fromRGB(255, 255, 255),
 	Resource = Color3.fromRGB(116, 221, 93),
-	Enemy = Color3.fromRGB(255, 104, 104),
+	Enemy = Color3.fromRGB(231, 116, 82),
 	BiomeTile = {
 		Forest = Color3.fromRGB(56, 92, 52),
 		Desert = Color3.fromRGB(138, 119, 72),

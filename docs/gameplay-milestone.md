@@ -1,0 +1,42 @@
+# Gameplay and field-kit milestone
+
+## Implemented
+
+- Rojo entrypoints are executable Scripts/LocalScripts; one bootstrap creates runtime folders and remotes before service startup. Authored assets remain compatible.
+- Normal biome duration is five minutes. Structures, their grid occupancy, and storage survive shifts. Old enemies are cleared. Chunk generation cancels stale work when shifts overlap.
+- Monsters receive a fixed level at spawn. Health and damage scale with level; templates remain unscaled. Active enemy counts are capped.
+- Current weather affects heat/cold, toxin, and wetness. Armor supplies separate protection channels. Local weather presentation transitions smoothly.
+- A fallen player leaves a ragdoll and can spectate a teammate. A living teammate holding a Revival Kit can revive them through a three-second prompt at 25% health. A full-team wipe ends the run with team statistics.
+- FieldClock reveals the countdown. BiomePredictor retains it and adds the next biome; WeatherPredictor retains both and adds the next weather. Forecasts share the actual server schedule.
+- Reusable stabilizer, trigger, and selector devices use majority ballots, fuel, cooldowns, and per-shift limits. Failed ballots spend nothing. Selection/advancement respect biome eligibility.
+- Hand-crafted Stone Spear and Revival Kit, a reachable Field Clock recipe, repaired station dependencies, and missing raw-resource sources support progression.
+- Shared animated field-kit styling covers HUD, vitals, inventory, crafting, building, stations, storage, map, survey/voting, spectating, and results.
+- Inventory, pickup, placement, combat, armor attachment, tool respawn, and crafting cancellation fixes address invalid requests and item-loss/duplication paths.
+- Temporary free Creator Store geometry supplies missing resource, tool, creature, and station visuals. Imported scripts are excluded; sources are recorded separately.
+
+## Gameplay checks performed in Studio
+
+The user requested gameplay testing. These were live Studio interactions and a temporary two-client diagnostic session, not a permanent automated test suite.
+
+- Normal resource prompt gathering produced inventory materials. Cursor-aimed harvesting reduced node health and produced a drop; the corrected cursor ray hits the visible target.
+- Crafted planks, crafted a Workbench through the crafting UI, placed it, and confirmed it remained after a biome shift.
+- An equipped Stone Spear hit a target for 18 damage. A level-four prototype wolf received 125.8 maximum health from its 85 baseline.
+- Equipping Desert Cloak applied 70% heat and 10% cold protection, plus 12 armor. This checks equipment wiring, not long-run survival balance.
+- No-device payloads hid countdown and forecasts. FieldClock revealed only timing; the top predictor retained timing and both forecasts.
+- A solo stabilizer vote added 60 seconds, consumed the listed fuel once, retained the device, and rejected a second use during cooldown.
+- Two actual Studio clients required both votes. Rejection consumed no fuel; approval extended the biome and consumed fuel once.
+- In that two-client session, a fallen player produced a ragdoll and their camera followed the living teammate. Revival without a kit was rejected. Client prompt-holding revived them at 25% health and consumed exactly one kit.
+- A full-team wipe produced results for both players. HUD, survey, crafting, and results were also visually inspected through Studio MCP.
+- Repeated startup/shift sessions showed no game-script errors in the inspected output. Studio/plugin diagnostic warnings were separate from game errors.
+- The final helper-free session confirmed a single weather Atmosphere and the corrected downed-health/results display. `scripts/rojo-build.ps1` successfully built `build/Ecoshift.rbxl`; both launch scripts now invoke Aftman's Rojo shim directly.
+
+All temporary diagnostic Scripts, LocalScripts, and grant/remoting helpers were removed before committing. No computer-use tools were needed; changes synced through Rojo.
+
+## Remaining design and validation work
+
+- The six proposed biome display names and 45–60 versus 20–30 minute progression pace await the player's choice. FrozenTundra, Volcanic, and CrystalWastes have prototype generation/resource data but remain disabled in random selection until their introduction gates and weights are agreed.
+- Fuel quantities, cooldowns, monster scaling, armor resistance, and recipes are initial tunable values. A full-length cooperative balance playthrough remains necessary.
+- The new content plan describes intended differentiated monster attacks and revised armor recipes. Most species still share the existing Wolf-style AI; these behavior/recipe proposals are not all implemented.
+- Some loose items still use fallback pickup geometry; armor visuals and all final models remain for the later art pass. Stations use generic temporary geometry.
+- Live lobby destination and replay flow have not been specified. The run ends with results; the existing development-only respawn is clearly labeled for Studio and does not reset a finished run.
+- Touch/gamepad play and small-screen layouts need device-specific playtesting. UI scales and clickable controls are present, but desktop Studio is the environment checked here.

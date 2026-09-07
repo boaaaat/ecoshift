@@ -1,152 +1,154 @@
--- BiomeService.lua
--- Tracks current biome and schedules periodic shifts.
+-- Server-owned shift schedule; forecasts and controls share this single state.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-
 local Config = require(ReplicatedStorage.Shared.Config)
 local BiomeConfig = require(ReplicatedStorage.Shared.BiomeConfig)
+local SurvivalConfig = require(ReplicatedStorage.Shared.SurvivalConfig)
 local Util = require(ReplicatedStorage.Shared.Util)
+local BiomeService = { _started = false, _shiftCount = 0, _version = 0 }
 
-local BiomeService = {}
-BiomeService._current = nil
-BiomeService._data = nil
-BiomeService._nextShift = 0
-BiomeService._started = false
-BiomeService._remotesFolder = nil
-BiomeService._remote = nil
-BiomeService._lastChangedAt = 0
-
-local function buildPool(startTime)
+local function weatherFor(biome)
+	local pick = Util.ChooseWeighted(SurvivalConfig.WEATHER_BY_BIOME[biome] or {}, "Weight")
+	return pick or { Id = "Clear", Name = "Clear skies", Temp = 0, Toxin = 0, Wet = 0 }
+end
+function BiomeService:GetElapsed()
+	return math.max(0, (self._pausedAt or os.clock()) - (self._startTime or os.clock()))
+end
+function BiomeService:GetEligibleBiomes(elapsed)
 	local pool = {}
-	for name, data in pairs(BiomeConfig.BIOMES or {}) do
-		local weight = data.Weight or data.weight or 1
-		local scaled = data.TimeScaledWeight or data.timeScaledWeight or 0
-		if scaled ~= 0 then
-			local elapsed = os.clock() - (startTime or os.clock())
-			local denom = (BiomeConfig.BIOME_SHIFT and BiomeConfig.BIOME_SHIFT.TimeScaleSeconds) or 900
-			weight = weight + (scaled * (elapsed / math.max(denom, 1)))
+	for name, data in pairs(BiomeConfig.BIOMES) do
+		local enabled = (data.Weight or data.weight or 1) > 0 or (data.TimeScaledWeight or data.timeScaledWeight or 0) > 0
+		if enabled and (elapsed or self:GetElapsed()) >= (data.MinElapsed or data.minElapsed or 0) then
+			table.insert(pool, name)
 		end
-		table.insert(pool, { Id = name, Weight = weight })
 	end
+	table.sort(pool)
 	return pool
 end
-
-local function pickDefault()
-	if BiomeConfig.BIOME_DEFAULT and BiomeConfig.BIOMES[BiomeConfig.BIOME_DEFAULT] then
-		return BiomeConfig.BIOME_DEFAULT
+function BiomeService:_pickNext(elapsed)
+	local pool = {}
+	for _, name in ipairs(self:GetEligibleBiomes(elapsed)) do
+		local data = BiomeConfig.BIOMES[name]
+		local weight = (data.Weight or data.weight or 1) +
+			(data.TimeScaledWeight or data.timeScaledWeight or 0) * elapsed /
+			math.max(1, (BiomeConfig.BIOME_SHIFT or {}).TimeScaleSeconds or 900)
+		if name ~= self._current then
+			table.insert(pool, { Id = name, Weight = math.max(0.05, weight) })
+		end
 	end
-	for name in pairs(BiomeConfig.BIOMES or {}) do
-		return name
-	end
-	return "Unknown"
+	local pick = Util.ChooseWeighted(pool, "Weight")
+	return pick and pick.Id or self._current
 end
-
 function BiomeService:_ensureRemote()
-	if self._remote then return end
-	self._remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
-	self._remote = Util.GetRemote(self._remotesFolder, Config.RemoteNames.BiomeChanged)
+	self._remote = self._remote or ReplicatedStorage.Remotes:FindFirstChild(Config.RemoteNames.BiomeChanged)
 end
-
 function BiomeService:_broadcast()
 	self:_ensureRemote()
-	if self._remote and self._remote.FireAllClients then
-		self._remote:FireAllClients(self._current, self._data)
-	end
+	if self._remote then self._remote:FireAllClients(self._current, self._data) end
 end
-
-function BiomeService:SendToPlayer(plr)
+function BiomeService:SendToPlayer(player)
 	self:_ensureRemote()
-	if self._remote and self._remote.FireClient then
-		self._remote:FireClient(plr, self._current, self._data)
-	end
+	if self._remote then self._remote:FireClient(player, self:GetCurrent(), self:GetData()) end
 end
-
 function BiomeService:GetCurrent()
-	if not self._current then
-		self:SetCurrent(pickDefault(), "Init")
-	end
+	if not self._current then self:SetCurrent(BiomeConfig.BIOME_DEFAULT or "Forest", "Init") end
 	return self._current
 end
-
 function BiomeService:GetData()
-	if not self._data then
-		self:SetCurrent(self:GetCurrent(), "Init")
-	end
+	self:GetCurrent()
 	return self._data
 end
-
+function BiomeService:GetWeather()
+	self:GetCurrent()
+	return self._weather
+end
+function BiomeService:GetTiming()
+	self:GetCurrent()
+	return {
+		Remaining = math.max(0, self._nextShift - (self._pausedAt or os.clock())),
+		Duration = self._duration, ShiftCount = self._shiftCount, Version = self._version,
+		UpcomingBiome = self._upcomingBiome, UpcomingWeather = self._upcomingWeather,
+	}
+end
+function BiomeService:_scheduleNext()
+	local window = BiomeConfig.BIOME_SHIFT or {}
+	local min = math.max(15, math.floor(window.MinSeconds or 300))
+	local max = math.max(min, math.floor(window.MaxSeconds or min))
+	self._duration = math.random(min, max)
+	self._nextShift = os.clock() + self._duration
+	self._upcomingBiome = self:_pickNext(self:GetElapsed() + self._duration)
+	self._upcomingWeather = weatherFor(self._upcomingBiome)
+	self._delayed, self._selected = false, false
+	self._version += 1
+end
 function BiomeService:SetCurrent(name, reason)
-	if not name or not BiomeConfig.BIOMES[name] then
-		return false
-	end
-	self._current = name
-	self._data = BiomeConfig.BIOMES[name]
+	if not BiomeConfig.BIOMES[name] or self._pausedAt then return false end
+	local wasStarted = self._current ~= nil
+	local forecast = name == self._upcomingBiome and self._upcomingWeather or nil
+	self._current, self._data = name, BiomeConfig.BIOMES[name]
+	self._weather = forecast or weatherFor(name)
 	self._lastChangedAt = os.clock()
+	if wasStarted then self._shiftCount += 1 end
+	self:_scheduleNext()
 	self:_broadcast()
-	_G.Ecoshift = _G.Ecoshift or {}
-	local list = _G.Ecoshift.BiomeChangedCallbacks
-	if type(list) == "table" then
-		for _, cb in ipairs(list) do
-			if type(cb) == "function" then
-				pcall(cb, name, self._data, reason)
-			end
-		end
+	for _, cb in ipairs((_G.Ecoshift or {}).BiomeChangedCallbacks or {}) do
+		local ok, err = pcall(cb, name, self._data, reason)
+		if not ok then warn("[BiomeService] Shift callback failed:", err) end
 	end
 	return true
 end
-
-function BiomeService:_scheduleNext()
-	local window = BiomeConfig.BIOME_SHIFT or {}
-	local minS = tonumber(window.MinSeconds) or 300
-	local maxS = tonumber(window.MaxSeconds) or 480
-	if maxS < minS then maxS = minS end
-	self._nextShift = os.clock() + math.random(minS, maxS)
-end
-
-function BiomeService:_pickNext()
-	local pool = buildPool(self._startTime)
-	if #pool == 0 then return self._current end
-	if #pool == 1 then
-		return pool[1].Id or self._current
-	end
-	-- Never pick the current biome if there's more than one choice
-	local filtered = {}
-	for _, entry in ipairs(pool) do
-		if entry.Id ~= self._current then
-			table.insert(filtered, entry)
+function BiomeService:CanControl(action, biome, version)
+	if self._pausedAt then return false, "The expedition has ended." end
+	if version ~= self._version then return false, "The shift schedule changed. Propose a new vote." end
+	local remaining = self:GetTiming().Remaining
+	if action == "Delay" then
+		if self._delayed then return false, "This shift has already been stabilized." end
+		if remaining <= 15 then return false, "The shift is already imminent." end
+	elseif action == "Advance" then
+		if os.clock() - self._lastChangedAt < 60 then return false, "Spend at least a minute in this biome first." end
+		if remaining <= 15 then return false, "The shift is already imminent." end
+		if not table.find(self:GetEligibleBiomes(self:GetElapsed() + 15), self._upcomingBiome) then
+			return false, "The next transition is not available early yet. Its forecast is unchanged."
 		end
-	end
-	if #filtered == 0 then
-		return self._current
-	end
-	local pick = Util.ChooseWeighted(filtered, "Weight")
-	return (pick and pick.Id) or self._current
+	elseif action == "Select" then
+		if self._selected then return false, "A destination is already locked for this shift." end
+		if remaining <= 15 then return false, "The shift is already imminent." end
+		if biome == self._current or not table.find(self:GetEligibleBiomes(), biome) then
+			return false, "Choose another biome that is unlocked in this run."
+		end
+	else return false, "Unknown world control." end
+	return true
 end
-
+function BiomeService:ApplyControl(action, biome, version)
+	local ok, message = self:CanControl(action, biome, version)
+	if not ok then return false, message end
+	if action == "Delay" then
+		self._nextShift += 60; self._duration += 60; self._delayed = true
+	elseif action == "Advance" then
+		self._nextShift = os.clock() + 15
+	elseif action == "Select" then
+		self._upcomingBiome, self._selected = biome, true
+		self._upcomingWeather = weatherFor(biome)
+	end
+	self._version += 1
+	return true
+end
+function BiomeService:Pause()
+	self._pausedAt = self._pausedAt or os.clock()
+end
 function BiomeService:Init()
 	if self._started then return end
-	self._started = true
-	self._startTime = os.clock()
-	self:SetCurrent(pickDefault(), "Init")
-	self:_scheduleNext()
+	self._started, self._startTime = true, os.clock()
 	_G.Ecoshift = _G.Ecoshift or {}
 	_G.Ecoshift.BiomeChangedCallbacks = _G.Ecoshift.BiomeChangedCallbacks or {}
 	_G.Ecoshift.OnBiomeChangedAdd = function(cb)
-		if type(cb) == "function" then
-			table.insert(_G.Ecoshift.BiomeChangedCallbacks, cb)
-		end
+		if type(cb) == "function" then table.insert(_G.Ecoshift.BiomeChangedCallbacks, cb) end
 	end
-	-- OPTIMIZED: Use task.spawn with sleep instead of Heartbeat to reduce per-frame overhead
+	self:SetCurrent(BiomeConfig.BIOME_DEFAULT or "Forest", "Init")
 	task.spawn(function()
-		while true do
-			if os.clock() >= self._nextShift then
-				local nextBiome = self:_pickNext()
-				self:SetCurrent(nextBiome, "Timer")
-				self:_scheduleNext()
-			end
-			task.wait(1) -- Check once per second instead of every frame
+		while not self._pausedAt do
+			if os.clock() >= self._nextShift then self:SetCurrent(self._upcomingBiome, "Timer") end
+			task.wait(0.25)
 		end
 	end)
 end
-
 return BiomeService

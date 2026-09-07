@@ -22,7 +22,7 @@ end
 
 local ChunkStreamingService = {}
 ChunkStreamingService._loadedChunks = {} -- [chunkKey] = { folder, lastAccess, objects }
-ChunkStreamingService._loadingChunks = {} -- [chunkKey] = true (currently loading)
+ChunkStreamingService._loadingChunks = {} -- [chunkKey] = generation token
 ChunkStreamingService._chunkFolders = {} -- [chunkKey] = Folder
 ChunkStreamingService._initialized = false
 ChunkStreamingService._currentBiome = "Forest"
@@ -34,6 +34,9 @@ ChunkStreamingService._biomes = nil
 ChunkStreamingService._loadQueue = {}
 ChunkStreamingService._loadQueueSet = {}
 ChunkStreamingService._loadQueueHead = 1
+ChunkStreamingService._generation = 0
+ChunkStreamingService._paused = true
+local GENERATION_CANCELLED = {}
 
 -- Config (read from BiomeConfig or use defaults)
 local CHUNK_SIZE = WorldGenConfig.chunk_size or 240
@@ -362,6 +365,7 @@ local function getAssetYOffset(prefabName)
 end
 
 local function tryApplyScaleOverride(instance, prefabName)
+	if instance:GetAttribute("PrototypePrefab") then return end
 	local override = getAssetOverrideForPrefab(prefabName)
 	if not override then
 		return
@@ -1409,7 +1413,8 @@ function ChunkStreamingService:_processLoadQueue(desiredSet)
 			break
 		end
 		local entry = self._loadQueue[head]
-		self._loadQueue[head] = nil
+		-- Keep the array dense until compaction; # is undefined for a sparse queue.
+		self._loadQueue[head] = false
 		self._loadQueueHead = head + 1
 		if entry then
 			self._loadQueueSet[entry.key] = nil
@@ -1431,6 +1436,7 @@ function ChunkStreamingService:_processLoadQueue(desiredSet)
 end
 
 function ChunkStreamingService:_loadChunk(cx, cz)
+	if self._paused then return end
 	local key = chunkKey(cx, cz)
 	
 	-- Already loaded or loading
@@ -1449,39 +1455,51 @@ function ChunkStreamingService:_loadChunk(cx, cz)
 		return -- Outside world bounds
 	end
 	
-	self._loadingChunks[key] = true
+	local generation = self._generation
+	self._loadingChunks[key] = generation
 	
 	task.spawn(function()
-		local chunkFolder = self:_getOrCreateChunkFolder(cx, cz)
-		local chunkCenter = Vector3.new(worldX, BASE_Y, worldZ)
-		local step = makeStep()
-		
-		-- Generate chunk content
-		local regions, biomeName = self:_generateChunkContent(cx, cz, chunkCenter, chunkFolder, step)
-		
-		self._loadedChunks[key] = {
-			folder = chunkFolder,
-			lastAccess = os.clock(),
-			cx = cx,
-			cz = cz,
-			regions = regions or {},
-		}
-		chunkFolder:SetAttribute("MapChunkX", cx)
-		chunkFolder:SetAttribute("MapChunkZ", cz)
-		chunkFolder:SetAttribute("MapBiome", tostring(biomeName or self._currentBiome or "Unknown"))
-		chunkFolder:SetAttribute("MapRegionsJson", serializeRegionsForMap(regions or {}))
-		self._loadingChunks[key] = nil
-		
-		-- Bind resource nodes in this chunk
-		task.defer(function()
+		local chunkFolder
+		local yieldStep = makeStep()
+		local function checkGeneration()
+			if generation ~= self._generation or self._paused
+				or (chunkFolder and not chunkFolder.Parent) then
+				error(GENERATION_CANCELLED, 0)
+			end
+		end
+		local function step()
+			checkGeneration()
+			yieldStep()
+			checkGeneration()
+		end
+		local ok, err = pcall(function()
+			checkGeneration()
+			chunkFolder = self:_getOrCreateChunkFolder(cx, cz)
+			local chunkCenter = Vector3.new(worldX, BASE_Y, worldZ)
+			local regions, biomeName = self:_generateChunkContent(cx, cz, chunkCenter, chunkFolder, step)
+			checkGeneration()
+			self._loadedChunks[key] = {
+				folder = chunkFolder,
+				lastAccess = os.clock(),
+				cx = cx,
+				cz = cz,
+				regions = regions or {},
+			}
+			chunkFolder:SetAttribute("MapChunkX", cx)
+			chunkFolder:SetAttribute("MapChunkZ", cz)
+			chunkFolder:SetAttribute("MapBiome", tostring(biomeName or self._currentBiome or "Unknown"))
+			chunkFolder:SetAttribute("MapRegionsJson", serializeRegionsForMap(regions or {}))
+			-- Keep binding in this protected worker so cancellation also stops loot work.
 			ResourceNodeService:BindFolder(chunkFolder)
 			
 			-- Bind chests and monsters for loot system
 			local loot = getLootService()
+			checkGeneration()
 			if loot then
 				-- Scan chunk folder for tagged chests and monsters
 				local descendants = chunkFolder:GetDescendants()
 				for i = 1, #descendants do
+					checkGeneration()
 					local descendant = descendants[i]
 					-- Check chest tags
 					if CollectionService:HasTag(descendant, "Common_Chest") or
@@ -1503,10 +1521,25 @@ function ChunkStreamingService:_loadChunk(cx, cz)
 					end
 					if i % STREAM_BIND_OPS_PER_YIELD == 0 then
 						task.wait()
+						checkGeneration()
 					end
 				end
 			end
 		end)
+		if not ok then
+			if err ~= GENERATION_CANCELLED then
+				warn(string.format("[ChunkStreamingService] Chunk %s failed: %s", key, tostring(err)))
+			end
+			if chunkFolder then chunkFolder:Destroy() end
+			-- A cancelled old worker must not erase the new generation's same chunk.
+			if self._chunkFolders[key] == chunkFolder then
+				self._chunkFolders[key] = nil
+				self._loadedChunks[key] = nil
+			end
+		end
+		if self._loadingChunks[key] == generation then
+			self._loadingChunks[key] = nil
+		end
 	end)
 end
 
@@ -1827,7 +1860,17 @@ function ChunkStreamingService:_placePrefab(prefab, position, parent, step)
 	-- Get Y offset
 	local yOffset = getOffsetValue(clone) + getAssetYOffset(prefab.Name)
 	
-	local targetCf = CFrame.new(position.X, BASE_Y + yOffset, position.Z)
+	local groundY = BASE_Y
+	if clone:GetAttribute("PrototypePrefab") then
+		-- Smooth terrain can end above the configured plane at voxel boundaries.
+		-- Ground the base-pivot test art on the actual surface, including small plants.
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Include
+		params.FilterDescendantsInstances = { Workspace.Terrain }
+		local hit = Workspace:Raycast(Vector3.new(position.X, BASE_Y + 32, position.Z), Vector3.new(0, -96, 0), params)
+		if hit then groundY = hit.Position.Y end
+	end
+	local targetCf = CFrame.new(position.X, groundY + yOffset, position.Z)
 	if clone:IsA("Model") then
 		clone:PivotTo(targetCf)
 	elseif clone:IsA("BasePart") then
@@ -1867,6 +1910,7 @@ function ChunkStreamingService:_getPlayerChunks()
 end
 
 function ChunkStreamingService:_updateChunks()
+	if self._paused then return end
 	local playerChunks = self:_getPlayerChunks()
 	local chunksToLoad = {}
 	local now = os.clock()
@@ -1908,15 +1952,13 @@ function ChunkStreamingService:_updateChunks()
 	end
 end
 
-function ChunkStreamingService:SetBiome(biomeName, force)
-	if self._currentBiome == biomeName and not force then return end
-	
-	self._currentBiome = biomeName
-	
-	-- Clear all loaded chunks and reload
-	for key, data in pairs(self._loadedChunks) do
-		if data.folder and data.folder.Parent then
-			data.folder:Destroy()
+function ChunkStreamingService:Pause()
+	self._paused = true
+	self._generation += 1
+	-- Includes partially generated chunks, not just completed workers.
+	for _, folder in pairs(self._chunkFolders) do
+		if folder.Parent then
+			folder:Destroy()
 		end
 	end
 	self._loadedChunks = {}
@@ -1925,7 +1967,14 @@ function ChunkStreamingService:SetBiome(biomeName, force)
 	self._loadQueue = {}
 	self._loadQueueSet = {}
 	self._loadQueueHead = 1
-	
+end
+
+function ChunkStreamingService:SetBiome(biomeName, force)
+	if self._currentBiome == biomeName and not force and not self._paused then return end
+	self:Pause()
+	self._currentBiome = biomeName
+	self:_ensureWorldFolder()
+	self._paused = false
 	-- Force immediate reload around players
 	self:_updateChunks()
 end
@@ -1965,24 +2014,13 @@ function ChunkStreamingService:Init()
 	self:_initBiomes()
 	self._currentBiome = BiomeService:GetCurrent()
 	
-	-- Subscribe to biome changes
-	_G.Ecoshift = _G.Ecoshift or {}
-	task.spawn(function()
-		for _ = 1, 50 do
-			if type(_G.Ecoshift.OnBiomeChangedAdd) == "function" then
-				_G.Ecoshift.OnBiomeChangedAdd(function(newBiome)
-					self:SetBiome(newBiome)
-				end)
-				break
-			end
-			task.wait(0.1)
-		end
-	end)
+	-- WorldGenController owns shift ordering: pause, terrain, then resume streaming.
 	
 	-- Main update loop
 	task.spawn(function()
 		while true do
-			self:_updateChunks()
+			local ok, err = pcall(self._updateChunks, self)
+			if not ok then warn("[ChunkStreamingService] Update failed: " .. tostring(err)) end
 			task.wait(UPDATE_INTERVAL)
 		end
 	end)

@@ -4,6 +4,10 @@ local Players = game:GetService("Players")
 local StarterPlayer = game:GetService("StarterPlayer")
 
 local Services = script.Parent.Services
+require(script.Parent:WaitForChild("RuntimeBootstrap")):Init()
+
+-- Supply test art before inventory tools and streaming cache their prefab roots.
+require(Services:WaitForChild("PrototypePrefabService")):Init()
 
 -- Reserve Shift for gameplay UI interactions (no Roblox shift lock).
 StarterPlayer.EnableMouseLockOption = false
@@ -49,6 +53,7 @@ local tier2Services = {
 	{ name = "ArmorService", method = "Init" },
 	{ name = "DayNightService", method = "Init" },
 	{ name = "CraftingService", method = "Init" },
+	{ name = "WorldControlService", method = "Init" },
 	{ name = "LootService", method = "Init" },
 	{ name = "RewardsObserver", method = "Init" },
 	{ name = "EntityAIService", method = "Init" },
@@ -98,15 +103,9 @@ end
 -- TIER 1: Critical (parallel)
 initTier(tier1Services, "Init")
 
--- TIER 2: Gameplay services (parallel, after tier 1)
-task.defer(function()
-	initTier(tier2Services)
-end)
-
--- TIER 3: Heavy/deferred (run after a short delay to let client connect)
-task.delay(0.1, function()
-	initTier(tier3Services)
-end)
+-- Complete gameplay initialization before starting world generation and waves.
+initTier(tier2Services)
+initTier(tier3Services)
 
 -- Relay biome changes to BuildService for global Decay pass
 Players.PlayerAdded:Connect(function(plr)

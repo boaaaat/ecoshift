@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 
+local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
@@ -25,24 +26,9 @@ elseif not rCraft then
 end
 
 -- UI Constants (matching inventory style)
-local COLORS = {
-	Background = Color3.fromRGB(18, 18, 22),
-	Panel = Color3.fromRGB(28, 28, 35),
-	SlotEmpty = Color3.fromRGB(38, 38, 48),
-	SlotFilled = Color3.fromRGB(48, 48, 60),
-	SlotHover = Color3.fromRGB(58, 58, 75),
-	SlotSelected = Color3.fromRGB(80, 120, 200),
-	Border = Color3.fromRGB(60, 60, 80),
-	Text = Color3.fromRGB(240, 240, 245),
-	TextMuted = Color3.fromRGB(160, 160, 175),
-	Accent = Color3.fromRGB(100, 180, 255),
-	Success = Color3.fromRGB(80, 200, 120),
-	Warning = Color3.fromRGB(255, 180, 80),
-	Danger = Color3.fromRGB(220, 80, 80),
-}
+local COLORS = Theme.Colors
 
 local MARGIN = 16
-local RECIPE_HEIGHT = 70
 local CRAFT_MESSAGES = ResultMessages.Craft or {}
 
 -- State
@@ -58,13 +44,14 @@ local gui = Instance.new("ScreenGui")
 gui.Name = "CraftingUI"
 gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.DisplayOrder = 20
 gui.Parent = playerGui
 
 -- Backdrop (dims screen when open)
 local backdrop = Instance.new("Frame")
 backdrop.Name = "Backdrop"
 backdrop.Size = UDim2.new(1, 0, 1, 0)
-backdrop.BackgroundColor3 = Color3.new(0, 0, 0)
+backdrop.BackgroundColor3 = COLORS.Night
 backdrop.BackgroundTransparency = 1
 backdrop.BorderSizePixel = 0
 backdrop.Visible = false
@@ -74,7 +61,7 @@ backdrop.Parent = gui
 -- Main panel (CanvasGroup for GroupTransparency animation)
 local mainPanel = Instance.new("CanvasGroup")
 mainPanel.Name = "MainPanel"
-mainPanel.Size = UDim2.new(0, 420, 0, 480)
+mainPanel.Size = UDim2.new(0, 452, 0, 530)
 mainPanel.AnchorPoint = Vector2.new(0.5, 0.5)
 mainPanel.Position = UDim2.new(0.5, 0, 0.5, 0)
 mainPanel.BackgroundColor3 = COLORS.Panel
@@ -106,6 +93,7 @@ shadow.ScaleType = Enum.ScaleType.Slice
 shadow.SliceCenter = Rect.new(23, 23, 277, 277)
 shadow.ZIndex = 9
 shadow.Parent = mainPanel
+shadow.Visible = false
 
 -- Header
 local header = Instance.new("Frame")
@@ -120,7 +108,7 @@ titleLabel.Name = "Title"
 titleLabel.Size = UDim2.new(1, -80, 1, 0)
 titleLabel.Position = UDim2.new(0, MARGIN, 0, 0)
 titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "🤲 Hand Crafting"
+titleLabel.Text = "Field crafting"
 titleLabel.TextColor3 = COLORS.Text
 titleLabel.TextSize = 20
 titleLabel.Font = Enum.Font.GothamBold
@@ -136,7 +124,7 @@ closeBtn.AnchorPoint = Vector2.new(1, 0.5)
 closeBtn.Position = UDim2.new(1, -MARGIN, 0.5, 0)
 closeBtn.BackgroundColor3 = COLORS.SlotEmpty
 closeBtn.BorderSizePixel = 0
-closeBtn.Text = "✕"
+closeBtn.Text = "X"
 closeBtn.TextColor3 = COLORS.TextMuted
 closeBtn.TextSize = 16
 closeBtn.Font = Enum.Font.GothamBold
@@ -243,7 +231,7 @@ local function beginCraftPending()
 	pendingRequestToken += 1
 	local token = pendingRequestToken
 	craftBtn.Text = "Crafting..."
-	craftBtn.TextColor3 = COLORS.Text
+	craftBtn.TextColor3 = COLORS.Paper
 	craftBtn.BackgroundColor3 = COLORS.Accent
 	craftBtnStroke.Color = COLORS.Accent
 	return token
@@ -310,21 +298,21 @@ local function createIngredientDisplay(ingredient, parent, craftMult)
 	
 	-- Item name/icon
 	local itemLabel = Instance.new("TextLabel")
-	itemLabel.Size = UDim2.new(1, -4, 0, 20)
+	itemLabel.Size = UDim2.new(1, -8, 0, 30)
 	itemLabel.Position = UDim2.new(0, 2, 0, 3)
 	itemLabel.BackgroundTransparency = 1
 	itemLabel.Text = name
 	itemLabel.TextColor3 = canAfford and COLORS.Text or COLORS.Danger
 	itemLabel.TextSize = 10
 	itemLabel.Font = Enum.Font.GothamBold
-	itemLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	itemLabel.TextWrapped = true
 	itemLabel.ZIndex = 14
 	itemLabel.Parent = frame
 	
 	-- Count display
 	local countLabel = Instance.new("TextLabel")
 	countLabel.Size = UDim2.new(1, -4, 0, 18)
-	countLabel.Position = UDim2.new(0, 2, 0, 22)
+	countLabel.Position = UDim2.new(0, 2, 0, 33)
 	countLabel.BackgroundTransparency = 1
 	countLabel.Text = string.format("%d/%d", have, needed)
 	countLabel.TextColor3 = canAfford and COLORS.Success or COLORS.Warning
@@ -350,13 +338,14 @@ local function createRecipeCard(recipeId, recipeData)
 	
 	local card = Instance.new("TextButton")
 	card.Name = recipeId
-	card.Size = UDim2.new(1, -12, 0, RECIPE_HEIGHT)
+	card.Size = UDim2.new(1, -12, 0, 38 + math.max(1, math.ceil(#ingredients / 3)) * 54)
 	card.BackgroundColor3 = COLORS.SlotFilled
 	card.BorderSizePixel = 0
 	card.Text = ""
 	card.AutoButtonColor = false
 	card.ZIndex = 12
 	card.Parent = recipeContainer
+	Theme.Button(card)
 	
 	local cardCorner = Instance.new("UICorner")
 	cardCorner.CornerRadius = UDim.new(0, 8)
@@ -372,7 +361,7 @@ local function createRecipeCard(recipeId, recipeData)
 	-- Result item name (with output count if > 1)
 	local nameLabel = Instance.new("TextLabel")
 	nameLabel.Name = "Name"
-	nameLabel.Size = UDim2.new(1, -10, 0, 22)
+	nameLabel.Size = UDim2.new(1, -102, 0, 22)
 	nameLabel.Position = UDim2.new(0, 10, 0, 6)
 	nameLabel.BackgroundTransparency = 1
 	nameLabel.Text = outputCount > 1 and string.format("%s x%d", name, outputCount) or name
@@ -380,6 +369,7 @@ local function createRecipeCard(recipeId, recipeData)
 	nameLabel.TextSize = 14
 	nameLabel.Font = Enum.Font.GothamBold
 	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	nameLabel.ZIndex = 13
 	nameLabel.Parent = card
 	
@@ -390,7 +380,7 @@ local function createRecipeCard(recipeId, recipeData)
 	statusLabel.AnchorPoint = Vector2.new(1, 0)
 	statusLabel.Position = UDim2.new(1, -10, 0, 8)
 	statusLabel.BackgroundTransparency = 1
-	statusLabel.Text = canCraft and "✓ Ready" or "✗ Missing"
+	statusLabel.Text = canCraft and "READY" or "MISSING"
 	statusLabel.TextColor3 = canCraft and COLORS.Success or COLORS.Danger
 	statusLabel.TextSize = 11
 	statusLabel.Font = Enum.Font.GothamBold
@@ -401,16 +391,18 @@ local function createRecipeCard(recipeId, recipeData)
 	-- Ingredients container
 	local ingredientsFrame = Instance.new("Frame")
 	ingredientsFrame.Name = "Ingredients"
-	ingredientsFrame.Size = UDim2.new(1, -20, 0, 44)
-	ingredientsFrame.Position = UDim2.new(0, 10, 0, 28)
+	ingredientsFrame.Size = UDim2.new(1, -20, 0, math.max(1, math.ceil(#ingredients / 3)) * 54)
+	ingredientsFrame.Position = UDim2.new(0, 10, 0, 32)
 	ingredientsFrame.BackgroundTransparency = 1
 	ingredientsFrame.ZIndex = 13
 	ingredientsFrame.Parent = card
 	
-	local ingredientLayout = Instance.new("UIListLayout")
+	local ingredientLayout = Instance.new("UIGridLayout")
 	ingredientLayout.FillDirection = Enum.FillDirection.Horizontal
+	ingredientLayout.FillDirectionMaxCells = 3
+	ingredientLayout.CellSize = UDim2.new(1 / 3, -4, 0, 50)
+	ingredientLayout.CellPadding = UDim2.fromOffset(4, 4)
 	ingredientLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	ingredientLayout.Padding = UDim.new(0, 6)
 	ingredientLayout.Parent = ingredientsFrame
 	
 	-- Add ingredient displays
@@ -455,7 +447,7 @@ end
 function updateCraftButton()
 	if isCraftPending then
 		craftBtn.Text = "Crafting..."
-		craftBtn.TextColor3 = COLORS.Text
+		craftBtn.TextColor3 = COLORS.Paper
 		craftBtn.BackgroundColor3 = COLORS.Accent
 		craftBtnStroke.Color = COLORS.Accent
 		return
@@ -478,12 +470,12 @@ function updateCraftButton()
 	
 	if canCraft then
 		craftBtn.Text = "Craft " .. name
-		craftBtn.TextColor3 = COLORS.Text
+		craftBtn.TextColor3 = COLORS.Paper
 		craftBtn.BackgroundColor3 = COLORS.Success
 		craftBtnStroke.Color = COLORS.Success
 	else
 		craftBtn.Text = "Missing Materials"
-		craftBtn.TextColor3 = COLORS.Text
+		craftBtn.TextColor3 = COLORS.Paper
 		craftBtn.BackgroundColor3 = COLORS.Danger
 		craftBtnStroke.Color = COLORS.Danger
 	end
@@ -533,7 +525,7 @@ local function openCrafting()
 	mainPanel.GroupTransparency = 1
 	
 	TweenService:Create(backdrop, TweenInfo.new(0.2), {BackgroundTransparency = 0.5}):Play()
-	TweenService:Create(mainPanel, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+	TweenService:Create(mainPanel, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
 		Position = UDim2.new(0.5, 0, 0.5, 0),
 		GroupTransparency = 0
 	}):Play()
@@ -671,3 +663,11 @@ end
 
 print("[CraftingUI] Ready - Press C for hand crafting (basic items)")
 print("[CraftingUI] Place workbenches for advanced recipes!")
+
+Theme.Panel(mainPanel)
+Theme.Fit(mainPanel, 452, 530)
+Theme.Button(closeBtn)
+Theme.Button(craftBtn)
+player:GetAttributeChangedSignal("FieldKitCraft"):Connect(function()
+ if isOpen then closeCrafting() else openCrafting() end
+end)

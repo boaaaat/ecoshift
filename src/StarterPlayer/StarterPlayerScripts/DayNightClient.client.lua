@@ -5,6 +5,7 @@ local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 
+local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 
@@ -56,83 +57,32 @@ local function createTimeUI()
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "DayNightUI"
 	screenGui.ResetOnSpawn = false
-	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	
+	screenGui.DisplayOrder = 5
+	screenGui.Parent = playerGui
 	local frame = Instance.new("Frame")
 	frame.Name = "TimeDisplay"
-	frame.Size = UDim2.new(0, 140, 0, 60)
-	frame.Position = UDim2.new(0.5, -70, 0, 10)
-	frame.AnchorPoint = Vector2.new(0, 0)
-	frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-	frame.BackgroundTransparency = 0.4
-	frame.BorderSizePixel = 0
-	frame.ClipsDescendants = false
+	frame.Size = UDim2.fromOffset(170, 36)
+	frame.AnchorPoint = Vector2.new(0.5, 0)
+	frame.Position = UDim2.new(0.5, 0, 0, 14)
 	frame.Parent = screenGui
-	
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent = frame
-	
-	local icon = Instance.new("ImageLabel")
-	icon.Name = "Icon"
-	icon.Size = UDim2.new(0, 24, 0, 24)
-	icon.Position = UDim2.new(0.5, 0, 0, 6)
-	icon.AnchorPoint = Vector2.new(0.5, 0)
-	icon.BackgroundTransparency = 1
-	icon.Image = "rbxassetid://6031079158" -- Sun icon
-	icon.ImageColor3 = Color3.fromRGB(255, 220, 100)
-	icon.Parent = frame
-	
-	local timeLabel = Instance.new("TextLabel")
-	timeLabel.Name = "TimeLabel"
-	timeLabel.Size = UDim2.new(1, -10, 0, 18)
-	timeLabel.Position = UDim2.new(0.5, 0, 0, 32)
-	timeLabel.AnchorPoint = Vector2.new(0.5, 0)
-	timeLabel.BackgroundTransparency = 1
-	timeLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	timeLabel.TextSize = 14
-	timeLabel.Font = Enum.Font.GothamBold
-	timeLabel.Text = "6:00 AM"
-	timeLabel.TextXAlignment = Enum.TextXAlignment.Center
-	timeLabel.Parent = frame
-	
-	local phaseLabel = Instance.new("TextLabel")
-	phaseLabel.Name = "PhaseLabel"
-	phaseLabel.Size = UDim2.new(1, -10, 0, 12)
-	phaseLabel.Position = UDim2.new(0.5, 0, 0, 46)
-	phaseLabel.AnchorPoint = Vector2.new(0.5, 0)
-	phaseLabel.BackgroundTransparency = 1
-	phaseLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-	phaseLabel.TextSize = 10
-	phaseLabel.Font = Enum.Font.Gotham
-	phaseLabel.Text = "Day"
-	phaseLabel.TextXAlignment = Enum.TextXAlignment.Center
-	phaseLabel.Parent = frame
-	
-	screenGui.Parent = playerGui
-	
-	return {
-		Frame = frame,
-		Icon = icon,
-		TimeLabel = timeLabel,
-		PhaseLabel = phaseLabel,
-	}
+	Theme.Panel(frame, true)
+	Theme.Fit(frame, 900, 610)
+	local dot = Instance.new("Frame")
+	dot.Name = "PhaseIndicator"
+	dot.Size = UDim2.fromOffset(8, 8)
+	dot.Position = UDim2.fromOffset(13, 14)
+	dot.BackgroundColor3 = Theme.Colors.Amber
+	dot.BorderSizePixel = 0
+	dot.Parent = frame
+	Theme.Corner(dot, 4)
+	local timeLabel = Theme.Label(frame, "6:00 AM", UDim2.fromOffset(80, 24), UDim2.fromOffset(29, 6), 12, Theme.Colors.Paper, true)
+	local phaseLabel = Theme.Label(frame, "DAY", UDim2.fromOffset(45, 24), UDim2.fromOffset(114, 6), 9, Theme.Colors.Sage, true)
+	phaseLabel.TextXAlignment = Enum.TextXAlignment.Right
+	return { Frame = frame, Icon = dot, TimeLabel = timeLabel, PhaseLabel = phaseLabel }
 end
 
 local function updateIcon(ui, phase)
-	if phase == "Night" then
-		ui.Icon.Image = "rbxassetid://6031079983" -- Moon icon
-		ui.Icon.ImageColor3 = Color3.fromRGB(200, 200, 255)
-	elseif phase == "Dawn" then
-		ui.Icon.Image = "rbxassetid://6031079158" -- Sun icon
-		ui.Icon.ImageColor3 = Color3.fromRGB(255, 180, 100)
-	elseif phase == "Dusk" then
-		ui.Icon.Image = "rbxassetid://6031079158" -- Sun icon
-		ui.Icon.ImageColor3 = Color3.fromRGB(255, 140, 80)
-	else -- Day
-		ui.Icon.Image = "rbxassetid://6031079158" -- Sun icon
-		ui.Icon.ImageColor3 = Color3.fromRGB(255, 220, 100)
-	end
+	Theme.Tween(ui.Icon, { BackgroundColor3 = phase == "Night" and Theme.Colors.Cold or Theme.Colors.Amber }, 0.5)
 end
 
 local function tweenLighting(preset, duration)
@@ -153,7 +103,7 @@ function DayNightClient:OnTimeUpdate(data)
 	-- Update UI
 	if self._ui then
 		self._ui.TimeLabel.Text = formatted
-		self._ui.PhaseLabel.Text = newPhase
+		self._ui.PhaseLabel.Text = string.upper(newPhase)
 		updateIcon(self._ui, newPhase)
 	end
 	
@@ -175,10 +125,10 @@ end
 
 function DayNightClient:ShowPhaseNotification(phase)
 	local messages = {
-		Dawn = "☀️ Dawn breaks...",
-		Day = "🌞 A new day begins!",
-		Dusk = "🌅 Dusk approaches...",
-		Night = "🌙 Night falls. Beware!",
+		Dawn = "Dawn breaks",
+		Day = "A new day begins",
+		Dusk = "Dusk approaches",
+		Night = "Night falls. Stay together.",
 	}
 	
 	local message = messages[phase]
@@ -190,12 +140,12 @@ function DayNightClient:ShowPhaseNotification(phase)
 	notification.ResetOnSpawn = false
 	
 	local label = Instance.new("TextLabel")
-	label.Size = UDim2.new(0, 300, 0, 50)
-	label.Position = UDim2.new(0.5, -150, 0, 100)
-	label.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+	label.Size = UDim2.new(0, 280, 0, 36)
+	label.Position = UDim2.new(0.5, -140, 0, 62)
+	label.BackgroundColor3 = Theme.Colors.Night
 	label.BackgroundTransparency = 0.3
-	label.TextColor3 = Color3.fromRGB(255, 255, 255)
-	label.TextSize = 24
+	label.TextColor3 = Theme.Colors.Paper
+	label.TextSize = 13
 	label.Font = Enum.Font.GothamBold
 	label.Text = message
 	label.TextTransparency = 1

@@ -83,8 +83,9 @@ end
 
 local function distanceOK(plr, target, maxDist)
 	maxDist = maxDist or 150
+	if typeof(target) ~= "Instance" or not target:IsA("Model") then return false end
 	local hrp = plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-	local tp = target and target:IsA("Model") and target.PrimaryPart or target:FindFirstChild("HumanoidRootPart") or target:FindFirstChildWhichIsA("BasePart")
+	local tp = target.PrimaryPart or target:FindFirstChild("HumanoidRootPart") or target:FindFirstChildWhichIsA("BasePart")
 	if not hrp or not tp then return false end
 	return (hrp.Position - tp.Position).Magnitude <= maxDist
 end
@@ -146,8 +147,8 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 		return
 	end
 	amount = tonumber(amount) or 0
-	if amount <= 0 or amount > 2000 then return end
-	if not target or not target.Parent then return end
+	if amount ~= amount or amount <= 0 or amount > 2000 then return end
+	if typeof(target) ~= "Instance" or not target:IsA("Model") or not target:IsDescendantOf(Workspace) then return end
 
 	-- attacker can be Player or Model
 	local attackerPlayer = attacker
@@ -155,6 +156,8 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 		attackerPlayer = Players:GetPlayerFromCharacter(attacker)
 	end
 	if attackerPlayer then
+		local hum = attackerPlayer.Character and attackerPlayer.Character:FindFirstChildOfClass("Humanoid")
+		if not hum or hum.Health <= 0 or attackerPlayer:GetAttribute("IsDead") then return end
 		if not canHit(attackerPlayer) then return end
 		if not distanceOK(attackerPlayer, target, 175) then return end
 		local combatMult = tonumber(attackerPlayer:GetAttribute("Role_Combat")) or 1.0
@@ -184,7 +187,7 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 	-- Shield block check for player targets
 	if tgtPlr and self._blocking[tgtPlr] then
 		local shieldTool = self._blocking[tgtPlr]
-		if shieldTool and shieldTool.Parent and shieldTool.Parent:IsDescendantOf(tgtPlr.Character) then
+		if shieldTool and tgtPlr.Character and shieldTool.Parent == tgtPlr.Character then
 			local blockPercent = WeaponUtil.GetNumber(shieldTool, "BlockPercent", 0)
 			local durability = WeaponUtil.GetNumber(shieldTool, "Durability", 0)
 			blockPercent = math.clamp(blockPercent, 0, 0.95)
@@ -192,12 +195,18 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 				local blocked = amount * blockPercent
 				amount = math.max(0, amount - blocked)
 				-- reduce durability by blocked amount
+				local remaining = math.max(0, durability - blocked)
+				if shieldTool:GetAttribute("Durability") ~= nil then
+					shieldTool:SetAttribute("Durability", remaining)
+				end
 				local child = shieldTool:FindFirstChild("Durability")
-				if child and child:IsA("ValueBase") then
-					child.Value = math.max(0, child.Value - blocked)
-					if child.Value <= 0 then
-						self._blocking[tgtPlr] = nil
-					end
+				if child and (child:IsA("NumberValue") or child:IsA("IntValue")) then
+					child.Value = remaining
+				elseif child and child:IsA("StringValue") then
+					child.Value = tostring(remaining)
+				end
+				if remaining <= 0 then
+					self._blocking[tgtPlr] = nil
 				end
 			end
 		else
@@ -279,6 +288,10 @@ end
 
 local function hasToolType(tool)
 	if not tool or not tool:IsA("Tool") then return false end
+	local weaponType = WeaponUtil.GetType(tool)
+	if weaponType and weaponType ~= "" then
+		return false
+	end
 	local attr = tool:GetAttribute("ToolType")
 	if typeof(attr) == "string" and attr ~= "" then
 		return true
@@ -335,7 +348,8 @@ local function getValidatedAimDirection(data)
 	if typeof(dir) ~= "Vector3" then
 		return nil
 	end
-	if dir.Magnitude < 0.001 then
+	if dir.X ~= dir.X or dir.Y ~= dir.Y or dir.Z ~= dir.Z
+		or dir.Magnitude == math.huge or dir.Magnitude < 0.001 then
 		return nil
 	end
 	return dir.Unit
@@ -370,7 +384,7 @@ local function raycastFromPlayer(plr, origin, dir, maxRange)
 	if not char or typeof(origin) ~= "Vector3" or typeof(dir) ~= "Vector3" then return nil end
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { char, Workspace.Terrain }
+	params.FilterDescendantsInstances = { char }
 	local direction = dir * maxRange
 	local res = Workspace:Raycast(origin, direction, params)
 	return res
@@ -391,8 +405,16 @@ function CombatService:_handleSword(plr, tool, weapon, data)
 	local cooldown = weapon:GetCooldown()
 	if not self:_canUseTool(tool, cooldown) then return end
 	local target = data and data.Target
-	if not target or not target.Parent then return end
+	if typeof(target) ~= "Instance" or not target:IsA("Model") or not target:IsDescendantOf(Workspace) then return end
 	if not distanceOK(plr, target, range + 2) then return end
+	local origin = getToolOrigin(plr, tool)
+	local targetPos = getTargetPosition(target)
+	if not origin or not targetPos then return end
+	local delta = targetPos - origin
+	if delta.Magnitude > 0 then
+		local hit = raycastFromPlayer(plr, origin, delta.Unit, delta.Magnitude)
+		if hit and not hit.Instance:IsDescendantOf(target) then return end
+	end
 	self:ApplyDamage(plr, target, dmg, "Melee")
 end
 
@@ -467,13 +489,22 @@ function CombatService:_handleBlock(plr, tool, weapon, isBlocking)
 end
 
 function CombatService:Bind()
+	if self._bound then return end
 	ensureRemotes(self)
 	-- Security: client-authoritative damage requests are intentionally disabled.
 	-- Damage must flow through validated CombatAction requests or server systems.
 
 	if self._remoteAction then
+		self._bound = true
 		self._remoteAction.OnServerEvent:Connect(function(plr, action, data)
+			if type(action) ~= "string" or (data ~= nil and type(data) ~= "table") then return end
 			if GameStateService:IsGameOver() then
+				return
+			end
+			local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+			if not hum or hum.Health <= 0 or plr:GetAttribute("IsDead") then return end
+			if action == "BlockEnd" then
+				self._blocking[plr] = nil
 				return
 			end
 			local tool = getEquippedTool(plr)

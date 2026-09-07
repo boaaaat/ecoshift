@@ -4,6 +4,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
+local GuiService = game:GetService("GuiService")
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes", 5)
 local CombatRE = Remotes and Remotes:WaitForChild("CombatAction", 3)
@@ -32,10 +33,11 @@ local function raycastFromMouse(maxRange)
 	local camera = Workspace.CurrentCamera
 	if not camera then return nil, nil end
 	local mousePos = UserInputService:GetMouseLocation()
-	local ray = camera:ScreenPointToRay(mousePos.X, mousePos.Y)
+	local inset = GuiService:GetGuiInset()
+	local ray = camera:ViewportPointToRay(mousePos.X - inset.X, mousePos.Y - inset.Y)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { player.Character, Workspace.Terrain }
+	params.FilterDescendantsInstances = { player.Character }
 	local result = Workspace:Raycast(ray.Origin, ray.Direction * maxRange, params)
 	return result, ray
 end

@@ -147,6 +147,7 @@ local raw = {
 	{ Id = "PhaseMultitool", Name = "Phase Multitool", StackSize = 1, Tags = { "Tool", "Holdable" } },
 
 	-- Weapons
+	{ Id = "StoneSpear", Name = "Stone Spear", StackSize = 1, Tags = { "Weapon", "Holdable" } },
 	{ Id = "BoneSpear", Name = "Bone Spear", StackSize = 1, Tags = { "Weapon", "Holdable" } },
 	{ Id = "SanditeBlade", Name = "Sandite Blade", StackSize = 1, Tags = { "Weapon", "Holdable" } },
 	{ Id = "MireDagger", Name = "Mire Dagger", StackSize = 1, Tags = { "Weapon", "Holdable" } },
@@ -162,8 +163,12 @@ local raw = {
 	{ Id = "VolcanicPlate", Name = "Volcanic Plate", StackSize = 1, Tags = { "Armor" } },
 	{ Id = "CrystalWeave", Name = "Crystal Weave", StackSize = 1, Tags = { "Armor" } },
 	{ Id = "AdaptiveSurvivalSuit", Name = "Adaptive Survival Suit", StackSize = 1, Tags = { "Armor" } },
+	{ Id = "ReviveKit", Name = "Revival Kit", StackSize = 5, Tags = { "Medical", "Revival" } },
 
 	-- Intel/strategy devices
+	{ Id = "ShiftStabilizer", Name = "Shift Stabilizer", StackSize = 1, Tags = { "Utility", "WorldControl" } },
+	{ Id = "ShiftTrigger", Name = "Shift Trigger", StackSize = 1, Tags = { "Utility", "WorldControl" } },
+	{ Id = "BiomeSelector", Name = "Biome Selector", StackSize = 1, Tags = { "Utility", "WorldControl" } },
 	{ Id = "FieldClock", Name = "Field Clock", StackSize = 1, Tags = { "Utility", "Intel" } },
 	{ Id = "BiomePredictor", Name = "Biome Predictor", StackSize = 1, Tags = { "Utility", "Intel" } },
 	{ Id = "WeatherPredictor", Name = "Weather Predictor", StackSize = 1, Tags = { "Utility", "Intel" } },

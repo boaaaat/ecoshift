@@ -1,126 +1,90 @@
--- PlayerVitalsUI.client.lua
--- Displays stamina, hunger, temperature, and armor bars
+-- One compact field instrument for health, energy and environmental protection.
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
+local C = Theme.Colors
 local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
-
 local gui = Instance.new("ScreenGui")
 gui.Name = "PlayerVitalsUI"
 gui.ResetOnSpawn = false
-gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-gui.Parent = playerGui
-
-local container = Instance.new("Frame")
-container.Name = "VitalsContainer"
-container.Size = UDim2.new(0, 250, 0, 74)
-container.Position = UDim2.new(0, 20, 1, -160)
-container.BackgroundTransparency = 1
-container.Parent = gui
-
-local function makeBar(name, y, color)
-	local barBg = Instance.new("Frame")
-	barBg.Name = name .. "Bg"
-	barBg.Size = UDim2.new(0, 200, 0, 14)
-	barBg.Position = UDim2.new(0, 50, 0, y)
-	barBg.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
-	barBg.BorderSizePixel = 0
-	barBg.Parent = container
-
-	local bgCorner = Instance.new("UICorner")
-	bgCorner.CornerRadius = UDim.new(0, 6)
-	bgCorner.Parent = barBg
-
+gui.DisplayOrder = 5
+gui.Parent = player:WaitForChild("PlayerGui")
+local panel = Instance.new("Frame")
+panel.Name = "VitalsContainer"
+panel.Size = UDim2.fromOffset(232, 154)
+panel.AnchorPoint = Vector2.new(0, 1)
+panel.Position = UDim2.new(0, 18, 1, -18)
+panel.Parent = gui
+Theme.Panel(panel, true)
+Theme.Fit(panel, 900, 610)
+Theme.Label(panel, "SURVIVAL / VITALS", UDim2.fromOffset(195, 16), UDim2.fromOffset(14, 10), 10, C.Amber, true)
+local function meter(name, y, color)
+	Theme.Label(panel, name, UDim2.fromOffset(62, 16), UDim2.fromOffset(14, y), 9, C.Sage, true)
+	local value = Theme.Label(panel, "--", UDim2.fromOffset(49, 16), UDim2.fromOffset(167, y), 10, C.Paper, true)
+	value.TextXAlignment = Enum.TextXAlignment.Right
+	local track = Instance.new("Frame")
+	track.Name = name .. "Track"
+	track.Size = UDim2.fromOffset(84, 5)
+	track.Position = UDim2.fromOffset(79, y + 6)
+	track.BorderSizePixel = 0
+	track.BackgroundColor3 = C.Moss
+	track.Parent = panel
+	Theme.Corner(track, 3)
 	local fill = Instance.new("Frame")
-	fill.Name = name .. "Fill"
-	fill.Size = UDim2.new(1, 0, 1, 0)
-	fill.BackgroundColor3 = color
+	fill.Name = "Fill"
+	fill.Size = UDim2.fromScale(1, 1)
 	fill.BorderSizePixel = 0
-	fill.Parent = barBg
-
-	local fillCorner = Instance.new("UICorner")
-	fillCorner.CornerRadius = UDim.new(0, 6)
-	fillCorner.Parent = fill
-
-	local label = Instance.new("TextLabel")
-	label.Name = name .. "Label"
-	label.Size = UDim2.new(0, 44, 0, 14)
-	label.Position = UDim2.new(0, 0, 0, y)
-	label.BackgroundTransparency = 1
-	label.Text = string.upper(name)
-	label.TextColor3 = Color3.fromRGB(200, 200, 210)
-	label.TextSize = 10
-	label.Font = Enum.Font.GothamBold
-	label.TextXAlignment = Enum.TextXAlignment.Left
-	label.Parent = container
-
-	return barBg, fill, label
+	fill.BackgroundColor3 = color
+	fill.Parent = track
+	Theme.Corner(fill, 3)
+	return { Fill = fill, Value = value }
 end
-
-local staminaBg, staminaFill, staminaLabel = makeBar("Stamina", 0, Color3.fromRGB(120, 200, 255))
-local hungerBg, hungerFill, hungerLabel = makeBar("Hunger", 20, Color3.fromRGB(255, 200, 100))
-local tempBg, tempFill, tempLabel = makeBar("Temp", 40, Color3.fromRGB(120, 180, 255))
-local armorBg, armorFill, armorLabel = makeBar("Armor", 60, Color3.fromRGB(200, 200, 220))
-
-tempBg.Visible = false
-tempLabel.Visible = false
-armorBg.Visible = false
-armorLabel.Visible = false
-
-local function tweenBar(fill, percent, color)
-	percent = math.clamp(percent, 0, 1)
-	local props = { Size = UDim2.new(percent, 0, 1, 0) }
+local health = meter("HEALTH", 34, C.Sage)
+local stamina = meter("ENERGY", 56, C.Cold)
+local hunger = meter("FOOD", 78, C.Amber)
+local temperature = meter("EXPOSURE", 100, C.Sage)
+local armor = meter("ARMOR", 122, C.Paper)
+local function updateMeter(bar, percent, value, color)
+	bar.Value.Text = value
+	local props = { Size = UDim2.fromScale(math.clamp(percent, 0, 1), 1) }
 	if color then props.BackgroundColor3 = color end
-	TweenService:Create(fill, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
+	Theme.Tween(bar.Fill, props, 0.22)
 end
-
-local function tempColor(temp)
-	if temp >= 0 then
-		return Color3.fromRGB(255, 170, 80)
-	end
-	return Color3.fromRGB(120, 180, 255)
-end
-
 local function updateVitals()
-	local stamina = player:GetAttribute("Stat_Stamina") or 0
-	local maxStamina = player:GetAttribute("Stat_MaxStamina") or 100
-	local hunger = player:GetAttribute("Stat_Hunger") or 0
-	local maxHunger = player:GetAttribute("Stat_MaxHunger") or 100
+	local energy = player:GetAttribute("Stat_Stamina") or 100
+	local food = player:GetAttribute("Stat_Hunger") or 100
 	local temp = player:GetAttribute("Stat_Temperature") or 0
-	local armor = player:GetAttribute("Stat_Armor") or 0
-
-	tweenBar(staminaFill, maxStamina > 0 and stamina / maxStamina or 0)
-	tweenBar(hungerFill, maxHunger > 0 and hunger / maxHunger or 0)
-
-	local tempVisible = math.abs(temp) >= 1
-	tempBg.Visible = tempVisible
-	tempLabel.Visible = tempVisible
-	if tempVisible then
-		local pct = (math.clamp(temp, -100, 100) + 100) / 200
-		tweenBar(tempFill, pct, tempColor(temp))
-	end
-
-	local armorVisible = (tonumber(armor) or 0) > 0
-	armorBg.Visible = armorVisible
-	armorLabel.Visible = armorVisible
-	if armorVisible then
-		tweenBar(armorFill, math.clamp((armor or 0) / 100, 0, 1))
-	end
+	local protection = player:GetAttribute("Stat_Armor") or 0
+	updateMeter(stamina, energy / math.max(1, player:GetAttribute("Stat_MaxStamina") or 100), tostring(math.floor(energy)))
+	updateMeter(hunger, food / math.max(1, player:GetAttribute("Stat_MaxHunger") or 100), tostring(math.floor(food)))
+	local tempColor = temp < -10 and C.Cold or (temp > 10 and C.Amber or C.Sage)
+	updateMeter(temperature, math.abs(temp) / 100, math.abs(temp) < 1 and "OK" or string.format("%+d", math.floor(temp)), tempColor)
+	temperature.Value.TextColor3 = tempColor
+	updateMeter(armor, protection / 100, tostring(math.floor(protection)))
 end
-
-local watched = {
-	"Stat_Stamina",
-	"Stat_MaxStamina",
-	"Stat_Hunger",
-	"Stat_MaxHunger",
-	"Stat_Temperature",
-	"Stat_Armor",
-}
-for _, attr in ipairs(watched) do
-	player:GetAttributeChangedSignal(attr):Connect(updateVitals)
+for _, attribute in ipairs({ "Stat_Stamina", "Stat_MaxStamina", "Stat_Hunger", "Stat_MaxHunger", "Stat_Temperature", "Stat_Armor" }) do
+	player:GetAttributeChangedSignal(attribute):Connect(updateVitals)
 end
-
+local healthConnection, maxHealthConnection
+local function bindCharacter(character)
+	if healthConnection then healthConnection:Disconnect() end
+	if maxHealthConnection then maxHealthConnection:Disconnect() end
+	local humanoid = character:WaitForChild("Humanoid", 10)
+	if not humanoid then return end
+	local function updateHealth()
+		local hp = player:GetAttribute("IsDead") and 0 or math.max(0, humanoid.Health)
+		local pct = hp / math.max(1, humanoid.MaxHealth)
+		updateMeter(health, pct, tostring(math.ceil(hp)), pct <= 0.25 and Color3.fromRGB(227, 119, 85) or C.Sage)
+	end
+	healthConnection = humanoid.HealthChanged:Connect(updateHealth)
+	maxHealthConnection = humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(updateHealth)
+	updateHealth()
+end
+player.CharacterAdded:Connect(bindCharacter)
+player:GetAttributeChangedSignal("IsDead"):Connect(function()
+	if player:GetAttribute("IsDead") then
+		updateMeter(health, 0, "DOWN", C.Danger)
+	end
+end)
+if player.Character then task.spawn(bindCharacter, player.Character) end
 updateVitals()
-
-print("[PlayerVitalsUI] Initialized")

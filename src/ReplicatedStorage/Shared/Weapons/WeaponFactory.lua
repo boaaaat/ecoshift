@@ -21,6 +21,10 @@ local TYPE_MAP = {
 }
 
 local function isHarvestTool(tool)
+	local weaponType = WeaponUtil.GetType(tool)
+	if weaponType and weaponType ~= "" then
+		return false
+	end
 	local toolType = WeaponUtil.GetString(tool, "ToolType", "")
 	return toolType ~= ""
 end

@@ -25,6 +25,7 @@ Config.RemoteNames = {
 	RoleUpdate = "RoleUpdate",
 	RoleSelect = "RoleSelect",
 	GameStateUpdate = "GameStateUpdate",
+	WorldControl = "WorldControl",
 	DropItem = "DropItem",
 	ChestEvent = "ChestEvent",
 	TimeUpdate = "TimeUpdate",

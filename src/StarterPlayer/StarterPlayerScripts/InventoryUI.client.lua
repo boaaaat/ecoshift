@@ -7,6 +7,7 @@ local ContextActionService = game:GetService("ContextActionService")
 local TweenService = game:GetService("TweenService")
 local GuiService = game:GetService("GuiService")
 
+local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
@@ -30,23 +31,10 @@ local rDrop = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames
 local rChest = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.ChestEvent)
 
 -- UI Constants
-local COLORS = {
-	Background = Color3.fromRGB(18, 18, 22),
-	Panel = Color3.fromRGB(28, 28, 35),
-	SlotEmpty = Color3.fromRGB(38, 38, 48),
-	SlotFilled = Color3.fromRGB(48, 48, 60),
-	SlotHover = Color3.fromRGB(58, 58, 75),
-	SlotSelected = Color3.fromRGB(80, 120, 200),
-	Border = Color3.fromRGB(60, 60, 80),
-	Text = Color3.fromRGB(240, 240, 245),
-	TextMuted = Color3.fromRGB(160, 160, 175),
-	Accent = Color3.fromRGB(100, 180, 255),
-	Warning = Color3.fromRGB(255, 180, 80),
-	Danger = Color3.fromRGB(220, 80, 80),
-}
+local COLORS = Theme.Colors
 
 local SLOT_SIZE = 64
-local HOTBAR_SLOT_SIZE = 72
+local HOTBAR_SLOT_SIZE = 60
 local SLOT_GAP = 6
 local HOTBAR_SLOTS = 4
 local STORAGE_COLS = 6
@@ -64,6 +52,7 @@ local gui = Instance.new("ScreenGui")
 gui.Name = "InventoryUI"
 gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.DisplayOrder = 20
 gui.Parent = playerGui
 
 local dragOverlay = Instance.new("ScreenGui")
@@ -120,10 +109,10 @@ header.Parent = mainContainer
 
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Name = "Title"
-titleLabel.Size = UDim2.new(0, 150, 1, 0)
+titleLabel.Size = UDim2.new(0, 230, 1, 0)
 titleLabel.Position = UDim2.new(0, MARGIN, 0, 0)
 titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "⚔️ Inventory"
+titleLabel.Text = "Field pack"
 titleLabel.TextColor3 = COLORS.Text
 titleLabel.TextSize = 18
 titleLabel.Font = Enum.Font.GothamBold
@@ -135,7 +124,7 @@ local capacityLabel = Instance.new("TextLabel")
 capacityLabel.Name = "Capacity"
 capacityLabel.Size = UDim2.new(0, 80, 0, 20)
 capacityLabel.AnchorPoint = Vector2.new(1, 0.5)
-capacityLabel.Position = UDim2.new(1, -MARGIN, 0.5, 0)
+capacityLabel.Position = UDim2.new(1, -MARGIN - 36, 0.5, 0)
 capacityLabel.BackgroundTransparency = 1
 capacityLabel.Text = string.format("0/%d", HOTBAR_SLOTS + STORAGE_COLS * STORAGE_ROWS)
 capacityLabel.TextColor3 = COLORS.TextMuted
@@ -213,7 +202,7 @@ local hotbarRoot = Instance.new("Frame")
 hotbarRoot.Name = "HotbarRoot"
 hotbarRoot.Size = UDim2.new(0, (HOTBAR_SLOT_SIZE * HOTBAR_SLOTS) + (SLOT_GAP * (HOTBAR_SLOTS - 1)) + MARGIN * 2, 0, HOTBAR_SLOT_SIZE + 12)
 hotbarRoot.AnchorPoint = Vector2.new(0.5, 1)
-hotbarRoot.Position = UDim2.new(0.5, 0, 1, -20)
+hotbarRoot.Position = UDim2.new(0.5, 0, 1, -18)
 hotbarRoot.BackgroundTransparency = 1
 hotbarRoot.Parent = gui
 
@@ -307,7 +296,7 @@ tooltipHint.Name = "Hint"
 tooltipHint.Size = UDim2.new(1, -16, 0, 14)
 tooltipHint.Position = UDim2.new(0, 8, 0, 68)
 tooltipHint.BackgroundTransparency = 1
-tooltipHint.TextColor3 = Color3.fromRGB(120, 120, 130)
+tooltipHint.TextColor3 = COLORS.TextMuted
 tooltipHint.TextSize = 10
 tooltipHint.Font = Enum.Font.Gotham
 tooltipHint.TextXAlignment = Enum.TextXAlignment.Left
@@ -378,7 +367,7 @@ local function createSlot(parent, x, y, slotType, index, slotSize)
 	qtyBadge.Name = "QtyBadge"
 	qtyBadge.Size = UDim2.new(0, badgeW, 0, badgeH)
 	qtyBadge.Position = UDim2.new(1, -(badgeW + 2), 1, -(badgeH + 2))
-	qtyBadge.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	qtyBadge.BackgroundColor3 = COLORS.Background
 	qtyBadge.BackgroundTransparency = 0.4
 	qtyBadge.BorderSizePixel = 0
 	qtyBadge.Visible = false
@@ -406,7 +395,7 @@ local function createSlot(parent, x, y, slotType, index, slotSize)
 		keybind.Name = "Keybind"
 		keybind.Size = UDim2.new(0, keySize, 0, keySize)
 		keybind.Position = UDim2.new(0, 4, 0, 4)
-		keybind.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		keybind.BackgroundColor3 = COLORS.Background
 		keybind.BackgroundTransparency = 0.5
 		keybind.BorderSizePixel = 0
 		keybind.TextColor3 = COLORS.TextMuted
@@ -430,10 +419,10 @@ local function createSlot(parent, x, y, slotType, index, slotSize)
 		armorBadge.BackgroundColor3 = COLORS.Warning
 		armorBadge.BackgroundTransparency = 0.3
 		armorBadge.BorderSizePixel = 0
-		armorBadge.TextColor3 = COLORS.Text
+		armorBadge.TextColor3 = COLORS.Paper
 		armorBadge.TextSize = 9
 		armorBadge.Font = Enum.Font.GothamBold
-		armorBadge.Text = "🛡️"
+		armorBadge.Text = "A"
 		armorBadge.ZIndex = 5
 		armorBadge.Parent = slot
 
@@ -588,7 +577,7 @@ local function hashColor(id)
 	for i = 1, #id do
 		hash = (hash * 33 + string.byte(id, i)) % 360
 	end
-	return Color3.fromHSV(hash / 360, 0.55, 0.85)
+	return COLORS.Text
 end
 
 local function getItemStackSize(itemId)
@@ -742,7 +731,7 @@ local function renderSlot(slot)
 		slot.Icon.Image = ""
 		slot.Icon.Visible = false
 		slot.ItemText.Text = name
-		slot.ItemText.TextColor3 = iconColor or hashColor(data.Id)
+		slot.ItemText.TextColor3 = COLORS.Text
 		slot.ItemText.Visible = true
 	end
 	
@@ -1520,3 +1509,32 @@ else
 	syncEquippedToolName()
 end
 player.CharacterAdded:Connect(bindCharacter)
+
+-- Paper pack and shared field-kit navigation.
+Theme.Panel(mainContainer)
+Theme.Fit(mainContainer, 900, 590)
+Theme.AnimatePanel(mainContainer)
+Theme.Panel(hotbarPanel)
+Theme.Fit(hotbarRoot, 900, 610)
+shadow.Visible = false
+Theme.Label(armorSection, "Weather protection goes here.\nDrag armor into the equipment slot.", UDim2.fromOffset(280, 42), UDim2.fromOffset(80, 27), 11, COLORS.TextMuted)
+local closePack = Instance.new("TextButton")
+closePack.Name = "ClosePack"
+closePack.Size = UDim2.fromOffset(28, 28)
+closePack.Position = UDim2.new(1, -44, 0, 8)
+closePack.Text = "X"
+closePack.TextSize = 12
+closePack.Font = Enum.Font.GothamBold
+closePack.Parent = header
+Theme.Button(closePack, false)
+closePack.Activated:Connect(function() setInventoryOpen(false) end)
+player:GetAttributeChangedSignal("FieldKitPack"):Connect(function() setInventoryOpen(not inventoryOpen) end)
+local function arrangePack()
+ local chestOpen = gui:GetAttribute("ChestOpen") == true
+ mainContainer.AnchorPoint = Vector2.new(chestOpen and 0 or 0.5, 0.5)
+ mainContainer.Position = UDim2.new(0.5, chestOpen and 12 or 0, 0.5, 0)
+ closePack.Visible = not chestOpen
+end
+gui:GetAttributeChangedSignal("ChestOpen"):Connect(arrangePack)
+arrangePack()
+for _, button in ipairs({ contextUse, contextDrop, contextSplit, contextPlace }) do Theme.Button(button) end

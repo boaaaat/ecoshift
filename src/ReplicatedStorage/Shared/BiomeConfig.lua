@@ -210,8 +210,8 @@ Config.structure_chests = {
 -- BIOME SHIFT CONFIG: How often biomes change
 Config.biome_default = "Forest"
 Config.biome_shift = {
-	MinSeconds = 300, -- 5 minutes minimum
-	MaxSeconds = 480, -- 8 minutes maximum
+	MinSeconds = 300, -- A normal shift occurs every five minutes.
+	MaxSeconds = 300,
 	TimeScaleSeconds = 900, -- Time scaling factor for weight calculations
 }
 
@@ -268,6 +268,7 @@ Config.biomes = {
 					Tree = { Weight = 1.2, DistanceWeight = { Min = 1.1, Max = 0.9 } },
 					Mushroom = { Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 1.1 } },
 					Reed = { Weight = 0.9, DistanceWeight = { Min = 0.9, Max = 1.3 } },
+					SapResin = { Weight = 0.5 },
 				},
 				resource_count = { min = 16, max = 28 },
 				props = {
@@ -285,6 +286,7 @@ Config.biomes = {
 				size = Vector2.new(80, 80),
 				resources = {
 					Mud = { Weight = 1.1, DistanceWeight = { Min = 1.1, Max = 0.9 } },
+					SpringWater = { Weight = 0.6 },
 					Stone = { Weight = 0.7, DistanceWeight = { Min = 0.9, Max = 1.2 } },
 					Mushroom = { Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 1.2 } },
 				},
@@ -306,6 +308,7 @@ Config.biomes = {
 					Tree = { Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 0.9 } },
 					Mushroom = { Weight = 1.1, DistanceWeight = { Min = 1.0, Max = 1.1 } },
 					Reed = { Weight = 0.8, DistanceWeight = { Min = 0.9, Max = 1.2 } },
+					MossBloom = { Weight = 0.8 },
 				},
 				resource_count = { min = 18, max = 30 },
 				props = {
@@ -327,6 +330,7 @@ Config.biomes = {
 				size = Vector2.new(110, 90),
 				resources = {
 					BigTree = { Weight = 0.9, DistanceWeight = { Min = 0.9, Max = 1.3 } },
+					SapResin = { Weight = 0.8 },
 					Tree = { Weight = 1.1, DistanceWeight = { Min = 1.1, Max = 0.9 } },
 					Stone = { Weight = 0.8, DistanceWeight = { Min = 0.9, Max = 1.2 } },
 				},
@@ -350,6 +354,8 @@ Config.biomes = {
 					Mushroom = { Weight = 1.1, DistanceWeight = { Min = 1.0, Max = 1.2 } },
 					Reed = { Weight = 1.0, DistanceWeight = { Min = 1.0, Max = 1.3 } },
 					SmallTree = { Weight = 0.8, DistanceWeight = { Min = 1.0, Max = 0.9 } },
+					SpringWater = { Weight = 0.5 },
+					MossBloom = { Weight = 0.5 },
 				},
 				resource_count = { min = 20, max = 34 },
 				props = {
@@ -388,6 +394,8 @@ Config.biomes = {
 				size = Vector2.new(110, 100),
 				resources = {
 					Cactus = { Weight = 0.8, DistanceWeight = { Min = 1.0, Max = 0.8 } },
+					Sand = { Weight = 0.9 },
+					SaltCrystal = { Weight = 0.5 },
 					Sandstone = { Weight = 0.4, DistanceWeight = { Min = 0.8, Max = 1.2 } },
 					DriedBone = { Weight = 0.3, DistanceWeight = { Min = 0.9, Max = 1.1 } },
 				},
@@ -409,6 +417,8 @@ Config.biomes = {
 				size = Vector2.new(85, 85),
 				resources = {
 					Sandstone = { Weight = 1.3, DistanceWeight = { Min = 1.1, Max = 0.9 } },
+					SulfiteOre = { Weight = 0.9 },
+					SunShard = { Weight = 0.25, DistanceWeight = { Min = 0.8, Max = 1.3 } },
 					Coal = { Weight = 1.0, DistanceWeight = { Min = 0.8, Max = 1.3 } },
 					DriedBone = { Weight = 0.5, DistanceWeight = { Min = 0.9, Max = 1.1 } },
 				},
@@ -453,6 +463,8 @@ Config.biomes = {
 				size = Vector2.new(95, 90),
 				resources = {
 					Cactus = { Weight = 1.5, DistanceWeight = { Min = 1.1, Max = 0.9 } },
+					Sand = { Weight = 0.7 },
+					SaltCrystal = { Weight = 0.6 },
 					Sandstone = { Weight = 0.5, DistanceWeight = { Min = 0.9, Max = 1.2 } },
 					DriedBone = { Weight = 0.3, DistanceWeight = { Min = 1.0, Max = 1.1 } },
 				},
@@ -474,6 +486,8 @@ Config.biomes = {
 				size = Vector2.new(80, 90),
 				resources = {
 					Coal = { Weight = 1.4, DistanceWeight = { Min = 0.8, Max = 1.3 } },
+					SulfiteOre = { Weight = 1.0 },
+					SunShard = { Weight = 0.3, DistanceWeight = { Min = 0.8, Max = 1.3 } },
 					Sandstone = { Weight = 0.9, DistanceWeight = { Min = 1.0, Max = 1.1 } },
 					Cactus = { Weight = 0.3, DistanceWeight = { Min = 1.0, Max = 0.8 } },
 				},
@@ -515,6 +529,7 @@ Config.biomes = {
 				size = Vector2.new(110, 100),
 				resources = {
 					BogReed = { Weight = 1.4, DistanceWeight = { Min = 1.0, Max = 1.2 } },
+					MarshWater = { Weight = 0.6 },
 					PeatMound = { Weight = 1.0, DistanceWeight = { Min = 1.1, Max = 1.0 } },
 					MangroveTree = { Weight = 1.1, DistanceWeight = { Min = 1.0, Max = 1.2 } },
 				},
@@ -559,6 +574,7 @@ Config.biomes = {
 				size = Vector2.new(95, 90),
 				resources = {
 					CypressTree = { Weight = 1.3, DistanceWeight = { Min = 1.0, Max = 1.3 } },
+					RootFiber = { Weight = 0.8 },
 					MangroveTree = { Weight = 0.8, DistanceWeight = { Min = 1.0, Max = 1.2 } },
 					MireStone = { Weight = 0.9, DistanceWeight = { Min = 0.9, Max = 1.3 } },
 				},
@@ -581,6 +597,8 @@ Config.biomes = {
 				size = Vector2.new(100, 95),
 				resources = {
 					BogReed = { Weight = 1.8, DistanceWeight = { Min = 1.1, Max = 1.2 } },
+					MarshWater = { Weight = 0.8 },
+					RootFiber = { Weight = 0.6 },
 					PeatMound = { Weight = 0.8, DistanceWeight = { Min = 1.2, Max = 0.9 } },
 					GlowcapCluster = { Weight = 0.8, DistanceWeight = { Min = 1.0, Max = 1.1 } },
 				},
@@ -634,6 +652,124 @@ Config.biomes = {
 		},
 		chest_count = 0.08,
 	},
+	-- Region data is complete; the progression schedule sets introduction weights.
+	FrozenTundra = {
+		weight = 0,
+		timeScaledWeight = 0,
+		region_count = { min = 1, max = 2 },
+		regions = {
+			{
+				name = "RimeGrove",
+				size = Vector2.new(100, 100),
+				resources = {
+					Frostwood = { Weight = 1.2 },
+					FrozenReed = { Weight = 1.0 },
+					SnowLichen = { Weight = 0.8 },
+					ChillBloom = { Weight = 0.6 },
+				},
+				resource_count = { min = 18, max = 28 },
+				props = {}, prop_count = { min = 0, max = 0 },
+				enemies = { { Name = "FrostWolf", Weight = 1.0 } },
+				enemy_count = { min = 0, max = 2 },
+			},
+			{
+				name = "GlacialShelf",
+				size = Vector2.new(90, 90),
+				resources = {
+					GlacialStone = { Weight = 1.2 },
+					IceCrystal = { Weight = 1.0 },
+					PermafrostOre = { Weight = 0.8 },
+					SnowLichen = { Weight = 0.5 },
+				},
+				resource_count = { min = 18, max = 28 },
+				props = {}, prop_count = { min = 0, max = 0 },
+				enemies = { { Name = "IceWraith", Weight = 1.0 }, { Name = "FrostWolf", Weight = 0.5 } },
+				enemy_count = { min = 0, max = 2 },
+			},
+		},
+		structures = {}, structure_count = 0,
+		objectives = {}, objective_count = 0,
+		chests = { { Name = "Common_Chest", Weight = 1.0 }, { Name = "Rare_Chest", Weight = 0.5 } },
+		chest_count = 0.08,
+	},
+	Volcanic = {
+		weight = 0,
+		timeScaledWeight = 0,
+		region_count = { min = 1, max = 2 },
+		regions = {
+			{
+				name = "CinderFields",
+				size = Vector2.new(105, 100),
+				resources = {
+					BasaltChunk = { Weight = 1.2 },
+					ScoriaRock = { Weight = 1.0 },
+					AshFiber = { Weight = 0.9 },
+					EmberBloom = { Weight = 0.7 },
+				},
+				resource_count = { min = 18, max = 28 },
+				props = {}, prop_count = { min = 0, max = 0 },
+				enemies = { { Name = "MagmaHound", Weight = 1.0 } },
+				enemy_count = { min = 0, max = 2 },
+			},
+			{
+				name = "ObsidianVent",
+				size = Vector2.new(90, 95),
+				resources = {
+					ObsidianShard = { Weight = 1.1 },
+					SulfurOre = { Weight = 1.0 },
+					LavaSalt = { Weight = 0.8 },
+					BasaltChunk = { Weight = 0.8 },
+				},
+				resource_count = { min = 18, max = 28 },
+				props = {}, prop_count = { min = 0, max = 0 },
+				enemies = { { Name = "MagmaHound", Weight = 1.0 }, { Name = "LavaGolem", Weight = 0.25 } },
+				enemy_count = { min = 0, max = 2 },
+			},
+		},
+		structures = {}, structure_count = 0,
+		objectives = {}, objective_count = 0,
+		chests = { { Name = "Common_Chest", Weight = 1.0 }, { Name = "Rare_Chest", Weight = 0.6 } },
+		chest_count = 0.08,
+	},
+	CrystalWastes = {
+		weight = 0,
+		timeScaledWeight = 0,
+		region_count = { min = 1, max = 2 },
+		regions = {
+			{
+				name = "PrismGarden",
+				size = Vector2.new(100, 100),
+				resources = {
+					CrystalShard = { Weight = 1.2 },
+					PrismSand = { Weight = 1.0 },
+					LatticeFiber = { Weight = 0.9 },
+					EchoBloom = { Weight = 0.6 },
+				},
+				resource_count = { min = 18, max = 28 },
+				props = {}, prop_count = { min = 0, max = 0 },
+				enemies = { { Name = "CrystalStalker", Weight = 1.0 } },
+				enemy_count = { min = 0, max = 2 },
+			},
+			{
+				name = "NullRidge",
+				size = Vector2.new(90, 90),
+				resources = {
+					PhaseQuartz = { Weight = 0.8 },
+					VoidResidue = { Weight = 0.9 },
+					AlloyDust = { Weight = 1.0 },
+					CrystalShard = { Weight = 0.8 },
+				},
+				resource_count = { min = 18, max = 28 },
+				props = {}, prop_count = { min = 0, max = 0 },
+				enemies = { { Name = "CrystalStalker", Weight = 1.0 }, { Name = "VoidSentinel", Weight = 0.2 } },
+				enemy_count = { min = 0, max = 2 },
+			},
+		},
+		structures = {}, structure_count = 0,
+		objectives = {}, objective_count = 0,
+		chests = { { Name = "Common_Chest", Weight = 0.8 }, { Name = "Rare_Chest", Weight = 0.8 } },
+		chest_count = 0.08,
+	},
 }
 
 -- Shared gameplay config (moved from ReplicatedStorage/Shared/Config.lua)
@@ -669,6 +805,8 @@ for name, gen in pairs(Config.biomes or {}) do
 	end
 	entry.Weight = gen.weight or gen.Weight or 1
 	entry.TimeScaledWeight = gen.timeScaledWeight or gen.time_scaled_weight or gen.TimeScaledWeight or 0
+	entry.MinElapsed = gen.minElapsed or gen.MinElapsed or entry.MinElapsed or 0
+	entry.DisplayName = gen.displayName or gen.DisplayName or entry.DisplayName or name
 	Config.BIOMES[name] = entry
 end
 

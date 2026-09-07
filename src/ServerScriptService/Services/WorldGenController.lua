@@ -5,13 +5,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local WorldGenConfig = require(ReplicatedStorage.Shared.BiomeConfig)
 local BiomeService = require(script.Parent.BiomeService)
-local GridService = require(script.Parent.GridService)
 local TerrainService = require(script.Parent.TerrainService)
 local ChunkStreamingService = require(script.Parent.ChunkStreamingService)
 
 local WorldGenController = {}
 WorldGenController._busy = false
 WorldGenController._initialized = false
+WorldGenController._pendingBiome = nil
 
 local function clearFolder(folder)
 	if not folder then return end
@@ -40,26 +40,33 @@ local function clearEnemies()
 end
 
 function WorldGenController:GenerateBiome(biomeName)
+	if type(biomeName) ~= "string" or not WorldGenConfig.biomes[biomeName] then return end
+	self._pendingBiome = biomeName
 	if self._busy then return end
 	self._busy = true
 	
 	task.spawn(function()
-		clearGeneratedWorld()
-		clearEnemies()
-		GridService:Clear()
-		
-		-- Terrain generation (still generates full terrain - Roblox terrain can't easily stream)
-		TerrainService:GenerateFlat(biomeName)
-		task.wait()
-		
-		-- Use dynamic chunk streaming - chunks load around players
-		ChunkStreamingService:SetBiome(biomeName, true)
-		print("[WorldGenController] Streaming mode - chunks will load around players")
-		
-		local folderName = WorldGenConfig.spawn_folder_name or "GeneratedWorld"
-		local created = Workspace:FindFirstChild(folderName)
-		if created then
-			created:SetAttribute("Generated", true)
+		while self._pendingBiome do
+			local requestedBiome = self._pendingBiome
+			self._pendingBiome = nil
+			local ok, err = pcall(function()
+				-- Invalidate workers before any old folder or terrain is removed.
+				ChunkStreamingService:Pause()
+				clearGeneratedWorld()
+				clearEnemies()
+				-- Player buildings and their occupancy records persist through shifts.
+				TerrainService:GenerateFlat(requestedBiome)
+				task.wait()
+				-- A newer request supersedes this terrain pass; do not spawn stale content.
+				if self._pendingBiome then return end
+				ChunkStreamingService:SetBiome(requestedBiome, true)
+				local folderName = WorldGenConfig.spawn_folder_name or "GeneratedWorld"
+				local created = Workspace:FindFirstChild(folderName)
+				if created then created:SetAttribute("Generated", true) end
+			end)
+			if not ok then
+				warn(string.format("[WorldGenController] Failed to generate %s: %s", requestedBiome, tostring(err)))
+			end
 		end
 		self._busy = false
 	end)

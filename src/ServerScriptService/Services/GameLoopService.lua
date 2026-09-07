@@ -7,6 +7,7 @@ local GameStateService = require(script.Parent.GameStateService)
 local ObjectiveService = require(script.Parent.ObjectiveService)
 local EventService = require(script.Parent.EventService)
 local DayNightService = require(script.Parent.DayNightService)
+local BiomeService = require(script.Parent.BiomeService)
 
 local GameLoopService = {}
 GameLoopService._gameEnded = false
@@ -30,6 +31,7 @@ function GameLoopService:_handleWipe(elapsed)
 	ObjectiveService:EndAll("Cancelled", { SuppressThreat = true })
 	EventService:EndAll()
 	DayNightService:Pause()
+	BiomeService:Pause()
 end
 
 function GameLoopService:Init()

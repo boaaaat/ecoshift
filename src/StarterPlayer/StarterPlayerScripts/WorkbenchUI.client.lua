@@ -7,6 +7,7 @@ local TweenService = game:GetService("TweenService")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local CollectionService = game:GetService("CollectionService")
 
+local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
@@ -26,28 +27,9 @@ elseif not rCraft then
 end
 
 -- UI Constants
-local COLORS = {
-	Background = Color3.fromRGB(18, 18, 22),
-	Panel = Color3.fromRGB(28, 28, 35),
-	SlotEmpty = Color3.fromRGB(38, 38, 48),
-	SlotFilled = Color3.fromRGB(48, 48, 60),
-	SlotHover = Color3.fromRGB(58, 58, 75),
-	SlotSelected = Color3.fromRGB(80, 120, 200),
-	Border = Color3.fromRGB(60, 60, 80),
-	Text = Color3.fromRGB(240, 240, 245),
-	TextMuted = Color3.fromRGB(160, 160, 175),
-	Accent = Color3.fromRGB(100, 180, 255),
-	Success = Color3.fromRGB(80, 200, 120),
-	Warning = Color3.fromRGB(255, 180, 80),
-	Danger = Color3.fromRGB(220, 80, 80),
-	Tier1 = Color3.fromRGB(150, 150, 150),  -- Basic workbench
-	Tier2 = Color3.fromRGB(100, 180, 255),  -- Advanced
-	Tier3 = Color3.fromRGB(255, 200, 80),   -- Master
-	Special = Color3.fromRGB(180, 100, 255), -- Furnace, Anvil, etc.
-}
+local COLORS = Theme.Colors
 
 local MARGIN = 16
-local RECIPE_HEIGHT = 90
 local CRAFT_REQUEST_TIMEOUT = 90
 local CRAFT_MESSAGES = ResultMessages.Craft or {}
 
@@ -66,13 +48,14 @@ local gui = Instance.new("ScreenGui")
 gui.Name = "WorkbenchUI"
 gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.DisplayOrder = 20
 gui.Parent = playerGui
 
 -- Backdrop
 local backdrop = Instance.new("Frame")
 backdrop.Name = "Backdrop"
 backdrop.Size = UDim2.new(1, 0, 1, 0)
-backdrop.BackgroundColor3 = Color3.new(0, 0, 0)
+backdrop.BackgroundColor3 = COLORS.Night
 backdrop.BackgroundTransparency = 1
 backdrop.BorderSizePixel = 0
 backdrop.Visible = false
@@ -114,6 +97,7 @@ shadow.ScaleType = Enum.ScaleType.Slice
 shadow.SliceCenter = Rect.new(23, 23, 277, 277)
 shadow.ZIndex = 9
 shadow.Parent = mainPanel
+shadow.Visible = false
 
 -- Header
 local header = Instance.new("Frame")
@@ -129,7 +113,7 @@ stationIcon.Size = UDim2.new(0, 40, 0, 40)
 stationIcon.Position = UDim2.new(0, MARGIN, 0.5, 0)
 stationIcon.AnchorPoint = Vector2.new(0, 0.5)
 stationIcon.BackgroundTransparency = 1
-stationIcon.Text = "🔨"
+stationIcon.Text = "I"
 stationIcon.TextColor3 = COLORS.Text
 stationIcon.TextSize = 28
 stationIcon.Font = Enum.Font.GothamBold
@@ -170,7 +154,7 @@ closeBtn.AnchorPoint = Vector2.new(1, 0.5)
 closeBtn.Position = UDim2.new(1, -MARGIN, 0.5, 0)
 closeBtn.BackgroundColor3 = COLORS.SlotEmpty
 closeBtn.BorderSizePixel = 0
-closeBtn.Text = "✕"
+closeBtn.Text = "X"
 closeBtn.TextColor3 = COLORS.TextMuted
 closeBtn.TextSize = 18
 closeBtn.Font = Enum.Font.GothamBold
@@ -182,13 +166,18 @@ closeBtnCorner.CornerRadius = UDim.new(0, 8)
 closeBtnCorner.Parent = closeBtn
 
 -- Category tabs
-local categoryBar = Instance.new("Frame")
+local categoryBar = Instance.new("ScrollingFrame")
 categoryBar.Name = "CategoryBar"
 categoryBar.Size = UDim2.new(1, -MARGIN * 2, 0, 32)
 categoryBar.Position = UDim2.new(0, MARGIN, 0, 65)
 categoryBar.BackgroundTransparency = 1
 categoryBar.ZIndex = 11
 categoryBar.Parent = mainPanel
+categoryBar.BorderSizePixel = 0
+categoryBar.ScrollBarThickness = 2
+categoryBar.AutomaticCanvasSize = Enum.AutomaticSize.X
+categoryBar.CanvasSize = UDim2.new()
+categoryBar.ScrollingDirection = Enum.ScrollingDirection.X
 
 local categoryLayout = Instance.new("UIListLayout")
 categoryLayout.FillDirection = Enum.FillDirection.Horizontal
@@ -294,7 +283,7 @@ local function beginCraftPending()
 	pendingRequestToken += 1
 	local token = pendingRequestToken
 	craftBtn.Text = "Crafting..."
-	craftBtn.TextColor3 = COLORS.Text
+	craftBtn.TextColor3 = COLORS.Paper
 	craftBtn.BackgroundColor3 = COLORS.Accent
 	craftBtnStroke.Color = COLORS.Accent
 	return token
@@ -369,20 +358,20 @@ local function createIngredientDisplay(ingredient, parent, craftMult)
 	corner.Parent = frame
 	
 	local itemLabel = Instance.new("TextLabel")
-	itemLabel.Size = UDim2.new(1, -4, 0, 16)
+	itemLabel.Size = UDim2.new(1, -8, 0, 30)
 	itemLabel.Position = UDim2.new(0, 2, 0, 2)
 	itemLabel.BackgroundTransparency = 1
 	itemLabel.Text = name
 	itemLabel.TextColor3 = canAfford and COLORS.Text or COLORS.Danger
 	itemLabel.TextSize = 10
 	itemLabel.Font = Enum.Font.GothamBold
-	itemLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	itemLabel.TextWrapped = true
 	itemLabel.ZIndex = 14
 	itemLabel.Parent = frame
 	
 	local countLabel = Instance.new("TextLabel")
 	countLabel.Size = UDim2.new(1, -4, 0, 14)
-	countLabel.Position = UDim2.new(0, 2, 0, 18)
+	countLabel.Position = UDim2.new(0, 2, 0, 33)
 	countLabel.BackgroundTransparency = 1
 	countLabel.Text = string.format("%d / %d", have, needed)
 	countLabel.TextColor3 = canAfford and COLORS.Success or COLORS.Warning
@@ -406,13 +395,14 @@ local function createRecipeCard(recipeId, recipe)
 	
 	local card = Instance.new("TextButton")
 	card.Name = recipeId
-	card.Size = UDim2.new(1, -12, 0, RECIPE_HEIGHT)
+	card.Size = UDim2.new(1, -12, 0, 52 + math.max(1, math.ceil(#(recipe.Ingredients or {}) / 3)) * 54)
 	card.BackgroundColor3 = COLORS.SlotFilled
 	card.BorderSizePixel = 0
 	card.Text = ""
 	card.AutoButtonColor = false
 	card.ZIndex = 12
 	card.Parent = recipeContainer
+	Theme.Button(card)
 	
 	local cardCorner = Instance.new("UICorner")
 	cardCorner.CornerRadius = UDim.new(0, 8)
@@ -436,6 +426,7 @@ local function createRecipeCard(recipeId, recipe)
 	nameLabel.TextSize = 14
 	nameLabel.Font = Enum.Font.GothamBold
 	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	nameLabel.ZIndex = 13
 	nameLabel.Parent = card
 	
@@ -460,7 +451,7 @@ local function createRecipeCard(recipeId, recipe)
 	statusLabel.AnchorPoint = Vector2.new(1, 0)
 	statusLabel.Position = UDim2.new(1, -12, 0, 10)
 	statusLabel.BackgroundTransparency = 1
-	statusLabel.Text = canCraft and "✓ Ready" or "✗ Missing"
+	statusLabel.Text = canCraft and "READY" or "MISSING"
 	statusLabel.TextColor3 = canCraft and COLORS.Success or COLORS.Danger
 	statusLabel.TextSize = 12
 	statusLabel.Font = Enum.Font.GothamBold
@@ -471,17 +462,19 @@ local function createRecipeCard(recipeId, recipe)
 	-- Ingredients container
 	local ingredientsFrame = Instance.new("Frame")
 	ingredientsFrame.Name = "Ingredients"
-	ingredientsFrame.Size = UDim2.new(1, -24, 0, 40)
+	ingredientsFrame.Size = UDim2.new(1, -24, 0, math.max(1, math.ceil(#(recipe.Ingredients or {}) / 3)) * 54)
 	ingredientsFrame.Position = UDim2.new(0, 12, 0, 44)
 	ingredientsFrame.BackgroundTransparency = 1
 	ingredientsFrame.ClipsDescendants = true
 	ingredientsFrame.ZIndex = 13
 	ingredientsFrame.Parent = card
 	
-	local ingredientLayout = Instance.new("UIListLayout")
+	local ingredientLayout = Instance.new("UIGridLayout")
 	ingredientLayout.FillDirection = Enum.FillDirection.Horizontal
+	ingredientLayout.FillDirectionMaxCells = 3
+	ingredientLayout.CellSize = UDim2.new(1 / 3, -4, 0, 50)
+	ingredientLayout.CellPadding = UDim2.fromOffset(4, 4)
 	ingredientLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	ingredientLayout.Padding = UDim.new(0, 4)
 	ingredientLayout.Parent = ingredientsFrame
 	
 	for _, ingredient in ipairs(recipe.Ingredients or {}) do
@@ -531,7 +524,7 @@ local function createCategoryButton(category, layoutOrder)
 	btn.BackgroundColor3 = isSelected and COLORS.Accent or COLORS.SlotEmpty
 	btn.BorderSizePixel = 0
 	btn.Text = category
-	btn.TextColor3 = isSelected and COLORS.Text or COLORS.TextMuted
+	btn.TextColor3 = isSelected and COLORS.Paper or COLORS.TextMuted
 	btn.TextSize = 11
 	btn.Font = Enum.Font.GothamBold
 	btn.AutoButtonColor = false
@@ -554,7 +547,7 @@ local function createCategoryButton(category, layoutOrder)
 		
 		selectedCategory = category
 		btn.BackgroundColor3 = COLORS.Accent
-		btn.TextColor3 = COLORS.Text
+		btn.TextColor3 = COLORS.Paper
 		
 		refreshRecipes()
 	end)
@@ -566,7 +559,7 @@ end
 function updateCraftButton()
 	if isCraftPending then
 		craftBtn.Text = "Crafting..."
-		craftBtn.TextColor3 = COLORS.Text
+		craftBtn.TextColor3 = COLORS.Paper
 		craftBtn.BackgroundColor3 = COLORS.Accent
 		craftBtnStroke.Color = COLORS.Accent
 		return
@@ -590,12 +583,12 @@ function updateCraftButton()
 	
 	if canCraft then
 		craftBtn.Text = "Craft " .. name
-		craftBtn.TextColor3 = COLORS.Text
+		craftBtn.TextColor3 = COLORS.Paper
 		craftBtn.BackgroundColor3 = COLORS.Success
 		craftBtnStroke.Color = COLORS.Success
 	else
 		craftBtn.Text = "Missing Materials"
-		craftBtn.TextColor3 = COLORS.Text
+		craftBtn.TextColor3 = COLORS.Paper
 		craftBtn.BackgroundColor3 = COLORS.Danger
 		craftBtnStroke.Color = COLORS.Danger
 	end
@@ -652,7 +645,7 @@ local function openWorkbench(station, stationType)
 	
 	local stationDef = WorkbenchConfig.STATIONS[stationType]
 	if stationDef then
-		stationIcon.Text = stationDef.Icon or "🔨"
+		stationIcon.Text = string.format("%02d", stationDef.Tier or 1)
 		titleLabel.Text = stationDef.Name or stationType
 		subtitleLabel.Text = stationDef.Description or "Craft items"
 		mainStroke.Color = getTierColor({ StationTier = stationDef.Tier, StationType = stationDef.Tier >= 10 and stationType or nil })
@@ -670,7 +663,7 @@ local function openWorkbench(station, stationType)
 	mainPanel.GroupTransparency = 1
 	
 	TweenService:Create(backdrop, TweenInfo.new(0.2), {BackgroundTransparency = 0.5}):Play()
-	TweenService:Create(mainPanel, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+	TweenService:Create(mainPanel, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
 		Position = UDim2.new(0.5, 0, 0.5, 0),
 		GroupTransparency = 0
 	}):Play()
@@ -817,3 +810,13 @@ if rInventory then
 end
 
 print("[WorkbenchUI] Ready - interact with placed workbenches to craft")
+
+Theme.Panel(mainPanel)
+Theme.Fit(mainPanel, 500, 550)
+Theme.Button(closeBtn)
+Theme.Button(craftBtn)
+stationIcon.BackgroundTransparency = 0
+stationIcon.BackgroundColor3 = COLORS.Moss
+stationIcon.TextColor3 = COLORS.Paper
+stationIcon.TextSize = 16
+Theme.Corner(stationIcon, 8)

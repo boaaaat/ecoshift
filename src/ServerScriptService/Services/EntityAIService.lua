@@ -9,9 +9,12 @@ local AIFolder = script.Parent.Parent:WaitForChild("AI")
 local MonsterClass = require(AIFolder:WaitForChild("Monster"))
 local AnimalClass = require(AIFolder:WaitForChild("Animal"))
 local EntityConfig = require(AIFolder:WaitForChild("EntityConfig"))
+local Progression = require(ReplicatedStorage.Shared.ProgressionConfig)
+local RoundService = require(script.Parent.RoundService)
 
 local EntityAIService = {}
 EntityAIService._entities = {} -- [Model] = controller
+EntityAIService._stepping = {} -- [Model] = true while its pathfinding step yields
 EntityAIService._stepInterval = 0.2
 
 local NUM_KEYS = {
@@ -178,7 +181,7 @@ function EntityAIService:_getClass(model, entityType, cfg)
 end
 
 function EntityAIService:BindEntity(model, forcedType)
-	if not model or not model.Parent then return end
+	if typeof(model) ~= "Instance" or not model:IsA("Model") or not model:IsDescendantOf(Workspace) then return end
 	if self._entities[model] then return end
 	if model:GetAttribute("NoAI") then return end
 	if Players:GetPlayerFromCharacter(model) then return end
@@ -196,6 +199,21 @@ function EntityAIService:BindEntity(model, forcedType)
 	end
 	model:SetAttribute("EntityType", entityType)
 	local cfg = self:_buildConfig(model, entityType)
+	if entityType == "Monster" then
+		local level = tonumber(model:GetAttribute("Level"))
+		if not level or level ~= level then
+			level = 1 + math.floor(RoundService:GetElapsed() / Progression.SecondsPerMonsterLevel)
+		end
+		level = math.clamp(math.floor(level), 1, 100)
+		model:SetAttribute("Level", level)
+		cfg.Damage = (cfg.Damage or 8) * (1 + Progression.DamagePerLevel * (level - 1))
+		if not model:GetAttribute("LevelHealthApplied") then
+			local fraction = hum.MaxHealth > 0 and hum.Health / hum.MaxHealth or 1
+			hum.MaxHealth *= 1 + Progression.HealthPerLevel * (level - 1)
+			hum.Health = hum.MaxHealth * fraction
+			model:SetAttribute("LevelHealthApplied", true)
+		end
+	end
 	local class = self:_getClass(model, entityType, cfg)
 	local controller = class.new(model, cfg)
 	self._entities[model] = controller
@@ -236,6 +254,8 @@ function EntityAIService:_watchFolder(folderName, entityType)
 end
 
 function EntityAIService:Init()
+	if self._initialized then return end
+	self._initialized = true
 	self._stepInterval = tonumber(EntityConfig.StepInterval) or self._stepInterval
 
 	-- CollectionService tags
@@ -269,7 +289,16 @@ function EntityAIService:Init()
 			last = now
 			for model, controller in pairs(self._entities) do
 				if controller and controller.IsAlive and controller:IsAlive() then
-					controller:Step(dt)
+					if not self._stepping[model] then
+						self._stepping[model] = true
+						task.spawn(function()
+							local ok, err = pcall(function() controller:Step(dt) end)
+							self._stepping[model] = nil
+							if not ok then
+								warn("[EntityAIService] Update failed for " .. model.Name .. ": " .. tostring(err))
+							end
+						end)
+					end
 				else
 					self._entities[model] = nil
 				end

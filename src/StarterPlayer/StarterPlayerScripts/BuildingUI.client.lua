@@ -7,6 +7,7 @@ local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
+local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 local Config = require(ReplicatedStorage.Shared.Config)
 local BiomeConfig = require(ReplicatedStorage.Shared.BiomeConfig)
 local Util = require(ReplicatedStorage.Shared.Util)
@@ -27,23 +28,7 @@ elseif not rBuild then
 end
 
 -- UI Constants
-local COLORS = {
-	Background = Color3.fromRGB(18, 18, 22),
-	Panel = Color3.fromRGB(28, 28, 35),
-	SlotEmpty = Color3.fromRGB(38, 38, 48),
-	SlotFilled = Color3.fromRGB(48, 48, 60),
-	SlotHover = Color3.fromRGB(58, 58, 75),
-	SlotSelected = Color3.fromRGB(80, 120, 200),
-	Border = Color3.fromRGB(60, 60, 80),
-	Text = Color3.fromRGB(240, 240, 245),
-	TextMuted = Color3.fromRGB(160, 160, 175),
-	Accent = Color3.fromRGB(100, 180, 255),
-	Success = Color3.fromRGB(80, 200, 120),
-	Warning = Color3.fromRGB(255, 180, 80),
-	Danger = Color3.fromRGB(220, 80, 80),
-	ValidPlacement = Color3.fromRGB(80, 200, 120),
-	InvalidPlacement = Color3.fromRGB(220, 80, 80),
-}
+local COLORS = Theme.Colors
 
 local GRID_SIZE = Config.GRID.Size or 6
 local BUILD_MESSAGES = ResultMessages.Build or {}
@@ -65,13 +50,14 @@ local gui = Instance.new("ScreenGui")
 gui.Name = "BuildingUI"
 gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.DisplayOrder = 20
 gui.Parent = playerGui
 
 -- Placement mode indicator
 local modeIndicator = Instance.new("Frame")
 modeIndicator.Name = "ModeIndicator"
-modeIndicator.Size = UDim2.new(0, 200, 0, 50)
-modeIndicator.Position = UDim2.new(0.5, 0, 0, 20)
+modeIndicator.Size = UDim2.new(0, 300, 0, 38)
+modeIndicator.Position = UDim2.new(0.5, 0, 0, 66)
 modeIndicator.AnchorPoint = Vector2.new(0.5, 0)
 modeIndicator.BackgroundColor3 = COLORS.Panel
 modeIndicator.BackgroundTransparency = 0.1
@@ -94,7 +80,7 @@ indicatorLabel.Name = "Label"
 indicatorLabel.Size = UDim2.new(1, -20, 1, 0)
 indicatorLabel.Position = UDim2.new(0, 10, 0, 0)
 indicatorLabel.BackgroundTransparency = 1
-indicatorLabel.Text = "🔨 Placing: Workbench"
+indicatorLabel.Text = "PLACE / Workbench"
 indicatorLabel.TextColor3 = COLORS.Text
 indicatorLabel.TextSize = 16
 indicatorLabel.Font = Enum.Font.GothamBold
@@ -103,8 +89,8 @@ indicatorLabel.Parent = modeIndicator
 
 local hintLabel = Instance.new("TextLabel")
 hintLabel.Name = "Hint"
-hintLabel.Size = UDim2.new(0, 300, 0, 24)
-hintLabel.Position = UDim2.new(0.5, 0, 0, 75)
+hintLabel.Size = UDim2.new(0, 390, 0, 32)
+hintLabel.Position = UDim2.new(0.5, 0, 0, 110)
 hintLabel.AnchorPoint = Vector2.new(0.5, 0)
 hintLabel.BackgroundTransparency = 1
 hintLabel.Text = DEFAULT_HINT_TEXT
@@ -137,7 +123,7 @@ end
 local selectionPanel = Instance.new("Frame")
 selectionPanel.Name = "SelectionPanel"
 selectionPanel.Size = UDim2.new(0, 320, 0, 180)
-selectionPanel.Position = UDim2.new(0.5, 0, 1, -20)
+selectionPanel.Position = UDim2.new(0.5, 0, 1, -140)
 selectionPanel.AnchorPoint = Vector2.new(0.5, 1)
 selectionPanel.BackgroundColor3 = COLORS.Panel
 selectionPanel.BackgroundTransparency = 0.05
@@ -159,7 +145,7 @@ local panelTitle = Instance.new("TextLabel")
 panelTitle.Name = "Title"
 panelTitle.Size = UDim2.new(1, 0, 0, 30)
 panelTitle.BackgroundTransparency = 1
-panelTitle.Text = "🏗️ Place Item (B to toggle • R salvage hovered)"
+panelTitle.Text = "CAMP EQUIPMENT  /  B CLOSE"
 panelTitle.TextColor3 = COLORS.Text
 panelTitle.TextSize = 14
 panelTitle.Font = Enum.Font.GothamBold
@@ -447,7 +433,7 @@ startPlacement = function(itemId)
 	end
 	selectedItem = itemId
 	local itemData = ItemDatabase:Get(itemId)
-	indicatorLabel.Text = "🔨 Placing: " .. (itemData and itemData.Name or itemId)
+	indicatorLabel.Text = "PLACE / " .. (itemData and itemData.Name or itemId)
 	isPlacementMode = true
 	modeIndicator.Visible = true
 	hintLabel.Visible = true
@@ -589,3 +575,16 @@ end)
 
 print("[BuildingUI] Ready - Press B to open building menu")
 print("[BuildingUI] Craft workbenches (Press C) then place them!")
+
+Theme.Panel(modeIndicator)
+Theme.Panel(selectionPanel)
+Theme.Fit(selectionPanel, 730, 610)
+Theme.AnimatePanel(selectionPanel)
+Theme.Fit(modeIndicator, 900, 610)
+Theme.Fit(hintLabel, 900, 610)
+hintLabel.TextWrapped = true
+hintLabel.TextColor3 = COLORS.TextMuted
+hintLabel.BackgroundColor3 = COLORS.Panel
+hintLabel.BackgroundTransparency = 0.12
+Theme.Corner(hintLabel, 6)
+player:GetAttributeChangedSignal("FieldKitBuild"):Connect(togglePanel)

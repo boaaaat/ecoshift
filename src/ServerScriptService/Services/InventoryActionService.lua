@@ -38,11 +38,12 @@ local function applyTimedCharacterResist(char, key, delta, duration)
 	if not char or type(key) ~= "string" then return end
 	local cur = tonumber(char:GetAttribute(key)) or 0
 	local nextValue = math.clamp(cur + (tonumber(delta) or 0), -0.9, 0.9)
+	local applied = nextValue - cur
 	char:SetAttribute(key, nextValue)
 	task.delay(duration, function()
 		if not char.Parent then return end
 		local now = tonumber(char:GetAttribute(key)) or 0
-		char:SetAttribute(key, math.clamp(now - (tonumber(delta) or 0), -0.9, 0.9))
+		char:SetAttribute(key, math.clamp(now - applied, -0.9, 0.9))
 	end)
 end
 
@@ -84,10 +85,14 @@ local function applyConsumableEffects(plr, itemId)
 end
 
 function InventoryActionService:Init()
+	if self._initialized then return end
 	local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
 	local remote = Util.GetRemote(remotesFolder, Config.RemoteNames.InventoryAction)
 	if not remote then return end
+	self._initialized = true
 	remote.OnServerEvent:Connect(function(plr, action, payload)
+		local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+		if not hum or hum.Health <= 0 or plr:GetAttribute("IsDead") then return end
 		if action == "Move" and type(payload) == "table" then
 			print(string.format("[InventoryAction] Move %s: %s[%s] -> %s[%s]", plr.Name, tostring(payload.FromType), tostring(payload.FromIndex), tostring(payload.ToType), tostring(payload.ToIndex)))
 			InventoryService:Move(plr, payload.FromType, payload.FromIndex, payload.ToType, payload.ToIndex)
@@ -101,7 +106,7 @@ function InventoryActionService:Init()
 		if action == "Use" and type(payload) == "table" then
 			local slotType = payload.SlotType
 			local slotIndex = payload.SlotIndex
-			if not slotType or typeof(slotIndex) ~= "number" then return end
+			if not slotType or typeof(slotIndex) ~= "number" or slotIndex % 1 ~= 0 then return end
 			local inv = InventoryService:GetAll(plr)
 			local slot = inv and ((slotType == "Hotbar" and inv.Hotbar and inv.Hotbar[slotIndex])
 				or (slotType == "Storage" and inv.Storage and inv.Storage[slotIndex])
@@ -119,7 +124,7 @@ function InventoryActionService:Init()
 			local slotType = payload.SlotType
 			local slotIndex = payload.SlotIndex
 			print(string.format("[InventoryAction] Equip request %s slot %s[%s]", plr.Name, tostring(slotType), tostring(slotIndex)))
-			if slotType ~= "Hotbar" or typeof(slotIndex) ~= "number" then return end
+			if slotType ~= "Hotbar" or typeof(slotIndex) ~= "number" or slotIndex % 1 ~= 0 or slotIndex < 1 or slotIndex > 4 then return end
 			
 			local char = plr.Character
 			local hum = char and char:FindFirstChildOfClass("Humanoid")

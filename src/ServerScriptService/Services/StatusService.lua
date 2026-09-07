@@ -33,14 +33,17 @@ function StatusService:_tickPlayer(plr)
 
 	local biomeEnv = BiomeService:GetData() and BiomeService:GetData().env or {}
 	local mods = getEventMods()
+	local weather = BiomeService:GetWeather() or {}
 
 	-- aggregate intensities
-	local toxin = (biomeEnv.Toxin or 0) + (mods.Toxin or 0)
-	local wet = (biomeEnv.Wet or 0) + (mods.Wet or 0)
+	local toxin = (biomeEnv.Toxin or 0) + (mods.Toxin or 0) + (weather.Toxin or 0)
+	local wet = (biomeEnv.Wet or 0) + (mods.Wet or 0) + (weather.Wet or 0)
 
 	-- resistances via Attributes on Character (set by your gear scripts)
 	local rToxin = resist(char:GetAttribute("Res_Toxin"))
 	local rWet   = resist(char:GetAttribute("Res_Wet"))
+	rToxin = 1 - (1 - rToxin) * (1 - resist(char:GetAttribute("GearRes_Toxin")))
+	rWet = 1 - (1 - rWet) * (1 - resist(char:GetAttribute("GearRes_Wet")))
 
 	-- temperature damage handled by SurvivalService (region-aware)
 

@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local Theme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UI"):WaitForChild("UITheme"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -25,11 +26,42 @@ local spectateConnection = nil
 local deathUI = nil
 local canReturnToLobby = RunService:IsStudio()
 local lastCanSpectate = false
+local teamResults = nil
+local corpse = nil
 
 -- Camera
 local camera = workspace.CurrentCamera
 local originalCameraType = nil
 local originalCameraSubject = nil
+
+local function followCorpse()
+	camera = workspace.CurrentCamera
+	local root = corpse and (corpse.PrimaryPart or corpse:FindFirstChild("HumanoidRootPart"))
+	if camera and root then
+		camera.CameraType = Enum.CameraType.Custom
+		camera.CameraSubject = root
+	end
+end
+
+local function showReviveNotice(message)
+	local gui = playerGui:FindFirstChild("ReviveNotice") or Instance.new("ScreenGui")
+	gui.Name, gui.ResetOnSpawn, gui.DisplayOrder = "ReviveNotice", false, 110
+	gui.Parent = playerGui
+	local old = gui:FindFirstChild("Notice")
+	if old then old:Destroy() end
+	local panel = Instance.new("Frame")
+	panel.Name = "Notice"
+	panel.Size = UDim2.fromOffset(380, 60)
+	panel.Position = UDim2.new(0.5, 0, 0.18, 0)
+	panel.AnchorPoint = Vector2.new(0.5, 0)
+	panel.Parent = gui
+	local label = Theme.Label(panel, message, UDim2.new(1, -24, 1, 0), UDim2.fromOffset(12, 0), 15, Theme.Colors.Paper)
+	label.TextXAlignment = Enum.TextXAlignment.Center
+	label.TextWrapped = true
+	Theme.Panel(panel, true)
+	Theme.Fit(panel, 380, 60)
+	task.delay(3, function() if panel.Parent then panel:Destroy() end end)
+end
 
 -------------------------------------------------------------------
 -- UI CREATION
@@ -60,13 +92,15 @@ local function createDeathUI()
 	container.BackgroundTransparency = 0.1
 	container.BorderSizePixel = 0
 	container.Parent = screenGui
+	Theme.Panel(container, true)
+	Theme.Fit(container, 440, 450)
 	
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 12)
 	corner.Parent = container
 	
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(180, 50, 50)
+	stroke.Color = Theme.Colors.Moss
 	stroke.Thickness = 2
 	stroke.Parent = container
 	
@@ -76,9 +110,9 @@ local function createDeathUI()
 	deathText.Size = UDim2.new(1, 0, 0, 60)
 	deathText.Position = UDim2.new(0, 0, 0, 30)
 	deathText.BackgroundTransparency = 1
-	deathText.Text = "YOU DIED"
-	deathText.TextColor3 = Color3.fromRGB(200, 60, 60)
-	deathText.TextSize = 42
+	deathText.Text = "EXPEDITION INTERRUPTED"
+	deathText.TextColor3 = Theme.Colors.Amber
+	deathText.TextSize = 25
 	deathText.Font = Enum.Font.GothamBold
 	deathText.Parent = container
 	
@@ -88,8 +122,8 @@ local function createDeathUI()
 	subtitle.Size = UDim2.new(1, -40, 0, 40)
 	subtitle.Position = UDim2.new(0, 20, 0, 90)
 	subtitle.BackgroundTransparency = 1
-	subtitle.Text = "Wait for a teammate to revive you..."
-	subtitle.TextColor3 = Color3.fromRGB(180, 180, 180)
+	subtitle.Text = "A teammate can revive you with a crafted Revival Kit."
+	subtitle.TextColor3 = Theme.Colors.Paper
 	subtitle.TextSize = 16
 	subtitle.Font = Enum.Font.Gotham
 	subtitle.TextWrapped = true
@@ -115,12 +149,13 @@ local function createDeathUI()
 	spectateBtn.Size = UDim2.new(1, 0, 0, 50)
 	spectateBtn.BackgroundColor3 = Color3.fromRGB(60, 100, 160)
 	spectateBtn.BorderSizePixel = 0
-	spectateBtn.Text = "👁 SPECTATE TEAMMATES"
+	spectateBtn.Text = "SPECTATE TEAMMATES"
 	spectateBtn.TextColor3 = Color3.new(1, 1, 1)
 	spectateBtn.TextSize = 18
 	spectateBtn.Font = Enum.Font.GothamBold
 	spectateBtn.AutoButtonColor = true
 	spectateBtn.Parent = buttonsFrame
+	Theme.Button(spectateBtn, true)
 	
 	local specCorner = Instance.new("UICorner")
 	specCorner.CornerRadius = UDim.new(0, 8)
@@ -132,17 +167,33 @@ local function createDeathUI()
 	lobbyBtn.Size = UDim2.new(1, 0, 0, 50)
 	lobbyBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 85)
 	lobbyBtn.BorderSizePixel = 0
-	lobbyBtn.Text = "🏠 RETURN TO LOBBY"
+	lobbyBtn.Text = "RETURN TO LOBBY"
 	lobbyBtn.TextColor3 = Color3.new(1, 1, 1)
 	lobbyBtn.TextSize = 18
 	lobbyBtn.Font = Enum.Font.GothamBold
 	lobbyBtn.AutoButtonColor = true
 	lobbyBtn.Visible = RunService:IsStudio()
 	lobbyBtn.Parent = buttonsFrame
+	Theme.Button(lobbyBtn, false)
 	
 	local lobbyCorner = Instance.new("UICorner")
 	lobbyCorner.CornerRadius = UDim.new(0, 8)
 	lobbyCorner.Parent = lobbyBtn
+	local results = Instance.new("ScrollingFrame")
+	results.Name = "TeamResults"
+	results.Size = UDim2.new(1, -40, 0, 190)
+	results.Position = UDim2.fromOffset(20, 140)
+	results.BackgroundTransparency = 1
+	results.BorderSizePixel = 0
+	results.ScrollBarThickness = 3
+	results.ScrollBarImageColor3 = Theme.Colors.Amber
+	results.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	results.CanvasSize = UDim2.new()
+	results.Visible = false
+	results.Parent = container
+	local rows = Instance.new("UIListLayout")
+	rows.Padding = UDim.new(0, 6)
+	rows.Parent = results
 	
 	screenGui.Enabled = false
 	screenGui.Parent = playerGui
@@ -167,6 +218,7 @@ local function createSpectateUI()
 	topBar.BackgroundTransparency = 0.3
 	topBar.BorderSizePixel = 0
 	topBar.Parent = screenGui
+	Theme.Panel(topBar, true)
 	
 	local topCorner = Instance.new("UICorner")
 	topCorner.CornerRadius = UDim.new(0, 8)
@@ -178,7 +230,7 @@ local function createSpectateUI()
 	spectateLabel.Position = UDim2.new(0, 0, 0, 5)
 	spectateLabel.BackgroundTransparency = 1
 	spectateLabel.Text = "SPECTATING"
-	spectateLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+	spectateLabel.TextColor3 = Theme.Colors.Amber
 	spectateLabel.TextSize = 12
 	spectateLabel.Font = Enum.Font.GothamBold
 	spectateLabel.Parent = topBar
@@ -189,7 +241,7 @@ local function createSpectateUI()
 	targetLabel.Position = UDim2.new(0, 0, 0, 22)
 	targetLabel.BackgroundTransparency = 1
 	targetLabel.Text = "Player Name"
-	targetLabel.TextColor3 = Color3.new(1, 1, 1)
+	targetLabel.TextColor3 = Theme.Colors.Paper
 	targetLabel.TextSize = 18
 	targetLabel.Font = Enum.Font.GothamBold
 	targetLabel.Parent = topBar
@@ -204,6 +256,8 @@ local function createSpectateUI()
 	controlsBar.BackgroundTransparency = 0.3
 	controlsBar.BorderSizePixel = 0
 	controlsBar.Parent = screenGui
+	Theme.Panel(controlsBar, true)
+	Theme.Fit(controlsBar, 400, 40)
 	
 	local ctrlCorner = Instance.new("UICorner")
 	ctrlCorner.CornerRadius = UDim.new(0, 8)
@@ -214,7 +268,7 @@ local function createSpectateUI()
 	controlsLabel.Size = UDim2.new(1, 0, 1, 0)
 	controlsLabel.BackgroundTransparency = 1
 	controlsLabel.Text = "[Q] Previous   |   [E] Next   |   [X] Stop Spectating"
-	controlsLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+	controlsLabel.TextColor3 = Theme.Colors.Paper
 	controlsLabel.TextSize = 14
 	controlsLabel.Font = Enum.Font.Gotham
 	controlsLabel.Parent = controlsBar
@@ -238,18 +292,32 @@ local function updateDeathUI(canSpectate)
 	local lobbyBtn = buttons and buttons:FindFirstChild("LobbyButton")
 
 	if deathText then
-		deathText.Text = isGameOver and "GAME OVER" or "YOU DIED"
+		deathText.Text = isGameOver and "EXPEDITION COMPLETE" or "EXPEDITION INTERRUPTED"
 	end
 
 	if subtitle then
 		if isGameOver then
-			if canReturnToLobby then
-				subtitle.Text = "The run ended in a full wipe. Return when ready."
-			else
-				subtitle.Text = "The run ended in a full wipe. Return is only available in Studio."
-			end
+			local seconds = math.floor(teamResults and teamResults.Elapsed or 0)
+			subtitle.Text = string.format("TEAM SURVIVAL  %02d:%02d\nYour team has fallen. This run has ended.", math.floor(seconds / 60), seconds % 60)
 		else
-			subtitle.Text = "Wait for a teammate to revive you..."
+			subtitle.Text = "A teammate can revive you with a crafted Revival Kit."
+		end
+	end
+	container.Size = UDim2.fromOffset(440, isGameOver and 430 or 300)
+	if buttons then buttons.Position = UDim2.fromOffset(20, isGameOver and 355 or 150) end
+	local results = container:FindFirstChild("TeamResults")
+	if results then
+		results.Visible = isGameOver
+		for _, child in ipairs(results:GetChildren()) do
+			if child:IsA("TextLabel") then child:Destroy() end
+		end
+		if isGameOver and teamResults then
+			local header = Theme.Label(results, "EXPEDITION CREW                 REVIVES / FALLS", UDim2.new(1, -8, 0, 24), UDim2.new(), 11, Theme.Colors.Amber, true)
+			header.LayoutOrder = 0
+			for index, entry in ipairs(teamResults.Players or {}) do
+				local row = Theme.Label(results, string.format("%s   ·   %d revives / %d falls", entry.DisplayName or entry.Name, entry.Revives or 0, entry.Deaths or 0), UDim2.new(1, -8, 0, 30), UDim2.new(), 14, Theme.Colors.Paper)
+				row.LayoutOrder = index
+			end
 		end
 	end
 
@@ -259,19 +327,21 @@ local function updateDeathUI(canSpectate)
 
 	if lobbyBtn then
 		if isGameOver then
-			lobbyBtn.Visible = true
+			lobbyBtn.Visible = canReturnToLobby
 			lobbyBtn.Active = canReturnToLobby
 			lobbyBtn.Selectable = canReturnToLobby
 			lobbyBtn.AutoButtonColor = canReturnToLobby
-			lobbyBtn.BackgroundColor3 = canReturnToLobby and Color3.fromRGB(80, 80, 85) or Color3.fromRGB(55, 55, 60)
-			lobbyBtn.Text = canReturnToLobby and "RETURN TO LOBBY" or "RETURN UNAVAILABLE"
+			lobbyBtn.BackgroundColor3 = Theme.Colors.SlotEmpty
+			lobbyBtn.TextColor3 = Theme.Colors.Text
+			lobbyBtn.Text = "RESPAWN (STUDIO)"
 		else
 			lobbyBtn.Visible = RunService:IsStudio()
 			lobbyBtn.Active = RunService:IsStudio()
 			lobbyBtn.Selectable = RunService:IsStudio()
 			lobbyBtn.AutoButtonColor = RunService:IsStudio()
-			lobbyBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 85)
-			lobbyBtn.Text = "RETURN TO LOBBY"
+			lobbyBtn.BackgroundColor3 = Theme.Colors.SlotEmpty
+			lobbyBtn.TextColor3 = Theme.Colors.Text
+			lobbyBtn.Text = "RESPAWN (STUDIO)"
 		end
 	end
 end
@@ -369,7 +439,7 @@ local function stopSpectateCamera()
 	if restoreType then
 		camera.CameraType = restoreType
 	end
-	if restoreSubject then
+	if restoreSubject and restoreSubject.Parent then
 		camera.CameraSubject = restoreSubject
 	end
 	originalCameraType = nil
@@ -383,6 +453,7 @@ local function stopSpectateCamera()
 	
 	-- Show death UI if still dead
 	if isDead then
+		followCorpse()
 		local deathUIRef = playerGui:FindFirstChild("DeathUI")
 		if deathUIRef then
 			deathUIRef.Enabled = true
@@ -485,8 +556,11 @@ local function onDeathRemote(action, data)
 	
 	if action == "Died" then
 		print("[DeathClient] Showing death UI")
+		corpse = data.ragdoll
 		showDeathUI(data.canSpectate)
+		if not isSpectating then followCorpse() end
 	elseif action == "Revived" then
+		corpse = nil
 		print("[DeathClient] Revived - resetting camera")
 		-- Stop spectating first
 		isSpectating = false
@@ -520,6 +594,7 @@ local function onDeathRemote(action, data)
 		end)
 		
 	elseif action == "ReturnedToLobby" then
+		corpse = nil
 		print("[DeathClient] Returned to lobby - resetting camera")
 		-- Stop spectating
 		isSpectating = false
@@ -554,10 +629,21 @@ local function onDeathRemote(action, data)
 			subtitle.Text = "Return to lobby is only available in Studio."
 		end
 		
-	elseif action == "PlayerDied" then
-		-- Another player died - could show notification
-	elseif action == "PlayerRevived" then
-		-- Another player was revived
+	elseif action == "TeamResults" and type(data) == "table" then
+		teamResults = data
+		isGameOver = true
+		showGameOverUI()
+	elseif action == "ReviveNotice" and type(data) == "string" then
+		showReviveNotice(data)
+	elseif action == "PlayerDied" or action == "PlayerRevived" then
+		if isDead and not isGameOver then
+			local alive = false
+			for _, teammate in ipairs(Players:GetPlayers()) do
+				local hum = teammate.Character and teammate.Character:FindFirstChildOfClass("Humanoid")
+				if teammate ~= player and not teammate:GetAttribute("IsDead") and hum and hum.Health > 0 then alive = true break end
+			end
+			updateDeathUI(alive)
+		end
 	end
 end
 
@@ -627,6 +713,7 @@ local function init()
 	if DeathRemote then
 		print("[DeathClient] DeathRemote found, connecting...")
 		DeathRemote.OnClientEvent:Connect(onDeathRemote)
+		DeathRemote:FireServer("RequestState")
 	else
 		warn("[DeathClient] DeathRemote NOT FOUND!")
 	end

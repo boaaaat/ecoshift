@@ -70,11 +70,11 @@ end
 
 local function validSlot(slotType, index)
 	if slotType == "Armor" then
-		return true
+		return index == nil or index == 1
 	elseif slotType == "Hotbar" then
-		return typeof(index) == "number" and index >= 1 and index <= HOTBAR_SLOTS
+		return typeof(index) == "number" and index % 1 == 0 and index >= 1 and index <= HOTBAR_SLOTS
 	elseif slotType == "Storage" then
-		return typeof(index) == "number" and index >= 1 and index <= STORAGE_SLOTS
+		return typeof(index) == "number" and index % 1 == 0 and index >= 1 and index <= STORAGE_SLOTS
 	end
 	return false
 end
@@ -244,7 +244,7 @@ end
 
 function InventoryService:Give(plr, itemId, amount, requireFit)
 	amount = math.floor(tonumber(amount) or 0)
-	if amount <= 0 or not itemId then return 0 end
+	if amount ~= amount or amount == math.huge or amount <= 0 or not itemId then return 0 end
 	local inv = getInv(plr)
 	if requireFit and not self:CanFit(plr, itemId, amount) then
 		return 0
@@ -262,7 +262,7 @@ end
 
 local function consumeNoSync(inv, itemId, amount)
 	amount = math.floor(tonumber(amount) or 0)
-	if amount <= 0 then return false end
+	if amount ~= amount or amount == math.huge or amount <= 0 then return false end
 
 	local total = 0
 	for i = 1, HOTBAR_SLOTS do
@@ -315,7 +315,7 @@ end
 
 function InventoryService:TakeFromSlot(plr, slotType, slotIndex, amount)
 	amount = math.floor(tonumber(amount) or 0)
-	if amount <= 0 then return nil end
+	if amount ~= amount or amount == math.huge or amount <= 0 then return nil end
 	if not validSlot(slotType, slotIndex) then return nil end
 	local inv = getInv(plr)
 	local slot = getSlot(inv, slotType, slotIndex)
@@ -331,7 +331,7 @@ end
 
 function InventoryService:TryAddToSlot(plr, slotType, slotIndex, itemId, amount)
 	amount = math.floor(tonumber(amount) or 0)
-	if amount <= 0 or not itemId then return 0 end
+	if amount ~= amount or amount == math.huge or amount <= 0 or not itemId then return 0 end
 	if not validSlot(slotType, slotIndex) then return 0 end
 	local inv = getInv(plr)
 	if slotType == "Armor" and not isArmor(itemId) then
@@ -369,7 +369,7 @@ function InventoryService:CanAfford(plr, costList)
 	return true
 end
 
-function InventoryService:PayCost(plr, costList)
+function InventoryService:PayCost(plr, costList, deferSync)
 	if not self:CanAfford(plr, costList) then return false end
 	local inv = getInv(plr)
 	for _, cost in ipairs(costList or {}) do
@@ -377,7 +377,7 @@ function InventoryService:PayCost(plr, costList)
 			return false
 		end
 	end
-	self:Sync(plr)
+	if not deferSync then self:Sync(plr) end
 	return true
 end
 
@@ -397,6 +397,7 @@ function InventoryService:OnChanged(callback)
 end
 
 function InventoryService:Move(plr, fromType, fromIndex, toType, toIndex)
+	if fromType == toType and (fromType == "Armor" or fromIndex == toIndex) then return false end
 	print(string.format("[InventoryService] Move request: %s[%s] -> %s[%s]", tostring(fromType), tostring(fromIndex), tostring(toType), tostring(toIndex)))
 	
 	if not validSlot(fromType, fromIndex) then
@@ -479,6 +480,9 @@ end
 
 function InventoryService:Split(plr, fromType, fromIndex, toType, toIndex, amount)
 	if not validSlot(fromType, fromIndex) then return false end
+	if amount ~= nil and (typeof(amount) ~= "number" or amount ~= amount or math.abs(amount) == math.huge) then
+		return false
+	end
 	local inv = getInv(plr)
 	local fromSlot = getSlot(inv, fromType, fromIndex)
 	if not fromSlot or fromSlot.N < 2 then return false end
@@ -507,7 +511,11 @@ function InventoryService:Split(plr, fromType, fromIndex, toType, toIndex, amoun
 			end
 		else
 			targetType = "Storage"
-			targetIndex = findEmptySlot(inv, targetType) or findEmptySlot(inv, "Hotbar")
+			targetIndex = findEmptySlot(inv, targetType)
+			if not targetIndex then
+				targetType = "Hotbar"
+				targetIndex = findEmptySlot(inv, targetType)
+			end
 		end
 	end
 

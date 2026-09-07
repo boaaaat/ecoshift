@@ -1,6 +1,7 @@
 -- EnemyHealthUI.client.lua
 -- Shows health bars above enemies when damaged
 local Players = game:GetService("Players")
+local C = require(game:GetService("ReplicatedStorage").Shared.UI.UITheme).Colors
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -23,7 +24,7 @@ local function createHealthBar(model)
 	
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "EnemyHealthBar"
-	billboard.Size = UDim2.new(0, 80, 0, 20)
+	billboard.Size = UDim2.new(0, 146, 0, 34)
 	billboard.StudsOffset = Vector3.new(0, 3, 0)
 	billboard.AlwaysOnTop = false
 	billboard.MaxDistance = 100
@@ -33,10 +34,10 @@ local function createHealthBar(model)
 	-- Background
 	local bg = Instance.new("Frame")
 	bg.Name = "Background"
-	bg.Size = UDim2.new(1, 0, 0.5, 0)
-	bg.Position = UDim2.new(0, 0, 0.5, 0)
+	bg.Size = UDim2.new(1, -14, 0, 5)
+	bg.Position = UDim2.new(0, 7, 0, 25)
 	bg.AnchorPoint = Vector2.new(0, 0.5)
-	bg.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+	bg.BackgroundColor3 = C.Night
 	bg.BorderSizePixel = 0
 	bg.Parent = billboard
 	
@@ -49,7 +50,7 @@ local function createHealthBar(model)
 	fill.Name = "Fill"
 	fill.Size = UDim2.new(1, 0, 1, 0)
 	fill.Position = UDim2.new(0, 0, 0, 0)
-	fill.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+	fill.BackgroundColor3 = C.Amber
 	fill.BorderSizePixel = 0
 	fill.Parent = bg
 	
@@ -63,8 +64,8 @@ local function createHealthBar(model)
 	nameLabel.Size = UDim2.new(1, 0, 0.5, 0)
 	nameLabel.Position = UDim2.new(0, 0, 0, 0)
 	nameLabel.BackgroundTransparency = 1
-	nameLabel.Text = model.Name
-	nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	nameLabel.Text = string.format("%s  /  LV %d", model.Name, model:GetAttribute("Level") or model:GetAttribute("MonsterLevel") or 1)
+	nameLabel.TextColor3 = C.Paper
 	nameLabel.TextStrokeTransparency = 0.5
 	nameLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
 	nameLabel.TextSize = 12
@@ -110,7 +111,7 @@ local function updateHealthBar(model, data)
 	elseif percent > 0.3 then
 		color = Color3.fromRGB(255, 200, 80)
 	else
-		color = Color3.fromRGB(255, 80, 80)
+		color = C.Amber
 	end
 	data.fill.BackgroundColor3 = color
 	

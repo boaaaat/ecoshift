@@ -3,6 +3,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
+local GuiService = game:GetService("GuiService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Remotes = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage:WaitForChild("Remotes", 5)
@@ -34,7 +35,8 @@ local function getMouseRay()
 	local camera = Workspace.CurrentCamera
 	if not camera then return nil, nil end
 	local mousePos = UserInputService:GetMouseLocation()
-	local ray = camera:ScreenPointToRay(mousePos.X, mousePos.Y)
+	local inset = GuiService:GetGuiInset()
+	local ray = camera:ViewportPointToRay(mousePos.X - inset.X, mousePos.Y - inset.Y)
 	return ray.Origin, ray.Direction
 end
 

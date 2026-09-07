@@ -4,8 +4,8 @@ This guide is for developers extending game systems and content in this repo.
 
 ## Quick Start
 
-1. Open the project in Roblox Studio with this source synced.
-2. Ensure required `ServerStorage` folders exist:
+1. Run `scripts/rojo-serve.ps1` and connect the Studio Rojo plugin to the server. `default.project.json` preserves authored Studio assets outside the mapped source tree.
+2. RuntimeBootstrap creates required runtime folders/remotes before gameplay starts. PrototypePrefabService supplies missing resources, tools, enemies, and station models using temporary geometry. Authored models take precedence. Optional authored folders are:
    - `ResourcePrefabs/<BiomeName>`
    - `PropPrefabs/<BiomeName>`
    - `StructurePrefabs/<BiomeName>`
@@ -15,7 +15,11 @@ This guide is for developers extending game systems and content in this repo.
    - `Tools/<ItemId>` (for holdable tools/weapons)
    - `BuildPrefabs/<BuildType>` (for placeable structures)
    - `LootTables/<TableName>` (ModuleScript or folder-style table)
-3. Start the game. `src/ServerScriptService/ServerMain.lua` boots services by tier.
+3. Start the game. `src/ServerScriptService/ServerMain.server.lua` boots services by tier. `.server.lua` and `.client.lua` suffixes are required for Rojo to create executable scripts.
+
+See [the progression plan](docs/game-design.md), [temporary asset sources](docs/temporary-assets.md), and [the gameplay milestone](docs/gameplay-milestone.md) for current behavior and remaining design decisions. Use `scripts/rojo-build.ps1` to produce a local place file; generated builds are ignored by Git.
+
+The field-kit controls are **G** pack, **C** craft, **B** build, **M** map, and **V** survey. Each has a clickable HUD button. Players begin with a harvester. Hold **E** at plants, click tougher resources with the harvester, and hand-craft a Stone Spear or Revival Kit. The next-shift countdown is hidden until FieldClock or an upgraded survey device is carried.
 
 ## Project Layout
 

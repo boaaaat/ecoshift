@@ -2,6 +2,7 @@
 -- Tactical minimap + fullscreen world map (M)
 
 local Players = game:GetService("Players")
+local Theme = require(game:GetService("ReplicatedStorage").Shared.UI.UITheme)
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local ContextActionService = game:GetService("ContextActionService")
@@ -574,6 +575,10 @@ local function createUI()
 	local miniH = MapConfig.Minimap.Size + 54
 	local miniContainer = buildCoreFrame(gui, UDim2.fromOffset(miniW, miniH), getPositionPreset(), MapConfig.Colors.UIPanel, 0.18)
 	miniContainer.Name = "MinimapContainer"
+	miniContainer.AnchorPoint = Vector2.new(1, 1)
+	miniContainer.Position = UDim2.new(1, -18, 1, -18)
+	Theme.Fit(miniContainer, 900, 610)
+	Theme.Panel(miniContainer)
 	styleCard(miniContainer)
 
 	local mapFrame = buildCoreFrame(miniContainer, UDim2.fromOffset(MapConfig.Minimap.Size, MapConfig.Minimap.Size), UDim2.fromOffset(10, 10), MapConfig.Colors.MinimapBackground, 0.1)
@@ -623,7 +628,7 @@ local function createUI()
 	UI.minimapZoom = zoom
 
 	-- Fullscreen map
-	local fullRoot = buildCoreFrame(gui, UDim2.fromScale(1, 1), UDim2.fromOffset(0, 0), Color3.fromRGB(5, 8, 12), 0.28)
+	local fullRoot = buildCoreFrame(gui, UDim2.fromScale(1, 1), UDim2.fromOffset(0, 0), Theme.Colors.Night, 0.28)
 	fullRoot.Name = "WorldMapRoot"
 	fullRoot.Visible = false
 
@@ -632,15 +637,15 @@ local function createUI()
 	styleCard(panel)
 
 	local header = buildCoreFrame(panel, UDim2.new(1, -16, 0, 40), UDim2.fromOffset(8, 8), Color3.new(), 1)
-	buildLabel(header, "WORLD MAP", UDim2.new(1, -190, 1, 0), UDim2.fromOffset(0, 0), Enum.Font.GothamBlack, 18, MapConfig.Colors.TextPrimary)
-	buildLabel(header, "M/ESC close  |  Wheel/Triggers zoom  |  Drag/Stick pan", UDim2.new(0, 430, 1, 0), UDim2.new(1, -430, 0, 0), Enum.Font.Gotham, 11, MapConfig.Colors.TextMuted, Enum.TextXAlignment.Right)
+	buildLabel(header, "EXPEDITION ATLAS", UDim2.new(1, -190, 1, 0), UDim2.fromOffset(0, 0), Enum.Font.GothamBlack, 18, MapConfig.Colors.TextPrimary)
+	buildLabel(header, "M CLOSE  /  SCROLL ZOOM  /  DRAG PAN", UDim2.new(0, 430, 1, 0), UDim2.new(1, -430, 0, 0), Enum.Font.Gotham, 11, MapConfig.Colors.TextMuted, Enum.TextXAlignment.Right)
 
 	local body = buildCoreFrame(panel, UDim2.new(1, -16, 1, -56), UDim2.fromOffset(8, 48), Color3.new(), 1)
-	local sidebarW = 210
-	local mapArea = buildCoreFrame(body, UDim2.new(1, -sidebarW - 10, 1, 0), UDim2.fromOffset(0, 0), Color3.fromRGB(12, 17, 23), 0)
+	local sidebarW = 170
+	local mapArea = buildCoreFrame(body, UDim2.new(1, -sidebarW - 10, 1, 0), UDim2.fromOffset(0, 0), Theme.Colors.SlotEmpty, 0)
 	styleCard(mapArea)
 
-	local canvas = buildCoreFrame(mapArea, UDim2.new(1, -14, 1, -14), UDim2.fromOffset(7, 7), Color3.fromRGB(8, 12, 16), 0)
+	local canvas = buildCoreFrame(mapArea, UDim2.new(1, -14, 1, -14), UDim2.fromOffset(7, 7), Theme.Colors.Night, 0)
 	canvas.Name = "Canvas"
 	canvas.ClipsDescendants = true
 	canvas.Active = true
@@ -652,7 +657,7 @@ local function createUI()
 	local markerLayer = buildCoreFrame(canvas, UDim2.fromScale(1, 1), UDim2.fromOffset(0, 0), Color3.new(), 1)
 	markerLayer.Name = "MarkerLayer"
 
-	local sidebar = buildCoreFrame(body, UDim2.new(0, sidebarW, 1, 0), UDim2.new(1, -sidebarW, 0, 0), Color3.fromRGB(16, 22, 29), 0)
+	local sidebar = buildCoreFrame(body, UDim2.new(0, sidebarW, 1, 0), UDim2.new(1, -sidebarW, 0, 0), Theme.Colors.Background, 0)
 	styleCard(sidebar)
 
 	local y = 8
@@ -664,13 +669,14 @@ local function createUI()
 		btn.Name = name .. "Toggle"
 		btn.Size = UDim2.new(1, -20, 0, 24)
 		btn.Position = UDim2.fromOffset(10, y)
-		btn.BackgroundColor3 = Color3.fromRGB(34, 47, 60)
+		btn.BackgroundColor3 = Theme.Colors.SlotEmpty
 		btn.BorderSizePixel = 0
 		btn.AutoButtonColor = false
 		btn.Font = Enum.Font.GothamMedium
 		btn.TextSize = 12
 		btn.TextColor3 = MapConfig.Colors.TextPrimary
 		btn.Parent = sidebar
+		Theme.Button(btn)
 		local c = Instance.new("UICorner")
 		c.CornerRadius = UDim.new(0, 6)
 		c.Parent = btn
@@ -682,7 +688,7 @@ local function createUI()
 	local centerBtn = Instance.new("TextButton")
 	centerBtn.Size = UDim2.new(1, -20, 0, 26)
 	centerBtn.Position = UDim2.fromOffset(10, y)
-	centerBtn.BackgroundColor3 = Color3.fromRGB(46, 74, 96)
+	centerBtn.BackgroundColor3 = Theme.Colors.SlotSelected
 	centerBtn.BorderSizePixel = 0
 	centerBtn.AutoButtonColor = false
 	centerBtn.Font = Enum.Font.GothamBold
@@ -707,6 +713,7 @@ local function createUI()
 	cursorLabel.TextWrapped = true
 	cursorLabel.TextYAlignment = Enum.TextYAlignment.Top
 
+	Theme.AnimatePanel(fullRoot)
 	UI.fullRoot = fullRoot
 	UI.fullCanvas = canvas
 	UI.fullChunkLayer = chunkLayer
@@ -721,7 +728,7 @@ local function createUI()
 		mapButton.Name = "MapToggleButton"
 		mapButton.Size = UDim2.fromOffset(60, 44)
 		mapButton.Position = UDim2.new(1, -72, 1, -56)
-		mapButton.BackgroundColor3 = Color3.fromRGB(32, 44, 56)
+		mapButton.BackgroundColor3 = Theme.Colors.Panel
 		mapButton.BackgroundTransparency = 0.1
 		mapButton.BorderSizePixel = 0
 		mapButton.Font = Enum.Font.GothamBold
@@ -761,7 +768,7 @@ local function updateLegendButtons()
 	for name, btn in pairs(UI.toggleButtons) do
 		local enabled = STATE.markerVisibility[name]
 		btn.Text = (enabled and "[ON] " or "[OFF] ") .. name
-		btn.BackgroundColor3 = enabled and Color3.fromRGB(55, 94, 120) or Color3.fromRGB(34, 47, 60)
+		btn.BackgroundColor3 = enabled and Theme.Colors.SlotSelected or Theme.Colors.SlotEmpty
 	end
 end
 
@@ -2111,5 +2118,7 @@ local function init()
 end
 
 init()
+
+player:GetAttributeChangedSignal("FieldKitMap"):Connect(toggleFullMap)
 
 return MinimapClient

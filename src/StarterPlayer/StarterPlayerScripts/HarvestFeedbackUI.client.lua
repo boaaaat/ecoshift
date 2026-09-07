@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 
+local C = require(ReplicatedStorage.Shared.UI.UITheme).Colors
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local DEBUG = false
@@ -23,12 +24,12 @@ local rFeedback = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteN
 
 -- UI Constants
 local COLORS = {
-	DamageText = Color3.fromRGB(255, 220, 100),
-	DamageCrit = Color3.fromRGB(255, 100, 100),
-	HealthBar = Color3.fromRGB(80, 200, 120),
-	HealthBarLow = Color3.fromRGB(220, 80, 80),
-	HealthBarBg = Color3.fromRGB(30, 30, 35),
-	Text = Color3.fromRGB(240, 240, 245),
+	DamageText = C.Amber,
+	DamageCrit = C.Danger,
+	HealthBar = C.Sage,
+	HealthBarLow = C.Danger,
+	HealthBarBg = C.Night,
+	Text = C.Paper,
 }
 
 -- Create main GUI
@@ -66,7 +67,7 @@ local function createDamageNumber(position, damage, destroyed)
 	label.BackgroundTransparency = 1
 	label.Text = "-" .. tostring(damage)
 	label.TextColor3 = destroyed and COLORS.DamageCrit or COLORS.DamageText
-	label.TextSize = destroyed and 44 or 36
+	label.TextSize = destroyed and 28 or 22
 	label.Font = Enum.Font.GothamBold
 	label.TextStrokeColor3 = Color3.new(0, 0, 0)
 	label.TextStrokeTransparency = 0.3
@@ -84,9 +85,9 @@ local function createDamageNumber(position, damage, destroyed)
 	}):Play()
 	
 	-- Scale pop effect (larger, smoother)
-	label.TextSize = destroyed and 32 or 26
+	label.TextSize = destroyed and 22 or 18
 	TweenService:Create(label, TweenInfo.new(0.12, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-		TextSize = destroyed and 44 or 36
+		TextSize = destroyed and 28 or 22
 	}):Play()
 	
 	-- Clean up

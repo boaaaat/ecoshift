@@ -37,6 +37,7 @@ local function getAmbientTemp(position)
 	end
 	local mods = (_G.Ecoshift and _G.Ecoshift.Mods) or {}
 	ambient += tonumber(mods.Temp) or 0
+	ambient += tonumber((BiomeService:GetWeather() or {}).Temp) or 0
 	return ambient
 end
 
@@ -76,9 +77,16 @@ function SurvivalService:_tickPlayer(plr, dt)
 	local tempRes = StatsService:GetStat(plr, "TemperatureResistance") or 0
 
 	local ambient = getAmbientTemp(hrp.Position)
+	local kind = ambient >= 0 and "Heat" or "Cold"
+	local gear = math.clamp(tonumber(char:GetAttribute("GearRes_" .. kind)) or 0, 0, 0.95)
+	local tonic = math.clamp(tonumber(char:GetAttribute("Res_" .. kind)) or 0, 0, 0.95)
+	ambient *= (1 - gear) * (1 - tonic)
+	if ambient < 0 then ambient *= 1 + (tonumber(char:GetAttribute("WetStacks")) or 0) * 0.1 end
 	if ambient ~= 0 then
 		temp += ambient * dt
 	end
+	-- Safe conditions and suitable gear allow body temperature to recover.
+	tempRes = math.max(0, tempRes) + 0.3
 	if tempRes > 0 then
 		if temp > 0 then
 			temp = math.max(0, temp - (tempRes * dt))

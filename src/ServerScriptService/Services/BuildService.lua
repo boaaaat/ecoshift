@@ -47,6 +47,8 @@ local function isChestStructure(inst, buildType)
 end
 
 local function withinRange(plr, worldPos)
+	local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+	if not hum or hum.Health <= 0 or plr:GetAttribute("IsDead") then return false end
 	local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
 	if not root then return false end
 	return (root.Position - worldPos).Magnitude <= (Config.GRID.BuildMaxDistance or 45)
@@ -194,6 +196,8 @@ function BuildService:Place(plr, buildType, worldPos)
 	if type(buildType) ~= "string" or typeof(worldPos) ~= "Vector3" then
 		return false, "InvalidPayload"
 	end
+	if worldPos.X ~= worldPos.X or worldPos.Y ~= worldPos.Y or worldPos.Z ~= worldPos.Z
+		or worldPos.Magnitude == math.huge then return false, "InvalidPayload" end
 	if GameStateService:IsGameOver() then
 		return false, "GameOver"
 	end
@@ -293,7 +297,8 @@ function BuildService:Place(plr, buildType, worldPos)
 end
 
 function BuildService:Remove(plr, target)
-	if typeof(target) ~= "Instance" or not target.Parent then return false, "InvalidPayload" end
+	if typeof(target) ~= "Instance" or not target:IsDescendantOf(workspace)
+		or (not target:IsA("Model") and not target:IsA("BasePart")) then return false, "InvalidPayload" end
 	if GameStateService:IsGameOver() then
 		return false, "GameOver"
 	end
@@ -342,12 +347,18 @@ function BuildService:Remove(plr, target)
 end
 
 function BuildService:Bind()
+	if self._bound then return end
 	if not self._remoteBuild then
 		warn("[BuildService] Missing build remote:", Config.RemoteNames.Build)
 		return
 	end
+	self._bound = true
 	self._remoteBuild.OnServerEvent:Connect(function(plr, action, payload)
 		if type(action) ~= "string" then return end
+		if type(payload) ~= "table" then
+			self._remoteBuild:FireClient(plr, "Result", { Action = action, Success = false, Reason = "InvalidPayload" })
+			return
+		end
 		if action == "Place" then
 			local buildType = payload and payload.Type
 			local pos = payload and payload.Position

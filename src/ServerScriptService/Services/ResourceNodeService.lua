@@ -2,6 +2,7 @@
 -- Adds prompts for duration-based resources.
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
 
 local InventoryService = require(script.Parent.InventoryService)
 local PromptQueueService = require(script.Parent.PromptQueueService)
@@ -9,6 +10,7 @@ local ResourceItemMap = require(ReplicatedStorage.Shared.ResourceItemMap)
 
 local ResourceNodeService = {}
 ResourceNodeService._bound = setmetatable({}, { __mode = "k" }) -- [Instance] = true
+ResourceNodeService._promptOwners = setmetatable({}, { __mode = "k" })
 ResourceNodeService._attachedCount = 0
 ResourceNodeService._lastReport = 0
 
@@ -135,9 +137,51 @@ local function attachDurationPrompt(instance)
 		prompt.ObjectText = instance.Name
 		prompt.RequiresLineOfSight = true
 	end
+	-- Nested prefab models can discover the same prompt during folder binding.
+	if ResourceNodeService._promptOwners[prompt] then return end
+	ResourceNodeService._promptOwners[prompt] = instance
 	prompt.Parent = attachment
 	prompt.MaxActivationDistance = 10
 	prompt.HoldDuration = duration
+	local holds = setmetatable({}, { __mode = "k" })
+	local claimed = false
+	local function canHarvest(plr)
+		if claimed or not prompt.Enabled or not instance:IsDescendantOf(Workspace)
+			or not attachment:IsDescendantOf(instance) or plr.Parent ~= Players
+			or plr:GetAttribute("IsDead") then
+			return false
+		end
+		local character = plr.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		return humanoid ~= nil and humanoid.Health > 0 and root ~= nil
+			and (root.Position - attachment.WorldPosition).Magnitude <= 11
+	end
+	prompt.PromptButtonHoldBegan:Connect(function(plr)
+		if not canHarvest(plr) then return end
+		local hold = { StartedAt = os.clock(), Character = plr.Character }
+		holds[plr] = hold
+		-- A client cannot bank a hold while dead or away from the resource.
+		task.spawn(function()
+			while holds[plr] == hold and not hold.EndedAt do
+				if not canHarvest(plr) or plr.Character ~= hold.Character
+					or os.clock() - hold.StartedAt > duration + 2 then
+					holds[plr] = nil
+					break
+				end
+				task.wait(0.1)
+			end
+		end)
+	end)
+	prompt.PromptButtonHoldEnded:Connect(function(plr)
+		local hold = holds[plr]
+		if not hold then return end
+		hold.EndedAt = os.clock()
+		-- Ended and Triggered can arrive together; retain only a brief completion window.
+		task.delay(0.5, function()
+			if holds[plr] == hold then holds[plr] = nil end
+		end)
+	end)
 	ResourceNodeService._attachedCount += 1
 	local now = os.clock()
 	if (now - ResourceNodeService._lastReport) >= 1 then
@@ -148,18 +192,29 @@ local function attachDurationPrompt(instance)
 		ResourceNodeService._lastReport = now
 	end
 	prompt.Triggered:Connect(function(plr)
-		print(string.format("[ResourceNodeService] Prompt triggered by %s on %s", plr.Name, instance.Name))
+		local hold = holds[plr]
+		holds[plr] = nil
+		local now = os.clock()
+		if not hold or plr.Character ~= hold.Character or not canHarvest(plr)
+			or now - hold.StartedAt > duration + 2
+			or (hold.EndedAt and now - hold.EndedAt > 0.5)
+			or (hold.EndedAt or now) - hold.StartedAt < math.max(0, duration - 0.1) then
+			return
+		end
+		-- Claim before inventory callbacks can yield or another player completes a hold.
+		claimed = true
+		prompt.Enabled = false
 		local itemId = getAttr(instance, "DropItemId") or getAttr(instance, "DropItemID") or getAttr(instance, "ItemId") or instance.Name
 		itemId = ResourceItemMap.Normalize(itemId)
 		local count = parseDropCount(instance)
 		local roleMult = tonumber(plr:GetAttribute("Role_Gather")) or 1.0
 		count = math.max(1, math.floor(count * roleMult))
 		local added = InventoryService:Give(plr, itemId, count, true)
-		print(string.format("[ResourceNodeService] Give %s x%d -> added %d", tostring(itemId), count, added))
 		if added > 0 then
 			instance:Destroy()
 		else
-			print("[ResourceNodeService] Inventory full or invalid item, no destroy")
+			claimed = false
+			if prompt.Parent then prompt.Enabled = true end
 		end
 	end)
 end

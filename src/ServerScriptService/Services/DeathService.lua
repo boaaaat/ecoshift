@@ -13,10 +13,15 @@ end
 
 local InventoryService = require(script.Parent.InventoryService)
 local ItemDropService = require(script.Parent.ItemDropService)
+local StatsService = require(script.Parent.StatsService)
+local GameStateService = require(script.Parent.GameStateService)
 
 local DeathService = {}
 DeathService._deadPlayers = {} -- [player] = { ragdoll: Model, deathTime: number }
 DeathService._spectating = {} -- [player] = targetPlayer
+DeathService._reviveHolds = {}
+DeathService._runStats = {}
+local REVIVE_ITEM = "ReviveKit"
 
 -- Remotes (created on init)
 local Remotes = nil
@@ -34,6 +39,8 @@ local DROP_VERTICAL_SPEED_MIN = 10
 local DROP_VERTICAL_SPEED_MAX = 20
 
 function DeathService:Init()
+	if self._initialized then return end
+	self._initialized = true
 	dprint("[DeathService] Init() called - starting...")
 	
 	Remotes = ReplicatedStorage:FindFirstChild("Remotes")
@@ -105,6 +112,7 @@ function DeathService:Init()
 			dprint("[DeathService] CharacterAdded for", plr.Name)
 			local humanoid = char:WaitForChild("Humanoid", 5)
 			if humanoid then
+				humanoid.BreakJointsOnDeath = false
 				dprint("[DeathService] Hooking Humanoid.HealthChanged for", plr.Name)
 				-- Use HealthChanged instead of Died so we can clone before cleanup
 				humanoid.HealthChanged:Connect(function(health)
@@ -124,6 +132,7 @@ function DeathService:Init()
 		if char then
 			local humanoid = char:FindFirstChildOfClass("Humanoid")
 			if humanoid then
+				humanoid.BreakJointsOnDeath = false
 				dprint("[DeathService] Hooking existing Humanoid.HealthChanged for", plr.Name)
 				humanoid.HealthChanged:Connect(function(health)
 					if health <= 0 and not self:IsDead(plr) then
@@ -148,6 +157,7 @@ function DeathService:Init()
 			dprint("[DeathService] CharacterAdded (existing player) for", plr.Name)
 			local hum = char:WaitForChild("Humanoid", 5)
 			if hum then
+				hum.BreakJointsOnDeath = false
 				dprint("[DeathService] Hooking Humanoid.HealthChanged for", plr.Name)
 				hum.HealthChanged:Connect(function(health)
 					if health <= 0 and not self:IsDead(plr) then
@@ -159,6 +169,46 @@ function DeathService:Init()
 		end)
 	end
 	
+	local function trackPlayer(player)
+		self._runStats[player.UserId] = self._runStats[player.UserId] or {
+			Name = player.Name, DisplayName = player.DisplayName, Deaths = 0, Revives = 0,
+		}
+	end
+	Players.PlayerAdded:Connect(trackPlayer)
+	for _, player in ipairs(Players:GetPlayers()) do trackPlayer(player) end
+	RunService.Heartbeat:Connect(function()
+		for reviver, hold in pairs(self._reviveHolds) do
+			if os.clock() - hold.StartedAt > REVIVAL_TIME + 2 or not self:_canRevive(hold.Target, reviver) then
+				self._reviveHolds[reviver] = nil
+			end
+		end
+	end)
+	GameStateService:OnStateChanged(function(state)
+		if state.MatchState ~= "GameOver" then return end
+		self._reviveHolds = {}
+		for _, data in pairs(self._deadPlayers) do
+			local prompt = data.ragdoll and data.ragdoll:FindFirstChild("RevivePrompt", true)
+			if prompt then prompt.Enabled = false end
+		end
+		local results = { Elapsed = state.FinalElapsed or state.Elapsed or 0, Players = {} }
+		for userId, stats in pairs(self._runStats) do
+			table.insert(results.Players, { UserId = userId, Name = stats.Name, DisplayName = stats.DisplayName, Deaths = stats.Deaths, Revives = stats.Revives })
+		end
+		table.sort(results.Players, function(a, b) return a.Name < b.Name end)
+		self._results = results
+		DeathRemote:FireAllClients("TeamResults", results)
+	end)
+	DeathRemote.OnServerEvent:Connect(function(player, action)
+		if action ~= "RequestState" then return end
+		if self._results then DeathRemote:FireClient(player, "TeamResults", self._results) end
+		local data = self._deadPlayers[player]
+		if data then
+			DeathRemote:FireClient(player, "Died", {
+				canSpectate = #self:_getAlivePlayers(player) > 0,
+				ragdoll = data.ragdoll, ragdollPosition = data.deathPosition,
+			})
+		end
+	end)
 	dprint("[DeathService] Initialized")
 end
 
@@ -233,6 +283,11 @@ function DeathService:KillPlayer(player)
 		deathPosition = deathPosition,
 	}
 
+	player:SetAttribute("IsDead", true)
+	self._reviveHolds[player] = nil
+	local runStats = self._runStats[player.UserId]
+	if runStats then runStats.Deaths += 1 end
+
 	-- Drop all carried inventory stacks with random toss directions.
 	self:_dropPlayerInventory(player, deathPosition)
 	
@@ -253,6 +308,7 @@ function DeathService:KillPlayer(player)
 	-- Notify client of death
 	DeathRemote:FireClient(player, "Died", {
 		canSpectate = canSpectate,
+		ragdoll = ragdoll,
 		ragdollPosition = ragdoll and ragdoll:GetPivot().Position or deathPosition,
 	})
 	
@@ -266,69 +322,74 @@ function DeathService:KillPlayer(player)
 		end
 	end
 	
-	dprint("[DeathService]", player.Name, "died successfully")
+	self:_refreshSpectators(player)
 end
 
-function DeathService:RevivePlayer(player, reviver)
-	if not self:IsDead(player) then return false end
-	
-	local data = self._deadPlayers[player]
-	local ragdoll = data and data.ragdoll
-	
-	-- Get revival position from ragdoll
-	local revivePosition = ragdoll and ragdoll:GetPivot().Position or data.deathPosition
-	
-	-- Clean up ragdoll
-	if ragdoll then
-		ragdoll:Destroy()
-	end
-	
-	-- Clear death state
-	self._deadPlayers[player] = nil
-	self._spectating[player] = nil
+local function liveCharacter(player)
+	if typeof(player) ~= "Instance" or not player:IsA("Player") or player.Parent ~= Players then return nil end
+	if player:GetAttribute("IsDead") then return nil end
+	local char = player.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if hum and hum.Health > 0 and root then return char, hum, root end
+	return nil
+end
 
-	-- Revived players come back empty-handed.
-	InventoryService:Clear(player)
-	
-	-- Clear dead flag and respawn
-	player:SetAttribute("IsDead", false)
-	player:LoadCharacter()
-	
-	-- Wait for character to load
-	local character = player.Character or player.CharacterAdded:Wait()
-	local humanoid = character:WaitForChild("Humanoid", 5)
-	
-	if humanoid then
-		-- Set to low HP
-		local maxHP = humanoid.MaxHealth
-		humanoid.Health = maxHP * REVIVAL_HP_PERCENT
-		
-		-- Move to revival position
-		task.wait(0.1) -- small delay for character to fully load
-		local hrp = character:FindFirstChild("HumanoidRootPart")
-		if hrp then
-			hrp.CFrame = CFrame.new(revivePosition + Vector3.new(0, 3, 0))
-		end
-	end
-	
-	-- Notify client of revival
-	DeathRemote:FireClient(player, "Revived", {
-		reviver = reviver and reviver.Name or "Unknown",
-	})
-	
-	-- Notify other clients
-	for _, other in ipairs(Players:GetPlayers()) do
-		if other ~= player then
-			DeathRemote:FireClient(other, "PlayerRevived", {
-				player = player,
-			})
-		end
-	end
-	
-	dprint("[DeathService]", player.Name, "was revived by", reviver and reviver.Name or "system")
+function DeathService:_canRevive(player, reviver)
+	local data = self._deadPlayers[player]
+	if GameStateService:IsGameOver() or not data or data.Reviving or player == reviver then return false end
+	if player.Parent ~= Players or not data.ragdoll or not data.ragdoll.Parent then return false end
+	local char, _, root = liveCharacter(reviver)
+	if not char then return false end
+	if player.Team and reviver.Team and player.Team ~= reviver.Team then return false end
+	local position = data.ragdoll:GetPivot().Position
+	if (root.Position - position).Magnitude > REVIVAL_RANGE then return false end
+	if not InventoryService:Has(reviver, REVIVE_ITEM, 1) then return false end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { char, data.ragdoll }
+	if workspace:Raycast(root.Position, position - root.Position, params) then return false end
 	return true
 end
 
+function DeathService:RevivePlayer(player, reviver)
+	local hold = self._reviveHolds[reviver]
+	if not hold or hold.Target ~= player or os.clock() - hold.StartedAt < REVIVAL_TIME - 0.1 then return false end
+	if not self:_canRevive(player, reviver) then return false end
+	self._reviveHolds[reviver] = nil
+	local data = self._deadPlayers[player]
+	-- Reserve the corpse and consume exactly one kit before yielding.
+	data.Reviving = true
+	if not InventoryService:Consume(reviver, REVIVE_ITEM, 1) then data.Reviving = nil return false end
+	local position = data.ragdoll:GetPivot().Position
+	player:SetAttribute("IsDead", false)
+	StatsService:SetBase(player, "Health", (StatsService:GetStat(player, "MaxHealth") or 100) * REVIVAL_HP_PERCENT)
+	local ok, err = pcall(function()
+		player:LoadCharacterAsync()
+		local char = player.Character
+		local hum = char and char:WaitForChild("Humanoid", 5)
+		if not hum then error("Revived character did not load") end
+		StatsService:SetBase(player, "Health", hum.MaxHealth * REVIVAL_HP_PERCENT)
+		char:PivotTo(CFrame.new(position + Vector3.new(0, 3, 0)))
+	end)
+	if not ok then
+		data.Reviving = nil
+		player:SetAttribute("IsDead", true)
+		if player.Character then player.Character:Destroy() end
+		local added = reviver.Parent == Players and InventoryService:Give(reviver, REVIVE_ITEM, 1) or 0
+		if added == 0 then ItemDropService:SpawnDrop(REVIVE_ITEM, 1, position + Vector3.new(0, 2, 0)) end
+		warn("[DeathService] Revival failed:", err)
+		return false
+	end
+	data.ragdoll:Destroy()
+	self._deadPlayers[player] = nil
+	self._spectating[player] = nil
+	local stats = self._runStats[reviver.UserId]
+	if stats then stats.Revives += 1 end
+	DeathRemote:FireClient(player, "Revived", { reviver = reviver.DisplayName })
+	DeathRemote:FireAllClients("PlayerRevived", { player = player })
+	return true
+end
 function DeathService:_createRagdoll(character)
 	if not character then
 		warn("[DeathService] Cannot create ragdoll - character nil")
@@ -343,7 +404,11 @@ function DeathService:_createRagdoll(character)
 		if not character.Parent then
 			error("Character has no parent")
 		end
-		return character:Clone()
+		local archivable = character.Archivable
+		character.Archivable = true
+		local clone = character:Clone()
+		character.Archivable = archivable
+		return clone
 	end)
 	
 	local ragdoll = nil
@@ -365,6 +430,7 @@ function DeathService:_createRagdoll(character)
 	
 	local humanoid = ragdoll:FindFirstChildOfClass("Humanoid")
 	if humanoid then
+		humanoid.BreakJointsOnDeath = false
 		humanoid.PlatformStand = true
 		humanoid.AutoRotate = false
 		humanoid:ChangeState(Enum.HumanoidStateType.Physics)
@@ -373,7 +439,7 @@ function DeathService:_createRagdoll(character)
 	-- Make all parts non-collidable with players but still visible
 	for _, part in ipairs(ragdoll:GetDescendants()) do
 		if part:IsA("BasePart") then
-			part.CanCollide = true
+			part.CanCollide = part.Name ~= "HumanoidRootPart" and not part:FindFirstAncestorOfClass("Accessory")
 			part.Anchored = false
 			
 			-- Remove scripts and tools
@@ -386,11 +452,12 @@ function DeathService:_createRagdoll(character)
 	self:_setupRagdollJoints(ragdoll)
 	
 	-- Add revival proximity prompt
-	local hrp = ragdoll:FindFirstChild("HumanoidRootPart")
+	local hrp = ragdoll:FindFirstChild("UpperTorso") or ragdoll:FindFirstChild("Torso") or ragdoll:FindFirstChild("HumanoidRootPart")
 	if hrp then
+		ragdoll.PrimaryPart = hrp
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.Name = "RevivePrompt"
-		prompt.ActionText = "Revive"
+		prompt.ActionText = "Revive · 1 Revival Kit"
 		prompt.ObjectText = character.Name
 		prompt.HoldDuration = REVIVAL_TIME
 		prompt.MaxActivationDistance = REVIVAL_RANGE
@@ -400,6 +467,21 @@ function DeathService:_createRagdoll(character)
 		-- Store original player reference
 		ragdoll:SetAttribute("OriginalPlayer", character.Name)
 		
+		prompt.PromptButtonHoldBegan:Connect(function(reviver)
+			local originalPlayer = Players:FindFirstChild(ragdoll:GetAttribute("OriginalPlayer"))
+			if originalPlayer then self:_startRevive(reviver, originalPlayer) end
+		end)
+		prompt.PromptButtonHoldEnded:Connect(function(reviver)
+			local hold = self._reviveHolds[reviver]
+			if not hold or hold.Target.Name ~= ragdoll:GetAttribute("OriginalPlayer") then return end
+			if os.clock() - hold.StartedAt < REVIVAL_TIME - 0.1 then
+				self._reviveHolds[reviver] = nil
+			else
+				task.delay(0.25, function()
+					if self._reviveHolds[reviver] == hold then self._reviveHolds[reviver] = nil end
+				end)
+			end
+		end)
 		prompt.Triggered:Connect(function(playerWhoTriggered)
 			-- Find the original player
 			local originalPlayer = Players:FindFirstChild(ragdoll:GetAttribute("OriginalPlayer"))
@@ -409,7 +491,12 @@ function DeathService:_createRagdoll(character)
 		end)
 	end
 	
+	local corpseHumanoid = ragdoll:FindFirstChildOfClass("Humanoid")
+	if corpseHumanoid then corpseHumanoid:Destroy() end
 	ragdoll.Parent = workspace
+	for _, part in ipairs(ragdoll:GetDescendants()) do
+		if part:IsA("BasePart") then part:SetNetworkOwner(nil) end
+	end
 	
 	-- Apply small downward force to make it fall
 	if hrp then
@@ -444,6 +531,9 @@ function DeathService:_setupRagdollJoints(ragdoll)
 			constraint.TwistUpperAngle = 45
 			constraint.Parent = motor.Part0
 			
+			local noCollision = Instance.new("NoCollisionConstraint")
+			noCollision.Part0, noCollision.Part1 = motor.Part0, motor.Part1
+			noCollision.Parent = motor.Part0
 			motor.Enabled = false
 		end
 	end
@@ -573,27 +663,28 @@ function DeathService:_getAlivePlayers(excludePlayer)
 end
 
 function DeathService:_startSpectate(player, targetPlayer)
-	if not self:IsDead(player) then return end
-	
-	-- Validate target
-	if targetPlayer and not self:IsDead(targetPlayer) then
+	if not self:IsDead(player) or GameStateService:IsGameOver() then return end
+	if targetPlayer == player or not liveCharacter(targetPlayer) then
+		targetPlayer = self:_getAlivePlayers(player)[1]
+	end
+	if targetPlayer then
 		self._spectating[player] = targetPlayer
 		SpectateRemote:FireClient(player, "SpectateTarget", targetPlayer)
 	else
-		-- Auto-select first alive player
-		local alive = self:_getAlivePlayers(player)
-		if #alive > 0 then
-			self._spectating[player] = alive[1]
-			SpectateRemote:FireClient(player, "SpectateTarget", alive[1])
-		end
+		self:_stopSpectate(player)
 	end
 end
 
+function DeathService:_refreshSpectators(unavailable)
+	for spectator, target in pairs(self._spectating) do
+		if target == unavailable then self:_startSpectate(spectator) end
+	end
+end
 function DeathService:_cycleSpectate(player, direction)
-	if not self:IsDead(player) then return end
+	if not self:IsDead(player) or GameStateService:IsGameOver() then return end
 	
 	local alive = self:_getAlivePlayers(player)
-	if #alive == 0 then return end
+	if #alive == 0 then self:_stopSpectate(player) return end
 	
 	local current = self._spectating[player]
 	local currentIndex = 1
@@ -616,13 +707,18 @@ function DeathService:_stopSpectate(player)
 end
 
 function DeathService:_startRevive(player, targetPlayer)
-	-- Handled by ProximityPrompt on ragdoll
+	if not self:_canRevive(targetPlayer, player) then
+		if liveCharacter(player) and not InventoryService:Has(player, REVIVE_ITEM, 1) then
+			DeathRemote:FireClient(player, "ReviveNotice", "Craft a Revival Kit to revive your teammate.")
+		end
+		return
+	end
+	self._reviveHolds[player] = { Target = targetPlayer, StartedAt = os.clock() }
 end
 
 function DeathService:_cancelRevive(player)
-	-- Handled by ProximityPrompt
+	self._reviveHolds[player] = nil
 end
-
 function DeathService:_returnToLobby(player)
 	if not RunService:IsStudio() then
 		DeathRemote:FireClient(player, "LobbyDisabled")
@@ -634,6 +730,7 @@ function DeathService:_returnToLobby(player)
 	end
 
 	local data = self._deadPlayers[player]
+	if data and data.Reviving then return end
 	local respawnPosition = data and data.deathPosition or nil
 	if data and data.ragdoll then
 		data.ragdoll:Destroy()
@@ -644,6 +741,7 @@ function DeathService:_returnToLobby(player)
 	-- Clear dead flag and respawn with no inventory.
 	InventoryService:Clear(player)
 	player:SetAttribute("IsDead", false)
+	StatsService:SetBase(player, "Health", StatsService:GetStat(player, "MaxHealth") or 100)
 	player:LoadCharacter()
 	if respawnPosition then
 		task.defer(function()
@@ -660,12 +758,14 @@ function DeathService:_returnToLobby(player)
 end
 
 function DeathService:_cleanupPlayer(player)
+	self._reviveHolds[player] = nil
 	local data = self._deadPlayers[player]
 	if data and data.ragdoll then
 		data.ragdoll:Destroy()
 	end
 	self._deadPlayers[player] = nil
 	self._spectating[player] = nil
+	task.defer(function() self:_refreshSpectators(player) end)
 end
 
 return DeathService

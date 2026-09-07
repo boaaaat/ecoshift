@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local InventoryService = require(script.Parent.InventoryService)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local StatsService = require(script.Parent.StatsService)
+local SurvivalConfig = require(ReplicatedStorage.Shared.SurvivalConfig)
 
 local ArmorService = {}
 ArmorService._equipped = {} -- [player] = { Id = string, Instance = Instance?, Character = Model? }
@@ -15,14 +16,7 @@ local EQUIP_FOLDER = "EquippedArmor"
 local MOD_ID_ARMOR = "ArmorEquip"
 local MOD_ID_TEMPRES = "TempResEquip"
 
-local ARMOR_STATS = {
-	DesertCloak = { Armor = 12, TempRes = 4 },
-	SwampWaders = { Armor = 16, TempRes = 2 },
-	FrostParka = { Armor = 20, TempRes = 6 },
-	VolcanicPlate = { Armor = 26, TempRes = 5 },
-	CrystalWeave = { Armor = 24, TempRes = 4 },
-	AdaptiveSurvivalSuit = { Armor = 34, TempRes = 7 },
-}
+local ARMOR_STATS = SurvivalConfig.ARMOR
 
 local function isArmor(itemId)
 	local item = ItemDatabase:Get(itemId)
@@ -49,6 +43,7 @@ local function clearArmor(plr)
 	end
 	local char = plr.Character
 	if char then
+		for _, kind in ipairs({"Heat", "Cold", "Toxin", "Wet"}) do char:SetAttribute("GearRes_" .. kind, 0) end
 		local folder = char:FindFirstChild(EQUIP_FOLDER)
 		if folder then folder:Destroy() end
 	end
@@ -62,7 +57,19 @@ local function attachModelToCharacter(model, character)
 	if not primary then return end
 	model.PrimaryPart = primary
 	model:PivotTo(hrp.CFrame)
-	primary.Anchored = false
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.Anchored = false
+			part.CanCollide = false
+			part.Massless = true
+			if part ~= primary then
+				local partWeld = Instance.new("WeldConstraint")
+				partWeld.Part0 = primary
+				partWeld.Part1 = part
+				partWeld.Parent = part
+			end
+		end
+	end
 	local weld = Instance.new("WeldConstraint")
 	weld.Part0 = hrp
 	weld.Part1 = primary
@@ -100,7 +107,10 @@ function ArmorService:Equip(plr, itemId)
 	end
 
 	if clone then
-		if clone:IsA("Accessory") or clone:IsA("Clothing") then
+		if clone:IsA("Accessory") then
+			local hum = char:FindFirstChildOfClass("Humanoid")
+			if hum then hum:AddAccessory(clone) else clone.Parent = char end
+		elseif clone:IsA("Clothing") then
 			clone.Parent = char
 		elseif clone:IsA("Tool") then
 			clone.Parent = char
@@ -109,6 +119,8 @@ function ArmorService:Equip(plr, itemId)
 			attachModelToCharacter(clone, char)
 		elseif clone:IsA("BasePart") then
 			clone.Parent = equipFolder
+			clone.CanCollide = false
+			clone.Massless = true
 			clone.CFrame = char:GetPivot()
 			local hrp = char:FindFirstChild("HumanoidRootPart")
 			if hrp then
@@ -129,6 +141,9 @@ function ArmorService:Equip(plr, itemId)
 	plr:SetAttribute("EquippedArmor", itemId)
 
 	local stats = ARMOR_STATS[itemId]
+	for _, kind in ipairs({"Heat", "Cold", "Toxin", "Wet"}) do
+		char:SetAttribute("GearRes_" .. kind, stats and stats[kind .. "Resistance"] or 0)
+	end
 	if StatsService and StatsService.AddModifier then
 		if stats and stats.Armor then
 			StatsService:AddModifier(plr, "Armor", stats.Armor, "Add", nil, MOD_ID_ARMOR)
@@ -157,14 +172,19 @@ function ArmorService:Sync(plr)
 end
 
 function ArmorService:Init()
+	if self._initialized then return end
+	self._initialized = true
 	InventoryService:OnChanged(function(plr)
 		ArmorService:Sync(plr)
 	end)
-	Players.PlayerAdded:Connect(function(plr)
+	local function bindPlayer(plr)
 		plr.CharacterAdded:Connect(function()
-			ArmorService:Sync(plr)
+			task.defer(function() ArmorService:Sync(plr) end)
 		end)
-	end)
+		ArmorService:Sync(plr)
+	end
+	Players.PlayerAdded:Connect(bindPlayer)
+	for _, plr in ipairs(Players:GetPlayers()) do bindPlayer(plr) end
 	Players.PlayerRemoving:Connect(function(plr)
 		ArmorService._equipped[plr] = nil
 	end)

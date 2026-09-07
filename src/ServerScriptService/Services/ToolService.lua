@@ -35,6 +35,8 @@ local function ensureTool(plr, itemId)
 	local template = toolsFolder and toolsFolder:FindFirstChild(itemId)
 	if template and template:IsA("Tool") then
 		local tool = template:Clone()
+		-- Inventory owns item drops; native Backspace drops would duplicate items.
+		tool.CanBeDropped = false
 		tool.Parent = backpack
 		print(string.format("[ToolService] Added tool %s to %s", itemId, plr.Name))
 	else
@@ -86,23 +88,28 @@ function ToolService:Sync(plr)
 end
 
 function ToolService:Init()
+	if self._initialized then return end
+	self._initialized = true
 	InventoryService:OnChanged(function(plr)
 		ToolService:Sync(plr)
 	end)
-	Players.PlayerAdded:Connect(function(plr)
-		task.spawn(function()
+	local function bindPlayer(plr)
+		local function syncCharacter()
 			local backpack = plr:WaitForChild("Backpack", 10)
 			if not backpack then
 				warn(string.format("[ToolService] No Backpack for %s", plr.Name))
 				return
 			end
 			ToolService:Sync(plr)
+		end
+		plr.CharacterAdded:Connect(function()
+			task.defer(syncCharacter)
 		end)
-	end)
+		task.spawn(syncCharacter)
+	end
+	Players.PlayerAdded:Connect(bindPlayer)
 	for _, plr in ipairs(Players:GetPlayers()) do
-		task.spawn(function()
-			ToolService:Sync(plr)
-		end)
+		bindPlayer(plr)
 	end
 end
 

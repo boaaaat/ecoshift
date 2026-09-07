@@ -6,7 +6,7 @@ local RunService = game:GetService("RunService")
 local StatsService = {}
 
 StatsService.DEFAULTS = {
-	Speed = 160,
+	Speed = 16,
 	JumpHeight = 7.2,
 	Health = 100,
 	MaxHealth = 100,

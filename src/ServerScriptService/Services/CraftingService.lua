@@ -48,14 +48,14 @@ local function emitResult(self, plr, recipeId, stationType, success, reason, ext
 	})
 end
 
-local function refundIngredients(plr, ingredients)
+local function refundIngredients(plr, ingredients, dropPosition)
 	local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-	local basePos = root and root.Position or nil
+	local basePos = dropPosition or (root and root.Position)
 	for _, entry in ipairs(ingredients or {}) do
 		local itemId = entry and entry.Id
 		local amount = math.max(0, math.floor(tonumber(entry and entry.N) or 0))
 		if itemId and amount > 0 then
-			local added = InventoryService:Give(plr, itemId, amount)
+			local added = dropPosition and 0 or InventoryService:Give(plr, itemId, amount)
 			local remaining = amount - added
 			if remaining > 0 and basePos then
 				ItemDropService:SpawnDrop(itemId, remaining, basePos + Vector3.new(0, 2, 0))
@@ -77,11 +77,11 @@ function CraftingService:FindNearbyStation(plr, stationType)
 
 	local interactRadius = station.InteractRadius or 8
 	local nearestStation = nil
-	local nearestDist = interactRadius + 1
+	local nearestDist = interactRadius
 
 	for _, structure in ipairs(CollectionService:GetTagged("Structure")) do
 		local structType = structure:GetAttribute("BuildType") or structure:GetAttribute("StationType")
-		if structType == buildType or structType == stationType then
+		if structure:IsDescendantOf(workspace) and (structType == buildType or structType == stationType) then
 			local pos
 			if structure:IsA("Model") then
 				pos = structure:GetPivot().Position
@@ -91,7 +91,7 @@ function CraftingService:FindNearbyStation(plr, stationType)
 
 			if pos then
 				local dist = (root.Position - pos).Magnitude
-				if dist < nearestDist then
+				if dist <= nearestDist then
 					nearestDist = dist
 					nearestStation = structure
 				end
@@ -103,6 +103,13 @@ function CraftingService:FindNearbyStation(plr, stationType)
 end
 
 function CraftingService:CanCraft(plr, recipeId, stationType)
+	if type(recipeId) ~= "string" or (stationType ~= nil and type(stationType) ~= "string") then
+		return false, "InvalidRequest"
+	end
+	local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+	if not hum or hum.Health <= 0 or plr:GetAttribute("IsDead") then
+		return false, "NotAlive"
+	end
 	if GameStateService:IsGameOver() then
 		return false, "GameOver"
 	end
@@ -144,6 +151,13 @@ function CraftingService:_completeCraft(plr, context)
 		return
 	end
 	self._activeCrafts[plr] = nil
+	if plr.Parent ~= Players then return end
+	local hum = context.Character and context.Character:FindFirstChildOfClass("Humanoid")
+	if plr.Character ~= context.Character or not hum or hum.Health <= 0 or plr:GetAttribute("IsDead") then
+		refundIngredients(plr, context.Ingredients, context.Position)
+		emitResult(self, plr, context.RecipeId, context.StationType, false, "NotAlive")
+		return
+	end
 	if GameStateService:IsGameOver() then
 		refundIngredients(plr, context.Ingredients)
 		emitResult(self, plr, context.RecipeId, context.StationType, false, "GameOver")
@@ -204,6 +218,8 @@ function CraftingService:Craft(plr, recipeId, stationType)
 	}
 
 	local context = {
+		Character = plr.Character,
+		Position = plr.Character:GetPivot().Position,
 		Token = token,
 		RecipeId = recipeId,
 		StationType = effectiveStation,
@@ -215,9 +231,12 @@ function CraftingService:Craft(plr, recipeId, stationType)
 	}
 
 	task.delay(duration, function()
-		pcall(function()
+		local completed, err = pcall(function()
 			CraftingService:_completeCraft(plr, context)
 		end)
+		if not completed then
+			warn("[CraftingService] Craft completion failed:", err)
+		end
 	end)
 
 	return true, "Queued", { Duration = duration }

@@ -1,0 +1,44 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "rojo: serve",
+      "type": "shell",
+      "command": "${workspaceFolder}\\scripts\\rojo-serve.ps1",
+      "windows": {
+        "options": {
+          "shell": {
+            "executable": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass"
+            ]
+          }
+        }
+      },
+      "isBackground": true,
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "rojo: build",
+      "type": "shell",
+      "command": "${workspaceFolder}\\scripts\\rojo-build.ps1",
+      "windows": {
+        "options": {
+          "shell": {
+            "executable": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass"
+            ]
+          }
+        }
+      },
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}

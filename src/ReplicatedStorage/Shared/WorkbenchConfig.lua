@@ -523,7 +523,8 @@ WorkbenchConfig.RECIPES = {
 	Workbench = {
 		Ingredients = {
 			{ Id = "ForestPlank", N = 8 },
-			{ Id = "FiberCloth", N = 2 },
+			-- Use unwoven fiber: the first loom requires this workbench.
+			{ Id = "ReedFiber", N = 6 },
 		},
 		Output = { Id = "Workbench", N = 1 },
 		AllowedStations = { "Hand" },
@@ -565,7 +566,10 @@ WorkbenchConfig.RECIPES = {
 		Ingredients = {
 			{ Id = "MireStone", N = 8 },
 			{ Id = "TemperedGlass", N = 4 },
-			{ Id = "BioGel", N = 2 },
+			-- Assemble the catalyst here; BioGel itself requires this station.
+			{ Id = "Glowcap", N = 2 },
+			{ Id = "MarshWater", N = 2 },
+			{ Id = "LeechVenomSac", N = 2 },
 		},
 		Output = { Id = "AlchemyTable", N = 1 },
 		AllowedStations = { "Workbench", "AdvancedWorkbench" },
@@ -587,7 +591,10 @@ WorkbenchConfig.RECIPES = {
 		Ingredients = {
 			{ Id = "Workbench", N = 1 },
 			{ Id = "SanditeIngot", N = 4 },
-			{ Id = "MireComposite", N = 4 },
+			-- Four composites' components avoid requiring an advanced bench first.
+			{ Id = "MireStone", N = 8 },
+			{ Id = "PeatBrick", N = 4 },
+			{ Id = "BioGel", N = 4 },
 		},
 		Output = { Id = "AdvancedWorkbench", N = 1 },
 		AllowedStations = { "Workbench" },
@@ -607,9 +614,11 @@ WorkbenchConfig.RECIPES = {
 	Refinery = {
 		Ingredients = {
 			{ Id = "AdvancedWorkbench", N = 1 },
-			{ Id = "ObsiditeIngot", N = 6 },
+			-- Includes the ingredients of two VoidAlloy, which require a refinery.
+			{ Id = "ObsiditeIngot", N = 8 },
 			{ Id = "CryoAlloy", N = 4 },
-			{ Id = "VoidAlloy", N = 2 },
+			{ Id = "AlloyDust", N = 4 },
+			{ Id = "VoidResidue", N = 2 },
 		},
 		Output = { Id = "Refinery", N = 1 },
 		AllowedStations = { "AdvancedWorkbench" },
@@ -642,6 +651,18 @@ WorkbenchConfig.RECIPES = {
 	},
 
 	-- Survival consumables
+	ReviveKit = {
+		Ingredients = {
+			{ Id = "ReedFiber", N = 6 },
+			{ Id = "SapResin", N = 2 },
+			{ Id = "BrownMushroom", N = 2 },
+		},
+		Output = { Id = "ReviveKit", N = 1 },
+		AllowedStations = { "Hand" },
+		Category = "Consumables",
+		ProcessKind = "Medicine",
+		BaseCraftTime = 4,
+	},
 	Bandage = {
 		Ingredients = {
 			{ Id = "FiberCloth", N = 2 },
@@ -815,6 +836,17 @@ WorkbenchConfig.RECIPES = {
 		BaseCraftTime = 12,
 	},
 
+	StoneSpear = {
+		Ingredients = {
+			{ Id = "ForestWood", N = 3 },
+			{ Id = "ForestStone", N = 2 },
+			{ Id = "ReedFiber", N = 2 },
+		},
+		Output = { Id = "StoneSpear", N = 1 },
+		AllowedStations = { "Hand" },
+		Category = "Weapons",
+		BaseCraftTime = 4,
+	},
 	BoneSpear = {
 		Ingredients = {
 			{ Id = "DriedBone", N = 4 },
@@ -963,15 +995,29 @@ WorkbenchConfig.RECIPES = {
 	},
 
 	-- Intel/strategy devices
+	ShiftStabilizer = {
+		Ingredients = { { Id = "SanditeIngot", N = 3 }, { Id = "TemperedGlass", N = 2 }, { Id = "BioGel", N = 2 } },
+		Output = { Id = "ShiftStabilizer", N = 1 },
+		AllowedStations = { "AdvancedWorkbench" }, Category = "Intel", BaseCraftTime = 12,
+	},
+	ShiftTrigger = {
+		Ingredients = { { Id = "SanditeIngot", N = 3 }, { Id = "SunShard", N = 2 }, { Id = "BioGel", N = 1 } },
+		Output = { Id = "ShiftTrigger", N = 1 },
+		AllowedStations = { "AdvancedWorkbench" }, Category = "Intel", BaseCraftTime = 12,
+	},
+	BiomeSelector = {
+		Ingredients = { { Id = "PhaseCircuit", N = 2 }, { Id = "CryoAlloy", N = 2 }, { Id = "ObsiditeIngot", N = 2 }, { Id = "SentinelCore", N = 1 } },
+		Output = { Id = "BiomeSelector", N = 1 },
+		AllowedStations = { "SurveyBench" }, Category = "Intel", BaseCraftTime = 16,
+	},
 	FieldClock = {
 		Ingredients = {
 			{ Id = "TemperedGlass", N = 2 },
 			{ Id = "SanditeIngot", N = 1 },
-			{ Id = "IceLens", N = 1 },
-			{ Id = "ResonantCrystal", N = 1 },
+			{ Id = "ForestPlank", N = 2 },
 		},
 		Output = { Id = "FieldClock", N = 1 },
-		AllowedStations = { "SurveyBench" },
+		AllowedStations = { "Workbench" },
 		Category = "Intel",
 		BaseCraftTime = 10,
 	},

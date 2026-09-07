@@ -8,6 +8,8 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local RoundService = require(script.Parent.RoundService)
 local BiomeService = require(script.Parent.BiomeService)
+local InventoryService = require(script.Parent.InventoryService)
+local Progression = require(ReplicatedStorage.Shared.ProgressionConfig)
 
 local GameStateService = {}
 GameStateService._remote = nil
@@ -32,15 +34,30 @@ function GameStateService:_ensureRemote()
 	return self._remote
 end
 
-function GameStateService:_composePayload()
-	return {
+function GameStateService:_composePayload(player)
+	local timing = BiomeService:GetTiming()
+	local weather = BiomeService:GetWeather()
+	local hasWeather = player and InventoryService:Has(player, "WeatherPredictor", 1) or false
+	local hasBiome = hasWeather or (player and InventoryService:Has(player, "BiomePredictor", 1) or false)
+	local hasClock = hasBiome or (player and InventoryService:Has(player, "FieldClock", 1) or false)
+	local payload = {
 		Elapsed = RoundService:GetElapsed(),
 		Biome = BiomeService:GetCurrent(),
 		MatchState = self._state.MatchState,
 		EndReason = self._state.EndReason,
 		FinalElapsed = self._state.FinalElapsed,
 		CanReturnToLobby = self._state.CanReturnToLobby == true,
+		HasFieldClock = hasClock,
+		ShiftCount = timing.ShiftCount,
+		Difficulty = math.clamp(1 + math.floor(RoundService:GetElapsed() / Progression.SecondsPerMonsterLevel), 1, 100),
+		Weather = weather.Name,
+		WeatherId = weather.Id,
+		BiomeDisplayName = BiomeService:GetData().DisplayName or BiomeService:GetCurrent(),
 	}
+	if hasClock then payload.ShiftRemaining, payload.ShiftDuration = timing.Remaining, timing.Duration end
+	if hasBiome then payload.UpcomingBiome = timing.UpcomingBiome end
+	if hasWeather then payload.UpcomingWeather = timing.UpcomingWeather.Name end
+	return payload
 end
 
 function GameStateService:_notifyCallbacks(state)
@@ -52,14 +69,14 @@ end
 function GameStateService:Broadcast()
 	local remote = self:_ensureRemote()
 	if remote then
-		remote:FireAllClients(self:_composePayload())
+		for _, player in ipairs(Players:GetPlayers()) do remote:FireClient(player, self:_composePayload(player)) end
 	end
 end
 
 function GameStateService:SendToPlayer(plr)
 	local remote = self:_ensureRemote()
 	if remote and plr then
-		remote:FireClient(plr, self:_composePayload())
+		remote:FireClient(plr, self:_composePayload(plr))
 	end
 end
 

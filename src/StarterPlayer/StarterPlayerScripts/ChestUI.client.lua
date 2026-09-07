@@ -6,6 +6,7 @@ local GuiService = game:GetService("GuiService")
 local CollectionService = game:GetService("CollectionService")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 
+local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
@@ -25,15 +26,7 @@ if not chestRemote then
 	warn("[ChestUI] Missing ChestEvent remote")
 end
 
-local COLORS = {
-	Panel = Color3.fromRGB(28, 28, 35),
-	SlotEmpty = Color3.fromRGB(38, 38, 48),
-	SlotFilled = Color3.fromRGB(48, 48, 60),
-	Border = Color3.fromRGB(60, 60, 80),
-	Text = Color3.fromRGB(240, 240, 245),
-	TextMuted = Color3.fromRGB(160, 160, 175),
-	Accent = Color3.fromRGB(100, 180, 255),
-}
+local COLORS = Theme.Colors
 
 local SLOT_SIZE = 64
 local SLOT_GAP = 6
@@ -46,7 +39,7 @@ local CHEST_TAGS = { "Common_Chest", "Rare_Chest", "Legendary_Chest", "Celestial
 local gui = Instance.new("ScreenGui")
 gui.Name = "ChestUI"
 gui.ResetOnSpawn = false
-gui.IgnoreGuiInset = true
+gui.IgnoreGuiInset = false
 gui.DisplayOrder = 25
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = playerGui
@@ -54,8 +47,8 @@ gui.Parent = playerGui
 local panel = Instance.new("Frame")
 panel.Name = "ChestPanel"
 panel.Size = UDim2.new(0, (SLOT_SIZE + SLOT_GAP) * COLS + MARGIN * 2, 0, 220)
-panel.AnchorPoint = Vector2.new(0, 1)
-panel.Position = UDim2.new(0, 20, 1, -190)
+panel.AnchorPoint = Vector2.new(1, 0.5)
+panel.Position = UDim2.new(0.5, -12, 0.5, 0)
 panel.BackgroundColor3 = COLORS.Panel
 panel.BackgroundTransparency = 0.05
 panel.BorderSizePixel = 0
@@ -106,11 +99,11 @@ local closeButton = Instance.new("TextButton")
 closeButton.Size = UDim2.new(0, 64, 0, 22)
 closeButton.AnchorPoint = Vector2.new(1, 0.5)
 closeButton.Position = UDim2.new(1, -MARGIN, 0.5, 0)
-closeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+closeButton.BackgroundColor3 = COLORS.Moss
 closeButton.BorderSizePixel = 0
 closeButton.Font = Enum.Font.GothamBold
 closeButton.TextSize = 12
-closeButton.TextColor3 = Color3.fromRGB(230, 230, 230)
+closeButton.TextColor3 = COLORS.Paper
 closeButton.Text = "Close"
 closeButton.Parent = header
 
@@ -143,7 +136,7 @@ local function hashColor(id)
 	for i = 1, #id do
 		hash = (hash * 33 + string.byte(id, i)) % 360
 	end
-	return Color3.fromHSV(hash / 360, 0.55, 0.85)
+	return COLORS.Text
 end
 
 local function getItemStackSize(itemId)
@@ -191,7 +184,7 @@ local function makeContextButton(text, order)
 	local btn = Instance.new("TextButton")
 	btn.Size = UDim2.new(1, -8, 0, 24)
 	btn.Position = UDim2.new(0, 4, 0, 4 + (order - 1) * 28)
-	btn.BackgroundColor3 = Color3.fromRGB(38, 38, 48)
+	btn.BackgroundColor3 = COLORS.SlotEmpty
 	btn.BorderSizePixel = 0
 	btn.Font = Enum.Font.GothamBold
 	btn.TextSize = 12
@@ -339,7 +332,7 @@ local function renderSlot(slot)
 	else
 		slot.Icon.Image = ""
 		slot.Icon.Visible = false
-		slot.ItemText.Text = string.format("%s x%d", data.Id, data.N)
+		slot.ItemText.Text = item and item.Name or data.Id
 		slot.ItemText.TextColor3 = hashColor(data.Id)
 		slot.ItemText.Visible = true
 	end
@@ -602,8 +595,8 @@ local function createSlot(index, x, y)
 	icon.Parent = slot
 
 	local itemText = Instance.new("TextLabel")
-	itemText.Size = UDim2.new(1, -8, 0, 18)
-	itemText.Position = UDim2.new(0, 4, 1, -20)
+	itemText.Size = UDim2.new(1, -8, 0, 40)
+	itemText.Position = UDim2.new(0, 4, 0, 7)
 	itemText.BackgroundTransparency = 1
 	itemText.Font = Enum.Font.Gotham
 	itemText.TextSize = 11
@@ -774,3 +767,9 @@ ProximityPromptService.PromptTriggered:Connect(function(prompt, playerWhoTrigger
 	lastOpenRequestAt = now
 	chestRemote:FireServer("Open", { Chest = chest })
 end)
+
+Theme.Panel(panel)
+Theme.Fit(panel, 900, 590)
+Theme.AnimatePanel(panel)
+Theme.Button(closeButton, true)
+for _, button in ipairs({contextTake, contextToHotbar, contextToStorage}) do Theme.Button(button) end

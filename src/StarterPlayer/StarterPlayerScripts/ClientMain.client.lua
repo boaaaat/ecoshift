@@ -28,7 +28,7 @@ local function disableShiftLock()
 		localPlayer.DevEnableMouseLock = false
 	end)
 end
-disableShiftLock()
+-- Mouse lock is configured on StarterPlayer by the server.
 
 -- OPTIMIZED: Defer config loading to not block script start
 local Config, Util
@@ -70,7 +70,7 @@ local CachedState = {
 _G.EcoshiftClient = _G.EcoshiftClient or {}
 _G.EcoshiftClient.Bind = function(tbl)
 	for k,v in pairs(tbl) do
-		if Hooks[k] ~= nil and type(v) == "function" then
+		if (k == "OnBiomeChanged" or k == "OnEvent" or k == "OnObjective") and type(v) == "function" then
 			Hooks[k] = v
 			if k == "OnBiomeChanged" and CachedState.BiomeName ~= nil then
 				v(CachedState.BiomeName, CachedState.BiomeData)
