@@ -337,26 +337,32 @@ local function consumeNoSync(inv, itemId, amount)
 	return remaining <= 0
 end
 
-function InventoryService:Consume(plr, itemId, amount)
+function InventoryService:Consume(plr, itemId, amount, deferSync)
 	local inv = getInv(plr)
 	if not consumeNoSync(inv, itemId, amount) then return false end
-	self:Sync(plr)
+	if not deferSync then self:Sync(plr) end
 	return true
 end
 
-function InventoryService:TakeFromSlot(plr, slotType, slotIndex, amount)
+function InventoryService:PeekSlot(plr, slotType, slotIndex)
+	if not validSlot(slotType, slotIndex) then return nil end
+	return cloneSlot(getSlot(getInv(plr), slotType, slotIndex))
+end
+
+function InventoryService:TakeFromSlot(plr, slotType, slotIndex, amount, options)
 	amount = math.floor(tonumber(amount) or 0)
 	if amount ~= amount or amount == math.huge or amount <= 0 then return nil end
 	if not validSlot(slotType, slotIndex) then return nil end
 	local inv = getInv(plr)
 	local slot = getSlot(inv, slotType, slotIndex)
 	if not slot or slot.N < amount then return nil end
+	if options and options.ExpectedId and slot.Id ~= options.ExpectedId then return nil end
 	local itemId = slot.Id
 	slot.N -= amount
 	if slot.N <= 0 then
 		setSlot(inv, slotType, slotIndex, nil)
 	end
-	self:Sync(plr)
+	if not (options and options.DeferSync) then self:Sync(plr) end
 	return itemId
 end
 

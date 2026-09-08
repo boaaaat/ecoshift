@@ -141,7 +141,7 @@ local function attachPrompt(model)
 	prompt.MaxActivationDistance = 10
 	local claimed = false
 	prompt.Triggered:Connect(function(plr)
-		if claimed or ReplicatedStorage:GetAttribute("WorldRestoring") or not model:IsDescendantOf(Workspace) then return end
+		if claimed or model:GetAttribute("PickupPending") or ReplicatedStorage:GetAttribute("WorldRestoring") or not model:IsDescendantOf(Workspace) then return end
 		if plr:GetAttribute("WorldPlayerRestoring") or plr:GetAttribute("WorldPlayerLoading") then return end
 		local char = plr.Character
 		local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -220,6 +220,7 @@ function ItemDropService:SpawnDrop(itemId, count, position, options)
 	setAnchoredRecursive(model, false)
 	model:SetAttribute("ItemId", itemId)
 	model:SetAttribute("Count", count)
+	if options and options.PendingPickup then model:SetAttribute("PickupPending", true) end
 	model:PivotTo(CFrame.new(position))
 	model.Parent = ensureFolder()
 	if root then pcall(function() root:SetNetworkOwner(nil) end) end
@@ -234,7 +235,7 @@ function ItemDropService:CaptureWorldState()
 	local codec, result = require(script.Parent.WorldSnapshotCodec), {}
 	local folder = Workspace:FindFirstChild("ItemDrops")
 	for _, model in ipairs(folder and folder:GetChildren() or {}) do
-		if model:IsA("Model") and model:GetAttribute("ItemId") then
+		if model:IsA("Model") and model:GetAttribute("ItemId") and not model:GetAttribute("PickupPending") then
 			assert(#result < codec.MaxDrops, "Ground drop snapshot capacity exceeded; refusing partial save")
 			table.insert(result, { Id = model:GetAttribute("ItemId"), N = model:GetAttribute("Count"), Transform = codec.CFrame(model:GetPivot()) })
 		end
