@@ -3,6 +3,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local DeathService = require(script.Parent.DeathService)
+local TeamExplorationService = require(script.Parent.TeamExplorationService)
 local Service = {}
 
 function Service:UpdatePlayer(player)
@@ -24,6 +25,7 @@ function Service:UpdatePlayer(player)
 			end
 		elseif root and humanoid and humanoid.Health > 0 then
 			position, look = root.Position, root.CFrame.LookVector
+			TeamExplorationService:RevealFromPlayer(player, position)
 		end
 	end
 	if player:GetAttribute("MapPosition") ~= position then player:SetAttribute("MapPosition", position) end
@@ -32,6 +34,7 @@ end
 
 function Service:Init()
 	if self._connection then return end
+	TeamExplorationService:Init()
 	local elapsed = 0
 	self._connection = RunService.Heartbeat:Connect(function(dt)
 		elapsed += dt

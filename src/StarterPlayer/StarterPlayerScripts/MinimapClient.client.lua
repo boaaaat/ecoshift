@@ -61,6 +61,12 @@ local STATE = {
 
 local WORLD = {
 	chunksByKey = {}, -- ["cx,cz"] = { cx, cz, biome, regions = { {name, x, z, sx, sz, temp} }, folder }
+	localChunksByKey = {},
+	sharedChunksByKey = {},
+	sharedChunkFolders = {},
+	sharedFolder = nil,
+	sharedFolderConns = {},
+	sharedRootConns = {},
 	chunkByFolder = {}, -- [Folder] = key
 	chunkConns = {}, -- [Folder] = { RBXScriptConnection }
 	markersByInstance = {}, -- [Instance] = { markerType, label }
@@ -875,13 +881,21 @@ local function parseChunkFolder(folder)
 		end
 	end
 
-	WORLD.chunksByKey[key] = {
+	local record = {
 		cx = cx,
 		cz = cz,
 		biome = biome,
 		regions = regions,
 		folder = folder,
 	}
+	if WORLD.sharedChunkFolders[folder] then
+		WORLD.sharedChunksByKey[key] = record
+		WORLD.exploredChunks[key] = true
+	else
+		WORLD.localChunksByKey[key] = record
+	end
+	-- Replicated chart data remains available when world geometry streams out.
+	WORLD.chunksByKey[key] = WORLD.sharedChunksByKey[key] or WORLD.localChunksByKey[key]
 	WORLD.chunkByFolder[folder] = key
 
 	if not STATE.fogEnabled then
@@ -919,9 +933,16 @@ end
 local function unbindChunkFolder(folder)
 	local key = WORLD.chunkByFolder[folder]
 	if key then
-		WORLD.chunksByKey[key] = nil
+		if WORLD.sharedChunkFolders[folder] then
+			WORLD.sharedChunksByKey[key] = nil
+			WORLD.exploredChunks[key] = nil
+		else
+			WORLD.localChunksByKey[key] = nil
+		end
+		WORLD.chunksByKey[key] = WORLD.sharedChunksByKey[key] or WORLD.localChunksByKey[key]
 		WORLD.chunkByFolder[folder] = nil
 	end
+	WORLD.sharedChunkFolders[folder] = nil
 	cleanupConnections(WORLD.chunkConns[folder])
 	WORLD.chunkConns[folder] = nil
 
@@ -940,7 +961,7 @@ local function bindGeneratedFolder(folder)
 
 	local oldFolders = {}
 	for oldFolder in pairs(WORLD.chunkConns) do
-		oldFolders[#oldFolders + 1] = oldFolder
+		if not WORLD.sharedChunkFolders[oldFolder] then oldFolders[#oldFolders + 1] = oldFolder end
 	end
 	for i = 1, #oldFolders do
 		local oldFolder = oldFolders[i]
@@ -976,8 +997,37 @@ local function refreshGeneratedFolderBinding()
 	bindGeneratedFolder(Workspace:FindFirstChild(GENERATED_FOLDER_NAME))
 end
 
+local function bindSharedExploration(folder)
+	if WORLD.sharedFolder == folder then return end
+	cleanupConnections(WORLD.sharedFolderConns)
+	local old = {}
+	for child in pairs(WORLD.sharedChunkFolders) do old[#old + 1] = child end
+	for _, child in ipairs(old) do unbindChunkFolder(child) end
+	WORLD.sharedFolder = folder
+	if not folder then return end
+	local function added(child)
+		if not child:IsA("Folder") then return end
+		WORLD.sharedChunkFolders[child] = true
+		bindChunkFolder(child)
+	end
+	WORLD.sharedFolderConns = {
+		folder.ChildAdded:Connect(added),
+		folder.ChildRemoved:Connect(unbindChunkFolder),
+	}
+	for _, child in ipairs(folder:GetChildren()) do added(child) end
+end
+
 local function initWorldBindings()
 	refreshGeneratedFolderBinding()
+	WORLD.sharedRootConns = {
+		ReplicatedStorage.ChildAdded:Connect(function(child)
+			if child.Name == "TeamExploration" and child:IsA("Folder") then bindSharedExploration(child) end
+		end),
+		ReplicatedStorage.ChildRemoved:Connect(function(child)
+			if child == WORLD.sharedFolder then bindSharedExploration(nil) end
+		end),
+	}
+	bindSharedExploration(ReplicatedStorage:FindFirstChild("TeamExploration"))
 
 	WORLD.workspaceConns = {
 		Workspace.ChildAdded:Connect(function(child)
@@ -1000,22 +1050,6 @@ local function initWorldBindings()
 
 	for _, inst in ipairs(Workspace:GetDescendants()) do
 		registerMarkerInstance(inst)
-	end
-end
-
-local function revealAround(pos)
-	if not STATE.fogEnabled then
-		for key in pairs(WORLD.chunksByKey) do
-			WORLD.exploredChunks[key] = true
-		end
-		return
-	end
-	local radius = math.max(0, MapConfig.Exploration.RevealChunkRadius or 0)
-	local cx, cz = worldToChunk(pos.X, pos.Z)
-	for dx = -radius, radius do
-		for dz = -radius, radius do
-			WORLD.exploredChunks[chunkKey(cx + dx, cz + dz)] = true
-		end
 	end
 end
 
@@ -2056,10 +2090,7 @@ local lastFullRender = 0
 
 local function update()
 	local now = os.clock()
-	local position, look, dead = getPlayerMapPose(player)
-	if position and not dead then
-		revealAround(position)
-	end
+	local position, look = getPlayerMapPose(player)
 	if STATE.markerVisibility.Enemies or STATE.markerVisibility.Resources then
 		getOptionalMarkers()
 	end
@@ -2148,6 +2179,8 @@ end
 
 function MinimapClient:ResetExploration()
 	tableClear(WORLD.exploredChunks)
+	-- A local debug reset cannot erase the expedition's shared discoveries.
+	for key in pairs(WORLD.sharedChunksByKey) do WORLD.exploredChunks[key] = true end
 end
 
 function MinimapClient:SetSpawnPoint(position)
@@ -2201,6 +2234,8 @@ local function init()
 	script.Destroying:Connect(function()
 		portraitAdded:Disconnect()
 		portraitRemoving:Disconnect()
+		cleanupConnections(WORLD.sharedRootConns)
+		bindSharedExploration(nil)
 		tableClear(playerPortraitCache) -- Invalidate any pending fetch/retry jobs.
 	end)
 

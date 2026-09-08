@@ -11,6 +11,7 @@ local WorldGenConfig = require(ReplicatedStorage.Shared.BiomeConfig)
 local BiomeService = require(script.Parent.BiomeService)
 local ResourceNodeService = require(script.Parent.ResourceNodeService)
 local SnapshotCodec = require(script.Parent.WorldSnapshotCodec)
+local TeamExplorationService = require(script.Parent.TeamExplorationService)
 local CenterClearance = require(script.Parent.Parent.WorldGen.CenterClearance)
 local DeathService -- Resolved during streaming, after service modules have loaded.
 
@@ -1638,6 +1639,7 @@ function ChunkStreamingService:_loadChunk(cx, cz)
 			chunkFolder:SetAttribute("MapChunkZ", cz)
 			chunkFolder:SetAttribute("MapBiome", tostring(biomeName or self._currentBiome or "Unknown"))
 			chunkFolder:SetAttribute("MapRegionsJson", serializeRegionsForMap(regions or {}))
+			TeamExplorationService:RecordChunk(chunkFolder, self._epoch)
 			-- Keep binding in this protected worker so cancellation also stops loot work.
 			ResourceNodeService:BindFolder(chunkFolder)
 			
@@ -2129,6 +2131,8 @@ function ChunkStreamingService:_updateChunks()
 end
 
 function ChunkStreamingService:Pause()
+	-- Clear previous-biome region details before terrain regeneration starts.
+	TeamExplorationService:BeginBiome(BiomeService:GetCurrent(), BiomeService:GetTiming().ShiftCount)
 	for key, entry in pairs(self._tracked) do self:_rememberObject(key, entry) end
 	self._paused = true
 	self._generation += 1
@@ -2155,6 +2159,7 @@ function ChunkStreamingService:SetBiome(biomeName, force)
 	if self._epoch ~= epoch or self._currentBiome ~= biomeName then self._persistent = {} end
 	self._epoch = epoch
 	self._currentBiome = biomeName
+	TeamExplorationService:BeginBiome(biomeName, self._epoch)
 	self:_ensureWorldFolder()
 	self._paused = false
 	-- Force immediate reload around players
@@ -2195,6 +2200,7 @@ function ChunkStreamingService:Init()
 	self:_initPrefabRoots()
 	self:_initBiomes()
 	self._currentBiome = BiomeService:GetCurrent()
+	TeamExplorationService:BeginBiome(self._currentBiome, self._epoch)
 	
 	-- WorldGenController owns shift ordering: pause, terrain, then resume streaming.
 	

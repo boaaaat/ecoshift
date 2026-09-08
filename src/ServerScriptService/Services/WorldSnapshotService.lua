@@ -52,6 +52,7 @@ function Snapshot:StageWorld(snapshot)
 	self._staged = true
 	ReplicatedStorage:SetAttribute("WorldRestoring", true)
 	if not snapshot then
+		service("TeamExplorationService"):RestoreWorldState(nil)
 		for _, player in ipairs(Players:GetPlayers()) do markJoiningPlayer(player) end
 		return true
 	end
@@ -59,6 +60,7 @@ function Snapshot:StageWorld(snapshot)
 	assert(#HttpService:JSONEncode(snapshot) <= self.MaxBytes, "World snapshot exceeds supported size")
 	Codec.BoundedCount(snapshot.Players, 100)
 	self._snapshot, self._players = Codec.Copy(snapshot), Codec.Copy(snapshot.Players)
+	service("TeamExplorationService"):RestoreWorldState(self._snapshot.Exploration)
 	for _, player in ipairs(Players:GetPlayers()) do markJoiningPlayer(player) end
 	service("BiomeService"):RestoreWorldState(snapshot.Biome)
 	service("RoundService"):RestoreWorldState(snapshot.Round)
@@ -187,6 +189,7 @@ function Snapshot:Capture()
 		Generated = service("ChunkStreamingService"):CaptureWorldState(), Structures = service("BuildService"):CaptureWorldState(),
 		Drops = service("ItemDropService"):CaptureWorldState(), Controls = service("WorldControlService"):CaptureWorldState(),
 		RunStats = service("DeathService"):CaptureRunState(), Players = Codec.Copy(self._players), Enemies = enemies, Auxiliary = auxiliary,
+		Exploration = service("TeamExplorationService"):CaptureWorldState(),
 	}
 	Codec.BoundedCount(state.Players, 100)
 	state = Codec.Copy(state)
