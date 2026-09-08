@@ -2,7 +2,10 @@ local Config = {}
 
 Config.seed = Random.new():NextInteger(10000, 99999)
 Config.world_radius = 1500
-Config.center_exclusion_radius = 80
+Config.center_exclusion_radius = 100 -- Keep the expedition's 200-stud camp clear.
+-- Preserve seeded candidate positions/weights from existing saved worlds. The
+-- larger camp radius is a final footprint mask, not a change to this sampler.
+Config.generation_sampling_exclusion_radius = 80
 Config.base_y = 0
 Config.chunk_size = 240
 Config.max_chunks = nil -- set to a number to cap how many chunks generate

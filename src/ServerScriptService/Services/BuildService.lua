@@ -6,7 +6,6 @@ local CollectionService = game:GetService("CollectionService")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
-local BiomeConfig = require(ReplicatedStorage.Shared.BiomeConfig)
 local Util = require(ReplicatedStorage.Shared.Util)
 local WorkbenchConfig = require(ReplicatedStorage.Shared.WorkbenchConfig)
 local BuildPlacement = require(ReplicatedStorage.Shared:WaitForChild("BuildPlacement"))
@@ -150,14 +149,34 @@ local function setupWorkbenchInteraction(inst, stationType)
 	end
 	if not promptParent then return end
 	
-	-- Create proximity prompt
-	local prompt = Instance.new("ProximityPrompt")
+	-- Reuse only this station's prompt, leaving unrelated authored interactions alone.
+	local prompt
+	for _, candidate in ipairs(inst:GetDescendants()) do
+		if candidate:IsA("ProximityPrompt") and (candidate.Name == "CraftingStationPrompt"
+			or (candidate.ObjectText == (station.Name or stationType) and candidate.ActionText == "Open")) then
+			prompt = candidate
+			break
+		end
+	end
+	prompt = prompt or Instance.new("ProximityPrompt")
+	prompt.Name = "CraftingStationPrompt"
+	if inst:IsA("Model") then
+		-- CraftingService validates from the model pivot, which can differ from its primary part.
+		local anchor = promptParent:FindFirstChild("CraftingPromptAttachment")
+		if not anchor or not anchor:IsA("Attachment") then
+			anchor = Instance.new("Attachment")
+			anchor.Name = "CraftingPromptAttachment"
+			anchor.Parent = promptParent
+		end
+		anchor.WorldPosition = inst:GetPivot().Position
+		promptParent = anchor
+	end
 	prompt.ObjectText = station.Name or stationType
 	prompt.ActionText = "Open"
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
 	prompt.HoldDuration = 0
 	prompt.MaxActivationDistance = station.InteractRadius or 8
-	prompt.RequiresLineOfSight = true
+	prompt.RequiresLineOfSight = false
 	prompt.Parent = promptParent
 	
 	-- Store station type for client reference
@@ -210,14 +229,13 @@ function BuildService:Place(plr, buildType, worldPos)
 	end
 	if not isAllowedType(buildType) then return false, "InvalidType" end
 	if not withinRange(plr, worldPos) then return false, "OutOfRange" end
-	local dist = math.sqrt(worldPos.X * worldPos.X + worldPos.Z * worldPos.Z)
-	if dist > (BiomeConfig.WORLD.WorldRadius or 2200) then return false, "OutOfBounds" end
-	if dist < (BiomeConfig.WORLD.CenterExclusionRadius or 0) then return false, "OutOfBounds" end
+	if not BuildPlacement.WithinCamp(worldPos) then return false, "OutsideCamp" end
 
 	local gx, gz = GridService:WorldToGrid(worldPos)
 	if GridService:IsOccupied(gx, gz) then return false, "Occupied" end
 	local pos = BuildPlacement.Surface(worldPos)
 	if not pos then return false, "NoSurface" end
+	if not BuildPlacement.WithinCamp(pos) then return false, "OutsideCamp" end
 	if not withinRange(plr, pos) then return false, "OutOfRange" end
 
 	-- Check if this is a placeable item (uses item from inventory)

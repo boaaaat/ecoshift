@@ -135,13 +135,14 @@ local function attachDurationPrompt(instance)
 		prompt = Instance.new("ProximityPrompt")
 		prompt.ActionText = "Harvest"
 		prompt.ObjectText = instance.Name
-		prompt.RequiresLineOfSight = true
 	end
+	-- Normalize authored prompts too; resource geometry must not hide access.
+	prompt.RequiresLineOfSight = false
+	prompt.MaxActivationDistance = 8
 	-- Nested prefab models can discover the same prompt during folder binding.
 	if ResourceNodeService._promptOwners[prompt] then return end
 	ResourceNodeService._promptOwners[prompt] = instance
 	prompt.Parent = attachment
-	prompt.MaxActivationDistance = 10
 	prompt.HoldDuration = duration
 	local holds = setmetatable({}, { __mode = "k" })
 	local claimed = false
@@ -155,7 +156,7 @@ local function attachDurationPrompt(instance)
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		return humanoid ~= nil and humanoid.Health > 0 and root ~= nil
-			and (root.Position - attachment.WorldPosition).Magnitude <= 11
+			and (root.Position - attachment.WorldPosition).Magnitude <= prompt.MaxActivationDistance + 0.5
 	end
 	prompt.PromptButtonHoldBegan:Connect(function(plr)
 		if not canHarvest(plr) then return end

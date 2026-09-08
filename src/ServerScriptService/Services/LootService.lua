@@ -173,7 +173,8 @@ local function canPlayerOpenChest(plr, chest)
 	local root = char and char:FindFirstChild("HumanoidRootPart")
 	local primary = getPrimary(chest)
 	if not hum or hum.Health <= 0 or not root or not primary then return false end
-	return (root.Position - primary.Position).Magnitude <= 12
+	-- The prompt is bound to this same primary part; allow only half a stud of latency drift.
+	return (root.Position - primary.Position).Magnitude <= 8.5
 end
 
 function LootService:_warnMissingChestTable(chest, tableName)
@@ -376,21 +377,16 @@ end
 local function attachChestPrompt(chest)
 	local part = getPrimary(chest)
 	if not part then return end
-	local prompt = part:FindFirstChildOfClass("ProximityPrompt")
+	local prompt = chest:FindFirstChildWhichIsA("ProximityPrompt", true)
 	if not prompt then
 		prompt = Instance.new("ProximityPrompt")
-		prompt.ActionText = "Open"
-		prompt.ObjectText = chest.Name
-		prompt.HoldDuration = 0.2
-		prompt.MaxActivationDistance = 10
-		prompt.RequiresLineOfSight = true
-		prompt.Parent = part
 	end
+	prompt.Parent = part
 	prompt.ActionText = "Open"
 	prompt.ObjectText = chest.Name
 	prompt.HoldDuration = 0.2
-	prompt.MaxActivationDistance = 10
-	prompt.RequiresLineOfSight = true
+	prompt.MaxActivationDistance = 8
+	prompt.RequiresLineOfSight = false
 	prompt:SetAttribute(PROMPT_BOUND_ATTR, true)
 	if LootService._chestPromptConns[prompt] then
 		return

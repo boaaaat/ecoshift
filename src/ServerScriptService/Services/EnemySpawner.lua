@@ -8,6 +8,8 @@ local CollectionService = game:GetService("CollectionService")
 local BiomeService = require(script.Parent.BiomeService)
 local EntityConfig = require(script.Parent.Parent.AI.EntityConfig)
 local Progression = require(game.ReplicatedStorage.Shared.ProgressionConfig)
+local BiomeConfig = require(game.ReplicatedStorage.Shared.BiomeConfig)
+local CenterClearance = require(script.Parent.Parent.WorldGen.CenterClearance)
 
 local function withinPlayerDistance(point, minDist, maxDist)
 	local p = point:IsA("Attachment") and point.WorldPosition or point.Position
@@ -308,6 +310,12 @@ spawnEnemyById = function(id, anchor, playerCount)
 		newEnemy.PrimaryPart = rootPart
 	end
 	newEnemy:PivotTo(safeCFrame)
+	-- Group offsets can cross the camp boundary even when their anchor is outside.
+	-- Only fresh placement is constrained; living enemies can still move normally.
+	if CenterClearance.Overlaps(newEnemy, BiomeConfig.center_exclusion_radius or 100) then
+		newEnemy:Destroy()
+		return
+	end
 
 	-- Finish health setup before parenting triggers the AI/level binding.
 	applyHealthScaling(newEnemy, playerCount or math.max(1, #Players:GetPlayers()))

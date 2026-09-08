@@ -4,6 +4,8 @@ The approved scope is 16 biomes: eight playable now and eight on the future road
 
 ## Confirmed rules
 
+- New buildings must be placed within 100 studs of the central spawn (a 200-stud diameter). Biome resources, props, landmarks, chests and fresh creature spawns stay outside that camp footprint. Existing creatures can still approach the camp; this is a placement rule, not immunity from combat or weather. Existing player builds and storage are preserved.
+
 - Cooperative survival; the goal is to keep the whole team alive as long as possible.
 - The world normally shifts every 300 seconds. Built structures and stored items survive; old monsters are removed when the biome changes.
 - A world-control action requires a majority team vote.

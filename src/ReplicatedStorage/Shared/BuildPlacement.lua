@@ -2,6 +2,11 @@ local Players = game:GetService("Players")
 local Config = require(script.Parent.Config)
 local Placement = {}
 
+function Placement.WithinCamp(position)
+	local radius = Config.BUILD.CampRadius
+	return position.X * position.X + position.Z * position.Z <= radius * radius
+end
+
 -- Positions represent the supporting surface, never a preview cube's center.
 function Placement.Surface(position, ignored)
 	local size = Config.GRID.Size

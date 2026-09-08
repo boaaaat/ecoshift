@@ -108,6 +108,7 @@ Config.OBJECTIVES = {
 -- NOTE: Biome configuration moved to ReplicatedStorage/Shared/BiomeConfig.lua
 
 Config.BUILD = {
+	CampRadius = 100, -- 200-stud diameter around the expedition spawn at X/Z zero.
 	AllowedTypes = {
 		Wall = true,
 		Floor = true,

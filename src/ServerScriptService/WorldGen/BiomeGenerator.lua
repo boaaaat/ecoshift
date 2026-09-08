@@ -3,6 +3,7 @@ local Workspace = game:GetService("Workspace")
 local CollectionService = game:GetService("CollectionService")
 
 local SpatialHash = require(script.Parent.SpatialHash)
+local CenterClearance = require(script.Parent.CenterClearance)
 local EntityConfig = require(script.Parent.Parent.AI.EntityConfig)
 
 local BiomeGenerator = {}
@@ -114,7 +115,8 @@ function BiomeGenerator.new(config)
 
 	self.world_radius = config_value(self.config, "world_radius", "worldRadius", 2000)
 	self.center_exclusion_radius = config_value(self.config, "center_exclusion_radius", "centerExclusionRadius", 0)
-	self.center_exclusion_radius_sq = self.center_exclusion_radius * self.center_exclusion_radius
+	self.sampling_exclusion_radius = config_value(self.config, "generation_sampling_exclusion_radius", "generationSamplingExclusionRadius", self.center_exclusion_radius)
+	self.sampling_exclusion_radius_sq = self.sampling_exclusion_radius * self.sampling_exclusion_radius
 	self.base_y = config_value(self.config, "base_y", "baseY", 0)
 	self.chunk_size = config_value(self.config, "chunk_size", "chunkSize", 240)
 	self.max_chunks = config_value(self.config, "max_chunks", "maxChunks", nil)
@@ -169,7 +171,7 @@ function BiomeGenerator.new(config)
 end
 
 function BiomeGenerator:_distance_t(x, z)
-	local inner = self.center_exclusion_radius or 0
+	local inner = self.sampling_exclusion_radius or 0
 	local outer = self.world_radius or 1
 	if outer <= inner then
 		return 0
@@ -521,12 +523,18 @@ function BiomeGenerator:_place_prefab(prefab, position, parent)
 		elseif clone:IsA("BasePart") then
 			clone.CFrame = target_cf
 		end
+		-- The random point fallback can be clamped into the clearing; checking the
+		-- final footprint also rejects large props whose pivot is just outside it.
+		if CenterClearance.Overlaps(clone, self.center_exclusion_radius) then
+			clone:Destroy()
+			return
+		end
 		clone.Parent = parent
 	end)
 end
 
 function BiomeGenerator:_random_point_in_bounds(min_x, max_x, min_z, max_z)
-	if self.center_exclusion_radius <= 0 then
+	if self.sampling_exclusion_radius <= 0 then
 		local x = self.random:NextNumber(min_x, max_x)
 		local z = self.random:NextNumber(min_z, max_z)
 		return Vector3.new(x, self.base_y, z)
@@ -535,13 +543,13 @@ function BiomeGenerator:_random_point_in_bounds(min_x, max_x, min_z, max_z)
 	for _ = 1, 8 do
 		local x = self.random:NextNumber(min_x, max_x)
 		local z = self.random:NextNumber(min_z, max_z)
-		if (x * x + z * z) >= self.center_exclusion_radius_sq then
+		if (x * x + z * z) >= self.sampling_exclusion_radius_sq then
 			return Vector3.new(x, self.base_y, z)
 		end
 	end
 
 	local angle = self.random:NextNumber(0, math.pi * 2)
-	local radius = self.center_exclusion_radius + 1
+	local radius = self.sampling_exclusion_radius + 1
 	local x = math.clamp(radius * math.cos(angle), min_x, max_x)
 	local z = math.clamp(radius * math.sin(angle), min_z, max_z)
 	return Vector3.new(x, self.base_y, z)
@@ -766,7 +774,7 @@ function BiomeGenerator:_generate(override_biome)
 	self:_ensure_spawn_folders()
 
 	local radius = self.world_radius
-	local inner = self.center_exclusion_radius
+	local inner = self.sampling_exclusion_radius
 	local chunk_step = self.chunk_size
 
 	local centers = {}

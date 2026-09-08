@@ -10,7 +10,6 @@ local TweenService = game:GetService("TweenService")
 
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 local Config = require(ReplicatedStorage.Shared.Config)
-local BiomeConfig = require(ReplicatedStorage.Shared.BiomeConfig)
 local Util = require(ReplicatedStorage.Shared.Util)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local ResultMessages = require(ReplicatedStorage.Shared.ResultMessages)
@@ -34,7 +33,7 @@ local COLORS = Theme.Colors
 
 local GRID_SIZE = Config.GRID.Size or 6
 local BUILD_MESSAGES = ResultMessages.Build or {}
-local DEFAULT_HINT_TEXT = "Left-click to place • Right-click to cancel • R to salvage hovered"
+local DEFAULT_HINT_TEXT = "Build within 100 studs of spawn\nLeft-click to place • Right-click to cancel • R to salvage hovered"
 local PLACE_REQUEST_ITEM_ATTR = "BuildPlaceItemRequestItem"
 local PLACE_REQUEST_NONCE_ATTR = "BuildPlaceItemRequestNonce"
 
@@ -91,7 +90,7 @@ indicatorLabel.Parent = modeIndicator
 
 local hintLabel = Instance.new("TextLabel")
 hintLabel.Name = "Hint"
-hintLabel.Size = UDim2.new(0, 390, 0, 32)
+hintLabel.Size = UDim2.new(0, 390, 0, 48)
 hintLabel.Position = UDim2.new(0.5, 0, 0, 110)
 hintLabel.AnchorPoint = Vector2.new(0.5, 0)
 hintLabel.BackgroundTransparency = 1
@@ -253,12 +252,7 @@ local function isValidPlacement(position)
 		return false
 	end
 	
-	-- World bounds check
-	local dist = math.sqrt(position.X * position.X + position.Z * position.Z)
-	if dist > (BiomeConfig.WORLD.WorldRadius or 2200) then
-		return false
-	end
-	if dist < (BiomeConfig.WORLD.CenterExclusionRadius or 0) then return false end
+	if not BuildPlacement.WithinCamp(position) then return false end
 	
 	return true
 end

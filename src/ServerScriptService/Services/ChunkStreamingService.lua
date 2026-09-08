@@ -11,6 +11,7 @@ local WorldGenConfig = require(ReplicatedStorage.Shared.BiomeConfig)
 local BiomeService = require(script.Parent.BiomeService)
 local ResourceNodeService = require(script.Parent.ResourceNodeService)
 local SnapshotCodec = require(script.Parent.WorldSnapshotCodec)
+local CenterClearance = require(script.Parent.Parent.WorldGen.CenterClearance)
 local DeathService -- Resolved during streaming, after service modules have loaded.
 
 -- Lazy-load LootService to avoid circular dependency
@@ -55,8 +56,9 @@ local STREAM_STEP_DELAY = WorldGenConfig.stream_step_delay or WorldGenConfig.ste
 local STREAM_BIND_OPS_PER_YIELD = WorldGenConfig.stream_bind_ops_per_yield or STREAM_OPS_PER_YIELD
 local BASE_Y = WorldGenConfig.base_y or 0
 local WORLD_RADIUS = WorldGenConfig.world_radius or 2200
-local CENTER_EXCLUSION = WorldGenConfig.center_exclusion_radius or 260
-local CENTER_EXCLUSION_SQ = CENTER_EXCLUSION * CENTER_EXCLUSION
+local SAMPLING_EXCLUSION = WorldGenConfig.generation_sampling_exclusion_radius or WorldGenConfig.center_exclusion_radius or 260
+local SAMPLING_EXCLUSION_SQ = SAMPLING_EXCLUSION * SAMPLING_EXCLUSION
+local CAMP_CLEARANCE = WorldGenConfig.center_exclusion_radius or 100
 local SPAWN_ENEMIES = WorldGenConfig.spawn_enemies ~= false
 local REGION_PADDING = math.max(0, tonumber(WorldGenConfig.region_padding) or 0)
 local STRUCTURE_PADDING = math.max(0, tonumber(WorldGenConfig.structure_padding) or 0)
@@ -178,15 +180,15 @@ local function lerp(a, b, t)
 	return a + (b - a) * t
 end
 
-local function isInsideCenterExclusion(x, z)
-	if CENTER_EXCLUSION <= 0 then
+local function isInsideSamplingExclusion(x, z)
+	if SAMPLING_EXCLUSION <= 0 then
 		return false
 	end
-	return (x * x + z * z) <= CENTER_EXCLUSION_SQ
+	return (x * x + z * z) <= SAMPLING_EXCLUSION_SQ
 end
 
 local function distanceT(x, z)
-	local inner = CENTER_EXCLUSION or 0
+	local inner = SAMPLING_EXCLUSION or 0
 	local outer = WORLD_RADIUS or 1
 	if outer <= inner then
 		return 0
@@ -846,7 +848,21 @@ end
 function ChunkStreamingService:_trackPersistent(inst, prefabName, parent, category, explicitKey)
 	local chunk = parent
 	while chunk and chunk:GetAttribute("ChunkX") == nil do chunk = chunk.Parent end
-	if not chunk then return true end
+	local function rejectCenterOverlap()
+		-- Check fresh placement before applying any saved actor transform below;
+		-- existing enemies may still move into camp and restore their saved position.
+		if CenterClearance.Overlaps(inst, CAMP_CLEARANCE) then
+			-- The caller briefly retains an unparented structure to consume legacy
+			-- socket RNG before destruction; nothing is published or tracked here.
+			if (category or parent.Name) ~= "Structures" then inst:Destroy() end
+			return true
+		end
+		return false
+	end
+	if not chunk then
+		if rejectCenterOverlap() then return false, "CenterClearance" end
+		return true
+	end
 	local key = explicitKey
 	if not key then
 		local ordinal = (parent:GetAttribute("SnapshotSpawnOrdinal") or 0) + 1
@@ -854,9 +870,16 @@ function ChunkStreamingService:_trackPersistent(inst, prefabName, parent, catego
 		local prefix = parent:GetAttribute("WorldObjectKey") or (tostring(self._epoch) .. "|" .. chunk.Name .. "|" .. parent.Name)
 		key = prefix .. "|" .. tostring(ordinal) .. "|" .. prefabName
 	end
+	-- Consume the ordinal even when rejected so later saved object keys stay stable.
+	-- This common path also covers loose chests and landmark chest sockets.
+	local state = self._persistent[key]
+	if rejectCenterOverlap() then
+		-- Previously removed landmarks already skipped socket rolls during replay.
+		if state and state.Destroyed then inst:Destroy(); return false end
+		return false, "CenterClearance"
+	end
 	inst:SetAttribute("WorldObjectKey", key)
 	inst:SetAttribute("SnapshotPrefab", prefabName)
-	local state = self._persistent[key]
 	if state then
 		assert(state.Prefab == prefabName, "Saved generated prefab changed")
 		if state.Destroyed then inst:Destroy(); return false end
@@ -1075,7 +1098,7 @@ function ChunkStreamingService:_paintChunkGround(biomeName, chunkCenter, seed, s
 
 	for x = startX, endX, cell do
 		for z = startZ, endZ, cell do
-			if not isInsideCenterExclusion(x, z) and ((x * x) + (z * z)) <= (WORLD_RADIUS * WORLD_RADIUS) then
+			if not isInsideSamplingExclusion(x, z) and ((x * x) + (z * z)) <= (WORLD_RADIUS * WORLD_RADIUS) then
 				local material = baseMaterial
 				local pathNoise = math.abs(math.noise(x * TERRAIN_DETAIL_PATH_SCALE, z * TERRAIN_DETAIL_PATH_SCALE, seed * 0.0007 + 41.1))
 				if pathMaterial and pathNoise < TERRAIN_DETAIL_PATH_WIDTH then
@@ -1356,8 +1379,8 @@ function ChunkStreamingService:_resolveChestEntries(biomeName, chestNames)
 	return entries
 end
 
-function ChunkStreamingService:_spawnStructureChests(structureClone, biomeName, structureName, rng, biome)
-	if not structureClone or not structureClone.Parent then return end
+function ChunkStreamingService:_spawnStructureChests(structureClone, biomeName, structureName, rng, biome, consumeOnly)
+	if not structureClone or (not consumeOnly and not structureClone.Parent) then return end
 	local cfg = self:_getStructureChestConfig(biome, structureName)
 	if not cfg then return end
 
@@ -1448,7 +1471,7 @@ function ChunkStreamingService:_spawnStructureChests(structureClone, biomeName, 
 		end
 
 		local prefab = self:_chooseWeighted(list, rng, distance_t)
-		if prefab then
+		if prefab and not consumeOnly then
 			local clone = prefab:Clone()
 			tryApplyScaleOverride(clone, prefab.Name)
 			local yOffset = getOffsetValue(clone) + (clone:GetAttribute("ArtStyle") == "Expedition" and 0 or getAssetYOffset(prefab.Name))
@@ -1577,7 +1600,7 @@ function ChunkStreamingService:_loadChunk(cx, cz)
 	local worldX, worldZ = chunkToWorld(cx, cz)
 	local dist = math.sqrt(worldX * worldX + worldZ * worldZ)
 	
-	if dist > WORLD_RADIUS or isInsideCenterExclusion(worldX, worldZ) then
+	if dist > WORLD_RADIUS or isInsideSamplingExclusion(worldX, worldZ) then
 		return -- Outside world bounds
 	end
 	
@@ -1820,8 +1843,10 @@ function ChunkStreamingService:_scatterCategory(categoryName, regionCenter, regi
 		if chance > 0 and rng:NextNumber() <= chance and not self:_isPointBlocked(placementState, categoryName, position.X, position.Z, minSpacing) then
 			local prefab = self:_chooseWeighted(prefabs, rng, distance_t)
 			if prefab then
-				local clone = self:_placePrefab(prefab, position, parent, step)
-				if clone then
+				local clone, consumed = self:_placePrefab(prefab, position, parent, step)
+				if clone or consumed then
+					-- Cleared/tombstoned entries consume their seeded slot without rerolling.
+					-- Keep only the local sampling reservation, never a destroyed instance.
 					self:_registerPoint(placementState, categoryName, position.X, position.Z)
 					placed += 1
 				end
@@ -1885,7 +1910,18 @@ function ChunkStreamingService:_placeStructure(biomeName, chunkCenter, names, pa
 		local avoidRegions = categoryName == "Structures" or categoryName == "Objectives"
 		if not self:_isRectBlocked(placementState, rect, minSpacing, avoidRegions) then
 			local position = Vector3.new(x, BASE_Y, z)
-			local clone = self:_placePrefab(prefab, position, parent, step)
+			local clone, consumed, socketReplay = self:_placePrefab(prefab, position, parent, step)
+			if consumed then
+				if socketReplay then
+					local ok, failure = pcall(self._spawnStructureChests, self, socketReplay, biomeName, prefab.Name, rng, biome, true)
+					socketReplay:Destroy()
+					if not ok then error(failure) end
+				end
+				-- Virtual sampling reservations keep later saved candidates deterministic.
+				self:_registerRect(placementState, categoryName, rect)
+				self:_registerPoint(placementState, categoryName, x, z)
+				return
+			end
 			if clone then
 				if categoryName == "Structures" then
 					setMapMarkerAttributes(clone, "Structure", prefab.Name)
@@ -1923,7 +1959,7 @@ function ChunkStreamingService:_placeChest(biomeName, chunkCenter, chestNames, p
 		local x = chunkCenter.X + rng:NextNumber(-half, half)
 		local z = chunkCenter.Z + rng:NextNumber(-half, half)
 		local position = Vector3.new(x, BASE_Y, z)
-		if isInsideCenterExclusion(position.X, position.Z) then
+		if isInsideSamplingExclusion(position.X, position.Z) then
 			if step then
 				step()
 			end
@@ -1947,9 +1983,12 @@ function ChunkStreamingService:_placeChest(biomeName, chunkCenter, chestNames, p
 				ensureChestTag(clone)
 				if clone:GetAttribute("ArtStyle") == "Expedition" then clone:SetAttribute("LootTable", biomeName .. "Supplies") end
 
-				if self:_trackPersistent(clone, prefab.Name, parent, "Chests") then clone.Parent = parent end
+				local survived = self:_trackPersistent(clone, prefab.Name, parent, "Chests")
+				-- These are seed reservations, including suppressed/tombstoned candidates.
 				self:_registerRect(placementState, "Chests", rect)
 				self:_registerPoint(placementState, "Chests", x, z)
+				if not survived then return end
+				clone.Parent = parent
 				return clone
 			end
 			if step then
@@ -1961,7 +2000,7 @@ end
 
 function ChunkStreamingService:_placePrefab(prefab, position, parent, step)
 	if not prefab then return end
-	if isInsideCenterExclusion(position.X, position.Z) then
+	if isInsideSamplingExclusion(position.X, position.Z) then
 		return
 	end
 	
@@ -1998,7 +2037,14 @@ function ChunkStreamingService:_placePrefab(prefab, position, parent, step)
 	elseif clone:IsA("BasePart") then
 		clone.CFrame = targetCf
 	end
-	if self:_trackPersistent(clone, prefab.Name, parent, parent.Name) then clone.Parent = parent end
+	local survived, rejection = self:_trackPersistent(clone, prefab.Name, parent, parent.Name)
+	if not survived then
+		if rejection == "CenterClearance" and parent.Name == "Structures" then
+			return nil, true, clone
+		end
+		return nil, true
+	end
+	clone.Parent = parent
 	return clone
 end
 

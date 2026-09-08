@@ -9,6 +9,7 @@ ResultMessages.Build = {
 	InvalidType = "That item cannot be placed.",
 	OutOfRange = "Move closer to build there.",
 	OutOfBounds = "That location is out of bounds.",
+	OutsideCamp = "Build within 100 studs of spawn (the 200-stud camp).",
 	Occupied = "That spot is already occupied.",
 	NoSurface = "Aim at solid ground or a supported surface.",
 	MissingPlaceableItem = "You do not have that placeable item.",

@@ -138,7 +138,7 @@ local function attachPrompt(model)
 	prompt.ObjectText = getPromptObjectText(itemId, count)
 	prompt.RequiresLineOfSight = false
 	prompt.HoldDuration = 0
-	prompt.MaxActivationDistance = 10
+	prompt.MaxActivationDistance = 8
 	local claimed = false
 	prompt.Triggered:Connect(function(plr)
 		if claimed or model:GetAttribute("PickupPending") or ReplicatedStorage:GetAttribute("WorldRestoring") or not model:IsDescendantOf(Workspace) then return end
@@ -147,7 +147,7 @@ local function attachPrompt(model)
 		local hum = char and char:FindFirstChildOfClass("Humanoid")
 		local root = char and char:FindFirstChild("HumanoidRootPart")
 		if not hum or hum.Health <= 0 or not root or plr:GetAttribute("IsDead") then return end
-		if not ((root.Position - part.Position).Magnitude <= prompt.MaxActivationDistance) then return end
+		if not ((root.Position - part.Position).Magnitude <= prompt.MaxActivationDistance + 0.5) then return end
 		local id = ResourceItemMap.Normalize(model:GetAttribute("ItemId"))
 		local count = model:GetAttribute("Count") or 1
 		if type(id) ~= "string" or not ItemDatabase:Get(id) then return end
