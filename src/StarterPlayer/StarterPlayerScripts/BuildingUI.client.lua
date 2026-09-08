@@ -14,6 +14,7 @@ local BiomeConfig = require(ReplicatedStorage.Shared.BiomeConfig)
 local Util = require(ReplicatedStorage.Shared.Util)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local ResultMessages = require(ReplicatedStorage.Shared.ResultMessages)
+local BuildPlacement = require(ReplicatedStorage.Shared:WaitForChild("BuildPlacement"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -197,13 +198,6 @@ local function isPlaceableItem(itemId)
 	return itemId ~= nil and placeableTypes[itemId] == true
 end
 
--- Helper: Snap to grid
-local function snapToGrid(position)
-	local gx = math.floor((position.X / GRID_SIZE) + 0.5)
-	local gz = math.floor((position.Z / GRID_SIZE) + 0.5)
-	return Vector3.new(gx * GRID_SIZE, position.Y, gz * GRID_SIZE)
-end
-
 -- Helper: Raycast for placement
 local function getPlacementPosition()
 	local camera = workspace.CurrentCamera
@@ -216,7 +210,7 @@ local function getPlacementPosition()
 	
 	local result = workspace:Raycast(unitRay.Origin, unitRay.Direction * 100, raycastParams)
 	if result then
-		return snapToGrid(result.Position + Vector3.new(0, GRID_SIZE / 2, 0))
+		return BuildPlacement.Surface(result.Position, previewPart and { previewPart } or {})
 	end
 	return nil
 end
@@ -264,6 +258,7 @@ local function isValidPlacement(position)
 	if dist > (BiomeConfig.WORLD.WorldRadius or 2200) then
 		return false
 	end
+	if dist < (BiomeConfig.WORLD.CenterExclusionRadius or 0) then return false end
 	
 	return true
 end
@@ -280,6 +275,7 @@ local function updatePreview()
 	
 	local position = getPlacementPosition()
 	if not position then
+		canPlace = false
 		if previewPart then
 			previewPart.Transparency = 1
 		end
@@ -304,7 +300,7 @@ local function updatePreview()
 		selection.Parent = previewPart
 	end
 	
-	previewPart.Position = position
+	previewPart.Position = position + Vector3.new(0, previewPart.Size.Y / 2, 0)
 	previewPart.Transparency = 0.5
 	
 	canPlace = isValidPlacement(position)

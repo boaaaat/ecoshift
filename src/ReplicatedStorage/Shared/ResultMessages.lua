@@ -10,6 +10,7 @@ ResultMessages.Build = {
 	OutOfRange = "Move closer to build there.",
 	OutOfBounds = "That location is out of bounds.",
 	Occupied = "That spot is already occupied.",
+	NoSurface = "Aim at solid ground or a supported surface.",
 	MissingPlaceableItem = "You do not have that placeable item.",
 	MissingCost = "Not enough materials.",
 	PlacementFailed = "Could not place that structure.",

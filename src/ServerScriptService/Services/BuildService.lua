@@ -9,6 +9,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local BiomeConfig = require(ReplicatedStorage.Shared.BiomeConfig)
 local Util = require(ReplicatedStorage.Shared.Util)
 local WorkbenchConfig = require(ReplicatedStorage.Shared.WorkbenchConfig)
+local BuildPlacement = require(ReplicatedStorage.Shared:WaitForChild("BuildPlacement"))
 local GridService = require(script.Parent.GridService)
 local InventoryService = require(script.Parent.InventoryService)
 local LootService = require(script.Parent.LootService)
@@ -215,6 +216,9 @@ function BuildService:Place(plr, buildType, worldPos)
 
 	local gx, gz = GridService:WorldToGrid(worldPos)
 	if GridService:IsOccupied(gx, gz) then return false, "Occupied" end
+	local pos = BuildPlacement.Surface(worldPos)
+	if not pos then return false, "NoSurface" end
+	if not withinRange(plr, pos) then return false, "OutOfRange" end
 
 	-- Check if this is a placeable item (uses item from inventory)
 	local refundEntries = nil
@@ -243,22 +247,18 @@ function BuildService:Place(plr, buildType, worldPos)
 		refundEntries = adjusted
 	end
 
-	local pos = GridService:GridToWorld(gx, gz, worldPos.Y)
 	local inst
 	local placeOk, placeErr = pcall(function()
 		local prefab = getPrefab(buildType)
 		if prefab then
 			inst = prefab:Clone()
-			if inst:IsA("Model") then
-				inst:PivotTo(CFrame.new(pos))
-			elseif inst:IsA("BasePart") then
-				inst.CFrame = CFrame.new(pos)
-			end
 		else
 			inst = createFallbackPart(buildType, pos)
 		end
+		BuildPlacement.PutOnSurface(inst, CFrame.new(pos))
 
 		inst.Parent = workspace
+		inst:SetAttribute("PlacementVersion", 1)
 		inst:SetAttribute("OwnerUserId", plr.UserId)
 		inst:SetAttribute("GridX", gx)
 		inst:SetAttribute("GridZ", gz)
@@ -359,6 +359,7 @@ function BuildService:CaptureWorldState()
 			assert(#result < SnapshotCodec.MaxStructures, "Saved structure capacity exceeded")
 			local durability = inst:FindFirstChild("Durability")
 			local state = { Type = inst:GetAttribute("BuildType"), Owner = inst:GetAttribute("OwnerUserId"),
+				PlacementVersion = inst:GetAttribute("PlacementVersion"),
 				GridX = inst:GetAttribute("GridX"), GridZ = inst:GetAttribute("GridZ"), Transform = SnapshotCodec.CFrame(inst:GetPivot()),
 				Durability = durability and durability.Value or 100, DurabilityMax = inst:GetAttribute("DurabilityMax") or 100 }
 			if isChestStructure(inst, state.Type) then state.Chest = LootService:CaptureChestState(inst) end
@@ -381,6 +382,19 @@ function BuildService:RestoreWorldState(states)
 		local prefab = getPrefab(state.Type)
 		local inst = prefab and prefab:Clone() or createFallbackPart(state.Type, cf.Position)
 		inst:PivotTo(cf)
+		if state.PlacementVersion == nil and inst:IsA("Model") and inst:GetAttribute("ArtStyle") == "Expedition" then
+			-- Correct only the recognizable old half-grid gap. Grounded or deliberately
+			-- elevated saved builds keep their transform; no repeated lowering on resume.
+			local params = RaycastParams.new()
+			params.FilterType = Enum.RaycastFilterType.Include
+			params.FilterDescendantsInstances = { workspace.Terrain }
+			local bottom = BuildPlacement.Bottom(inst)
+			local ground = workspace:Raycast(Vector3.new(cf.X, bottom + .1, cf.Z), Vector3.new(0, -Config.GRID.Size, 0), params)
+			if ground and math.abs(bottom - ground.Position.Y - Config.GRID.Size / 2) < .1 then
+				inst:PivotTo(cf + Vector3.new(0, ground.Position.Y - bottom, 0))
+			end
+		end
+		inst:SetAttribute("PlacementVersion", 1)
 		inst:SetAttribute("OwnerUserId", SnapshotCodec.Number(state.Owner))
 		inst:SetAttribute("GridX", gx); inst:SetAttribute("GridZ", gz)
 		inst:SetAttribute("BuildType", state.Type)
