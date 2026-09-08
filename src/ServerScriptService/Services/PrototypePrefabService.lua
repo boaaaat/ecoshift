@@ -81,6 +81,12 @@ local function makeTool(parent, item)
 		tool:SetAttribute("ToolType", "Universal")
 		tool:SetAttribute("Damage", toolPower[item.Id] or 20)
 		tool:SetAttribute("Range", 10)
+		if item.Id == "Harvester" then
+			-- Emergency defense is separate from resource harvesting power.
+			tool:SetAttribute("CombatDamage", 6)
+			tool:SetAttribute("CombatRange", 6)
+			tool:SetAttribute("CombatCooldown", 0.6)
+		end
 	else
 		tool:SetAttribute("WeaponType", item.Id == "CrystalBow" and "Bow" or "Sword")
 		tool:SetAttribute("Damage", weaponPower[item.Id] or 20)

@@ -410,6 +410,15 @@ function CombatService:_handleSword(plr, tool, weapon, data)
 	local origin = getToolOrigin(plr, tool)
 	local targetPos = getTargetPosition(target)
 	if not origin or not targetPos then return end
+	-- A held handle can clip into a wall; a ray starting inside it can miss it.
+	-- Require a clear path from the character as well as from the weapon.
+	local body = getRoot(plr.Character)
+	if not body then return end
+	local bodyDelta = targetPos - body.Position
+	if bodyDelta.Magnitude > 0 then
+		local obstruction = raycastFromPlayer(plr, body.Position, bodyDelta.Unit, bodyDelta.Magnitude)
+		if obstruction and not obstruction.Instance:IsDescendantOf(target) then return end
+	end
 	local delta = targetPos - origin
 	if delta.Magnitude > 0 then
 		local hit = raycastFromPlayer(plr, origin, delta.Unit, delta.Magnitude)
@@ -509,7 +518,23 @@ function CombatService:Bind()
 			end
 			local tool = getEquippedTool(plr)
 			if not tool then return end
-			if hasToolType(tool) then return end
+			if hasToolType(tool) then
+				-- Harvesting damage must never become combat damage. Only tools with
+				-- an explicit server-authored combat profile can use this melee path.
+				local damage = WeaponUtil.GetNumber(tool, "CombatDamage", 0)
+				if action ~= "Attack" or damage <= 0 then return end
+				local target = data and data.Target
+				if typeof(target) ~= "Instance" or not target:IsA("Model") or not isTaggedCombatTarget(target) then return end
+				if ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring")
+					or plr:GetAttribute("WorldPlayerLoading") then return end
+				local harvestWeapon = {
+					GetDamage = function() return damage end,
+					GetRange = function() return WeaponUtil.GetNumber(tool, "CombatRange", 6) end,
+					GetCooldown = function() return math.max(0.1, WeaponUtil.GetNumber(tool, "CombatCooldown", 0.6)) end,
+				}
+				self:_handleSword(plr, tool, harvestWeapon, data)
+				return
+			end
 			local weapon = WeaponFactory.Create(tool, plr)
 			if not weapon then return end
 			local wtype = weapon:GetType():lower()

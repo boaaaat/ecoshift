@@ -5,6 +5,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
+local CollectionService = game:GetService("CollectionService")
+local Debris = game:GetService("Debris")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Remotes = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage:WaitForChild("Remotes", 5)
@@ -14,6 +16,7 @@ local function resolveInteractRemote()
 		or Remotes:WaitForChild(Config.RemoteNames.Interact, 3)
 end
 local InteractRE = resolveInteractRemote()
+local CombatRE = Remotes and Remotes:WaitForChild("CombatAction", 3)
 local ToolConfig = require(ReplicatedStorage.Modules.ToolConfig)
 local missingInteractWarned = false
 
@@ -189,6 +192,19 @@ local function harvestOnce(tool)
 	missingInteractWarned = false
 	local range = getRange(tool)
 	local hit = acquireHarvestHit(range)
+	local target = hit
+	while target and target ~= Workspace do
+		if target:IsA("Model") and (CollectionService:HasTag(target, "Monster") or CollectionService:HasTag(target, "Animal")) then
+			if CombatRE and (tonumber(tool:GetAttribute("CombatDamage")) or 0) > 0 then
+				CombatRE:FireServer("Attack", { Target = target })
+				local swing = Instance.new("StringValue")
+				swing.Name, swing.Value, swing.Parent = "toolanim", "Slash", tool
+				Debris:AddItem(swing, 1)
+			end
+			return
+		end
+		target = target.Parent
+	end
 	local node = findNode(hit)
 	InteractRE:FireServer("Harvest", node or hit)
 end
