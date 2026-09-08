@@ -47,7 +47,7 @@ end
 local function applySprintModifier(plr, enabled)
 	if enabled then
 		if not SurvivalService._sprintApplied[plr] then
-			StatsService:AddModifier(plr, "Speed", 0.2, "Mult", nil, "Sprint")
+			StatsService:AddModifier(plr, "Speed", 0.5, "Mult", nil, "Sprint")
 			SurvivalService._sprintApplied[plr] = true
 		end
 	else

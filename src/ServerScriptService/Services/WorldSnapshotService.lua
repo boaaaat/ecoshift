@@ -18,6 +18,7 @@ function Snapshot:CapturePlayer(player)
 		Inventory = service("InventoryService"):CaptureWorldState(player),
 		Stats = service("StatsService"):CaptureWorldState(player),
 		Death = service("DeathService"):CaptureWorldState(player),
+		CraftRefund = service("CraftingService"):CaptureRefund(player),
 	}
 	if char and char.Parent then
 		state.Transform = Codec.CFrame(char:GetPivot())
@@ -153,6 +154,7 @@ function Snapshot:RestorePlayer(player)
 		char:SetAttribute("WetStacks", Codec.Number(state.WetStacks or 0, 0, 5))
 		service("InventoryActionService"):RestoreCharacterState(char, state.ResistEffects or {})
 		service("DeathService"):RestoreWorldState(player, state.Death)
+		service("CraftingService"):RestoreRefund(player, state)
 	end
 	player:SetAttribute("WorldPlayerRestoring", nil)
 	player:SetAttribute("WorldPlayerLoading", nil)

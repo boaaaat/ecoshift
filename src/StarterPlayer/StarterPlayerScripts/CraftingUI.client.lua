@@ -30,6 +30,7 @@ end
 local COLORS = Theme.Colors
 
 local MARGIN = 16
+local MAX_CRAFT_QUANTITY = 99
 local CRAFT_MESSAGES = ResultMessages.Craft or {}
 
 -- State
@@ -39,13 +40,23 @@ local selectedRecipe = nil
 local isCraftPending = false
 local pendingRequestToken = 0
 local statusToken = 0
+local craftQuantity = 1
+local pendingOutput = ""
+local pendingQuantity = 1
+local pendingDuration = 0
+local pendingStartedAt = 0
+local pendingConfirmed = false
+local pendingRecipeId = nil
+local pendingStationType = nil
 
 -- Create main GUI
 local gui = Instance.new("ScreenGui")
 gui.Name = "CraftingUI"
 gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-gui.DisplayOrder = 20
+-- Crafting modals shade the HUD and crew shortcut (orders 5–50), while
+-- world ballots, death screens, and settings retain their higher priority.
+gui.DisplayOrder = 60
 gui.Parent = playerGui
 
 -- Backdrop (dims screen when open)
@@ -62,7 +73,7 @@ backdrop.Parent = gui
 -- Main panel (CanvasGroup for GroupTransparency animation)
 local mainPanel = Instance.new("CanvasGroup")
 mainPanel.Name = "MainPanel"
-mainPanel.Size = UDim2.new(0, 452, 0, 530)
+mainPanel.Size = UDim2.new(0, 452, 0, 610)
 mainPanel.AnchorPoint = Vector2.new(0.5, 0.5)
 mainPanel.Position = UDim2.new(0.5, 0, 0.5, 0)
 mainPanel.BackgroundColor3 = COLORS.Panel
@@ -139,7 +150,7 @@ closeBtnCorner.Parent = closeBtn
 -- Recipe list container
 local recipeContainer = Instance.new("ScrollingFrame")
 recipeContainer.Name = "RecipeList"
-recipeContainer.Size = UDim2.new(1, -MARGIN * 2, 1, -130)
+recipeContainer.Size = UDim2.new(1, -MARGIN * 2, 1, -230)
 recipeContainer.Position = UDim2.new(0, MARGIN, 0, 55)
 recipeContainer.BackgroundColor3 = COLORS.Background
 recipeContainer.BackgroundTransparency = 0.5
@@ -166,17 +177,100 @@ recipePadding.PaddingLeft = UDim.new(0, 6)
 recipePadding.PaddingRight = UDim.new(0, 6)
 recipePadding.Parent = recipeContainer
 
+-- Keep batch input outside refreshed recipe cards so typing survives snapshots.
+local quantityBar = Instance.new("Frame")
+quantityBar.Name = "QuantityControls"
+quantityBar.Size = UDim2.new(1, -MARGIN * 2, 0, 38)
+quantityBar.Position = UDim2.new(0, MARGIN, 1, -164)
+quantityBar.BackgroundTransparency = 1
+quantityBar.ZIndex = 12
+quantityBar.Parent = mainPanel
+
+local quantityLabel = Instance.new("TextLabel")
+quantityLabel.Size = UDim2.fromOffset(78, 38)
+quantityLabel.BackgroundTransparency = 1
+quantityLabel.Text = "Batches"
+quantityLabel.TextColor3 = COLORS.Text
+quantityLabel.TextSize = 15
+quantityLabel.Font = Enum.Font.GothamBold
+quantityLabel.TextXAlignment = Enum.TextXAlignment.Left
+quantityLabel.ZIndex = 12
+quantityLabel.Parent = quantityBar
+
+local function quantityButton(name, text, x, width)
+	local button = Instance.new("TextButton")
+	button.Name = name
+	button.Position = UDim2.fromOffset(x, 0)
+	button.Size = UDim2.fromOffset(width, 38)
+	button.BackgroundColor3 = COLORS.SlotEmpty
+	button.TextColor3 = COLORS.Text
+	button.Text = text
+	button.TextSize = 16
+	button.Font = Enum.Font.GothamBold
+	button.ZIndex = 13
+	button.Parent = quantityBar
+	Theme.Button(button)
+	return button
+end
+local decreaseBtn = quantityButton("DecreaseQuantity", "−", 78, 36)
+local increaseBtn = quantityButton("IncreaseQuantity", "+", 186, 36)
+local maxBtn = quantityButton("MaxQuantity", "Max (0)", 232, 100)
+maxBtn.Size = UDim2.new(1, -232, 0, 38)
+maxBtn.TextSize = 14
+
+local quantityBox = Instance.new("TextBox")
+quantityBox.Name = "QuantityInput"
+quantityBox.Position = UDim2.fromOffset(120, 0)
+quantityBox.Size = UDim2.fromOffset(60, 38)
+quantityBox.BackgroundColor3 = COLORS.Background
+quantityBox.BorderSizePixel = 0
+quantityBox.TextColor3 = COLORS.Text
+quantityBox.TextSize = 17
+quantityBox.Font = Enum.Font.GothamBold
+quantityBox.Text = "1"
+quantityBox.PlaceholderText = "1–99"
+quantityBox.ClearTextOnFocus = false
+quantityBox.ZIndex = 13
+quantityBox.Parent = quantityBar
+Theme.Corner(quantityBox, 6)
+local quantityStroke = Instance.new("UIStroke")
+quantityStroke.Color = COLORS.Border
+quantityStroke.Parent = quantityBox
+
+local batchSummary = Instance.new("TextLabel")
+batchSummary.Name = "BatchSummary"
+batchSummary.Size = UDim2.new(1, -MARGIN * 2, 0, 20)
+batchSummary.Position = UDim2.new(0, MARGIN, 1, -120)
+batchSummary.BackgroundTransparency = 1
+batchSummary.Text = "Choose a recipe to set its batch size"
+batchSummary.TextColor3 = COLORS.Text
+batchSummary.TextSize = 14
+batchSummary.Font = Enum.Font.GothamBold
+batchSummary.TextXAlignment = Enum.TextXAlignment.Left
+batchSummary.TextTruncate = Enum.TextTruncate.AtEnd
+batchSummary.ZIndex = 12
+batchSummary.Parent = mainPanel
+local batchTime = batchSummary:Clone()
+batchTime.Name = "BatchTime"
+batchTime.Position = UDim2.new(0, MARGIN, 1, -100)
+batchTime.Text = ""
+batchTime.TextSize = 13
+batchTime.Font = Enum.Font.Gotham
+batchTime.TextColor3 = COLORS.TextMuted
+batchTime.Parent = mainPanel
+
 -- Craft button at bottom
 local craftBtn = Instance.new("TextButton")
 craftBtn.Name = "CraftButton"
-craftBtn.Size = UDim2.new(1, -MARGIN * 2, 0, 50)
-craftBtn.Position = UDim2.new(0, MARGIN, 1, -65)
+craftBtn.Size = UDim2.new(1, -MARGIN * 2, 0, 48)
+craftBtn.Position = UDim2.new(0, MARGIN, 1, -76)
 craftBtn.AnchorPoint = Vector2.new(0, 0)
 craftBtn.BackgroundColor3 = COLORS.SlotEmpty
 craftBtn.BorderSizePixel = 0
 craftBtn.Text = "Select a Recipe"
 craftBtn.TextColor3 = COLORS.TextMuted
 craftBtn.TextSize = 16
+craftBtn.TextWrapped = true
 craftBtn.Font = Enum.Font.GothamBold
 craftBtn.ZIndex = 12
 craftBtn.AutoButtonColor = false
@@ -192,11 +286,33 @@ craftBtnStroke.Color = COLORS.Border
 craftBtnStroke.Thickness = 1
 craftBtnStroke.Parent = craftBtn
 
+local progressTrack = Instance.new("Frame")
+progressTrack.Name = "CraftProgress"
+progressTrack.AnchorPoint = Vector2.new(0, 1)
+progressTrack.Position = UDim2.new(0, 8, 1, -4)
+progressTrack.Size = UDim2.new(1, -16, 0, 4)
+progressTrack.BackgroundColor3 = COLORS.Night
+progressTrack.BackgroundTransparency = 0.3
+progressTrack.BorderSizePixel = 0
+progressTrack.ClipsDescendants = true
+progressTrack.Visible = false
+progressTrack.ZIndex = 14
+progressTrack.Parent = craftBtn
+Theme.Corner(progressTrack, 2)
+local progressFill = Instance.new("Frame")
+progressFill.Name = "Fill"
+progressFill.Size = UDim2.fromScale(0, 1)
+progressFill.BackgroundColor3 = COLORS.Paper
+progressFill.BorderSizePixel = 0
+progressFill.ZIndex = 15
+progressFill.Parent = progressTrack
+Theme.Corner(progressFill, 2)
+
 local inlineStatusLabel = Instance.new("TextLabel")
 inlineStatusLabel.Name = "InlineStatus"
 inlineStatusLabel.Size = UDim2.new(1, -MARGIN * 2, 0, 16)
 inlineStatusLabel.AnchorPoint = Vector2.new(0, 1)
-inlineStatusLabel.Position = UDim2.new(0, MARGIN, 1, -6)
+inlineStatusLabel.Position = UDim2.new(0, MARGIN, 1, -8)
 inlineStatusLabel.BackgroundTransparency = 1
 inlineStatusLabel.Text = ""
 inlineStatusLabel.TextColor3 = COLORS.TextMuted
@@ -227,23 +343,6 @@ local function showInlineStatus(text, color, duration)
 	end
 end
 
-local function beginCraftPending()
-	isCraftPending = true
-	pendingRequestToken += 1
-	local token = pendingRequestToken
-	craftBtn.Text = "Crafting..."
-	craftBtn.TextColor3 = COLORS.Paper
-	craftBtn.BackgroundColor3 = COLORS.Accent
-	craftBtnStroke.Color = COLORS.Accent
-	return token
-end
-
-local function getCraftRequestTimeout(recipeId)
-	local recipe = recipeId and WorkbenchConfig.RECIPES[recipeId] or nil
-	local baseTime = recipe and tonumber(recipe.BaseCraftTime) or 0
-	return math.max(8, baseTime + 5)
-end
-
 local function getItemCount(itemId)
 	if not inventorySnapshot then return 0 end
 	local count = 0
@@ -264,28 +363,60 @@ local function getItemCount(itemId)
 	return count
 end
 
-local function canCraftRecipe(recipeId)
-	local recipe = WorkbenchConfig.RECIPES[recipeId]
-	if not recipe then return false end
-	local craftMult = tonumber(player:GetAttribute("Role_Craft")) or 1.0
-	for _, ingredient in ipairs(recipe.Ingredients or {}) do
-		local needed = math.max(1, math.floor((ingredient.N or 1) / math.max(craftMult, 0.1)))
-		local have = getItemCount(ingredient.Id)
-		if have < needed then
-			return false
-		end
-	end
-	return true
+local function ingredientCost(ingredient)
+	local craftMult = tonumber(player:GetAttribute("Role_Craft")) or 1
+	return math.max(1, math.floor((ingredient.N or 1) / math.max(craftMult, 0.1)))
 end
 
-local function createIngredientDisplay(ingredient, parent, craftMult)
-	local needed = math.max(1, math.floor((ingredient.N or 1) / math.max(craftMult, 0.1)))
+local function maxAffordable(recipeId)
+	local recipe = recipeId and WorkbenchConfig.RECIPES[recipeId]
+	if not recipe or not inventorySnapshot then return 0 end
+	local costs = {}
+	for _, ingredient in ipairs(recipe.Ingredients or {}) do
+		costs[ingredient.Id] = (costs[ingredient.Id] or 0) + ingredientCost(ingredient)
+	end
+	local maximum = MAX_CRAFT_QUANTITY
+	for id, cost in pairs(costs) do
+		maximum = math.min(maximum, math.floor(getItemCount(id) / cost))
+	end
+	return maximum
+end
+
+local function canCraftRecipe(recipeId, quantity)
+	quantity = quantity or 1
+	return quantity >= 1 and quantity <= MAX_CRAFT_QUANTITY
+		and quantity % 1 == 0 and quantity <= maxAffordable(recipeId)
+end
+
+local function craftDuration(recipeId, quantity)
+	local recipe = recipeId and WorkbenchConfig.RECIPES[recipeId]
+	if not recipe then return 0 end
+	local multiplier = WorkbenchConfig:GetEffectiveStationModifiers(recipe, "Hand")
+	return math.max(0.05, (tonumber(recipe.BaseCraftTime) or 0) * multiplier) * quantity
+end
+
+local function formatDuration(seconds)
+	if seconds < 60 then return string.format("%.1fs", seconds) end
+	local rounded = math.floor(seconds + 0.5)
+	return string.format("%dm %02ds", math.floor(rounded / 60), rounded % 60)
+end
+
+local function outputDescription(recipeId, quantity)
+	local recipe = WorkbenchConfig.RECIPES[recipeId]
+	local output = recipe and recipe.Output or { Id = recipeId, N = 1 }
+	local item = ItemDatabase:Get(output.Id)
+	return string.format("%d × %s", (output.N or 1) * quantity, item and item.Name or output.Id)
+end
+
+local function createIngredientDisplay(ingredient, parent)
+	local needed = ingredientCost(ingredient)
 	local have = getItemCount(ingredient.Id)
 	local item = ItemDatabase:Get(ingredient.Id)
 	local name = item and item.Name or ingredient.Id
 	local canAfford = have >= needed
 	
 	local frame = Instance.new("Frame")
+	frame:SetAttribute("IngredientId", ingredient.Id)
 	frame.Size = UDim2.new(0, 80, 0, 44)
 	frame.BackgroundColor3 = COLORS.SlotEmpty
 	frame.BackgroundTransparency = 0.5
@@ -299,6 +430,7 @@ local function createIngredientDisplay(ingredient, parent, craftMult)
 	
 	-- Item name/icon
 	local itemLabel = Instance.new("TextLabel")
+	itemLabel.Name = "ItemName"
 	itemLabel.Size = UDim2.new(1, -8, 0, 30)
 	itemLabel.Position = UDim2.new(0, 2, 0, 3)
 	itemLabel.BackgroundTransparency = 1
@@ -312,6 +444,7 @@ local function createIngredientDisplay(ingredient, parent, craftMult)
 	
 	-- Count display
 	local countLabel = Instance.new("TextLabel")
+	countLabel.Name = "Count"
 	countLabel.Size = UDim2.new(1, -4, 0, 18)
 	countLabel.Position = UDim2.new(0, 2, 0, 33)
 	countLabel.BackgroundTransparency = 1
@@ -334,7 +467,6 @@ local function createRecipeCard(recipeId, recipeData)
 	local item = ItemDatabase:Get(output.Id)
 	local name = item and item.Name or output.Id
 	local canCraft = canCraftRecipe(recipeId)
-	local craftMult = tonumber(player:GetAttribute("Role_Craft")) or 1.0
 	local outputCount = output.N or 1
 	
 	local card = Instance.new("TextButton")
@@ -408,7 +540,7 @@ local function createRecipeCard(recipeId, recipeData)
 	
 	-- Add ingredient displays
 	for _, ingredient in ipairs(ingredients) do
-		createIngredientDisplay(ingredient, ingredientsFrame, craftMult)
+		createIngredientDisplay(ingredient, ingredientsFrame)
 	end
 	
 	-- Interactions
@@ -423,6 +555,7 @@ local function createRecipeCard(recipeId, recipeData)
 	end)
 	
 	card.MouseButton1Click:Connect(function()
+		if isCraftPending then return end
 		-- Deselect previous
 		if selectedRecipe and recipeCards[selectedRecipe] then
 			local prevCard = recipeCards[selectedRecipe]
@@ -432,6 +565,10 @@ local function createRecipeCard(recipeId, recipeData)
 		end
 		
 		-- Select this one
+		if selectedRecipe ~= recipeId then
+			craftQuantity = 1
+			quantityBox.Text = "1"
+		end
 		selectedRecipe = recipeId
 		cardStroke.Color = COLORS.SlotSelected
 		cardStroke.Thickness = 2
@@ -445,42 +582,145 @@ local function createRecipeCard(recipeId, recipeData)
 	return card
 end
 
+local function updateRecipeCard(card, recipeId)
+	local recipe = WorkbenchConfig.RECIPES[recipeId]
+	local quantity = 1
+	if selectedRecipe == recipeId then quantity = craftQuantity end
+	local affordable = quantity ~= nil and canCraftRecipe(recipeId, quantity)
+	card:FindFirstChild("Name").Text = outputDescription(recipeId, quantity or 1)
+	card.Status.Text = quantity == nil and "SET BATCHES" or (affordable and "READY" or "MISSING")
+	card.Status.TextColor3 = affordable and COLORS.Success or COLORS.Danger
+	for _, frame in ipairs(card.Ingredients:GetChildren()) do
+		local id = frame:GetAttribute("IngredientId")
+		if id then
+			local cost = 0
+			for _, ingredient in ipairs(recipe.Ingredients or {}) do
+				if ingredient.Id == id then cost += ingredientCost(ingredient) end
+			end
+			local needed = cost * (quantity or 1)
+			local have = getItemCount(id)
+			frame.ItemName.TextColor3 = have >= needed and COLORS.Text or COLORS.Danger
+			frame.Count.Text = string.format("%d / %d", have, needed)
+			frame.Count.TextColor3 = have >= needed and COLORS.Success or COLORS.Warning
+		end
+	end
+	local selected = selectedRecipe == recipeId
+	card.Stroke.Color = selected and COLORS.SlotSelected or COLORS.Border
+	card.Stroke.Thickness = selected and 2 or 1
+	card.BackgroundColor3 = selected and COLORS.SlotSelected or COLORS.SlotFilled
+end
+
+local function setControlEnabled(button, enabled)
+	button.Active = enabled
+	button.Selectable = enabled
+	button.TextColor3 = enabled and COLORS.Text or COLORS.TextMuted
+	button.BackgroundTransparency = enabled and 0 or 0.5
+end
+
+local function updateCraftProgress()
+	if not isCraftPending then return end
+	if not pendingConfirmed then
+		progressFill.Size = UDim2.fromScale(0, 1)
+		batchTime.Text = string.format("%d %s · %s total · preparing…", pendingQuantity,
+			pendingQuantity == 1 and "batch" or "batches", formatDuration(pendingDuration))
+		return
+	end
+	local elapsed = math.max(0, os.clock() - pendingStartedAt)
+	local progress = math.clamp(elapsed / math.max(0.05, pendingDuration), 0, 1)
+	progressFill.Size = UDim2.fromScale(progress, 1)
+	local remaining = math.max(0, pendingDuration - elapsed)
+	batchTime.Text = string.format("%d %s · %s / %s%s", pendingQuantity, pendingQuantity == 1 and "batch" or "batches",
+		formatDuration(math.min(elapsed, pendingDuration)), formatDuration(pendingDuration),
+		remaining == 0 and " · finishing…" or "")
+end
+
 function updateCraftButton()
+	local available = maxAffordable(selectedRecipe)
+	local editable = selectedRecipe ~= nil and not isCraftPending
+	quantityBox.TextEditable = editable
+	quantityBox.TextColor3 = editable and COLORS.Text or COLORS.TextMuted
+	quantityStroke.Color = craftQuantity == nil and COLORS.Danger or COLORS.Border
+	setControlEnabled(decreaseBtn, editable and (craftQuantity == nil or craftQuantity > 1))
+	setControlEnabled(increaseBtn, editable and craftQuantity ~= nil and craftQuantity < available)
+	setControlEnabled(maxBtn, editable and available > 0)
+	maxBtn.Text = string.format("Max (%d)", available)
+	for recipeId, card in pairs(recipeCards) do updateRecipeCard(card, recipeId) end
+	craftBtn.Active = false
+	craftBtn.Selectable = false
+	progressTrack.Visible = isCraftPending
+	if not isCraftPending then progressFill.Size = UDim2.fromScale(0, 1) end
 	if isCraftPending then
-		craftBtn.Text = "Crafting..."
+		craftBtn.Text = (pendingConfirmed and "Crafting " or "Preparing ") .. pendingOutput
 		craftBtn.TextColor3 = COLORS.Paper
 		craftBtn.BackgroundColor3 = COLORS.Accent
 		craftBtnStroke.Color = COLORS.Accent
+		batchSummary.Text = "Output: " .. pendingOutput
+		updateCraftProgress()
 		return
 	end
-	
 	if not selectedRecipe then
 		craftBtn.Text = "Select a Recipe"
 		craftBtn.TextColor3 = COLORS.TextMuted
 		craftBtn.BackgroundColor3 = COLORS.SlotEmpty
 		craftBtnStroke.Color = COLORS.Border
+		batchSummary.Text = "Choose a recipe to set its batch size"
+		batchTime.Text = "Each batch repeats the recipe once"
 		return
 	end
-	
-	-- Get recipe from WorkbenchConfig
-	local recipe = WorkbenchConfig.RECIPES[selectedRecipe]
-	local output = recipe and recipe.Output or { Id = selectedRecipe, N = 1 }
-	local item = ItemDatabase:Get(output.Id or selectedRecipe)
-	local name = item and item.Name or (output.Id or selectedRecipe)
-	local canCraft = canCraftRecipe(selectedRecipe)
-	
-	if canCraft then
-		craftBtn.Text = "Craft " .. name
-		craftBtn.TextColor3 = COLORS.Paper
-		craftBtn.BackgroundColor3 = COLORS.SuccessFill
-		craftBtnStroke.Color = COLORS.Success
-	else
-		craftBtn.Text = "Missing Materials"
-		craftBtn.TextColor3 = COLORS.Paper
-		craftBtn.BackgroundColor3 = COLORS.DangerFill
+	if not craftQuantity then
+		craftBtn.Text = "Enter 1–99 whole batches"
+		craftBtn.TextColor3 = COLORS.TextMuted
+		craftBtn.BackgroundColor3 = COLORS.SlotEmpty
 		craftBtnStroke.Color = COLORS.Danger
+		batchSummary.Text = "Batch size must be a whole number from 1 to 99"
+		batchTime.Text = ""
+		return
 	end
+	local output = outputDescription(selectedRecipe, craftQuantity)
+	local recipe = WorkbenchConfig.RECIPES[selectedRecipe]
+	local _, bonus = WorkbenchConfig:GetEffectiveStationModifiers(recipe, "Hand")
+	batchSummary.Text = "Output: " .. output
+	batchTime.Text = string.format("%d %s · %s total%s", craftQuantity, craftQuantity == 1 and "batch" or "batches",
+		formatDuration(craftDuration(selectedRecipe, craftQuantity)), bonus > 0 and " · bonus yield possible" or "")
+	local affordable = canCraftRecipe(selectedRecipe, craftQuantity)
+	craftBtn.Active = affordable
+	craftBtn.Selectable = affordable
+	craftBtn.Text = affordable and ("Craft " .. output) or "Missing Materials"
+	craftBtn.TextColor3 = COLORS.Paper
+	craftBtn.BackgroundColor3 = affordable and COLORS.SuccessFill or COLORS.DangerFill
+	craftBtnStroke.Color = affordable and COLORS.Success or COLORS.Danger
 end
+
+quantityBox:GetPropertyChangedSignal("Text"):Connect(function()
+	local parsed = tonumber(quantityBox.Text)
+	craftQuantity = parsed and parsed >= 1 and parsed <= MAX_CRAFT_QUANTITY and parsed % 1 == 0 and parsed or nil
+	updateCraftButton()
+end)
+local function setQuantity(quantity)
+	if isCraftPending or not selectedRecipe then return end
+	quantityBox.Text = tostring(math.clamp(quantity, 1, MAX_CRAFT_QUANTITY))
+	updateCraftButton()
+end
+decreaseBtn.Activated:Connect(function()
+	if decreaseBtn.Active then setQuantity((craftQuantity or 2) - 1) end
+end)
+increaseBtn.Activated:Connect(function()
+	if increaseBtn.Active then setQuantity((craftQuantity or 1) + 1) end
+end)
+maxBtn.Activated:Connect(function()
+	if maxBtn.Active then setQuantity(maxAffordable(selectedRecipe)) end
+end)
+quantityBox.FocusLost:Connect(function()
+	if craftQuantity then quantityBox.Text = tostring(craftQuantity) end
+end)
+player:GetAttributeChangedSignal("Role_Craft"):Connect(updateCraftButton)
+local progressTick = 0
+game:GetService("RunService").Heartbeat:Connect(function(delta)
+	progressTick += delta
+	if progressTick < 0.05 then return end
+	progressTick = 0
+	if isOpen and isCraftPending then updateCraftProgress() end
+end)
 
 local function refreshRecipes()
 	-- Clear existing cards
@@ -516,6 +756,11 @@ end
 local function openCrafting()
 	if isOpen then return end
 	isOpen = true
+	if isCraftPending then
+		selectedRecipe = pendingRecipeId
+		craftQuantity = pendingQuantity
+		quantityBox.Text = tostring(pendingQuantity)
+	end
 	
 	backdrop.Visible = true
 	mainPanel.Visible = true
@@ -570,16 +815,26 @@ end)
 craftBtn.MouseButton1Click:Connect(function()
 	if isCraftPending then return end
 	if not selectedRecipe then return end
-	if not canCraftRecipe(selectedRecipe) then return end
+	if not craftQuantity or not canCraftRecipe(selectedRecipe, craftQuantity) then return end
 	if not rCraft then return end
 	
-	local requestToken = beginCraftPending()
+	isCraftPending = true
+	pendingRequestToken += 1
+	local requestToken = pendingRequestToken
+	pendingRecipeId = selectedRecipe
+	pendingStationType = "Hand"
+	pendingQuantity = craftQuantity
+	pendingOutput = outputDescription(selectedRecipe, craftQuantity)
+	pendingDuration = craftDuration(selectedRecipe, craftQuantity)
+	pendingStartedAt = os.clock()
+	pendingConfirmed = false
+	updateCraftButton()
 	showInlineStatus("Crafting...", COLORS.Accent)
 	
 	-- Send craft request (Hand crafting)
-	rCraft:FireServer(selectedRecipe, "Hand")
+	rCraft:FireServer(selectedRecipe, "Hand", craftQuantity)
 	
-	task.delay(getCraftRequestTimeout(selectedRecipe), function()
+	task.delay(math.max(8, pendingDuration + 8), function()
 		if not isCraftPending then return end
 		if requestToken ~= pendingRequestToken then return end
 		isCraftPending = false
@@ -605,15 +860,32 @@ end)
 
 if rCraft then
 	rCraft.OnClientEvent:Connect(function(kind, payload)
-		if kind ~= "Result" or type(payload) ~= "table" then return end
+		if type(payload) ~= "table" then return end
+		if not isCraftPending or payload.RecipeId ~= pendingRecipeId or payload.StationType ~= pendingStationType then return end
+		if kind == "Started" then
+			pendingConfirmed = true
+			if type(payload.Duration) == "number" then pendingDuration = payload.Duration end
+			pendingStartedAt = os.clock()
+			showInlineStatus("Crafting...", COLORS.Accent)
+			updateCraftButton()
+			return
+		end
+		if kind ~= "Result" then return end
 		if payload.StationType and payload.StationType ~= "Hand" then return end
 		local success = payload.Success == true
 		if isCraftPending then
 			isCraftPending = false
 			pendingRequestToken += 1
 		end
+		updateCraftButton()
 		local reason = payload.Reason or (success and "Success" or "Unknown")
-		showInlineStatus(messageForReason(reason), success and COLORS.Success or COLORS.Danger, success and 1.2 or 1.8)
+		local resultMessage = messageForReason(reason)
+		if success and type(payload.Extra) == "table" and type(payload.Extra.OutputCount) == "number" then
+			local outputItem = ItemDatabase:Get(payload.Extra.OutputId)
+			resultMessage = string.format("Crafted %d × %s", payload.Extra.OutputCount,
+				outputItem and outputItem.Name or tostring(payload.Extra.OutputId))
+		end
+		showInlineStatus(resultMessage, success and COLORS.Success or COLORS.Danger, success and 1.2 or 1.8)
 		if isOpen then
 			refreshRecipes()
 		end
@@ -666,9 +938,10 @@ print("[CraftingUI] Ready - Press C for hand crafting (basic items)")
 print("[CraftingUI] Place workbenches for advanced recipes!")
 
 Theme.Panel(mainPanel)
-Theme.Fit(mainPanel, 452, 530)
+Theme.Fit(mainPanel, 452, 610)
 Theme.Button(closeBtn)
 Theme.Button(craftBtn)
+updateCraftButton()
 player:GetAttributeChangedSignal("FieldKitCraft"):Connect(function()
  if isOpen then closeCrafting() else openCrafting() end
 end)

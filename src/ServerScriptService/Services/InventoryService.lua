@@ -183,7 +183,7 @@ function InventoryService:CaptureWorldState(plr)
 	return snapshot(getInv(plr))
 end
 
-function InventoryService:RestoreWorldState(plr, state)
+local function readSnapshot(state)
 	assert(type(state) == "table", "Missing saved inventory")
 	local function read(slot, armor)
 		if slot == false or slot == nil then return nil end
@@ -196,9 +196,14 @@ function InventoryService:RestoreWorldState(plr, state)
 	local inv = { Hotbar = {}, Storage = {}, Armor = read(state.Armor, true) }
 	for i = 1, HOTBAR_SLOTS do inv.Hotbar[i] = read(state.Hotbar[i]) end
 	for i = 1, STORAGE_SLOTS do inv.Storage[i] = read(state.Storage[i]) end
+	return inv
+end
+
+function InventoryService:RestoreWorldState(plr, state, deferSync)
+	local inv = readSnapshot(state)
 	self._inventories[plr] = inv
 	self._worldInitialized[plr] = true
-	self:Sync(plr)
+	if not deferSync then self:Sync(plr) end
 end
 
 function InventoryService:TotalCount(plr, itemId)
@@ -249,6 +254,31 @@ local function addToSlots(slots, slotCount, itemId, amount)
 	return remaining
 end
 
+-- Pure escrow projection. Validate everything before changing even the copy;
+-- live inventories and callbacks are untouched until the caller commits.
+function InventoryService:ProjectRefund(state, ingredients, dropOnly)
+	local inv = readSnapshot(state)
+	assert(type(ingredients) == "table" and #ingredients <= 128, "Invalid craft refund ingredients")
+	local size = #ingredients
+	local count = 0
+	for index in pairs(ingredients) do count += 1; assert(type(index) == "number" and index % 1 == 0 and index >= 1 and index <= size, "Invalid craft refund ingredient list") end
+	assert(count == size, "Sparse craft refund ingredient list")
+	for _, entry in ipairs(ingredients) do
+		assert(type(entry) == "table" and type(entry.Id) == "string" and ItemDatabase:Get(entry.Id), "Unknown craft refund item")
+		assert(type(entry.N) == "number" and entry.N == entry.N and entry.N % 1 == 0 and entry.N > 0 and entry.N <= 1e8, "Invalid craft refund count")
+	end
+	local overflow = {}
+	for _, entry in ipairs(ingredients) do
+		local remaining = entry.N
+		if not dropOnly then
+			remaining = addToSlots(inv.Hotbar, HOTBAR_SLOTS, entry.Id, remaining)
+			if remaining > 0 then remaining = addToSlots(inv.Storage, STORAGE_SLOTS, entry.Id, remaining) end
+		end
+		if remaining > 0 then table.insert(overflow, {Id = entry.Id, N = remaining}) end
+	end
+	return snapshot(inv), overflow
+end
+
 function InventoryService:CanFit(plr, itemId, amount)
 	if type(itemId) ~= "string" or not ItemDatabase:Get(itemId) or type(amount) ~= "number" or amount ~= amount or amount == math.huge or amount < 0 or amount % 1 ~= 0 then return false end
 	local inv = getInv(plr)
@@ -273,7 +303,7 @@ function InventoryService:CanFit(plr, itemId, amount)
 	return remaining <= 0
 end
 
-function InventoryService:Give(plr, itemId, amount, requireFit)
+function InventoryService:Give(plr, itemId, amount, requireFit, deferSync)
 	amount = math.floor(tonumber(amount) or 0)
 	if amount ~= amount or amount == math.huge or amount <= 0 or type(itemId) ~= "string" or not ItemDatabase:Get(itemId) then return 0 end
 	local inv = getInv(plr)
@@ -285,7 +315,7 @@ function InventoryService:Give(plr, itemId, amount, requireFit)
 		remaining = addToSlots(inv.Storage, STORAGE_SLOTS, itemId, remaining)
 	end
 	local added = amount - remaining
-	if added > 0 then
+	if added > 0 and not deferSync then
 		self:Sync(plr)
 	end
 	return added

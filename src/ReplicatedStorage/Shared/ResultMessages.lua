@@ -22,6 +22,11 @@ ResultMessages.Build = {
 }
 
 ResultMessages.Craft = {
+	InvalidQuantity = "Choose a craft quantity from 1 to 99.",
+	InvalidRequest = "That crafting request is invalid.",
+	NotAlive = "You must be alive to craft.",
+	WorldLoading = "Wait for your expedition to finish loading before crafting.",
+	RefundPending = "Craft cancelled. Your materials have been returned.",
 	Success = "Crafting complete.",
 	NoRecipe = "Recipe not found.",
 	WrongStation = "Use the required station for this recipe.",
