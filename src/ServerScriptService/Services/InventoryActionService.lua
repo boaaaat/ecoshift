@@ -1,6 +1,7 @@
 -- InventoryActionService.lua
 -- Handles client requests to move/swap inventory slots.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
@@ -18,10 +19,37 @@ local FOOD_RESTORE = {
 	StaminaRation = 24,
 	ReinforcedRation = 40,
 }
+local RESIST_EFFECTS = {
+	AntitoxinTonic = {Key = "Res_Toxin", Amount = 0.35, Duration = 120},
+	HeatTonic = {Key = "Res_Heat", Amount = 0.35, Duration = 120},
+	ColdTonic = {Key = "Res_Cold", Amount = 0.35, Duration = 120},
+	ToxinFilter = {Key = "Res_Toxin", Amount = 0.25, Duration = 90},
+}
 
 local function canConsume(item)
 	if not item then return false end
-	return item:HasTag("Food") or item:HasTag("Consumable")
+	return (item:HasTag("Food") or item:HasTag("Consumable"))
+		and (FOOD_RESTORE[item.Id] ~= nil or RESIST_EFFECTS[item.Id] ~= nil or item.Id == "Bandage" or item.Id == "ThermalPatch")
+end
+
+local function canAct(plr)
+	if ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring")
+		or plr:GetAttribute("WorldPlayerLoading") or plr:GetAttribute("IsDead") then return nil end
+	local char = plr.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not hum or hum.Health <= 0 then return nil end
+	return char, hum
+end
+
+local function hasUsefulEffect(plr, char, hum, itemId)
+	if FOOD_RESTORE[itemId] then
+		local maximum = StatsService:GetStat(plr, "MaxHunger") or 100
+		return (StatsService:GetBase(plr, "Hunger") or StatsService:GetStat(plr, "Hunger") or 0) < maximum
+	end
+	if itemId == "Bandage" then return hum.Health < hum.MaxHealth end
+	local effect = RESIST_EFFECTS[itemId]
+	if effect then return (tonumber(char:GetAttribute(effect.Key)) or 0) < 0.9 end
+	return itemId == "ThermalPatch"
 end
 
 local function applyFood(plr, itemId)
@@ -40,6 +68,7 @@ local function applyTimedCharacterResist(char, key, delta, duration)
 	local cur = tonumber(char:GetAttribute(key)) or 0
 	local nextValue = math.clamp(cur + (tonumber(delta) or 0), -0.9, 0.9)
 	local applied = nextValue - cur
+	if applied == 0 then return end
 	char:SetAttribute(key, nextValue)
 	local entries = resistEffects[char] or {}
 	resistEffects[char] = entries
@@ -56,39 +85,42 @@ end
 
 local function applyTimedStatModifier(plr, stat, delta, duration, idPrefix)
 	if not StatsService or not StatsService.AddModifier then return end
-	local id = string.format("%s_%s_%d", idPrefix or "Consumable", stat, math.floor(os.clock() * 1000))
+	local id = string.format("%s_%s_%s", idPrefix or "Consumable", stat, HttpService:GenerateGUID(false))
 	StatsService:AddModifier(plr, stat, delta, "Add", duration, id)
 end
 
-local function applyConsumableEffects(plr, itemId)
-	local char = plr.Character
-	local hum = char and char:FindFirstChildOfClass("Humanoid")
+local function applyConsumableEffects(plr, char, hum, itemId)
 	if itemId == "Bandage" then
 		if hum then
 			hum.Health = math.min(hum.MaxHealth, hum.Health + 25)
 		end
 		return
 	end
-	if itemId == "AntitoxinTonic" then
-		applyTimedCharacterResist(char, "Res_Toxin", 0.35, 120)
-		return
-	end
-	if itemId == "HeatTonic" then
-		applyTimedCharacterResist(char, "Res_Heat", 0.35, 120)
-		return
-	end
-	if itemId == "ColdTonic" then
-		applyTimedCharacterResist(char, "Res_Cold", 0.35, 120)
-		return
-	end
-	if itemId == "ToxinFilter" then
-		applyTimedCharacterResist(char, "Res_Toxin", 0.25, 90)
+	local effect = RESIST_EFFECTS[itemId]
+	if effect then
+		applyTimedCharacterResist(char, effect.Key, effect.Amount, effect.Duration)
 		return
 	end
 	if itemId == "ThermalPatch" then
 		applyTimedStatModifier(plr, "TemperatureResistance", 3.0, 90, "ThermalPatch")
 		applyTimedCharacterResist(char, "Res_Wet", 0.2, 90)
 	end
+end
+
+function InventoryActionService:_consumeFromSlot(plr, slotType, slotIndex)
+	local char, hum = canAct(plr)
+	if not char then return false end
+	local slot = InventoryService:PeekSlot(plr, slotType, slotIndex)
+	local item = slot and ItemDatabase:Get(slot.Id)
+	if not canConsume(item) or not hasUsefulEffect(plr, char, hum, slot.Id) then return false end
+	-- Debit and effect finish before inventory callbacks can change the slot or
+	-- character. ExpectedId also prevents consuming a replacement item.
+	local removed = InventoryService:TakeFromSlot(plr, slotType, slotIndex, 1, {ExpectedId = slot.Id, DeferSync = true})
+	if not removed then return false end
+	applyFood(plr, removed)
+	applyConsumableEffects(plr, char, hum, removed)
+	InventoryService:Sync(plr)
+	return true
 end
 
 function InventoryActionService:Init()
@@ -98,8 +130,8 @@ function InventoryActionService:Init()
 	if not remote then return end
 	self._initialized = true
 	remote.OnServerEvent:Connect(function(plr, action, payload)
-		local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
-		if not hum or hum.Health <= 0 or plr:GetAttribute("IsDead") then return end
+		local _, hum = canAct(plr)
+		if not hum then return end
 		if action == "Move" and type(payload) == "table" then
 			print(string.format("[InventoryAction] Move %s: %s[%s] -> %s[%s]", plr.Name, tostring(payload.FromType), tostring(payload.FromIndex), tostring(payload.ToType), tostring(payload.ToIndex)))
 			InventoryService:Move(plr, payload.FromType, payload.FromIndex, payload.ToType, payload.ToIndex)
@@ -111,20 +143,7 @@ function InventoryActionService:Init()
 			return
 		end
 		if action == "Use" and type(payload) == "table" then
-			local slotType = payload.SlotType
-			local slotIndex = payload.SlotIndex
-			if not slotType or typeof(slotIndex) ~= "number" or slotIndex % 1 ~= 0 then return end
-			local inv = InventoryService:GetAll(plr)
-			local slot = inv and ((slotType == "Hotbar" and inv.Hotbar and inv.Hotbar[slotIndex])
-				or (slotType == "Storage" and inv.Storage and inv.Storage[slotIndex])
-				or (slotType == "Armor" and inv.Armor)) or nil
-			if not slot then return end
-			local item = ItemDatabase:Get(slot.Id)
-			if not canConsume(item) then return end
-			if InventoryService:TakeFromSlot(plr, slotType, slotIndex, 1) then
-				applyFood(plr, slot.Id)
-				applyConsumableEffects(plr, slot.Id)
-			end
+			self:_consumeFromSlot(plr, payload.SlotType, payload.SlotIndex)
 			return
 		end
 		if action == "Equip" and type(payload) == "table" then
@@ -152,10 +171,7 @@ function InventoryActionService:Init()
 
 			local item = ItemDatabase:Get(slot.Id)
 			if item and canConsume(item) then
-				if InventoryService:TakeFromSlot(plr, "Hotbar", slotIndex, 1) then
-					applyFood(plr, slot.Id)
-					applyConsumableEffects(plr, slot.Id)
-				end
+				self:_consumeFromSlot(plr, "Hotbar", slotIndex)
 				return
 			end
 			if not item or not item:HasTag("Holdable") then

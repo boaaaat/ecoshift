@@ -67,7 +67,7 @@ function SurvivalService:_tickSprint(plr, dt)
 	local char = plr.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	if ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring")
+	if ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring") or plr:GetAttribute("WorldPlayerLoading")
 		or plr:GetAttribute("IsDead") or not hum or not hrp or hum.Health <= 0 then
 		self:_stopSprint(plr)
 		return
@@ -108,7 +108,7 @@ function SurvivalService:_setSprint(plr, enabled)
 end
 
 function SurvivalService:_tickPlayer(plr, dt)
-	if ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring") or plr:GetAttribute("IsDead") then return end
+	if ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring") or plr:GetAttribute("WorldPlayerLoading") or plr:GetAttribute("IsDead") then return end
 	local char = plr.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")

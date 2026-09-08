@@ -340,7 +340,7 @@ function StatsService:Init()
 		if ReplicatedStorage:GetAttribute("WorldRestoring") then return end
 		for _, plr in ipairs(Players:GetPlayers()) do
 			local data = self._data[plr]
-			if data and plr.Character and not plr:GetAttribute("WorldPlayerRestoring") then
+			if data and plr.Character and not plr:GetAttribute("WorldPlayerRestoring") and not plr:GetAttribute("WorldPlayerLoading") and not plr:GetAttribute("IsDead") then
 				local hum = plr.Character:FindFirstChildOfClass("Humanoid")
 				if hum and hum.Health > 0 and hum.Health < hum.MaxHealth then
 					local regen = data.Cache.HealthRegen or computeStat(data, "HealthRegen")

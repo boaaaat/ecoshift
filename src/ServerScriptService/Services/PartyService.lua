@@ -123,8 +123,10 @@ function PartyService:Mutate(id, transform, mergeOwner)
 end
 
 function PartyService:_member(player)
+	-- Creating a crew or accepting an invitation opts this new member in.
+	-- Merger and role-change flows retain their explicit ready resets.
 	return { UserId=player.UserId, Name=player.Name, DisplayName=player.DisplayName,
-		Role=player:GetAttribute("Role") or "Generalist", JoinedAt=os.time(), Ready=false, OnlineUntil=os.time()+Config.PresenceTTL,
+		Role=player:GetAttribute("Role") or "Generalist", JoinedAt=os.time(), Ready=true, OnlineUntil=os.time()+Config.PresenceTTL,
 		Session=self._sessions[player] and self._sessions[player].Id,
 		SessionAt=self._sessions[player] and self._sessions[player].StartedAt }
 end
