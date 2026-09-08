@@ -13,6 +13,36 @@ local merges = MemoryStore:GetHashMap(Config.Namespace .. ":party-merges")
 local function key(userId) return tostring(userId) end
 local function guid() return HttpService:GenerateGUID(false) end
 local function count(map) local n=0; for _ in pairs(map or {}) do n+=1 end; return n end
+local function validUserId(userId)
+	return type(userId)=="number" and userId>0 and userId<2^53 and userId%1==0
+end
+local function rosterSet(roster)
+	if type(roster)~="table" then return nil end
+	local size=count(roster)
+	if size<1 or size>Config.MaxPartySize then return nil end
+	local seen={}
+	for index,userId in pairs(roster) do
+		if type(index)~="number" or index%1~=0 or index<1 or index>size or not validUserId(userId) or seen[key(userId)] then return nil end
+		seen[key(userId)]=true
+	end
+	return seen,size
+end
+local function launchKind(mode)
+	if mode==nil or mode=="Matchmaking" then return "Matchmaking" end
+	if mode=="Party" then return "Party" end
+	return nil
+end
+local function memberRoster(members)
+	if type(members)~="table" then return nil end
+	local roster={}
+	for id,member in pairs(members) do
+		if type(member)~="table" or not validUserId(member.UserId) or id~=key(member.UserId) then return nil end
+		table.insert(roster,member.UserId)
+	end
+	table.sort(roster)
+	local seen,size=rosterSet(roster)
+	return seen and roster or nil,seen,size
+end
 local function call(callback)
 	local ok, value = pcall(callback)
 	if not ok then warn("[PartyService] Shared session storage unavailable:", value) end
@@ -338,16 +368,10 @@ end
 -- Freeze the validated roster until the durable generation accepts or rejects it.
 -- Heartbeats may advance Revision; only membership/session changes invalidate it.
 function PartyService:LockResume(partyId, worldRecord, expectedMembers, requesterId)
+	local roster,rosterSize=rosterSet(type(worldRecord)=="table" and worldRecord.Roster)
 	if type(partyId)~="string" or type(worldRecord)~="table" or worldRecord.CrewCommitted~=true
 		or type(worldRecord.Id)~="string" or type(worldRecord.MatchId)~="string" or type(worldRecord.Generation)~="number"
-		or type(worldRecord.Roster)~="table" or #worldRecord.Roster~=Config.MaxPartySize
-		or count(worldRecord.Roster)~=Config.MaxPartySize or type(expectedMembers)~="table"
-		or count(expectedMembers)~=Config.MaxPartySize then return nil,"InvalidResumeCrew" end
-	local roster={}
-	for _,userId in ipairs(worldRecord.Roster) do
-		if type(userId)~="number" or userId<=0 or userId%1~=0 or userId>=2^53 or roster[key(userId)] then return nil,"InvalidResumeCrew" end
-		roster[key(userId)]=true
-	end
+		or not roster or type(expectedMembers)~="table" or count(expectedMembers)~=rosterSize then return nil,"InvalidResumeCrew" end
 	if not roster[key(requesterId)] then return nil,"OriginalCrewRequired" end
 	local read,previous=call(function() return parties:GetAsync(partyId) end)
 	if not read then return nil,"Party service is temporarily unavailable." end
@@ -366,7 +390,7 @@ function PartyService:LockResume(partyId, worldRecord, expectedMembers, requeste
 		if current.MergeLock and not (commit and sameLock(current.MergeLock,worldRecord.Id,worldRecord.MatchId)) then reason="CrewCommitPending"; return nil end
 		if commit and (not sameLock(current.MergeLock,worldRecord.Id,worldRecord.MatchId)
 			or commit.Generation~=worldRecord.Generation or (commit.Until or 0)<=os.time()) then reason="ResumeDecisionPending"; return nil end
-		if type(current.Members)~="table" or count(current.Members)~=Config.MaxPartySize then reason="CrewChanged"; return nil end
+		if type(current.Members)~="table" or count(current.Members)~=rosterSize then reason="CrewChanged"; return nil end
 		for id,member in pairs(current.Members) do
 			local expected=expectedMembers[id]
 			if not roster[id] or member.UserId~=tonumber(id) or type(expected)~="table" or expected.UserId~=member.UserId
@@ -437,7 +461,7 @@ function PartyService:Snapshot(player)
 		player:SetAttribute("PartyId",party.Id)
 		snapshot.Id,snapshot.LeaderId,snapshot.RunId,snapshot.Revision=party.Id,party.LeaderId,party.RunId,party.Revision
 		if party.Queue then
-			snapshot.Queue={State=party.Queue.State,QueuedAt=party.Queue.QueuedAt}
+			snapshot.Queue={State=party.Queue.State,QueuedAt=party.Queue.QueuedAt,Mode=party.Queue.Mode}
 			snapshot.QueueStartedAt=party.Queue.QueuedAt
 		end
 		for _,member in pairs(party.Members) do
@@ -549,7 +573,15 @@ end
 
 -- Third return: true means committed/recovery, false means confirmed safe abort,
 -- nil means storage uncertainty. No caller may release claims on nil.
-function PartyService:MergeForExpedition(sourceIds,matchId,worldId,leaseToken)
+function PartyService:MergeForExpedition(sourceIds,matchId,worldId,leaseToken,launchMode)
+	local mode=launchKind(launchMode)
+	if not mode or type(sourceIds)~="table" or type(matchId)~="string" or type(worldId)~="string" then return nil,"Invalid expedition launch request.",nil end
+	local sourceSet,sourceCount={},count(sourceIds)
+	if sourceCount<1 or sourceCount>Config.MaxPartySize or (mode=="Party" and sourceCount~=1) then return nil,"A party launch requires exactly one source crew.",nil end
+	for index,id in pairs(sourceIds) do
+		if type(index)~="number" or index%1~=0 or index<1 or index>sourceCount or type(id)~="string" or id=="" or sourceSet[id] then return nil,"Invalid source crews.",nil end
+		sourceSet[id]=true
+	end
 	local mergedId="world:"..worldId
 	local state,err,intent=self:GetMergeStatus(worldId)
 	if err then return nil,err,nil end
@@ -560,6 +592,9 @@ function PartyService:MergeForExpedition(sourceIds,matchId,worldId,leaseToken)
 		return nil,message or reason,nil
 	end
 	if intent and intent.MatchId~=matchId then return nil,"World commit ownership changed.",nil end
+	if intent and (intent.LaunchMode~=nil or intent.Sources) and launchKind(intent.LaunchMode)~=mode then
+		return nil,"World launch mode changed.",(state=="Committed" or state=="Complete") and true or nil
+	end
 	if state=="Aborted" then return nil,"Matchmaking was cancelled before commit.",false end
 	if not intent or not intent.Sources then
 		local members,sources,leader,created={},{},nil,math.huge
@@ -568,6 +603,8 @@ function PartyService:MergeForExpedition(sourceIds,matchId,worldId,leaseToken)
 			if not ok then return nil,"A source party is unavailable.",nil end
 			if record and record.MergedInto then return nil,"A previous crew commit needs recovery.",true end
 			if not record or record.Closed or not record.Queue or record.Queue.MatchId~=matchId then return abort("A source party is no longer claimed.") end
+			if launchKind(record.Queue.Mode)~=mode then return abort("A source crew's launch mode changed.") end
+			if not memberRoster(record.Members) then return abort("A source crew has an invalid roster.") end
 			table.insert(sources,{Id=id,Token=record.Queue.Token})
 			for userId,member in pairs(record.Members) do
 				if members[userId] then return abort("A player appears in more than one party.") end
@@ -575,24 +612,56 @@ function PartyService:MergeForExpedition(sourceIds,matchId,worldId,leaseToken)
 			end
 			if record.CreatedAt<created then created=record.CreatedAt; leader=record.LeaderId end
 		end
-		if count(members)~=Config.MaxPartySize then return abort("An expedition requires six distinct members.") end
+		local roster=memberRoster(members)
+		if not roster or (mode~="Party" and #roster~=Config.MaxPartySize) then return abort("Matchmaking requires six distinct members; party launches allow one to six.") end
 		local ok,saved=call(function() return merges:UpdateAsync(worldId,function(old)
+			if old and (old.MatchId~=matchId or (old.LaunchMode~=nil and launchKind(old.LaunchMode)~=mode)) then return nil end
 			if old and (old.State~="Preparing" or old.Sources) then return old end
 			if leaseToken and (not old or old.LeaseToken~=leaseToken or (old.LeaseUntil or 0)<=os.time()) then return nil end
 			old=old or {WorldId=worldId,MatchId=matchId,State="Preparing",CreatedAt=os.time()}
-			old.PartyId,old.Sources,old.Members,old.LeaderId=mergedId,sources,members,leader; return old
+			old.PartyId,old.Sources,old.Members,old.LeaderId=mergedId,sources,members,leader
+			old.LaunchMode,old.Roster=mode,roster; return old
 		end,Config.PartyTTL) end)
 		if not ok or not saved then return nil,"Crew preparation is retrying.",nil end
 		intent=saved
+	end
+	if intent.State=="Aborted" then return nil,"The expedition was cancelled before commit.",false end
+	-- Replays use the persisted original sources and roster. They cannot convert
+	-- a queued six-player match into a smaller direct launch (or vice versa).
+	local roster,rosterIds,rosterSize=memberRoster(intent.Members)
+	local sourcesValid=type(intent.Sources)=="table" and #intent.Sources==sourceCount and count(intent.Sources)==sourceCount
+	local sourceMembers,seenSources={},{}
+	if sourcesValid then
+		for _,source in ipairs(intent.Sources) do
+			if type(source)~="table" or not sourceSet[source.Id] or seenSources[source.Id] or type(source.Token)~="string" then sourcesValid=false; break end
+			seenSources[source.Id]=true; sourceMembers[source.Id]=0
+		end
+	end
+	if roster and sourcesValid then
+		for _,member in pairs(intent.Members) do
+			if not seenSources[member.SourcePartyId] then sourcesValid=false; break end
+			sourceMembers[member.SourcePartyId]+=1
+		end
+	end
+	local savedRoster,savedSize=rosterSet(intent.Roster or roster)
+	if savedRoster and roster then for id in pairs(rosterIds) do if not savedRoster[id] then savedRoster=nil; break end end end
+	if launchKind(intent.LaunchMode)~=mode or intent.PartyId~=mergedId or not sourcesValid or not roster
+		or not savedRoster or savedSize~=rosterSize or not rosterIds[key(intent.LeaderId)]
+		or (mode~="Party" and rosterSize~=Config.MaxPartySize) then
+		return nil,"The original crew commit does not match this launch request.",(intent.State=="Committed" or intent.State=="Complete") and true or nil
 	end
 	local lock={WorldId=worldId,MatchId=matchId}
 	if intent.State=="Preparing" then
 		for _,source in ipairs(intent.Sources) do
 			local locked,reason=self:Mutate(source.Id,function(current)
 				if leaseToken and (intent.LeaseToken~=leaseToken or (intent.LeaseUntil or 0)<=os.time()) then return false,"The crew commit lease expired." end
-				if not current.Queue or current.Queue.Token~=source.Token or current.Queue.MatchId~=matchId then return false,"A source crew cancelled." end
+				if not current.Queue or current.Queue.Token~=source.Token or current.Queue.MatchId~=matchId or launchKind(current.Queue.Mode)~=mode then return false,"A source crew cancelled or changed launch mode." end
+				if type(current.Members)~="table" or count(current.Members)~=sourceMembers[source.Id] then return false,"A source crew's roster changed." end
 				for userId,member in pairs(current.Members) do
-					if not intent.Members[userId] or intent.Members[userId].SourcePartyId~=source.Id or (member.OnlineUntil or 0)<=os.time() then return false,"A crew member disconnected." end
+					local original=intent.Members[userId]
+					if type(member)~="table" or not original or original.SourcePartyId~=source.Id or member.UserId~=original.UserId
+						or member.Session~=original.Session or member.SessionAt~=original.SessionAt or member.Role~=original.Role
+						or not member.Ready or (member.OnlineUntil or 0)<=os.time() then return false,"A crew member changed or disconnected." end
 				end
 				current.MergeLock=lock; current.Queue.State="Committing"; return true
 			end,lock)
@@ -604,7 +673,7 @@ function PartyService:MergeForExpedition(sourceIds,matchId,worldId,leaseToken)
 		for userId,member in pairs(intent.Members) do
 			local p,available=self:GetPresence(member.UserId)
 			if not available then return nil,"Connection status is temporarily unavailable.",nil end
-			if not p or not p.Online or p.ExpiresAt<=os.time() then return abort("A crew member disconnected before commit.") end
+			if not p or not p.Online or p.ExpiresAt<=os.time() or p.Mode~="Lobby" or p.Session~=member.Session or p.SessionAt~=member.SessionAt then return abort("A crew member changed connection before commit.") end
 			local ok,link=call(function() return membership:UpdateAsync(userId,function(old)
 				if leaseToken and (intent.LeaseToken~=leaseToken or (intent.LeaseUntil or 0)<=os.time()) then return nil end
 				if not old or old.PartyId~=member.SourcePartyId or old.Session~=p.Session or (old.MergeLock and not sameLock(old.MergeLock,worldId,matchId)) then return nil end
@@ -617,7 +686,9 @@ function PartyService:MergeForExpedition(sourceIds,matchId,worldId,leaseToken)
 	-- All source/member claims are fenced before this single irreversible write.
 	local ok,committed=call(function() return merges:UpdateAsync(worldId,function(current)
 		if not current or current.MatchId~=matchId then return nil end
+		if launchKind(current.LaunchMode)~=mode then return nil end
 		if leaseToken and (current.LeaseToken~=leaseToken or (current.LeaseUntil or 0)<=os.time()) then return nil end
+		current.LaunchMode,current.Roster=mode,current.Roster or roster
 		if current.State=="Preparing" then current.State="Committed" end
 		return current
 	end,Config.PartyTTL) end)
@@ -625,8 +696,8 @@ function PartyService:MergeForExpedition(sourceIds,matchId,worldId,leaseToken)
 	if committed.State=="Aborted" then return nil,"Matchmaking was cancelled before commit.",false end
 	intent=committed
 	local written,merged=call(function() return parties:UpdateAsync(mergedId,function(old)
-		if old then return old.MatchId==matchId and old or nil end
-		return {Id=mergedId,LeaderId=intent.LeaderId,Members=intent.Members,CreatedAt=intent.CreatedAt,Revision=1,RunId=worldId,MatchId=matchId,MergeLock=lock}
+		if old then return old.MatchId==matchId and launchKind(old.LaunchMode)==mode and old or nil end
+		return {Id=mergedId,LeaderId=intent.LeaderId,Members=intent.Members,CreatedAt=intent.CreatedAt,Revision=1,RunId=worldId,MatchId=matchId,MergeLock=lock,LaunchMode=mode}
 	end,Config.PartyTTL) end)
 	if not written or not merged then return nil,"Committed crew creation is retrying.",true end
 	if intent.State~="Complete" then
@@ -646,7 +717,7 @@ function PartyService:MergeForExpedition(sourceIds,matchId,worldId,leaseToken)
 			if not saved or not result or result.PartyId~=mergedId then return nil,"Committed member redirects are retrying.",true end
 		end
 		local saved,result=call(function() return merges:UpdateAsync(worldId,function(current)
-			if not current or current.MatchId~=matchId or current.State=="Aborted" then return nil end
+			if not current or current.MatchId~=matchId or current.State=="Aborted" or launchKind(current.LaunchMode)~=mode then return nil end
 			current.State="Complete"; return current
 		end,Config.PartyTTL) end)
 		if not saved or not result or result.State~="Complete" then return nil,"Crew completion is retrying.",true end
@@ -682,16 +753,15 @@ function PartyService:RestoreExpeditionParty(worldRecord)
 	if world.Phase~="CrewCommitted" and world.Phase~="Reserving" and world.Phase~="Launching" and world.Phase~="Active" then
 		return nil,"Reform the original crew before resuming."
 	end
+	local roster,rosterSize=rosterSet(world.Roster)
+	local mode=launchKind(world.LaunchMode)
 	if type(world.PartyId)~="string" or #world.PartyId<1 or #world.PartyId>128 or type(world.MatchId)~="string"
-		or type(world.Roster)~="table" or type(world.Members)~="table" or #world.Roster~=Config.MaxPartySize
-		or count(world.Roster)~=Config.MaxPartySize or count(world.Members)~=Config.MaxPartySize then return nil,"InvalidDurableCrew" end
-	local roster,members,sources={},{},{}
+		or not mode or not roster or type(world.Members)~="table" or count(world.Members)~=rosterSize then return nil,"InvalidDurableCrew" end
+	local members,sources={},{}
 	for _,userId in ipairs(world.Roster) do
-		if type(userId)~="number" or userId<=0 or userId%1~=0 or userId>=2^53 or roster[key(userId)] then return nil,"InvalidDurableCrew" end
 		local member=world.Members[key(userId)]
 		if type(member)~="table" or member.UserId~=userId or type(member.Name)~="string" or type(member.DisplayName)~="string"
 			or type(member.Role)~="string" or type(member.JoinedAt)~="number" then return nil,"InvalidDurableCrew" end
-		roster[key(userId)]=true
 		members[key(userId)]={UserId=userId,Name=member.Name,DisplayName=member.DisplayName,Role=member.Role,JoinedAt=member.JoinedAt,Ready=false,OnlineUntil=0}
 	end
 	if not roster[key(world.LeaderId)] then return nil,"InvalidDurableCrew" end
@@ -700,8 +770,8 @@ function PartyService:RestoreExpeditionParty(worldRecord)
 		sources[source.Id]=source.Token
 	end
 	local function exactRoster(party)
-		if type(party.Members)~="table" or count(party.Members)~=Config.MaxPartySize then return false end
-		for id,member in pairs(party.Members) do if not roster[id] or member.UserId~=tonumber(id) then return false end end
+		if type(party.Members)~="table" or count(party.Members)~=rosterSize then return false end
+		for id,member in pairs(party.Members) do if not roster[id] or type(member)~="table" or member.UserId~=tonumber(id) then return false end end
 		return true
 	end
 	local targetId=world.PartyId
@@ -730,7 +800,7 @@ function PartyService:RestoreExpeditionParty(worldRecord)
 			if other and other.Id~=targetId and other.Members[userId] then
 				-- An original source still locked to this exact committed match is
 				-- recoverable; a new queue or any unrelated live party is not.
-				if not sources[other.Id] or not other.Queue or other.Queue.Token~=sources[other.Id] or other.Queue.MatchId~=world.MatchId then return nil,"CrewPartyConflict" end
+				if not sources[other.Id] or not other.Queue or other.Queue.Token~=sources[other.Id] or other.Queue.MatchId~=world.MatchId or launchKind(other.Queue.Mode)~=mode then return nil,"CrewPartyConflict" end
 				for id in pairs(other.Members) do if not roster[id] then return nil,"CrewPartyConflict" end end
 			end
 		end
@@ -809,10 +879,14 @@ function PartyService:RestoreExpeditionParty(worldRecord)
 	local latest=require(script.Parent.WorldStateStore):Get(world.Id)
 	if not latest then return nil,"CrewRecoveryPending" end
 	if latest.CrewCommitted~=true or latest.Generation~=world.Generation or latest.PartyId~=targetId or latest.Phase~=world.Phase then rollback(); return nil,"WorldCrewChanged" end
+	local latestRoster,latestSize=rosterSet(latest.Roster)
+	if not latestRoster or latestSize~=rosterSize then rollback(); return nil,"WorldCrewChanged" end
+	for id in pairs(roster) do if not latestRoster[id] then rollback(); return nil,"WorldCrewChanged" end end
 	local saved,restored=call(function() return parties:UpdateAsync(targetId,function(party)
 		if os.time()>=deadline or not owns(party) then return nil end
 		party.Members,party.LeaderId=members,world.LeaderId
 		party.RunId,party.MatchId=world.Id,world.MatchId
+		party.LaunchMode=mode
 		party.MergeLock,party.Closed,party.RecoveryPending,party.RecoveryLock=nil,nil,nil,nil
 		party.RecoveryCompleteToken,party.RecoveredGeneration=token,world.Generation
 		party.Revision=(party.Revision or 0)+1; return party
@@ -822,7 +896,7 @@ function PartyService:RestoreExpeditionParty(worldRecord)
 	if not clearCompletedLocks(restored) then return nil,"CrewRecoveryPending" end
 	for sourceId,sourceToken in pairs(sources) do
 		if sourceId~=targetId then call(function() return parties:UpdateAsync(sourceId,function(source)
-			if not source or not source.Queue or source.Queue.Token~=sourceToken or source.Queue.MatchId~=world.MatchId then return nil end
+			if not source or not source.Queue or source.Queue.Token~=sourceToken or source.Queue.MatchId~=world.MatchId or launchKind(source.Queue.Mode)~=mode then return nil end
 			for userId in pairs(source.Members) do if not roster[userId] then return nil end end
 			source.MergedInto,source.Closed,source.Queue,source.MergeLock=targetId,true,nil,nil; return source
 		end,Config.PartyTTL) end) end

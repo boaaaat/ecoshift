@@ -367,7 +367,7 @@ function Service:RemoveCopy(player, slotId)
 end
 
 -- Restore missing named copies into the same shared world, not a cloned run.
--- All six capacities are reserved before any pending copy is made visible.
+-- Every original crew member's capacity is reserved before any copy is visible.
 function Service:ReconcileRosterForResume(worldId, roster)
 	local owners = rosterIds(roster)
 	local manifest, reason = self:GetManifest(worldId)

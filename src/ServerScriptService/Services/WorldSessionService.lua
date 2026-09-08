@@ -25,14 +25,14 @@ local function sameRoster(a, b)
 	return true
 end
 local function validRoster(ids)
-	if type(ids) ~= "table" or #ids ~= Config.MaxPartySize then return false end
+	if type(ids) ~= "table" or #ids < 1 or #ids > Config.MaxPartySize then return false end
 	local seen, count = {}, 0
 	for key, id in pairs(ids) do
-		if type(key) ~= "number" or key % 1 ~= 0 or key < 1 or key > Config.MaxPartySize
-			or type(id) ~= "number" or id % 1 ~= 0 or id <= 0 or seen[id] then return false end
+		if type(key) ~= "number" or key % 1 ~= 0 or key < 1 or key > #ids
+			or type(id) ~= "number" or id % 1 ~= 0 or id <= 0 or id >= 2^53 or seen[id] then return false end
 		seen[id] = true; count += 1
 	end
-	return count == Config.MaxPartySize
+	return count == #ids
 end
 local function active(record)
 	return record and not record.Ended and record.Phase == "Active" and (record.ServerLeaseUntil or 0) > os.time()
@@ -45,7 +45,7 @@ local function launching(record)
 end
 local function safeMessage(player, success, message)
 	local remote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Lobby")
-	if remote and player.Parent == Players then remote:FireClient(player, "Result", { Success = success, Message = message }) end
+	if remote and player.Parent == Players then remote:FireClient(player, "Notice", { Success = success, Message = message }) end
 end
 
 function Service:_adopt(record)
@@ -155,14 +155,26 @@ end
 function Service:CreateMatchedExpedition(match)
 	if RunService:IsStudio() then return false, "PublishedPlayRequired" end
 	if type(match) ~= "table" or not validRoster(match.Roster) or not Policy.IsMatchmakingType(match.MatchmakingType) then return false, "InvalidMatchedRoster" end
+	local launchMode = match.LaunchMode or "Matchmaking"
+	if launchMode ~= "Matchmaking" and launchMode ~= "Party" then return false, "InvalidLaunchMode" end
+	if launchMode == "Matchmaking" and #match.Roster ~= Config.MaxPartySize then return false, "InvalidMatchedRoster" end
+	if launchMode == "Party" and (type(match.Sources) ~= "table" or #match.Sources ~= 1) then return false, "InvalidPartyLaunch" end
 	local record, reason = Store:Get(match.WorldId)
 	if not record and reason ~= "WorldNotFound" then return nil, reason end
 	if not record then
+		local function sourceChanged(message)
+			-- A cancelled start can lose its source queue before the first world
+			-- write. Resolve the fenced decision instead of retrying it forever.
+			local aborted, failure = Parties:AbortMerge(match.WorldId, match.Id, match.LeaseToken)
+			if aborted == true then return false, message end
+			return nil, failure or "CrewCommitRecoveryPending"
+		end
 		local members, sources, sourceIds, roster, leader, oldest = {}, {}, {}, {}, nil, math.huge
 		for _, source in ipairs(match.Sources or {}) do
 			local party, err = Parties:GetPartyById(source.Id)
 			if err then return nil, err end
-			if not party or not party.Queue or party.Queue.MatchId ~= match.Id or party.Queue.Token ~= source.Token then return nil, "SourceCrewChanged" end
+			if not party or not party.Queue or party.Queue.MatchId ~= match.Id or party.Queue.Token ~= source.Token then return sourceChanged("SourceCrewChanged") end
+			if (party.Queue.Mode or "Matchmaking") ~= launchMode then return sourceChanged("LaunchModeChanged") end
 			table.insert(sourceIds, source.Id); table.insert(sources, { Id = source.Id, Token = source.Token })
 			if party.CreatedAt < oldest then oldest, leader = party.CreatedAt, party.LeaderId end
 			for userId, member in pairs(party.Members) do
@@ -176,13 +188,13 @@ function Service:CreateMatchedExpedition(match)
 		table.sort(roster)
 		record, reason = Store:Mutate(match.WorldId, function(current)
 			if current then return current.MatchId == match.Id and current or nil, "WorldCommitChanged" end
-			return { SchemaVersion = 1, Id = match.WorldId, MatchId = match.Id, Sources = sources, SourceIds = sourceIds,
+			return { SchemaVersion = 1, Id = match.WorldId, MatchId = match.Id, LaunchMode = launchMode, Sources = sources, SourceIds = sourceIds,
 				Roster = roster, Members = members, LeaderId = leader, PartyId = "world:" .. match.WorldId,
 				MatchmakingType = match.MatchmakingType, CreatedAt = os.time(), Generation = 0, Phase = "Preparing", CrewCommitted = false }
 		end)
 		if not record then return nil, reason end
 	end
-	if record.MatchId ~= match.Id or not sameRoster(record.Roster, match.Roster) then return nil, "WorldCommitChanged" end
+	if record.MatchId ~= match.Id or (record.LaunchMode or "Matchmaking") ~= launchMode or not sameRoster(record.Roster, match.Roster) then return nil, "WorldCommitChanged" end
 	if record.CrewCommitted then
 		if Parties.RestoreExpeditionParty and (record.Phase == "CrewCommitted" or record.Phase == "Reserving") then
 			local party = Parties:RestoreExpeditionParty(record)
@@ -216,7 +228,7 @@ function Service:CreateMatchedExpedition(match)
 	end
 	local party, mergeReason, decision
 	if validSignals then
-		party, mergeReason, decision = Parties:MergeForExpedition(record.SourceIds, record.MatchId, record.Id, match.LeaseToken)
+		party, mergeReason, decision = Parties:MergeForExpedition(record.SourceIds, record.MatchId, record.Id, match.LeaseToken, launchMode)
 	else
 		-- Atomic cancellation distinguishes an actual precommit change from a
 		-- previous worker that already committed and began transferring the crew.
@@ -332,7 +344,7 @@ function Service:Rejoin(player)
 	if not record then return false, errorMessage end
 	if record.Generation ~= assignment.Generation or not contains(record, player.UserId) then return false, "That expedition assignment changed." end
 	if record.MatchmakingType ~= nativeType() then return false, "This server has incompatible cross-play settings." end
-	if not active(record) and not launching(record) then return false, "Reunite and ready the original six-person crew to resume this saved world." end
+	if not active(record) and not launching(record) then return false, "Reunite and ready this world's original crew to resume it." end
 	return self:_queueTravel(player, record)
 end
 
@@ -377,7 +389,7 @@ function Service:Resume(player, slotId)
 		if other == nil then return false, errorMessage end
 		if other then return false, "A crew member has another active expedition." end
 	end
-	if not validRoster(ids) or not sameRoster(ids, record.Roster) then return false, "This shared save needs exactly its original six crew members." end
+	if not validRoster(ids) or not sameRoster(ids, record.Roster) then return false, "This shared save needs exactly its original " .. tostring(#record.Roster) .. " crew members." end
 	if platform ~= record.MatchmakingType then return false, "Use the saved expedition's cross-play settings." end
 	local copiesReady, copyError = Saves:ReconcileRosterForResume(record.Id, record.Roster)
 	if not copiesReady then return false, copyError end

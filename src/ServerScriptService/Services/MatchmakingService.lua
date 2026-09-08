@@ -2,6 +2,7 @@
 local Players=game:GetService("Players")
 local MemoryStore=game:GetService("MemoryStoreService")
 local HttpService=game:GetService("HttpService")
+local RunService=game:GetService("RunService")
 local RS=game:GetService("ReplicatedStorage")
 local Config=require(RS.Shared.SessionConfig)
 local Policy=require(RS.Shared.MatchmakingPolicy)
@@ -37,11 +38,11 @@ end
 
 function Service:_validate(party)
 	local nativeType
-	if size(party.Members)>Config.MaxPartySize then return false,"The crew is too large." end
+	if size(party.Members)<1 or size(party.Members)>Config.MaxPartySize then return false,"An expedition needs one to six crew members." end
 	for _,member in pairs(party.Members) do
 		local p,ok=Parties:GetPresence(member.UserId)
 		if not ok then return false,"Connection status is temporarily unavailable." end
-		if not p or not p.Online or p.ExpiresAt<=os.time() or p.Mode~="Lobby" then return false,"Every crew member must be online in a lobby." end
+		if not p or not p.Online or p.ExpiresAt<=os.time() or p.Mode~="Lobby" or p.Session~=member.Session then return false,"Every crew member must be online in a lobby." end
 		if not member.Ready then return false,"Every crew member must ready up." end
 		if not Policy.IsMatchmakingType(p.MatchmakingType) then return false,"A crew member's platform matchmaking is not ready." end
 		if nativeType and nativeType~=p.MatchmakingType then return false,"Crew members have incompatible cross-play settings." end
@@ -56,6 +57,7 @@ function Service:Join(player)
 	if not party then return false,err or "Create a party and ready up first." end
 	if party.LeaderId~=player.UserId then return false,"Only the crew leader can queue." end
 	if party.RunId then return false,"Finish or save the current expedition first." end
+	if party.Queue or party.MergeLock then return false,"Your crew is already matchmaking or starting an expedition." end
 	local valid,nativeType=self:_validate(party)
 	if not valid then return false,nativeType end
 	local saves=require(script.Parent.WorldSaveService)
@@ -72,6 +74,52 @@ function Service:Join(player)
 	return updated~=nil,reason or "Finding a six-player crew with complementary classes."
 end
 
+-- A party-only launch uses the same recoverable reservation/crew commit as a
+-- matched launch, but never exports a public queue ticket or selects strangers.
+function Service:StartParty(player)
+	if Config.GetMode()~="Lobby" then return false,"Start your expedition from the lobby." end
+	local party,err=Parties:GetParty(player)
+	if not party then return false,err or "Create a party and ready up first." end
+	if party.LeaderId~=player.UserId then return false,"Only the crew leader can start the expedition." end
+	if party.RunId or party.MergeLock then return false,"Your crew already has an expedition starting." end
+	if party.Queue then return false,"Cancel matchmaking before starting with just your crew." end
+	local valid,nativeType=self:_validate(party)
+	if not valid then return false,nativeType end
+	if RunService:IsStudio() then return false,"Starting an expedition requires the published game. Studio cannot teleport between places." end
+	local saves=require(script.Parent.WorldSaveService)
+	for _,member in pairs(party.Members) do
+		local room,reason=saves:HasFreeSlot(member.UserId)
+		if room~=true then return false,reason or "Every crew member needs a free save slot." end
+	end
+	local id,token=HttpService:GenerateGUID(false),HttpService:GenerateGUID(false)
+	local record={Id=id,WorldId=HttpService:GenerateGUID(false),LaunchMode="Party",Sources={{Id=party.Id,Token=token}},Roster={},
+		CreatedAt=os.time(),MatchmakingType=nativeType,Stage="Preparing",Owner=workerId,
+		LeaseToken=HttpService:GenerateGUID(false),LeaseUntil=os.time()+90}
+	for _,member in pairs(party.Members) do table.insert(record.Roster,member.UserId) end
+	table.sort(record.Roster)
+	local saved=attempt(function() pending:SetAsync(id,record,Config.PartyTTL,record.CreatedAt) end)
+	if not saved then return false,"Expedition preparation is unavailable. Please try again." end
+	if not Parties:ClaimMerge(record.WorldId,id,record.LeaseToken) then return false,"Expedition preparation is unavailable. Please try again." end
+	local claimed,reason=Parties:Mutate(party.Id,function(current)
+		if record.LeaseUntil<=os.time() or current.Revision~=party.Revision or current.Queue or current.RunId then return false,"Your crew changed. Ready up and try again." end
+		current.Queue={Token=token,QueuedAt=record.CreatedAt,Generation=DateTime.now().UnixTimestampMillis,
+			MatchmakingType=nativeType,State="Starting",Mode="Party",MatchId=id}
+		return true
+	end)
+	if not claimed then
+		if self:_release(record) then return false,reason or "Your crew changed. Ready up and try again." end
+		return true,"The start request is being resolved. Keep your crew together."
+	end
+	local committed,ready=attempt(function() return pending:UpdateAsync(id,function(old)
+		if not old or old.LeaseToken~=record.LeaseToken or old.LeaseUntil<=os.time() then return nil end
+		old.Stage="Claimed"; old.LeaseUntil=0; return old,old.CreatedAt
+	end,Config.PartyTTL) end)
+	if not committed or not ready or ready.Stage~="Claimed" then return true,"Your crew is preparing. The start request will retry automatically." end
+	Parties:ReleaseMergeLease(record.WorldId,id,record.LeaseToken)
+	task.spawn(function() self:_process(ready) end)
+	return true,"Starting an expedition with your current crew."
+end
+
 function Service:Cancel(player)
 	local party,err=Parties:GetParty(player)
 	if not party then return false,err or "You are not in a party." end
@@ -80,12 +128,12 @@ function Service:Cancel(player)
 	if not party.Queue then return true,"You are not matchmaking." end
 	local updated,reason=Parties:CancelQueue(party.Id,party.Queue.Token)
 	if updated then removeTicket(party.Id,party.Queue.Token) end
-	return updated==true,reason or "Matchmaking cancelled."
+	return updated==true,reason or (party.Queue.Mode=="Party" and "Expedition start cancelled." or "Matchmaking cancelled.")
 end
 
 function Service:_refresh(party)
 	local queue=party.Queue
-	if not queue then return end
+	if not queue or queue.Mode=="Party" then return end
 	if queue.MatchId then return end
 	local valid=self:_validate(party)
 	if not valid then
@@ -114,6 +162,16 @@ function Service:_release(record)
 	return terminal(record,"Aborted")
 end
 
+function Service:_notifyAbort(record)
+	local remote=RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Lobby")
+	if not remote then return end
+	for _,userId in ipairs(record.Roster or {}) do
+		local player=Players:GetPlayerByUserId(userId)
+		if player then remote:FireClient(player,"Notice",{Success=false,
+			Message="The expedition could not start because crew or save availability changed. Check your crew and try again."}) end
+	end
+end
+
 function Service:_process(record)
 	if self._processing[record.Id] or record.Stage=="Done" or record.Stage=="Aborted" then return end
 	self._processing[record.Id]=true
@@ -128,7 +186,7 @@ function Service:_process(record)
 	if not ok or not claimed or claimed.LeaseToken~=leaseToken then return end
 	if not Parties:ClaimMerge(claimed.WorldId,claimed.Id,leaseToken) then return end
 	if claimed.Stage~="Claimed" then
-		if os.time()-claimed.CreatedAt>90 then self:_release(claimed) end
+		if os.time()-claimed.CreatedAt>90 and self:_release(claimed) then self:_notifyAbort(claimed) end
 		return
 	end
 	local module=script.Parent:FindFirstChild("WorldSessionService")
@@ -139,7 +197,7 @@ function Service:_process(record)
 		terminal(claimed,"Done")
 	elseif success and result==false then
 		-- The world service returns false only before any irreversible crew commit.
-		self:_release(claimed)
+		if self:_release(claimed) then self:_notifyAbort(claimed) end
 	elseif not success then warn("[Matchmaking] Expedition commit will retry:",result) end
 	end)
 	self._processing[record.Id]=nil
@@ -191,7 +249,7 @@ function Service:Init()
 		-- Remove every ticket containing this player, even before the next refresh.
 		local player=Players:GetPlayerByUserId(userId)
 		if player then local party=Parties:GetParty(player); if party then
-			if party.Queue then
+			if party.Queue and party.Queue.Mode~="Party" then
 				removeTicket(party.Id,party.Queue.Token)
 				Parties:CancelQueue(party.Id,party.Queue.Token)
 			end
@@ -202,7 +260,7 @@ function Service:Init()
 			local seen={}
 			for _,player in ipairs(Players:GetPlayers()) do
 				local party=Parties:GetParty(player)
-				if party and party.Queue and not party.RunId and Profiles:IsLoaded(player) then
+				if party and party.Queue and party.Queue.Mode~="Party" and not party.RunId and Profiles:IsLoaded(player) then
 					local hint=Signals.Capture(player)
 					if hint then
 						local p=Parties:GetPresence(player.UserId)

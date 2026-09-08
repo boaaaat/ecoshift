@@ -106,7 +106,7 @@ for index, entry in ipairs({{"Party", "01  EXPEDITION CREW"}, {"Classes", "02  C
 	nav[entry[1]].TextSize = 15
 	if Mode ~= "Lobby" and entry[1] ~= "Party" then nav[entry[1]].Visible = false end
 end
-label(side, "SIX EXPLORERS\nONE CHANGING WORLD", 8, 234, 205, 66, 14, "TextMuted", true).TextWrapped = true
+label(side, "1–6 EXPLORERS\nONE CHANGING WORLD", 8, 234, 205, 66, 14, "TextMuted", true).TextWrapped = true
 label(side, "F2  ·  CREW PANEL\nF4  ·  APPEARANCE", 8, 474, 205, 55, 14, "TextMuted").TextWrapped = true
 button(side, "APPEARANCE", 0, 540, 220, 44, function() player:SetAttribute("FieldKitSettings", (player:GetAttribute("FieldKitSettings") or 0) + 1) end)
 local open = button(gui, Mode == "Lobby" and "EXPEDITION DESK  /  F2" or "CREW  /  F2", 0, 0, 264, 44, function()
@@ -137,13 +137,16 @@ local descriptions = {
 local function updateQueue()
 	if not queueLabel or not queueLabel.Parent then return end
 	local party = snapshot.Party or {}
-	if party.Queue then
+	if party.Queue and party.Queue.Mode == "Party" then
+		queueLabel.Text = string.format("%d / 6  ·  STARTING YOUR CREW'S EXPEDITION", #(party.Members or {}))
+		Theme.Bind(queueLabel, "TextColor3", "Amber")
+	elseif party.Queue then
 		local started = tonumber(party.QueueStartedAt)
 		local elapsed = started and math.max(0, math.floor(workspace:GetServerTimeNow() - started)) or 0
 		queueLabel.Text = string.format("%d / 6  ·  FINDING EXPEDITION  ·  %02d:%02d", #(party.Members or {}), math.floor(elapsed / 60), elapsed % 60)
 		Theme.Bind(queueLabel, "TextColor3", "Amber")
 	else
-		queueLabel.Text = party.Id and (#(party.Members or {}) .. " / 6  ·  PREPARING") or "Choose classes, invite friends, and ready up together."
+		queueLabel.Text = party.Id and (#(party.Members or {}) .. " / 6  ·  " .. (party.RunId and "EXPEDITION ASSIGNED" or "PREPARING")) or "Start solo or invite friends. Matchmaking is optional."
 		Theme.Bind(queueLabel, "TextColor3", "TextMuted")
 	end
 end
@@ -280,7 +283,7 @@ local function visualKey()
 	local crew = {}
 	for _, member in ipairs(party.Members or {}) do table.insert(crew, {member.UserId, member.DisplayName, member.Role, member.Ready == true, member.Online == true}) end
 	return HttpService:JSONEncode({page, snapshot.Currency, snapshot.Classes, party.Id, party.LeaderId, party.RunId,
-		party.Queue ~= nil and party.Queue ~= false, party.QueueStartedAt, crew, party.Invites, snapshot.Rejoin, page == "Saves" and snapshot.Worlds or false,
+		party.Queue and party.Queue.Mode or false, party.Queue ~= nil and party.Queue ~= false, party.QueueStartedAt, crew, party.Invites, snapshot.Rejoin, page == "Saves" and snapshot.Worlds or false,
 		page == "Saves" and snapshot.ArchiveAvailable, page == "Invite" and snapshot.InviteDirectory or false})
 end
 render = function()
@@ -315,10 +318,19 @@ render = function()
 			if not party.RunId then actionButton(content, selfMember and selfMember.Ready and "NOT READY" or "READY UP", "UPDATING…", "Ready", {Ready = not (selfMember and selfMember.Ready)}, 0, y, 190, 46, true) end
 			actionButton(content, "LEAVE PARTY", "LEAVING…", "LeaveParty", nil, 202, y, 190, 46)
 			if party.LeaderId == player.UserId and Mode == "Lobby" and not party.RunId then
-				actionButton(content, party.Queue and "CANCEL QUEUE" or "FIND EXPEDITION", party.Queue and "CANCELLING…" or "JOINING QUEUE…", party.Queue and "CancelQueue" or "Queue", nil, 404, y, 392, 46, true)
+				local starting = party.Queue and party.Queue.Mode == "Party"
+				actionButton(content, starting and "STARTING EXPEDITION…" or "START EXPEDITION", "STARTING…", "StartExpedition", nil, 404, y, 392, 46, true, party.Queue ~= nil and party.Queue ~= false)
 			end
 			if party.LeaderId == player.UserId and not party.RunId then
-				y += 60; button(content, "+  INVITE EXPLORERS", 0, y, 796, 46, openPicker)
+				y += 60
+				local inviteButton = button(content, "+  INVITE EXPLORERS", 0, y, 392, 46, openPicker)
+				inviteButton.Interactable = not party.Queue and #(party.Members or {}) < 6
+				if Mode == "Lobby" then
+					local starting = party.Queue and party.Queue.Mode == "Party"
+					actionButton(content, party.Queue and (starting and "CANCEL START" or "CANCEL MATCHMAKING") or "MATCHMAKE · FILL CREW", party.Queue and "CANCELLING…" or "JOINING QUEUE…", party.Queue and "CancelQueue" or "Queue", nil, 404, y, 392, 46, false, not party.Queue and #(party.Members or {}) >= 6)
+				end
+				y += 52
+				label(content, "Start with 1–6 ready players. Matchmaking fills open seats with other explorers.", 0, y, 796, 42, 14, "TextMuted").TextWrapped = true
 			end
 		end
 		y += 62
@@ -418,6 +430,8 @@ remote.OnClientEvent:Connect(function(action, data)
 		elseif data.Success and completed.Action == "BuyClass" then message = "Class unlocked. Choose Equip Class to use it." end
 		notify(message, data.Success and "Success" or "Danger")
 		if not UIS:GetFocusedTextBox() then render() else applyControls() end
+	elseif action == "Notice" and type(data.Message) == "string" then
+		notify(data.Message, data.Success and "Success" or "Amber")
 	elseif action == "SnapshotError" and incoming >= revision then
 		if data.Section == "Archive" then snapshot.ArchiveAvailable = false end
 		if data.Section == "Core" and not snapshot.Classes then notify("Expedition records could not load. Retrying…", "Amber") end

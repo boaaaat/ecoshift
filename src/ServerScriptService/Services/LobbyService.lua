@@ -10,7 +10,7 @@ local Parties=require(script.Parent.PartyService)
 local HttpService=game:GetService("HttpService")
 local Service={_clients={}}
 local actions={Snapshot=true,CreateParty=true,Invite=true,AcceptInvite=true,LeaveParty=true,Ready=true,
-	SelectClass=true,BuyClass=true,Queue=true,CancelQueue=true,ResumeWorld=true,Rejoin=true,ReturnLobby=true,RenameWorld=true,RemoveWorld=true}
+	SelectClass=true,BuyClass=true,StartExpedition=true,Queue=true,CancelQueue=true,ResumeWorld=true,Rejoin=true,ReturnLobby=true,RenameWorld=true,RemoveWorld=true}
 local sections={Core=true,Archive=true,Rejoin=true,InviteDirectory=true}
 local messages={
 	InsufficientCurrency="You need more "..Economy.CurrencyName.." to unlock this class. Earn them on expeditions.",
@@ -80,10 +80,11 @@ function Service:_handle(player,action,data)
 	elseif action=="Ready" then return Parties:SetReady(player,data.Ready)
 	elseif action=="SelectClass" then return Roles:SetRole(player,data.Id)
 	elseif action=="BuyClass" then return Roles:PurchaseRole(player,data.Id)
-	elseif action=="Queue" or action=="CancelQueue" then
+	elseif action=="StartExpedition" or action=="Queue" or action=="CancelQueue" then
 		if Config.GetMode()~="Lobby" then return false,"Return to the lobby to find a new expedition." end
 		local queue=optional("MatchmakingService")
 		if not queue then return false,"Matchmaking is temporarily unavailable." end
+		if action=="StartExpedition" then return queue:StartParty(player) end
 		if action=="Queue" then return queue:Join(player) end
 		return queue:Cancel(player)
 	elseif action=="ResumeWorld" or action=="Rejoin" or action=="ReturnLobby" then
