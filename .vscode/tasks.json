@@ -2,6 +2,20 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "rojo: serve both",
+      "dependsOn": ["rojo: serve", "rojo: serve lobby"],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    },
+    {
+      "label": "rojo: serve lobby",
+      "type": "process",
+      "command": "pwsh",
+      "args": ["-NoProfile", "-File", "${workspaceFolder}/scripts/rojo-serve.ps1", "-Place", "Lobby"],
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
       "label": "rojo: serve",
       "type": "shell",
       "command": "${workspaceFolder}\\scripts\\rojo-serve.ps1",

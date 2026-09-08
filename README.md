@@ -6,7 +6,7 @@ The current prototype has eight playable biomes and eight future biome concepts.
 
 ## Quick Start
 
-1. Run `scripts/rojo-serve.ps1` and connect the Studio Rojo plugin to the server. `default.project.json` preserves authored Studio assets outside the mapped source tree.
+1. In VS Code, run the **rojo: serve both** task. Alternatively, run `scripts/rojo-serve.ps1` for Expedition and `scripts/rojo-serve.ps1 -Place Lobby` in a second terminal. Connect Expedition Studio to `localhost:34872` and Ecoshift (the lobby) Studio to `localhost:34873`. Each project restricts syncing to its corresponding cloud place ID. Both projects preserve authored Studio assets outside the mapped source tree. Keep the Studio plugin and CLI on the same Rojo version; `rojo plugin install` updates the plugin, followed by reopening the place.
 2. RuntimeBootstrap creates required runtime folders/remotes before gameplay starts. PrototypePrefabService supplies missing resources, tools, enemies, and station models using temporary geometry. Authored models take precedence. Optional authored folders are:
    - `ResourcePrefabs/<BiomeName>`
    - `PropPrefabs/<BiomeName>`

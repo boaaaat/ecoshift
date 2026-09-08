@@ -1,5 +1,7 @@
 {
   "name": "EcoshiftLobby",
+  "servePort": 34873,
+  "servePlaceIds": [120274921310527],
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
