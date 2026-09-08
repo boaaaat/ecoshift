@@ -17,7 +17,7 @@ panel.AnchorPoint = Vector2.new(0, 1)
 panel.Position = UDim2.new(0, 18, 1, -18)
 panel.Parent = gui
 Theme.Panel(panel, true)
-Theme.Fit(panel, 900, 610)
+Theme.Fit(panel, 900, 610, nil, true)
 Theme.Label(panel, "SURVIVAL / VITALS", UDim2.fromOffset(195, 16), UDim2.fromOffset(14, 10), 10, C.Amber, true)
 local function meter(name, y, color)
 	Theme.Label(panel, name, UDim2.fromOffset(62, 16), UDim2.fromOffset(14, y), 9, C.Sage, true)

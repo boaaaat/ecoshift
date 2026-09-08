@@ -20,7 +20,7 @@ card.Size = UDim2.fromOffset(272, 188)
 card.Position = UDim2.fromOffset(18, 14)
 card.Parent = gui
 Theme.Panel(card, true)
-Theme.Fit(card, 730, 610)
+Theme.Fit(card, 730, 610, nil, true)
 Theme.Label(card, "ECO / SHIFT", UDim2.fromOffset(165, 26), UDim2.fromOffset(16, 12), 21, C.Paper, true)
 Theme.Label(card, "EXPEDITION RECORD", UDim2.fromOffset(230, 14), UDim2.fromOffset(16, 40), 9, C.Sage, true)
 local runLabel = Theme.Label(card, "00:00", UDim2.fromOffset(72, 18), UDim2.fromOffset(182, 16), 12, C.Amber, true)
@@ -77,7 +77,7 @@ kit.AnchorPoint = Vector2.new(0.5, 1)
 kit.Position = UDim2.new(0.5, 0, 1, -94)
 kit.BackgroundTransparency = 1
 kit.Parent = gui
-Theme.Fit(kit, 730, 610)
+Theme.Fit(kit, 730, 610, nil, true)
 for index, entry in ipairs({ { "Pack", "G" }, { "Craft", "C" }, { "Build", "B" }, { "Map", "M" }, { "Survey", "V" } }) do
 	local button = Instance.new("TextButton")
 	button.Name = entry[1]

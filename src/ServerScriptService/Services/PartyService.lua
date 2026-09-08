@@ -153,19 +153,37 @@ function PartyService:Create(player)
 	return true,"Party created."
 end
 
-function PartyService:Invite(player, username)
-	if type(username)~="string" or #username<3 or #username>20 or not username:match("^[%w_]+$") then return false,"Enter a Roblox username." end
+function PartyService:Invite(player, target)
+	local numeric=type(target)=="number"
+	if numeric then
+		if target~=target or target%1~=0 or target<=0 or target>=2^53 then return false,"Choose a valid Roblox player." end
+	elseif type(target)~="string" or #target<3 or #target>20 or not target:match("^[%w_]+$") then return false,"Enter a Roblox username." end
+	local now=os.clock()
+	if now-(self._lastRequest[player] or -math.huge)<2 then return false,"Wait a moment before inviting another player." end
+	self._lastRequest[player]=now
 	local party, err=self:GetParty(player)
 	if not party then return false,err or "Create a party first." end
 	if party.LeaderId~=player.UserId then return false,"Only the party leader can invite." end
-	if party.Queue or party.RunId then return false,"Finish the current expedition or queue first." end
+	if party.Queue or party.RunId or party.MergeLock then return false,"Finish the current expedition or queue first." end
 	if count(party.Members)>=Config.MaxPartySize then return false,"Your party has six members." end
 	local ok,userId=pcall(function()
-		local localTarget=Players:FindFirstChild(username)
-		return localTarget and localTarget.UserId or Players:GetUserIdFromNameAsync(username)
+		if numeric then return target end
+		local localTarget=Players:FindFirstChild(target)
+		return localTarget and localTarget.UserId or Players:GetUserIdFromNameAsync(target)
 	end)
 	if not ok or userId==player.UserId then return false,"That player could not be invited." end
 	if party.Members[key(userId)] then return false,"That player is already in your party." end
+	-- Numeric IDs and client friend labels confer no permission. Only verified
+	-- EcoShift lobby presence is eligible for an in-experience party invitation.
+	local localTarget=Players:GetPlayerByUserId(userId)
+	if localTarget then
+		if Config.GetMode()~="Lobby" then return false,"That player must return to the lobby before joining a new crew." end
+	else
+		local targetPresence,available=self:GetPresence(userId)
+		if not available then return false,"That player's connection is still synchronizing. Try again shortly." end
+		if not online(targetPresence) then return false,"That player is outside EcoShift. Use the Roblox friend invite to bring them here first." end
+		if targetPresence.Mode~="Lobby" then return false,"That player must return to the lobby before joining a new crew." end
+	end
 	local inviteId=guid()
 	local saved=call(function() invites:UpdateAsync(key(userId),function(list)
 		local nextList={}
@@ -414,15 +432,29 @@ end
 
 function PartyService:Snapshot(player)
 	local party,err=self:GetParty(player)
-	local snapshot={Available=err==nil,Message=err,MaxMembers=Config.MaxPartySize,Members={},Invites={}}
+	local snapshot={Available=err==nil,Message=err,MaxMembers=Config.MaxPartySize,Members={},Invites={},QueueStartedAt=false}
 	if party then
 		player:SetAttribute("PartyId",party.Id)
-		snapshot.Id,snapshot.LeaderId,snapshot.Queue,snapshot.RunId=party.Id,party.LeaderId,party.Queue,party.RunId
+		snapshot.Id,snapshot.LeaderId,snapshot.RunId,snapshot.Revision=party.Id,party.LeaderId,party.RunId,party.Revision
+		if party.Queue then
+			snapshot.Queue={State=party.Queue.State,QueuedAt=party.Queue.QueuedAt}
+			snapshot.QueueStartedAt=party.Queue.QueuedAt
+		end
 		for _,member in pairs(party.Members) do
 			local item=table.clone(member)
 			item.Session=nil; item.SessionAt=nil; item.OnlineUntil=nil
 			local p=self:GetPresence(member.UserId)
 			item.Online=online(p)==true; item.Location=item.Online and p.Mode or "Offline"
+			local localMember=Players:GetPlayerByUserId(member.UserId)
+			if localMember and Config.GetMode()=="Lobby" and not party.RunId then
+				local currentRole=localMember:GetAttribute("Role")
+				if type(currentRole)=="string" then
+					-- Profile selection is already confirmed locally; the shared party
+					-- update may still be yielding. A changed class requires readiness.
+					if item.Role~=currentRole then item.Ready=false end
+					item.Role=currentRole
+				end
+			end
 			table.insert(snapshot.Members,item)
 		end
 		table.sort(snapshot.Members,function(a,b) if a.JoinedAt==b.JoinedAt then return a.UserId<b.UserId end; return a.JoinedAt<b.JoinedAt end)
@@ -834,12 +866,16 @@ function PartyService:Init()
 		session.RoleBound=true
 		player:GetAttributeChangedSignal("Role"):Connect(function()
 			local party=self:GetParty(player)
-			if party and party.Queue then self:CancelQueue(party.Id,party.Queue.Token) end
-			if party and not party.RunId then self:Mutate(party.Id,function(current)
+			local role=player:GetAttribute("Role") or "Generalist"
+			local member=party and party.Members[key(player.UserId)]
+			if party and member and member.Role~=role and not party.RunId then
+				if party.Queue then self:CancelQueue(party.Id,party.Queue.Token) end
+				self:Mutate(party.Id,function(current)
 				local member=current.Members[key(player.UserId)]
-				if member and member.Session==session.Id then member.Role=player:GetAttribute("Role") or "Generalist"; member.Ready=false end
+				if member and member.Session==session.Id and member.Role~=role and player:GetAttribute("Role")==role then member.Role=role; member.Ready=false end
 				return true
-			end) end
+				end)
+			end
 		end)
 	end
 	local function startPlayer(player)
@@ -850,6 +886,7 @@ function PartyService:Init()
 	end
 	Players.PlayerAdded:Connect(startPlayer)
 	Players.PlayerRemoving:Connect(function(player)
+		self._lastRequest[player]=nil
 		if self._sessions[player] then self._sessions[player].Leaving=true end
 		self:Heartbeat(player,true)
 		local party=self:GetParty(player)

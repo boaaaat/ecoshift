@@ -578,7 +578,7 @@ local function createUI()
 	miniContainer.Name = "MinimapContainer"
 	miniContainer.AnchorPoint = Vector2.new(1, 1)
 	miniContainer.Position = UDim2.new(1, -18, 1, -18)
-	Theme.Fit(miniContainer, 900, 610)
+	Theme.Fit(miniContainer, 900, 610, nil, true)
 	Theme.Panel(miniContainer)
 	styleCard(miniContainer)
 

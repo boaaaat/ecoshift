@@ -182,7 +182,7 @@ function Theme.Button(button, primary)
 	button.BorderSizePixel = 0
 	if primary ~= nil then
 		button.BackgroundColor3 = primary and Theme.Colors.Moss or Theme.Colors.SlotEmpty
-		button.TextColor3 = primary and Theme.Colors.Paper or Theme.Colors.Text
+		if button:IsA("TextButton") then button.TextColor3 = primary and Theme.Colors.Paper or Theme.Colors.Text end
 	end
 	Theme.Corner(button, 6)
 	local scale = Instance.new("UIScale")
@@ -196,7 +196,8 @@ function Theme.Button(button, primary)
 end
 
 -- Keep fixed design dimensions readable without letting panels leave small viewports.
-function Theme.Fit(frame, width, height, maximum)
+function Theme.Fit(frame, width, height, maximum, scaleEdgeOffsets)
+	local designPosition = frame.Position
 	local scale = Instance.new("UIScale")
 	scale.Name = "ViewportScale"
 	scale.Parent = frame
@@ -205,8 +206,15 @@ function Theme.Fit(frame, width, height, maximum)
 		local camera = Workspace.CurrentCamera
 		if not camera then return end
 		local viewport = camera.ViewportSize
-		scale.Scale = math.min(maximum or 1, math.max(0.35, (viewport.X - 40) / width), math.max(0.35, (viewport.Y - 90) / height))
+		-- Scale the field kit with desktop resolution, including 1440p/4K.
+		-- Small screens still fit within their available width and height.
+		local desktopScale = math.clamp(math.min(viewport.X / 1440, viewport.Y / 900), 1, 2.5)
+		scale.Scale = math.min(maximum or desktopScale, math.max(0.1, (viewport.X - 40) / width), math.max(0.1, (viewport.Y - 90) / height))
 		scale:SetAttribute("TargetScale", scale.Scale)
+		if scaleEdgeOffsets then
+			frame.Position = UDim2.new(designPosition.X.Scale, designPosition.X.Offset * scale.Scale,
+				designPosition.Y.Scale, designPosition.Y.Offset * scale.Scale)
+		end
 	end
 	local function bindCamera()
 		if cameraConnection then cameraConnection:Disconnect() end

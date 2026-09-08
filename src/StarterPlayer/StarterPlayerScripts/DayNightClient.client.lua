@@ -67,7 +67,7 @@ local function createTimeUI()
 	frame.Position = UDim2.new(0.5, 0, 0, 14)
 	frame.Parent = screenGui
 	Theme.Panel(frame, true)
-	Theme.Fit(frame, 900, 610)
+	Theme.Fit(frame, 900, 610, nil, true)
 	local dot = Instance.new("Frame")
 	dot.Name = "PhaseIndicator"
 	dot.Size = UDim2.fromOffset(8, 8)

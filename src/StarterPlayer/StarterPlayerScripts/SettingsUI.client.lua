@@ -20,14 +20,22 @@ gui.Parent = playerGui
 
 local open = Instance.new("TextButton")
 open.Name = "OpenSettings"
-open.Size = UDim2.fromOffset(116, 32)
+open.Size = UDim2.fromOffset(152, 42)
 open.Position = UDim2.new(1, -18, 0, 62)
 open.AnchorPoint = Vector2.new(1, 0)
 open.Text = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled and "SETTINGS" or "F4  SETTINGS"
 open.Font = Enum.Font.GothamBold
-open.TextSize = 10
+open.TextSize = 14
 open.Parent = gui
 Theme.Button(open, true)
+local shortcut = Instance.new("Frame")
+shortcut.Name = "SettingsShortcut"
+shortcut.BackgroundTransparency = 1
+shortcut.Size, shortcut.Position, shortcut.AnchorPoint = open.Size, open.Position, open.AnchorPoint
+shortcut.Parent = gui
+open.Parent = shortcut
+open.Position, open.AnchorPoint = UDim2.new(), Vector2.zero
+Theme.Fit(shortcut, 900, 610, nil, true)
 
 local backdrop = Instance.new("TextButton")
 backdrop.Name = "Backdrop"

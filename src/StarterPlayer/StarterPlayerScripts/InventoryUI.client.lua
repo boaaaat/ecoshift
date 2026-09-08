@@ -1516,7 +1516,7 @@ Theme.Panel(mainContainer)
 Theme.Fit(mainContainer, 900, 590)
 Theme.AnimatePanel(mainContainer)
 Theme.Panel(hotbarPanel)
-Theme.Fit(hotbarRoot, 900, 610)
+Theme.Fit(hotbarRoot, 900, 610, nil, true)
 shadow.Visible = false
 Theme.Label(armorSection, "Weather protection goes here.\nDrag armor into the equipment slot.", UDim2.fromOffset(280, 42), UDim2.fromOffset(80, 27), 11, COLORS.TextMuted)
 local closePack = Instance.new("TextButton")
