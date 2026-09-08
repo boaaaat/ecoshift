@@ -513,6 +513,29 @@ local function showTransferStatus(text, color, duration)
 	end)
 end
 
+-- Consumable feedback remains visible when using the hotbar with inventory closed.
+local useNotice = Instance.new("Frame")
+useNotice.Name, useNotice.Size = "ItemUseNotice", UDim2.fromOffset(380, 48)
+useNotice.AnchorPoint, useNotice.Position = Vector2.new(0.5, 1), UDim2.new(0.5, 0, 1, -116)
+useNotice.Visible, useNotice.Parent = false, gui
+Theme.Panel(useNotice, false)
+Theme.Fit(useNotice, 380, 48, nil, true)
+Theme.AnimatePanel(useNotice)
+local useNoticeText = Theme.Label(useNotice, "", UDim2.new(1, -24, 1, -12), UDim2.fromOffset(12, 6), 14, COLORS.Text, true)
+useNoticeText.TextWrapped = true
+local useNoticeToken = 0
+if rInventoryAction then
+	rInventoryAction.OnClientEvent:Connect(function(action, payload)
+		if action ~= "UseResult" or type(payload) ~= "table" or type(payload.Message) ~= "string" then return end
+		useNoticeToken += 1
+		local token = useNoticeToken
+		useNoticeText.Text = payload.Message
+		useNoticeText.TextColor3 = payload.Success and COLORS.Success or COLORS.Warning
+		useNotice.Visible = true
+		task.delay(3, function() if token == useNoticeToken then useNotice.Visible = false end end)
+	end)
+end
+
 local function isChestTransferLockActive()
 	return gui:GetAttribute("ChestOpen") == true
 end

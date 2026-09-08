@@ -98,10 +98,7 @@ local toolPower = { Harvester = 20, StoneHatchet = 30, StonePickaxe = 30, Sandit
 	MireSickle = 45, CryoPickaxe = 60, ObsidianAxe = 75, PhaseMultitool = 100 }
 local weaponPower = { StoneSpear = 18, BoneSpear = 18, SanditeBlade = 27, MireDagger = 23, FrostLance = 38,
 	MagmaHammer = 50, CrystalBow = 44, VoidEdge = 65, MeteorPike = 82 }
-local function makeTool(parent, item)
-	if keepExisting(parent, item.Id) then return end
-	local tool = ExpeditionModels.CreateTool(item.Id, item:HasTag("Weapon"))
-	if not tool then warn("[Art] No authored tool model:", item.Id); return end
+local function configureTool(tool, item)
 	tool.Name, tool.ToolTip, tool.CanBeDropped = item.Id, item.Name, false
 	if item:HasTag("Tool") then
 		tool:SetAttribute("ToolType", "Universal")
@@ -119,6 +116,29 @@ local function makeTool(parent, item)
 		tool:SetAttribute("Range", item.Id == "CrystalBow" and 180 or 9)
 	end
 	tool:SetAttribute("Cooldown", 0.6)
+	-- Attribute reads take precedence over legacy child values.
+	-- Explicitly clear the opposite profile when updating generated templates.
+	if item:HasTag("Tool") then
+		tool:SetAttribute("WeaponType", "")
+		tool:SetAttribute("Type", "")
+	else
+		tool:SetAttribute("ToolType", "")
+	end
+end
+local function makeTool(parent, item)
+	if keepExisting(parent, item.Id) then
+		local existing = parent:FindFirstChild(item.Id)
+		-- Preserve generated artwork while bringing its gameplay bindings forward.
+		-- Authored overrides retain their own statistics and behavior.
+		if existing and existing:IsA("Tool") and existing:GetAttribute("GeneratedBy") == GENERATOR
+			and existing:GetAttribute("PrefabOverride") ~= true then
+			configureTool(existing, item)
+		end
+		return
+	end
+	local tool = ExpeditionModels.CreateTool(item.Id, item:HasTag("Weapon"))
+	if not tool then warn("[Art] No authored tool model:", item.Id); return end
+	configureTool(tool, item)
 	publish(tool, parent)
 end
 local function authoredBounds(model)

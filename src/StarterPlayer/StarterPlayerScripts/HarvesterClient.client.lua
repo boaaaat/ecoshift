@@ -22,6 +22,13 @@ local missingInteractWarned = false
 
 local player = Players.LocalPlayer
 
+local function inputBlocked()
+	local gui = player:FindFirstChildOfClass("PlayerGui")
+	return player:GetAttribute("IsDead") == true
+		or (gui and gui:GetAttribute("MenuCursorOpen") == true)
+		or UserInputService:GetFocusedTextBox() ~= nil
+end
+
 local function raycastTarget(origin, direction, excludeTerrain)
 	if not origin or not direction then return nil, nil end
 	local params = RaycastParams.new()
@@ -111,7 +118,8 @@ end
 
 local activeTool = nil
 local holding = false
-local loopRunning = false
+local runningTool = nil
+local loopGeneration = 0
 local inputBeganConn = nil
 local inputEndedConn = nil
 local boundTools = setmetatable({}, { __mode = "k" })
@@ -210,18 +218,21 @@ local function harvestOnce(tool)
 end
 
 local function startLoop(tool)
-	if loopRunning then return end
-	loopRunning = true
+	if runningTool == tool then return end
+	loopGeneration += 1
+	local generation = loopGeneration
+	runningTool = tool
 	task.spawn(function()
-		while holding and activeTool == tool do
+		while generation == loopGeneration and holding and activeTool == tool do
 			-- Ensure tool is still equipped
-			if not tool.Parent or tool.Parent ~= player.Character then
+			if inputBlocked() or not tool.Parent or tool.Parent ~= player.Character then
+				holding = false
 				break
 			end
 			harvestOnce(tool)
 			task.wait(getCooldown(tool))
 		end
-		loopRunning = false
+		if generation == loopGeneration then runningTool = nil end
 	end)
 end
 
@@ -235,18 +246,24 @@ local function bindTool(tool)
 		activeTool = tool
 	end)
 	tool.Unequipped:Connect(function()
-		holding = false
-		activeTool = nil
+		if activeTool == tool then
+			holding = false
+			activeTool = nil
+		end
 	end)
 	tool.Activated:Connect(function()
 		-- Single click still works
+		if activeTool ~= tool or inputBlocked() then return end
 		holding = true
 		startLoop(tool)
+	end)
+	tool.Deactivated:Connect(function()
+		if activeTool == tool then holding = false end
 	end)
 end
 
 inputBeganConn = UserInputService.InputBegan:Connect(function(input, processed)
-	if processed then return end
+	if processed or inputBlocked() then return end
 	if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
 	if not activeTool or activeTool.Parent ~= player.Character then return end
 	holding = true

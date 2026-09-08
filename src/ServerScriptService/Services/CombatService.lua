@@ -33,7 +33,7 @@ CombatService._remoteAction = nil
 CombatService._remoteFeedback = nil
 
 CombatService._lastUse = setmetatable({}, { __mode = "k" }) -- [tool] = time
-CombatService._chargeStart = setmetatable({}, { __mode = "k" }) -- [player] = time
+CombatService._chargeStart = setmetatable({}, { __mode = "k" }) -- [player] = { Tool, Started }
 CombatService._blocking = setmetatable({}, { __mode = "k" }) -- [player] = tool
 local COMBAT_FEEDBACK_RANGE = 180
 local TOOL_ORIGIN_NAMES = { "MuzzleAttachment", "Muzzle", "Barrel", "Tip" }
@@ -448,11 +448,11 @@ end
 
 function CombatService:_handleBow(plr, tool, weapon, data)
 	local now = os.clock()
-	local start = self._chargeStart[plr]
+	local charge = self._chargeStart[plr]
 	self._chargeStart[plr] = nil
-	if not start then return end
+	if not charge or charge.Tool ~= tool then return end
 	local chargeTime = weapon:GetChargeTime()
-	local ratio = math.clamp((now - start) / math.max(chargeTime, 0.1), 0, 1)
+	local ratio = math.clamp((now - charge.Started) / math.max(chargeTime, 0.1), 0, 1)
 	local cooldown = math.max(chargeTime * 0.2, 0.2)
 	if not self:_canUseTool(tool, cooldown) then return end
 
@@ -507,6 +507,10 @@ function CombatService:Bind()
 		self._bound = true
 		self._remoteAction.OnServerEvent:Connect(function(plr, action, data)
 			if type(action) ~= "string" or (data ~= nil and type(data) ~= "table") then return end
+			if action == "ChargeCancel" then
+				self._chargeStart[plr] = nil
+				return
+			end
 			if GameStateService:IsGameOver() then
 				return
 			end
@@ -548,7 +552,10 @@ function CombatService:Bind()
 				end
 			elseif wtype == "bow" or wtype == "bows" then
 				if action == "ChargeStart" then
-					self._chargeStart[plr] = os.clock()
+					local charge = self._chargeStart[plr]
+					if not charge or charge.Tool ~= tool then
+						self._chargeStart[plr] = { Tool = tool, Started = os.clock() }
+					end
 				elseif action == "ChargeRelease" then
 					self:_handleBow(plr, tool, weapon, data)
 				end

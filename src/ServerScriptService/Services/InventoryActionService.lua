@@ -44,11 +44,11 @@ end
 local function hasUsefulEffect(plr, char, hum, itemId)
 	if FOOD_RESTORE[itemId] then
 		local maximum = StatsService:GetStat(plr, "MaxHunger") or 100
-		return (StatsService:GetBase(plr, "Hunger") or StatsService:GetStat(plr, "Hunger") or 0) < maximum
+		return (StatsService:GetBase(plr, "Hunger") or StatsService:GetStat(plr, "Hunger") or 0) < maximum, "Hunger is already full."
 	end
-	if itemId == "Bandage" then return hum.Health < hum.MaxHealth end
+	if itemId == "Bandage" then return hum.Health < hum.MaxHealth, "Health is already full." end
 	local effect = RESIST_EFFECTS[itemId]
-	if effect then return (tonumber(char:GetAttribute(effect.Key)) or 0) < 0.9 end
+	if effect then return (tonumber(char:GetAttribute(effect.Key)) or 0) < 0.9, "This resistance is already at its limit." end
 	return itemId == "ThermalPatch"
 end
 
@@ -109,18 +109,28 @@ end
 
 function InventoryActionService:_consumeFromSlot(plr, slotType, slotIndex)
 	local char, hum = canAct(plr)
-	if not char then return false end
+	if not char then return false, "You cannot use items right now." end
 	local slot = InventoryService:PeekSlot(plr, slotType, slotIndex)
 	local item = slot and ItemDatabase:Get(slot.Id)
-	if not canConsume(item) or not hasUsefulEffect(plr, char, hum, slot.Id) then return false end
+	if not canConsume(item) then return false, "This item cannot be consumed." end
+	local useful, reason = hasUsefulEffect(plr, char, hum, slot.Id)
+	if not useful then return false, reason end
 	-- Debit and effect finish before inventory callbacks can change the slot or
 	-- character. ExpectedId also prevents consuming a replacement item.
 	local removed = InventoryService:TakeFromSlot(plr, slotType, slotIndex, 1, {ExpectedId = slot.Id, DeferSync = true})
-	if not removed then return false end
+	if not removed then return false, "That inventory slot changed. Try again." end
+	local oldHunger = StatsService:GetBase(plr, "Hunger") or 0
+	local oldHealth = hum.Health
 	applyFood(plr, removed)
 	applyConsumableEffects(plr, char, hum, removed)
 	InventoryService:Sync(plr)
-	return true
+	if FOOD_RESTORE[removed] then
+		return true, string.format("%s: +%d hunger", item.Name, math.floor((StatsService:GetBase(plr, "Hunger") or oldHunger) - oldHunger + 0.5))
+	elseif removed == "Bandage" then
+		return true, string.format("Bandage: +%d health", math.floor(hum.Health - oldHealth + 0.5))
+	end
+	local effect = RESIST_EFFECTS[removed]
+	return true, effect and string.format("%s active for %ds", item.Name, effect.Duration) or "Thermal Patch active for 90s"
 end
 
 function InventoryActionService:Init()
@@ -129,6 +139,10 @@ function InventoryActionService:Init()
 	local remote = Util.GetRemote(remotesFolder, Config.RemoteNames.InventoryAction)
 	if not remote then return end
 	self._initialized = true
+	local function consume(plr, slotType, slotIndex)
+		local success, message = self:_consumeFromSlot(plr, slotType, slotIndex)
+		remote:FireClient(plr, "UseResult", { Success = success, Message = message })
+	end
 	remote.OnServerEvent:Connect(function(plr, action, payload)
 		local _, hum = canAct(plr)
 		if not hum then return end
@@ -143,7 +157,7 @@ function InventoryActionService:Init()
 			return
 		end
 		if action == "Use" and type(payload) == "table" then
-			self:_consumeFromSlot(plr, payload.SlotType, payload.SlotIndex)
+			consume(plr, payload.SlotType, payload.SlotIndex)
 			return
 		end
 		if action == "Equip" and type(payload) == "table" then
@@ -171,7 +185,7 @@ function InventoryActionService:Init()
 
 			local item = ItemDatabase:Get(slot.Id)
 			if item and canConsume(item) then
-				self:_consumeFromSlot(plr, "Hotbar", slotIndex)
+				consume(plr, "Hotbar", slotIndex)
 				return
 			end
 			if not item or not item:HasTag("Holdable") then
