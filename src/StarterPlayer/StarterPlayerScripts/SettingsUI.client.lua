@@ -20,14 +20,45 @@ gui.Parent = playerGui
 
 local open = Instance.new("TextButton")
 open.Name = "OpenSettings"
-open.Size = UDim2.fromOffset(152, 42)
-open.Position = UDim2.new(1, -18, 0, 62)
+open.Size = UDim2.fromOffset(44, 44)
+open.Position = UDim2.new(1, -18, 0, 12)
 open.AnchorPoint = Vector2.new(1, 0)
-open.Text = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled and "SETTINGS" or "F4  SETTINGS"
+open.Text = ""
 open.Font = Enum.Font.GothamBold
 open.TextSize = 14
 open.Parent = gui
 Theme.Button(open, true)
+-- Draw the gear locally so the shortcut never waits for an image to load.
+local gear = Instance.new("Frame")
+gear.Name = "GearIcon"
+gear.BackgroundTransparency = 1
+gear.Size = UDim2.fromOffset(26, 26)
+gear.AnchorPoint = Vector2.new(.5, .5)
+gear.Position = UDim2.fromScale(.5, .5)
+gear.Parent = open
+for index = 0, 7 do
+	local angle = math.rad(index * 45)
+	local tooth = Instance.new("Frame")
+	tooth.BorderSizePixel = 0
+	tooth.Size = UDim2.fromOffset(5, 7)
+	tooth.AnchorPoint = Vector2.new(.5, .5)
+	tooth.Position = UDim2.fromOffset(13 + math.sin(angle) * 10, 13 - math.cos(angle) * 10)
+	tooth.Rotation = index * 45
+	tooth.Parent = gear
+	Theme.Bind(tooth, "BackgroundColor3", "Paper")
+end
+local ring = Instance.new("Frame")
+ring.Name = "Ring"
+ring.BackgroundTransparency = 1
+ring.Size = UDim2.fromOffset(14, 14)
+ring.AnchorPoint = Vector2.new(.5, .5)
+ring.Position = UDim2.fromScale(.5, .5)
+ring.Parent = gear
+Theme.Corner(ring, 20)
+local outline = Instance.new("UIStroke")
+outline.Thickness = 4
+outline.Parent = ring
+Theme.Bind(outline, "Color", "Paper")
 local shortcut = Instance.new("Frame")
 shortcut.Name = "SettingsShortcut"
 shortcut.BackgroundTransparency = 1

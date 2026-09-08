@@ -127,6 +127,7 @@ local INPUT = {
 local getMarkerGlyph
 local applyGlyphToFrame
 local clearGlyphFromFrame
+local setFullMapOpen
 
 local function tableClear(t)
 	for k in pairs(t) do
@@ -389,6 +390,12 @@ local function getEnemyEmoji(inst)
 end
 
 local function getPlayerGlyph(plr)
+	if plr == player then
+		-- The self marker is authored facing up; its parent rotates with the
+		-- character's heading after the same axis flips as map positions.
+		return (MapConfig.MarkerGlyphs and MapConfig.MarkerGlyphs.PlayerSelf)
+			or { Type = "emoji", Value = "▲" }
+	end
 	return {
 		Type = "emoji",
 		Value = getPlayerEmoji(plr),
@@ -638,8 +645,20 @@ local function createUI()
 	styleCard(panel)
 
 	local header = buildCoreFrame(panel, UDim2.new(1, -16, 0, 40), UDim2.fromOffset(8, 8), Color3.new(), 1)
-	buildLabel(header, "EXPEDITION ATLAS", UDim2.new(1, -190, 1, 0), UDim2.fromOffset(0, 0), Enum.Font.GothamBlack, 18, MapConfig.Colors.TextPrimary)
-	buildLabel(header, "M CLOSE  /  SCROLL ZOOM  /  DRAG PAN", UDim2.new(0, 430, 1, 0), UDim2.new(1, -430, 0, 0), Enum.Font.Gotham, 11, MapConfig.Colors.TextMuted, Enum.TextXAlignment.Right)
+	header.Name = "Header"
+	buildLabel(header, "EXPEDITION ATLAS", UDim2.new(1, -54, 0, 22), UDim2.fromOffset(0, 0), Enum.Font.GothamBlack, 18, MapConfig.Colors.TextPrimary)
+	buildLabel(header, "M CLOSE  /  SCROLL ZOOM  /  DRAG PAN", UDim2.new(1, -54, 0, 16), UDim2.fromOffset(0, 24), Enum.Font.Gotham, 11, MapConfig.Colors.TextMuted)
+	local closeButton = Instance.new("TextButton")
+	closeButton.Name = "CloseMapButton"
+	closeButton.Size = UDim2.fromOffset(40, 40)
+	closeButton.Position = UDim2.new(1, -40, 0, 0)
+	closeButton.Font = Enum.Font.GothamBold
+	closeButton.TextSize = 28
+	closeButton.Text = "×"
+	closeButton.Parent = header
+	Theme.Button(closeButton, false)
+	Theme.Bind(closeButton, "TextColor3", "Text")
+	closeButton.Activated:Connect(function() setFullMapOpen(false) end)
 
 	local body = buildCoreFrame(panel, UDim2.new(1, -16, 1, -56), UDim2.fromOffset(8, 48), Color3.new(), 1)
 	local sidebarW = 170
@@ -760,7 +779,7 @@ local function createUI()
 
 	if UI.mapToggleButton then
 		UI.mapToggleButton.MouseButton1Click:Connect(function()
-			STATE.fullMapOpen = not STATE.fullMapOpen
+			setFullMapOpen(not STATE.fullMapOpen)
 		end)
 	end
 end
@@ -1185,8 +1204,14 @@ local function markFullMapInteraction()
 	STATE.fullRenderBoostUntil = math.max(STATE.fullRenderBoostUntil or 0, os.clock() + duration)
 end
 
-local function setFullMapOpen(open)
+setFullMapOpen = function(open)
 	STATE.fullMapOpen = open
+	if not open then
+		INPUT.dragInput = nil
+		INPUT.dragging = false
+		INPUT.lastTouchPan = nil
+		INPUT.gamepadPan = Vector2.zero
+	end
 	if UI.fullRoot then
 		UI.fullRoot.Visible = open
 	end
@@ -1739,7 +1764,9 @@ local function renderMinimap(playerRoot)
 	UI.minimapCoords.Text = string.format("X: %d  Z: %d", math.floor(playerPos.X), math.floor(playerPos.Z))
 	UI.minimapZoom.Text = string.format("Range: %dm", math.floor(STATE.minimapRange))
 
-	local mapSize = UI.minimapFrame and UI.minimapFrame.AbsoluteSize or Vector2.new(0, 0)
+	-- Marker/tile offsets use the map's local pixels. AbsoluteSize includes
+	-- Theme.Fit's UIScale and would scale the projection a second time.
+	local mapSize = UI.minimapFrame and Vector2.new(UI.minimapFrame.Size.X.Offset, UI.minimapFrame.Size.Y.Offset) or Vector2.zero
 	if mapSize.X <= 0 or mapSize.Y <= 0 then return end
 
 	local radiusPx = math.max(8, math.min(mapSize.X, mapSize.Y) * 0.5 - 4)

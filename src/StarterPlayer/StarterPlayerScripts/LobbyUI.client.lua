@@ -127,7 +127,10 @@ local open = button(gui, Mode == "Lobby" and "EXPEDITION DESK  /  F2" or "CREW  
 	if panel.Visible then refresh("All") end
 end, true)
 local openHost = Instance.new("Frame"); openHost.Name = "DeskShortcut"; openHost.BackgroundTransparency = 1
-openHost.Size = open.Size; openHost.AnchorPoint = Vector2.new(.5, 0); openHost.Position = UDim2.new(.5, 0, 0, 12); openHost.Parent = gui
+openHost.Size = open.Size
+openHost.AnchorPoint = Vector2.new(.5, Mode == "Lobby" and 1 or 0)
+openHost.Position = Mode == "Lobby" and UDim2.new(.5, 0, 1, -18) or UDim2.new(.5, 0, 0, 12)
+openHost.Parent = gui
 open.Parent = openHost; Theme.Fit(openHost, 1120, 740, nil, true)
 open.Visible = not panel.Visible
 panel:GetPropertyChangedSignal("Visible"):Connect(function()

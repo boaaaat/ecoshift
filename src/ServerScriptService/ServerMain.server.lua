@@ -138,7 +138,7 @@ local function boot()
 	snapshots:StageWorld(saved)
 	-- Supply art before tools/streaming initialize their prefab caches.
 	getService("PrototypePrefabService"):Init()
-	StarterPlayer.EnableMouseLockOption = false
+	StarterPlayer.EnableMouseLockOption = true
 	ReplicatedStorage:SetAttribute("ServerBootState", "LoadingServices")
 	if Services:FindFirstChild("ExpeditionRewardsService") then
 		table.insert(tier2Services, { name = "ExpeditionRewardsService", method = "Init" })

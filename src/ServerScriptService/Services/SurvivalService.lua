@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
@@ -14,6 +15,8 @@ SurvivalService._tickInterval = 1
 
 SurvivalService._sprintWanted = setmetatable({}, { __mode = "k" })
 SurvivalService._sprintApplied = setmetatable({}, { __mode = "k" })
+SurvivalService._sprintExhausted = setmetatable({}, { __mode = "k" })
+SurvivalService._lastSprintRequest = setmetatable({}, { __mode = "k" })
 
 local HUNGER_DRAIN = 0.05
 local HUNGER_DAMAGE = 10
@@ -55,24 +58,61 @@ local function applySprintModifier(plr, enabled)
 	end
 end
 
-function SurvivalService:_tickPlayer(plr, dt)
-	if ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring") then return end
+function SurvivalService:_stopSprint(plr)
+	self._sprintWanted[plr] = nil
+	applySprintModifier(plr, false)
+end
+
+function SurvivalService:_tickSprint(plr, dt)
 	local char = plr.Character
-	if not char then
-		applySprintModifier(plr, false)
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring")
+		or plr:GetAttribute("IsDead") or not hum or not hrp or hum.Health <= 0 then
+		self:_stopSprint(plr)
+		return
+	end
+	if hum.Sit or hum.PlatformStand then self:_stopSprint(plr) end
+	local maxStamina = math.max(0, StatsService:GetStat(plr, "MaxStamina") or 100)
+	local stamina = clamp(StatsService:GetBase(plr, "Stamina") or maxStamina, 0, maxStamina)
+	-- MoveDirection is not replicated reliably to the server for client-owned
+	-- characters. Horizontal assembly velocity also detects actual movement.
+	local velocity = hrp.AssemblyLinearVelocity
+	local moving = hum.MoveDirection.Magnitude > 0.1 or Vector3.new(velocity.X, 0, velocity.Z).Magnitude > 0.75
+	local sprinting = self._sprintWanted[plr] == true and not self._sprintExhausted[plr] and moving and stamina > 0
+	local nextStamina = clamp(stamina + (sprinting and -STAMINA_DRAIN or STAMINA_REGEN) * dt, 0, maxStamina)
+	if nextStamina <= 0 and self._sprintWanted[plr] then
+		self._sprintExhausted[plr] = true
 		self._sprintWanted[plr] = nil
+		sprinting = false
+	end
+	applySprintModifier(plr, sprinting)
+	if nextStamina ~= stamina then StatsService:SetBaseStats(plr, {Stamina = nextStamina}) end
+end
+
+function SurvivalService:_setSprint(plr, enabled)
+	if type(enabled) ~= "boolean" then return end
+	if not enabled then
+		self._sprintExhausted[plr] = nil
+		self:_stopSprint(plr)
 		return
 	end
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	if not hum or not hrp then
-		applySprintModifier(plr, false)
-		return
-	end
-	if hum.Health <= 0 then
-		applySprintModifier(plr, false)
-		return
-	end
+	local now = os.clock()
+	if self._sprintWanted[plr] or self._sprintExhausted[plr] then return end
+	self._sprintWanted[plr] = true
+	-- A fast release/repress still records intent; the regular tick applies it
+	-- if the immediate update is throttled.
+	if now - (self._lastSprintRequest[plr] or -math.huge) < 0.1 then return end
+	self._lastSprintRequest[plr] = now
+	self:_tickSprint(plr, 0)
+end
+
+function SurvivalService:_tickPlayer(plr, dt)
+	if ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring") or plr:GetAttribute("IsDead") then return end
+	local char = plr.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if not hum or not hrp or hum.Health <= 0 then return end
 
 	local temp = StatsService:GetBase(plr, "Temperature") or StatsService:GetStat(plr, "Temperature") or 0
 	local tempRes = StatsService:GetStat(plr, "TemperatureResistance") or 0
@@ -109,29 +149,9 @@ function SurvivalService:_tickPlayer(plr, dt)
 		hum:TakeDamage(HUNGER_DAMAGE * dt)
 	end
 
-	local maxStamina = StatsService:GetStat(plr, "MaxStamina") or 100
-	local stamina = StatsService:GetBase(plr, "Stamina") or StatsService:GetStat(plr, "Stamina") or maxStamina
-	local moving = hum.MoveDirection.Magnitude > 0.1
-	local wantsSprint = self._sprintWanted[plr] and true or false
-	local sprinting = wantsSprint and moving and stamina > 0
-
-	if sprinting then
-		stamina = stamina - (STAMINA_DRAIN * dt)
-	else
-		stamina = stamina + (STAMINA_REGEN * dt)
-	end
-	stamina = clamp(stamina, 0, maxStamina)
-	if stamina <= 0 and wantsSprint then
-		self._sprintWanted[plr] = nil
-		sprinting = false
-	end
-
-	applySprintModifier(plr, sprinting)
-
 	StatsService:SetBaseStats(plr, {
 		Temperature = temp,
 		Hunger = hunger,
-		Stamina = stamina,
 	})
 end
 
@@ -143,9 +163,24 @@ function SurvivalService:Init()
 	local rSprint = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.SprintToggle)
 	if rSprint then
 		rSprint.OnServerEvent:Connect(function(plr, enabled)
-			self._sprintWanted[plr] = enabled and true or nil
+			self:_setSprint(plr, enabled)
 		end)
 	end
+	local elapsed = 0
+	RunService.Heartbeat:Connect(function(dt)
+		elapsed += dt
+		if elapsed < 0.1 then return end
+		local step = math.min(elapsed, 0.5); elapsed = 0
+		for _, plr in ipairs(Players:GetPlayers()) do self:_tickSprint(plr, step) end
+	end)
+	local function bindPlayer(plr)
+		plr.CharacterRemoving:Connect(function()
+			self:_stopSprint(plr); self._sprintExhausted[plr] = nil
+		end)
+		plr:GetAttributeChangedSignal("IsDead"):Connect(function() if plr:GetAttribute("IsDead") then self:_stopSprint(plr) end end)
+	end
+	Players.PlayerAdded:Connect(bindPlayer)
+	for _, plr in ipairs(Players:GetPlayers()) do bindPlayer(plr) end
 
 	task.spawn(function()
 		local last = os.clock()
@@ -165,6 +200,8 @@ function SurvivalService:Init()
 	Players.PlayerRemoving:Connect(function(plr)
 		self._sprintWanted[plr] = nil
 		self._sprintApplied[plr] = nil
+		self._sprintExhausted[plr] = nil
+		self._lastSprintRequest[plr] = nil
 	end)
 end
 

@@ -22,14 +22,7 @@ local function disableDefaultUI()
 end
 disableDefaultUI()
 
-local function disableShiftLock()
-	local localPlayer = Players.LocalPlayer
-	if not localPlayer then return end
-	pcall(function()
-		localPlayer.DevEnableMouseLock = false
-	end)
-end
--- Mouse lock is configured on StarterPlayer by the server.
+-- Mouse lock uses Roblox's controller; MouseLockKeys moves its toggle to Control.
 
 -- OPTIMIZED: Defer config loading to not block script start
 local Config, Util
