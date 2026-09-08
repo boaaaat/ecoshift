@@ -13,7 +13,6 @@ local ThreatService = require(script.Parent.ThreatService)
 
 local SpawnService = {}
 SpawnService._enemySpawns = Util.WaitForDescendant(Config.Paths.EnemySpawnsFolder, 5)
-SpawnService._startTime = os.clock()
 
 local function lerp(a, b, t)
 	return a + (b - a) * t
@@ -233,7 +232,7 @@ function SpawnService:ComputeEnemyWave()
 
 	-- build a bag
 	local bag = {}
-	local elapsed = os.clock() - (self._startTime or os.clock())
+	local elapsed = BiomeService:GetElapsed()
 	local timeScale = tonumber(waves.TimeScaleSeconds) or tonumber(BiomeConfig.time_scale_seconds) or 900
 	for _,entry in pairs(entriesById) do
 		local baseWeight = tonumber(entry.BaseWeight) or 1

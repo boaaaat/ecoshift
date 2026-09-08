@@ -100,7 +100,7 @@ Provisional formula: health multiplier `1 + 0.16 × (level - 1)` and damage mult
 
 Monsters gain one level per 450 seconds (7.5 minutes), with the level fixed at spawn. Biome eligibility begins at 0/5/10/20/30/40/45/55 minutes for Verdant Reach/Sunscar Dunes/Mirefen/Frostfall/Cinder Rift/Prism Barrens/Aurora Vale/Starfall Crater. Eligibility is the earliest possible visit, not a guaranteed arrival. Later biome weights rise with elapsed time; an early-biome weight floor of 0.4 preserves revisits. Forecasts and selectors use the same eligibility rules, and advancing a shift cannot bypass a future biome's introduction gate.
 
-The 60–90 minute target includes gathering, hunting, processing, and infrastructure after biome visits. Team preparation and random shifts affect actual completion time. This is a balance target, not a hard time lock on crafting or a maximum run length.
+The 60–90 minute target includes gathering, hunting, processing, and infrastructure after biome visits. Team preparation and random shifts affect actual completion time. This is a balance target, not a hard time lock on crafting or a maximum run length. Natural shifts remain fully weighted random as confirmed on September 7; do not add an unvisited-biome bias or guaranteed rotation. Unlucky runs may take substantially longer. See progression-balance.md for the natural-visit analysis.
 
 ## Proposed world-control equipment
 
