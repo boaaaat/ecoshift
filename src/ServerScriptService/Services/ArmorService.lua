@@ -254,8 +254,15 @@ function ArmorService:Equip(plr, itemId)
 		else
 			StatsService:RemoveModifier(plr, "Armor", MOD_ID_ARMOR)
 		end
-		if stats and stats.TempRes then
-			StatsService:AddModifier(plr, "TemperatureResistance", stats.TempRes, "Add", nil, MOD_ID_TEMPRES)
+		if stats and (stats.TempRes or stats.TemperatureResistance or stats.TempResistance) then
+			StatsService:AddModifier(
+				plr,
+				"TemperatureResistance",
+				(stats.TempRes or stats.TemperatureResistance or stats.TempResistance),
+				"Add",
+				nil,
+				MOD_ID_TEMPRES
+			)
 		else
 			StatsService:RemoveModifier(plr, "TemperatureResistance", MOD_ID_TEMPRES)
 		end

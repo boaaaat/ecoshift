@@ -31,7 +31,7 @@ local ReviveRemote = nil -- Client -> Server revival requests
 local SpectateRemote = nil -- Client -> Server spectate requests
 
 local REVIVAL_TIME = 3 -- seconds to hold E to revive
-local REVIVAL_RANGE = 8 -- studs from body
+local REVIVAL_RANGE = 10 -- studs from body
 local REVIVAL_STATS = { Health = 30, Temperature = 0, Hunger = 50, Stamina = 50 }
 local DROP_RADIUS = 3
 local DROP_HORIZONTAL_SPEED_MIN = 10
@@ -366,10 +366,7 @@ function DeathService:_canRevive(player, reviver)
 	local position = data.ragdoll:GetPivot().Position
 	if (root.Position - position).Magnitude > REVIVAL_RANGE then return false end
 	if not InventoryService:Has(reviver, REVIVE_ITEM, 1) then return false end
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { char, data.ragdoll }
-	if workspace:Raycast(root.Position, position - root.Position, params) then return false end
+	-- Line-of-sight is handled by the prompt itself; avoid strict raycast rejects that can fail due to temporary blockers.
 	return true
 end
 
@@ -489,7 +486,7 @@ function DeathService:_createRagdoll(character)
 		prompt.ObjectText = character.Name
 		prompt.HoldDuration = REVIVAL_TIME
 		prompt.MaxActivationDistance = REVIVAL_RANGE
-		prompt.RequiresLineOfSight = true
+		prompt.RequiresLineOfSight = false
 		prompt.Parent = hrp
 		
 		-- Store original player reference
