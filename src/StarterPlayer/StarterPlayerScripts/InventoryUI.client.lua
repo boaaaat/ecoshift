@@ -921,6 +921,20 @@ local swapLocalSlots
 local function shiftMove(slot)
 	local data = getSlotData(slot.Type, slot.Index)
 	if not data then return end
+	local item = ItemDatabase:Get(data.Id)
+	if slot.Type ~= "Armor" and item and item:HasTag("Armor") then
+		if not rInventoryAction then return end
+		-- Move atomically returns the old armor to this same slot, even with a
+		-- full inventory. Armor equip takes priority over open-chest transfers.
+		rInventoryAction:FireServer("Move", {
+			FromType = slot.Type,
+			FromIndex = slot.Index,
+			ToType = "Armor",
+			ToIndex = 1,
+		})
+		showTransferStatus("Equipping armor...", COLORS.Accent, 0.9)
+		return
+	end
 	local chestAttempted = false
 	if rChest then
 		local chestId = getOpenChestSlotsContainer()
