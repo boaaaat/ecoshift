@@ -1,3 +1,4 @@
+local Settings = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("ClientSettings"))
 if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 -- BuildingUI.client.lua
 -- Allows players to place items from their inventory (workbenches, campfires, etc.)
@@ -33,7 +34,10 @@ local COLORS = Theme.Colors
 
 local GRID_SIZE = Config.GRID.Size or 6
 local BUILD_MESSAGES = ResultMessages.Build or {}
-local DEFAULT_HINT_TEXT = "Build within 100 studs of spawn\nLeft-click to place • Right-click to cancel • R to salvage hovered"
+local function defaultHint()
+	return "Build within 100 studs of spawn\nLeft-click to place • Right-click to cancel • " .. Settings.Key("Salvage").Name .. " to salvage hovered"
+end
+local DEFAULT_HINT_TEXT = defaultHint()
 local PLACE_REQUEST_ITEM_ATTR = "BuildPlaceItemRequestItem"
 local PLACE_REQUEST_NONCE_ATTR = "BuildPlaceItemRequestNonce"
 
@@ -101,6 +105,7 @@ hintLabel.Font = Enum.Font.Gotham
 hintLabel.Visible = false
 hintLabel.ZIndex = 100
 hintLabel.Parent = gui
+Settings.Changed:Connect(function() DEFAULT_HINT_TEXT = defaultHint(); hintLabel.Text = DEFAULT_HINT_TEXT end)
 
 local function showHintStatus(text, color, duration)
 	hintMessageToken += 1
@@ -477,14 +482,14 @@ end
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 	
-	if input.KeyCode == Enum.KeyCode.B then
+	if Settings.Matches(input, "Build") then
 		if isPlacementMode then
 			cancelPlacement()
 			selectionPanel.Visible = false
 		else
 			togglePanel()
 		end
-	elseif input.KeyCode == Enum.KeyCode.R then
+	elseif Settings.Matches(input, "Salvage") then
 		removeHoveredStructure()
 	elseif input.KeyCode == Enum.KeyCode.Escape and isPlacementMode then
 		cancelPlacement()

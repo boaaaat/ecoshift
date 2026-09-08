@@ -6,6 +6,7 @@ local RunService = game:GetService("RunService")
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
+local Settings = require(ReplicatedStorage.Shared.ClientSettings)
 local C = Theme.Colors
 local player = Players.LocalPlayer
 local gui = Instance.new("ScreenGui")
@@ -27,6 +28,20 @@ local runLabel = Theme.Label(card, "00:00", UDim2.fromOffset(72, 18), UDim2.from
 runLabel.TextXAlignment = Enum.TextXAlignment.Right
 local biomeLabel = Theme.Label(card, "Surveying world...", UDim2.fromOffset(242, 29), UDim2.fromOffset(16, 66), 20, C.Paper, true)
 local weatherLabel = Theme.Label(card, "Awaiting conditions", UDim2.fromOffset(240, 17), UDim2.fromOffset(16, 96), 11, C.Sage)
+-- Whole text rows are tap targets; keep labels so state updates stay simple.
+for _, entry in ipairs({ { biomeLabel, "Biome", 66, 29 }, { weatherLabel, "Conditions", 96, 25 } }) do
+	entry[1].Size = UDim2.fromOffset(220, entry[4])
+	local hit = Instance.new("TextButton")
+	hit.Name, hit.Text = "Inspect" .. entry[2], ""
+	hit.Size, hit.Position = UDim2.fromOffset(244, entry[4]), UDim2.fromOffset(14, entry[3])
+	hit.BackgroundTransparency, hit.Parent = 1, card
+	local arrow = Theme.Label(hit, ">", UDim2.fromOffset(16, 18), UDim2.new(1, -16, .5, -9), 14, C.Amber, true)
+	arrow.TextXAlignment = Enum.TextXAlignment.Center
+	hit.Activated:Connect(function()
+		local attribute = "FieldGuide" .. entry[2]
+		player:SetAttribute(attribute, (player:GetAttribute(attribute) or 0) + 1)
+	end)
+end
 local shiftLabel = Theme.Label(card, "SHIFT TIME UNKNOWN", UDim2.fromOffset(152, 18), UDim2.fromOffset(16, 127), 10, C.Sage, true)
 local countdown = Theme.Label(card, "--:--", UDim2.fromOffset(90, 22), UDim2.fromOffset(166, 124), 19, C.Amber, true)
 countdown.TextXAlignment = Enum.TextXAlignment.Right
@@ -85,7 +100,9 @@ for index, entry in ipairs({ { "Pack", "G" }, { "Craft", "C" }, { "Build", "B" }
 	button.Position = UDim2.fromOffset((index - 1) * 76, 0)
 	button.Font = Enum.Font.GothamBold
 	button.TextSize = 10
-	button.Text = entry[2] .. "  " .. string.upper(entry[1])
+	local function updateHint() button.Text = Settings.Key(entry[1]).Name .. "  " .. string.upper(entry[1]) end
+	Settings.Changed:Connect(updateHint)
+	updateHint()
 	button.Parent = kit
 	Theme.Button(button, true)
 	button.Activated:Connect(function()
@@ -93,6 +110,14 @@ for index, entry in ipairs({ { "Pack", "G" }, { "Craft", "C" }, { "Build", "B" }
 		player:SetAttribute(attribute, (player:GetAttribute(attribute) or 0) + 1)
 	end)
 end
+
+local function updateHUDPreferences()
+	notes.Visible = Settings.Get("ShowFieldNotes")
+	roleButton.Position = UDim2.fromOffset(0, notes.Visible and 308 or 200)
+	kit.Visible = Settings.Get("ShowNavigation")
+end
+Settings.Changed:Connect(updateHUDPreferences)
+updateHUDPreferences()
 
 local remotes = Util.GetDescendant(Config.Paths.Remotes) or Util.WaitForDescendant(Config.Paths.Remotes, 15)
 local function remote(name) return remotes and Util.GetRemote(remotes, Config.RemoteNames[name]) end

@@ -7,10 +7,6 @@ local isExpedition = require(ReplicatedStorage.Shared.SessionConfig).GetMode() =
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 Theme.TrackRoot(playerGui)
-Theme.SetMode(player:GetAttribute("UITheme"))
-player:GetAttributeChangedSignal("UITheme"):Connect(function()
-	Theme.SetMode(player:GetAttribute("UITheme"))
-end)
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "SettingsUI"
@@ -85,147 +81,107 @@ backdrop.Visible = false
 backdrop.ZIndex = 5
 backdrop.Parent = gui
 
+local Settings = require(ReplicatedStorage.Shared.ClientSettings)
+local Schema = require(ReplicatedStorage.Shared.SettingsConfig)
 local panel = Instance.new("Frame")
 panel.Name = "FieldSettings"
-panel.Size = UDim2.fromOffset(464, 320)
-panel.Position = UDim2.fromScale(0.5, 0.5)
-panel.AnchorPoint = Vector2.new(0.5, 0.5)
-panel.ZIndex = 6
-panel.Visible = false
-panel.Parent = gui
-Theme.Panel(panel)
-Theme.Fit(panel, 464, 320)
+panel.Size = UDim2.fromOffset(580, 560)
+panel.Position, panel.AnchorPoint = UDim2.fromScale(.5, .5), Vector2.new(.5, .5)
+panel.ZIndex, panel.Visible, panel.Parent = 6, false, gui
+Theme.Panel(panel); Theme.Fit(panel, 580, 560)
 Theme.CaptureCursor(panel); Theme.AnimatePanel(panel)
-
-Theme.Label(panel, "ECOSHIFT  /  PERSONAL FIELD KIT", UDim2.fromOffset(390, 18), UDim2.fromOffset(22, 16), 10, Theme.Colors.TextMuted, true)
-Theme.Label(panel, "Make camp your own.", UDim2.fromOffset(390, 32), UDim2.fromOffset(22, 38), 24, nil, true)
-Theme.Label(panel, "APPEARANCE", UDim2.fromOffset(320, 18), UDim2.fromOffset(22, 85), 10, Theme.Colors.TextMuted, true)
-
-local close = Instance.new("TextButton")
-close.Name = "CloseSettings"
-close.Size = UDim2.fromOffset(30, 30)
-close.Position = UDim2.new(1, -46, 0, 16)
-close.Text = "×"
-close.Font = Enum.Font.Gotham
-close.TextSize = 21
-close.ZIndex = 8
-close.Parent = panel
-Theme.Button(close, false)
-
-local choices = {}
-for index, option in ipairs({ { "Dark", "NIGHT WATCH", "Charcoal & moss" }, { "Light", "FIELD PAPER", "Warm expedition notes" } }) do
-	local mode, title, subtitle = option[1], option[2], option[3]
-	local card = Instance.new("TextButton")
-	card.Name = mode .. "Theme"
-	card.Size = UDim2.fromOffset(202, 137)
-	card.Position = UDim2.fromOffset(22 + (index - 1) * 218, 110)
-	card.Text = ""
-	card.ZIndex = 7
-	card.Parent = panel
-	Theme.Button(card, false)
-	local stroke = Instance.new("UIStroke")
-	stroke.Name = "SelectionOutline"
-	stroke.Thickness = 2
-	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	stroke.Parent = card
-
-	-- Illustrations show both choices faithfully even when the active theme changes.
-	local previewPalette = Theme.Palette(mode)
-	local preview = Instance.new("Frame")
-	preview.Name = "PalettePreview"
-	preview:SetAttribute("ThemeFixed", true)
-	preview.Size = UDim2.fromOffset(178, 64)
-	preview.Position = UDim2.fromOffset(12, 12)
-	preview.BackgroundColor3 = previewPalette.Panel
-	preview.BorderSizePixel = 0
-	preview.ZIndex = 8
-	preview.Parent = card
-	Theme.Corner(preview, 5)
-	local ribbon = Instance.new("Frame")
-	ribbon.Size = UDim2.new(0, 4, 1, -20)
-	ribbon.Position = UDim2.fromOffset(10, 10)
-	ribbon.BackgroundColor3 = previewPalette.Amber
-	ribbon.BorderSizePixel = 0
-	ribbon.ZIndex = 9
-	ribbon.Parent = preview
-	for line = 1, 3 do
-		local mark = Instance.new("Frame")
-		mark.Size = UDim2.fromOffset(line == 1 and 109 or (line == 2 and 135 or 82), line == 1 and 6 or 4)
-		mark.Position = UDim2.fromOffset(25, 11 + (line - 1) * 16)
-		mark.BackgroundColor3 = line == 1 and previewPalette.Text or previewPalette.TextMuted
-		mark.BackgroundTransparency = line == 1 and 0 or 0.35
-		mark.BorderSizePixel = 0
-		mark.ZIndex = 9
-		mark.Parent = preview
-		Theme.Corner(mark, 2)
-	end
-	Theme.Label(card, title, UDim2.fromOffset(164, 20), UDim2.fromOffset(12, 84), 11, nil, true)
-	Theme.Label(card, subtitle, UDim2.fromOffset(180, 18), UDim2.fromOffset(12, 108), 10, Theme.Colors.TextMuted)
-	local selected = Theme.Label(card, "✓", UDim2.fromOffset(20, 20), UDim2.fromOffset(172, 84), 14, Theme.Colors.Text, true)
-	selected.Name = "Selected"
-	choices[mode] = { Button = card, Outline = stroke, Selected = selected }
+Theme.Label(panel, "PERSONAL FIELD KIT", UDim2.fromOffset(440, 18), UDim2.fromOffset(22, 16), 10, Theme.Colors.TextMuted, true)
+Theme.Label(panel, "Settings", UDim2.fromOffset(420, 32), UDim2.fromOffset(22, 36), 25, nil, true)
+local function button(parent, name, text, x, y, w, h)
+	local b = Instance.new("TextButton")
+	b.Name, b.Text, b.Size, b.Position = name, text, UDim2.fromOffset(w, h), UDim2.fromOffset(x, y)
+	b.Font, b.TextSize, b.ZIndex, b.Parent = Enum.Font.GothamBold, 12, 8, parent
+	Theme.Button(b, false)
+	return b
 end
-
-local status = Theme.Label(panel, "Applies across your field kit, map and crafting menus.", UDim2.new(1, -44, 0, 36), UDim2.fromOffset(22, 265), 11, Theme.Colors.TextMuted)
-status.Name = "PreferenceStatus"
-status.TextWrapped = true
-status.TextTruncate = Enum.TextTruncate.None
-
-local function renderSelection()
-	for mode, choice in pairs(choices) do
-		local selected = Theme.Mode == mode
-		Theme.Bind(choice.Button, "BackgroundColor3", selected and "SlotSelected" or "SlotEmpty")
-		Theme.Bind(choice.Outline, "Color", selected and "Amber" or "Border")
-		choice.Outline.Transparency = selected and 0 or 0.55
-		choice.Selected.Visible = selected
-	end
+local close = button(panel, "CloseSettings", "X", 530, 16, 30, 30)
+local tabs, currentTab = {}, "Gameplay"
+local scroll = Instance.new("ScrollingFrame")
+scroll.Name = "Preferences"
+scroll.Size, scroll.Position = UDim2.fromOffset(536, 320), UDim2.fromOffset(22, 118)
+scroll.BackgroundTransparency, scroll.BorderSizePixel, scroll.ScrollBarThickness = 1, 0, 5
+scroll.AutomaticCanvasSize, scroll.CanvasSize = Enum.AutomaticSize.Y, UDim2.new()
+scroll.ZIndex, scroll.Parent = 7, panel
+local layout = Instance.new("UIListLayout")
+layout.Padding, layout.SortOrder, layout.Parent = UDim.new(0, 8), Enum.SortOrder.LayoutOrder, scroll
+local status = Theme.Label(panel, "", UDim2.fromOffset(536, 46), UDim2.fromOffset(22, 446), 11, Theme.Colors.TextMuted)
+status.TextWrapped, status.TextTruncate = true, Enum.TextTruncate.None
+local save = button(panel, "SavePreferences", "Save preferences", 354, 506, 204, 34)
+local reset = button(panel, "ResetPreferences", "Reset defaults", 22, 506, 150, 34)
+local replay = button(panel, "ReplayTutorial", "Replay tutorial", 182, 506, 162, 34)
+replay.Visible = isExpedition
+local rows, capture = {}, nil
+local function cancelCapture()
+	capture = nil; Settings.Capturing = false
 end
-Theme.Changed:Connect(renderSelection)
-renderSelection()
-
-local preferenceRemote, requestedTheme
-for mode, choice in pairs(choices) do
-	choice.Button.Activated:Connect(function()
-		requestedTheme = mode
-		player:SetAttribute("UITheme", mode)
-		Theme.SetMode(mode)
-		if preferenceRemote then
-			status.Text = "Saving your appearance preference..."
-			preferenceRemote:FireServer("SetTheme", mode)
-		else
-			status.Text = "Appearance applied. Waiting for your expedition profile..."
-		end
+local function render()
+	Theme.SetMode(Settings.Get("UITheme"))
+	status.Text = capture and "Press a key. Esc cancels. Movement, E, Q, X, number keys and chat are reserved." or Settings.Status
+	for key, row in pairs(rows) do
+		row.Frame.Visible = Schema.Definitions[key].Section == currentTab
+		local value = Settings.Get(key)
+		row.Button.Text = capture == key and "Press a key..." or (type(value) == "boolean" and (value and "On" or "Off") or tostring(value))
+	end
+	for name, tab in pairs(tabs) do Theme.Bind(tab, "BackgroundColor3", currentTab == name and "SlotSelected" or "SlotEmpty") end
+end
+for index, section in ipairs({ "Gameplay", "Graphics", "Keybinds" }) do
+	local tab = button(panel, section .. "Tab", section, 22 + (index - 1) * 182, 78, 172, 30)
+	tabs[section] = tab
+	tab.Activated:Connect(function() cancelCapture(); currentTab = section; scroll.CanvasPosition = Vector2.zero; render() end)
+end
+for index, key in ipairs(Schema.Order) do
+	local def = Schema.Definitions[key]
+	local row = Instance.new("Frame")
+	row.Name, row.Size, row.BackgroundTransparency = key, UDim2.new(1, -10, 0, 44), 1
+	row.LayoutOrder, row.Parent = index, scroll
+	Theme.Label(row, def.Label, UDim2.fromOffset(330, 38), UDim2.fromOffset(0, 3), 12)
+	local choice = button(row, "Value", "", 340, 3, 172, 36)
+	rows[key] = { Frame = row, Button = choice }
+	choice.Activated:Connect(function()
+		cancelCapture()
+		if def.Section == "Keybinds" then capture = key; Settings.Capturing = true
+		elseif def.Values then
+			local indexNow = table.find(def.Values, Settings.Get(key)) or 1
+			Settings.Set(key, def.Values[indexNow % #def.Values + 1])
+		else Settings.Set(key, not Settings.Get(key)) end
+		render()
 	end)
 end
-
-task.spawn(function()
-	local remotes = ReplicatedStorage:WaitForChild("Remotes", 30)
-	preferenceRemote = remotes and remotes:WaitForChild("ProfilePreference", 30)
-	if not preferenceRemote then
-		if requestedTheme then status.Text = "Appearance applied for this session." end
-		return
-	end
-	preferenceRemote.OnClientEvent:Connect(function(action, result)
-		if action ~= "Result" or type(result) ~= "table" then return end
-		if result.RequestedTheme and result.RequestedTheme ~= requestedTheme then return end
-		if result.Success then
-			status.Text = "Appearance preference updated."
-		else
-			status.Text = "Appearance applied. Your preference could not be saved yet."
-		end
-	end)
-	if requestedTheme then preferenceRemote:FireServer("SetTheme", requestedTheme) end
-end)
-
+Settings.Changed:Connect(render)
 local function setOpen(visible)
-	backdrop.Visible, panel.Visible = visible, visible
-	open.Visible = not visible
+	cancelCapture()
+	backdrop.Visible, panel.Visible, open.Visible = visible, visible, not visible
+	render()
 end
 open.Activated:Connect(function() setOpen(true) end)
 close.Activated:Connect(function() setOpen(false) end)
 backdrop.Activated:Connect(function() setOpen(false) end)
+save.Activated:Connect(function() cancelCapture(); Settings.Save() end)
+reset.Activated:Connect(function() cancelCapture(); Settings.Reset() end)
+replay.Activated:Connect(function()
+	setOpen(false)
+	player:SetAttribute("ReplaySurvivalTutorial", (player:GetAttribute("ReplaySurvivalTutorial") or 0) + 1)
+end)
 player:GetAttributeChangedSignal("FieldKitSettings"):Connect(function() setOpen(not panel.Visible) end)
 UserInputService.InputBegan:Connect(function(input, processed)
-	if processed or UserInputService:GetFocusedTextBox() then return end
-	if input.KeyCode == Enum.KeyCode.F4 then setOpen(not panel.Visible) end
+	if capture then
+		if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+		if input.KeyCode == Enum.KeyCode.Escape then cancelCapture(); render(); return end
+		if not Settings.Set(capture, input.KeyCode.Name) then
+			status.Text = "That key is reserved or already bound. Choose another key, or press Esc."
+			return
+		end
+		-- Keep gameplay suppressed through the current input dispatch.
+		task.defer(function() cancelCapture(); render() end)
+		return
+	end
+	if processed or not Settings.CanInput() then return end
+	if Settings.Matches(input, "Settings") then setOpen(not panel.Visible)
+	elseif input.KeyCode == Enum.KeyCode.Escape and panel.Visible then setOpen(false) end
 end)
+render()

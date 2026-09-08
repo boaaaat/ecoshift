@@ -4,6 +4,7 @@ local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local Settings = require(ReplicatedStorage.Shared.ClientSettings)
 local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere") or Instance.new("Atmosphere")
 atmosphere.Name = "EcoShiftWeather"
 atmosphere.Density, atmosphere.Haze = 0.18, 0.5
@@ -45,13 +46,21 @@ local styles = {
 	CosmicHaze = {0.38, 2.3, Color3.fromRGB(174, 150, 207), 40},
 }
 local current
+local weatherRate = 0
+local function applyQuality()
+	local multiplier = ({ Low = 0.2, Medium = 0.5, High = 1 })[Settings.Get("GraphicsQuality")] or 1
+	particles.Rate = Settings.Get("WeatherParticles") and weatherRate * multiplier or 0
+	if particles.Rate == 0 then particles:Clear() end
+end
+Settings.Changed:Connect(applyQuality)
 ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("GameStateUpdate").OnClientEvent:Connect(function(state)
 	if type(state) ~= "table" or current == state.WeatherId then return end
 	current = state.WeatherId
 	local style = styles[current] or styles.Clear
 	TweenService:Create(atmosphere, TweenInfo.new(3), {Density = style[1], Haze = style[2], Color = style[3]}):Play()
 	TweenService:Create(correction, TweenInfo.new(3), {TintColor = Color3.new(1, 1, 1):Lerp(style[3], 0.15)}):Play()
-	particles.Rate = style[4] or 0
+	weatherRate = style[4] or 0
+	applyQuality()
 	particles.Color = ColorSequence.new(style[3])
 	particles.Size = NumberSequence.new(current == "Rain" and 0.08 or 0.18)
 	particles.Speed = current == "Rain" and NumberRange.new(30, 38) or NumberRange.new(5, 10)
