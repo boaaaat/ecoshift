@@ -8,6 +8,7 @@ local InventoryService = require(script.Parent.InventoryService)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local StatsService = require(script.Parent.StatsService)
 local SurvivalConfig = require(ReplicatedStorage.Shared.SurvivalConfig)
+local GeneratedArmorFit = require(script.Parent.GeneratedArmorFit)
 
 local ArmorService = {}
 ArmorService._equipped = {} -- [player] = { Id = string, Instance = Instance?, Character = Model? }
@@ -124,6 +125,7 @@ end
 local function clearArmor(plr)
 	local entry = ArmorService._equipped[plr]
 	if entry then entry.MountTicket = nil end
+	if entry and entry.FitCleanup then entry.FitCleanup() end
 	if entry and entry.Instance and entry.Instance.Parent then
 		entry.Instance:Destroy()
 	end
@@ -236,6 +238,9 @@ function ArmorService:Equip(plr, itemId)
 	end
 
 	ArmorService._equipped[plr] = { Id = itemId, Instance = clone, Character = char }
+	if isGeneratedArmor(clone) then
+		ArmorService._equipped[plr].FitCleanup = GeneratedArmorFit.Bind(clone)
+	end
 	if clone then recoverGeneratedMount(plr, ArmorService._equipped[plr]) end
 	plr:SetAttribute("EquippedArmor", itemId)
 
@@ -299,6 +304,7 @@ function ArmorService:Init()
 	Players.PlayerRemoving:Connect(function(plr)
 		local entry = ArmorService._equipped[plr]
 		if entry then entry.MountTicket = nil end
+		if entry and entry.FitCleanup then entry.FitCleanup() end
 		ArmorService._equipped[plr] = nil
 	end)
 end
