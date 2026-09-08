@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
 local Theme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UI"):WaitForChild("UITheme"))
 
 local player = Players.LocalPlayer
@@ -18,6 +19,7 @@ local SpectateRemote = Remotes and Remotes:WaitForChild("Spectate", 5)
 local ReviveRemote = Remotes and Remotes:WaitForChild("Revive", 5)
 local GameStateRemote = Remotes and Remotes:WaitForChild("GameStateUpdate", 5)
 local RewardsRemote = Remotes and Remotes:WaitForChild("ExpeditionRewards", 10)
+local LobbyRemote = Remotes and Remotes:WaitForChild("Lobby", 10)
 
 -- State
 local isDead = false
@@ -31,6 +33,7 @@ local lastCanSpectate = false
 local teamResults = nil
 local rewardSummaries = {}
 local currencyName = "Field Marks"
+local returnRequest, returnAccepted, returnMessage = nil, false, ""
 local corpse = nil
 local corpsePosition = nil
 local corpseDeathId = nil
@@ -255,6 +258,10 @@ local function createDeathUI()
 	local rows = Instance.new("UIListLayout")
 	rows.Padding = UDim.new(0, 6)
 	rows.Parent = results
+	local travelStatus = Theme.Label(container, "", UDim2.fromOffset(400, 26), UDim2.fromOffset(20, 493), 11, Theme.Colors.Paper)
+	travelStatus.Name = "TravelStatus"
+	travelStatus.TextWrapped = true
+	travelStatus.Visible = false
 	
 	screenGui.Enabled = false
 	screenGui.Parent = playerGui
@@ -365,7 +372,12 @@ local function updateDeathUI(canSpectate)
 		end
 	end
 	container.Size = UDim2.fromOffset(440, isGameOver and 525 or 300)
-	if buttons then buttons.Position = UDim2.fromOffset(20, isGameOver and 455 or 150) end
+	if buttons then buttons.Position = UDim2.fromOffset(20, isGameOver and 440 or 150) end
+	local travelStatus = container:FindFirstChild("TravelStatus")
+	if travelStatus then
+		travelStatus.Visible = isGameOver and not RunService:IsStudio()
+		travelStatus.Text = returnMessage
+	end
 	local rewards = container:FindFirstChild("RunRewards")
 	if rewards then
 		rewards.Visible = isGameOver
@@ -414,7 +426,11 @@ local function updateDeathUI(canSpectate)
 	end
 
 	if lobbyBtn then
-		if isGameOver then
+		if isGameOver and not RunService:IsStudio() then
+			lobbyBtn.Visible = true
+			lobbyBtn.Interactable = LobbyRemote ~= nil and returnRequest == nil
+			lobbyBtn.Text = returnRequest and "RETURNING…" or "RETURN TO OBSERVATORY"
+		elseif isGameOver then
 			lobbyBtn.Visible = canReturnToLobby
 			lobbyBtn.Active = canReturnToLobby
 			lobbyBtn.Selectable = canReturnToLobby
@@ -602,6 +618,7 @@ local function onGameStateRemote(state)
 	if isGameOver then
 		showGameOverUI()
 	elseif wasGameOver then
+		returnRequest, returnAccepted, returnMessage = nil, false, ""
 		updateDeathUI(lastCanSpectate)
 		if not isDead then
 			local ui = playerGui:FindFirstChild("DeathUI")
@@ -785,7 +802,18 @@ local function setupButtonHandlers()
 	
 	if lobbyBtn then
 		lobbyBtn.MouseButton1Click:Connect(function()
-			if ReviveRemote then
+			if isGameOver and not RunService:IsStudio() then
+				if not LobbyRemote or returnRequest then return end
+				local requestId = "DeathReturn:" .. HttpService:GenerateGUID(false)
+				returnRequest, returnAccepted, returnMessage = requestId, false, "Arranging your return to the observatory…"
+				updateDeathUI(lastCanSpectate)
+				LobbyRemote:FireServer("ReturnLobby", {RequestId = requestId})
+				task.delay(15, function()
+					if returnRequest ~= requestId or returnAccepted then return end
+					returnRequest, returnMessage = nil, "No reply yet. You can try returning again."
+					updateDeathUI(lastCanSpectate)
+				end)
+			elseif ReviveRemote then
 				ReviveRemote:FireServer("ReturnToLobby")
 			end
 		end)
@@ -841,6 +869,19 @@ local function init()
 
 	if GameStateRemote then
 		GameStateRemote.OnClientEvent:Connect(onGameStateRemote)
+	end
+	if LobbyRemote then
+		LobbyRemote.OnClientEvent:Connect(function(action, data)
+			if not returnRequest or type(data) ~= "table" then return end
+			if action == "Result" and data.Action == "ReturnLobby" and data.RequestId == returnRequest then
+				returnAccepted = data.Success == true
+				returnMessage = data.Message or (returnAccepted and "Returning to the observatory…" or "Could not return. Please try again.")
+				if not returnAccepted then returnRequest = nil end
+			elseif action == "Notice" and returnAccepted then
+				returnMessage = data.Message or returnMessage
+			else return end
+			updateDeathUI(lastCanSpectate)
+		end)
 	end
 	if RewardsRemote then
 		RewardsRemote.OnClientEvent:Connect(function(action, data)
