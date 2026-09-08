@@ -8,6 +8,9 @@ local Policy = {
 	MaxInputTickets = 100,
 	MaxCandidateTickets = 20,
 	MaxSearchStates = 40000,
+	-- Optional future progression hint, populated only from authoritative server data.
+	MaxLevel = 1000000,
+	LevelWeight = 6,
 }
 local MATCHMAKING_TYPES = { Default = true, XboxOnly = true, PlayStationOnly = true }
 
@@ -48,7 +51,9 @@ local function prepare(ticket, now, matchmakingType)
 		local class = type(signal.Class) == "string" and #signal.Class > 0 and #signal.Class <= 80 and signal.Class or nil
 		local language = type(signal.Language) == "string" and signal.Language:match("^[a-z][a-z][a-z]?$") and signal.Language or nil
 		result.UserIds[signal.UserId] = true
-		table.insert(result.Members, { Signal = signal, Class = class, Language = language, Groups = chatGroups(signal, now) })
+		local level = finite(signal.Level) and signal.Level % 1 == 0
+			and signal.Level >= 1 and signal.Level <= Policy.MaxLevel and signal.Level or nil
+		table.insert(result.Members, { Signal = signal, Class = class, Language = language, Level = level, Groups = chatGroups(signal, now) })
 	end
 	if #result.Members == 0 then return nil end
 	table.sort(result.Members, function(a, b) return a.Signal.UserId < b.Signal.UserId end)
@@ -71,10 +76,17 @@ local function evaluate(parties, now)
 		end
 	end
 	local classCount, chatKnown, compatible, sameLanguage = 0, 0, 0, 0
+	local levelKnownPairs, levelSimilarity, levelRelativeGap = 0, 0, 0
 	for _ in pairs(classes) do classCount += 1 end
 	for first = 1, #members - 1 do
 		for second = first + 1, #members do
 			local a, b = members[first], members[second]
+			if a.Level and b.Level then
+				local gap = math.abs(a.Level - b.Level) / math.max(a.Level, b.Level)
+				levelKnownPairs += 1
+				levelRelativeGap += gap
+				levelSimilarity += 1 - gap
+			end
 			if a.Language and a.Language == b.Language then sameLanguage += 1 end
 			if a.Groups and b.Groups then
 				chatKnown += 1
@@ -85,15 +97,23 @@ local function evaluate(parties, now)
 		end
 	end
 	local pairCount = Policy.TeamSize * (Policy.TeamSize - 1) / 2
-	-- Early matching favors complementary roles and communication. As the oldest
+	-- Early matching favors complementary roles, similar known levels and communication. As the oldest
 	-- party waits, age of the other parties matters more, without changing size.
 	local relaxation = math.clamp((oldestWait - 30) / 120, 0, 1)
 	local quality = 45 * classCount / Policy.TeamSize + 35 * compatible / pairCount + 20 * sameLanguage / pairCount
+	-- Missing/invalid levels are neutral. Cap this preference below one extra class,
+	-- even when tuned, so level similarity alone never costs a complementary role.
+	local levelWeight = finite(Policy.LevelWeight) and math.clamp(Policy.LevelWeight, 0, 45 / Policy.TeamSize - 0.01) or 0
+	local levelBonus = levelWeight * levelSimilarity / pairCount
+	quality += levelBonus
 	local fairness = totalWait / (Policy.TeamSize * 300)
 	local score = quality * (1 - relaxation * 0.65) + fairness * (5 + 60 * relaxation)
 	return score, {
 		ClassCount = classCount, ChatKnownPairs = chatKnown, ChatCompatiblePairs = compatible,
 		ChatUnknownPairs = pairCount - chatKnown, SameLanguagePairs = sameLanguage,
+		LevelKnownPairs = levelKnownPairs, LevelUnknownPairs = pairCount - levelKnownPairs,
+		MeanRelativeLevelGap = levelKnownPairs > 0 and levelRelativeGap / levelKnownPairs or nil,
+		LevelBonus = levelBonus,
 		OldestWaitSeconds = oldestWait, MeanCappedWaitSeconds = totalWait / Policy.TeamSize,
 		Relaxation = relaxation,
 	}
@@ -101,6 +121,9 @@ end
 
 -- Score({ticket, ...}, unixNow) -> number, diagnostics OR nil, reason.
 -- A ticket is {Id, QueuedAt, ExpiresAt, MatchmakingType, Members={signal,...}}.
+-- signal.Level is optional: a server-sourced integer in [1, MaxLevel]. Unknown
+-- levels do not block matching or change the existing no-level score. Diagnostics
+-- expose only aggregate pair counts/gaps; they contain no individual levels.
 function Policy.Score(tickets, now)
 	now = now or os.time()
 	if not finite(now) or type(tickets) ~= "table" then return nil, "InvalidInput" end

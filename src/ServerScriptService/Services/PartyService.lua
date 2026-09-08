@@ -4,6 +4,7 @@ local MemoryStore = game:GetService("MemoryStoreService")
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage.Shared.SessionConfig)
+local MatchmakingPolicy = require(ReplicatedStorage.Shared.MatchmakingPolicy)
 local PartyService = { _sessions = {}, _busy = {}, _lastRequest = {} }
 local parties = MemoryStore:GetHashMap(Config.Namespace .. ":parties")
 local membership = MemoryStore:GetHashMap(Config.Namespace .. ":members")
@@ -30,7 +31,11 @@ end
 local function launchKind(mode)
 	if mode==nil or mode=="Matchmaking" then return "Matchmaking" end
 	if mode=="Party" then return "Party" end
+	if mode=="LobbyMerge" then return "LobbyMerge" end
 	return nil
+end
+local function queueKind(queue)
+	return queue.Purpose=="LobbyMerge" and "LobbyMerge" or launchKind(queue.Mode)
 end
 local function memberRoster(members)
 	if type(members)~="table" then return nil end
@@ -269,6 +274,56 @@ function PartyService:Leave(player)
 	return true,"Left the party. Your run rejoin remains available."
 end
 
+-- Leadership actions use the caller's established connection and the exact
+-- observed member. A delayed kick must never clear a newer membership claim.
+function PartyService:_manageMember(player, userId, transfer)
+	if not validUserId(userId) or userId==player.UserId then return false,"Choose another crew member." end
+	if Config.GetMode()~="Lobby" then return false,"Crew management is available in the lobby." end
+	local session=self._sessions[player]
+	if not session or not session.Established or session.Leaving or player.Parent~=Players then return false,"Your connection is still synchronizing." end
+	local party,err=self:GetParty(player)
+	if not party then return false,err or "Create or join a party first." end
+	if party.LeaderId~=player.UserId then return false,"Only the party leader can manage the crew." end
+	if party.Queue or party.RunId or party.MergeLock or party.ResumeCommit or party.RecoveryPending then return false,"Cancel matchmaking or finish the current launch first." end
+	local target=party.Members[key(userId)]
+	local caller=party.Members[key(player.UserId)]
+	if not target or not caller or caller.Session~=session.Id or caller.SessionAt~=session.StartedAt then return false,"Your crew or connection changed. Try again." end
+	local p,available=self:GetPresence(player.UserId)
+	if not available or not online(p) or not p.Online or p.Mode~="Lobby" or p.Session~=session.Id or p.SessionAt~=session.StartedAt then return false,"Your connection is still synchronizing." end
+	local read,observed=call(function() return membership:GetAsync(key(userId)) end)
+	if not read then return false,"Party service is temporarily unavailable." end
+	if not observed or observed.PartyId~=party.Id or observed.Session~=target.Session or observed.SessionAt~=target.SessionAt
+		or observed.MergeLock or recoveryBusy(observed) then return false,"That member's connection or party changed. Try again." end
+	if transfer then
+		local targetPresence,known=self:GetPresence(userId)
+		if not known or not online(targetPresence) or not targetPresence.Online or targetPresence.Mode~="Lobby" or targetPresence.Session~=target.Session
+			or targetPresence.SessionAt~=target.SessionAt then return false,"The new leader must be online in the lobby." end
+	end
+	local result,reason=self:Mutate(party.Id,function(current)
+		local actor,member=current.Members[key(player.UserId)],current.Members[key(userId)]
+		if self._sessions[player]~=session or session.Leaving or player.Parent~=Players or not actor
+			or actor.Session~=session.Id or actor.SessionAt~=session.StartedAt then return false,"Your connection changed." end
+		if current.LeaderId~=player.UserId then return false,"Only the party leader can manage the crew." end
+		if current.Queue or current.RunId or current.MergeLock or current.ResumeCommit or current.RecoveryPending then return false,"Cancel matchmaking or finish the current launch first." end
+		if not member or member.Session~=target.Session or member.SessionAt~=target.SessionAt or member.JoinedAt~=target.JoinedAt then return false,"That crew member changed. Try again." end
+		if transfer then current.LeaderId=userId else current.Members[key(userId)]=nil end
+		for _,remaining in pairs(current.Members) do remaining.Ready=false end
+		return true
+	end)
+	if not result then return false,reason end
+	if not transfer then
+		call(function() return membership:UpdateAsync(key(userId),function(link)
+			if not link or link.PartyId~=party.Id or link.Token~=observed.Token or link.Session~=observed.Session
+				or link.SessionAt~=observed.SessionAt or link.MergeLock or recoveryBusy(link) then return nil end
+			return {ClearedAt=os.time(),Session=link.Session,SessionAt=link.SessionAt}
+		end,Config.PartyTTL) end)
+	end
+	return true,transfer and "Party leadership transferred. Everyone must ready up again." or "Player removed from the crew. Everyone must ready up again."
+end
+
+function PartyService:KickMember(player,userId) return self:_manageMember(player,userId,false) end
+function PartyService:TransferLeader(player,userId) return self:_manageMember(player,userId,true) end
+
 function PartyService:SetReady(player, ready)
 	if type(ready)~="boolean" then return false,"Invalid ready state." end
 	local party,err=self:GetParty(player)
@@ -460,8 +515,10 @@ function PartyService:Snapshot(player)
 	if party then
 		player:SetAttribute("PartyId",party.Id)
 		snapshot.Id,snapshot.LeaderId,snapshot.RunId,snapshot.Revision=party.Id,party.LeaderId,party.RunId,party.Revision
+		snapshot.ManagementLocked=(party.MergeLock~=nil or party.ResumeCommit~=nil or party.RecoveryPending==true)
+		snapshot.MergedCrew=party.LaunchMode=="LobbyMerge"
 		if party.Queue then
-			snapshot.Queue={State=party.Queue.State,QueuedAt=party.Queue.QueuedAt,Mode=party.Queue.Mode}
+			snapshot.Queue={State=party.Queue.State,QueuedAt=party.Queue.QueuedAt,Mode=party.Queue.Mode,Purpose=party.Queue.Purpose}
 			snapshot.QueueStartedAt=party.Queue.QueuedAt
 		end
 		for _,member in pairs(party.Members) do
@@ -582,7 +639,7 @@ function PartyService:MergeForExpedition(sourceIds,matchId,worldId,leaseToken,la
 		if type(index)~="number" or index%1~=0 or index<1 or index>sourceCount or type(id)~="string" or id=="" or sourceSet[id] then return nil,"Invalid source crews.",nil end
 		sourceSet[id]=true
 	end
-	local mergedId="world:"..worldId
+	local mergedId=(mode=="LobbyMerge" and "merge:" or "world:")..worldId
 	local state,err,intent=self:GetMergeStatus(worldId)
 	if err then return nil,err,nil end
 	local function abort(reason)
@@ -597,21 +654,29 @@ function PartyService:MergeForExpedition(sourceIds,matchId,worldId,leaseToken,la
 	end
 	if state=="Aborted" then return nil,"Matchmaking was cancelled before commit.",false end
 	if not intent or not intent.Sources then
-		local members,sources,leader,created={},{},nil,math.huge
+		local members,sources,leaders,leader,created,nativeType={},{},{},nil,math.huge,nil
 		for _,id in ipairs(sourceIds) do
 			local ok,record=call(function() return parties:GetAsync(id) end)
 			if not ok then return nil,"A source party is unavailable.",nil end
 			if record and record.MergedInto then return nil,"A previous crew commit needs recovery.",true end
 			if not record or record.Closed or not record.Queue or record.Queue.MatchId~=matchId then return abort("A source party is no longer claimed.") end
-			if launchKind(record.Queue.Mode)~=mode then return abort("A source crew's launch mode changed.") end
+			if queueKind(record.Queue)~=mode then return abort("A source crew's launch mode changed.") end
+			if mode=="LobbyMerge" then
+				local sourceType=record.Queue.MatchmakingType
+				if not MatchmakingPolicy.IsMatchmakingType(sourceType) or (nativeType and nativeType~=sourceType) then return abort("Crew members have incompatible cross-play settings.") end
+				nativeType=sourceType
+			end
 			if not memberRoster(record.Members) then return abort("A source crew has an invalid roster.") end
-			table.insert(sources,{Id=id,Token=record.Queue.Token})
+			if not record.Members[key(record.LeaderId)] then return abort("A source crew's leader changed.") end
+			table.insert(leaders,record.LeaderId)
+			table.insert(sources,{Id=id,Token=record.Queue.Token,LeaderId=record.LeaderId})
 			for userId,member in pairs(record.Members) do
 				if members[userId] then return abort("A player appears in more than one party.") end
 				members[userId]=table.clone(member); members[userId].Ready=false; members[userId].SourcePartyId=id
 			end
 			if record.CreatedAt<created then created=record.CreatedAt; leader=record.LeaderId end
 		end
+		if mode=="LobbyMerge" then leader=leaders[math.random(1,#leaders)] end
 		local roster=memberRoster(members)
 		if not roster or (mode~="Party" and #roster~=Config.MaxPartySize) then return abort("Matchmaking requires six distinct members; party launches allow one to six.") end
 		local ok,saved=call(function() return merges:UpdateAsync(worldId,function(old)
@@ -620,7 +685,9 @@ function PartyService:MergeForExpedition(sourceIds,matchId,worldId,leaseToken,la
 			if leaseToken and (not old or old.LeaseToken~=leaseToken or (old.LeaseUntil or 0)<=os.time()) then return nil end
 			old=old or {WorldId=worldId,MatchId=matchId,State="Preparing",CreatedAt=os.time()}
 			old.PartyId,old.Sources,old.Members,old.LeaderId=mergedId,sources,members,leader
-			old.LaunchMode,old.Roster=mode,roster; return old
+			old.LaunchMode,old.Roster,old.SourceLeaders=mode,roster,leaders
+			if mode=="LobbyMerge" then old.MatchmakingType=nativeType end
+			return old
 		end,Config.PartyTTL) end)
 		if not ok or not saved then return nil,"Crew preparation is retrying.",nil end
 		intent=saved
@@ -650,13 +717,43 @@ function PartyService:MergeForExpedition(sourceIds,matchId,worldId,leaseToken,la
 		or (mode~="Party" and rosterSize~=Config.MaxPartySize) then
 		return nil,"The original crew commit does not match this launch request.",(intent.State=="Committed" or intent.State=="Complete") and true or nil
 	end
+	if mode=="LobbyMerge" then
+		if not MatchmakingPolicy.IsMatchmakingType(intent.MatchmakingType) then return abort("Crew platform matchmaking is not ready.") end
+		local originalLeader=false
+		for _,source in ipairs(intent.Sources) do
+			if source.LeaderId==intent.LeaderId and intent.Members[key(source.LeaderId)] and intent.Members[key(source.LeaderId)].SourcePartyId==source.Id then originalLeader=true end
+		end
+		if not originalLeader then return nil,"The original crew leaders changed.",(intent.State=="Committed" or intent.State=="Complete") and true or nil end
+	end
 	local lock={WorldId=worldId,MatchId=matchId}
+	local function unlockLobbyMerge()
+		for userId in pairs(intent.Members) do
+			local saved=call(function() return membership:UpdateAsync(userId,function(link)
+				if link and link.PartyId==mergedId and sameLock(link.MergeLock,worldId,matchId) then link.MergeLock=nil; return link end
+				return nil
+			end,Config.PartyTTL) end)
+			if not saved then return nil,"Crew unlock is retrying.",true end
+		end
+		local saved,current=call(function() return parties:UpdateAsync(mergedId,function(party)
+			-- Completed replays cannot recreate a dissolved party, reset readiness,
+			-- or unlock a newer match the crew has entered since this merge.
+			if party and sameLock(party.MergeLock,worldId,matchId) then
+				party.MergeLock=nil; party.Revision=(party.Revision or 0)+1
+			end
+			return party
+		end,Config.PartyTTL) end)
+		if not saved then return nil,"Crew unlock is retrying.",true end
+		return current or {Id=mergedId,Completed=true},nil,true
+	end
+	if mode=="LobbyMerge" and intent.State=="Complete" then return unlockLobbyMerge() end
 	if intent.State=="Preparing" then
 		for _,source in ipairs(intent.Sources) do
 			local locked,reason=self:Mutate(source.Id,function(current)
 				if leaseToken and (intent.LeaseToken~=leaseToken or (intent.LeaseUntil or 0)<=os.time()) then return false,"The crew commit lease expired." end
-				if not current.Queue or current.Queue.Token~=source.Token or current.Queue.MatchId~=matchId or launchKind(current.Queue.Mode)~=mode then return false,"A source crew cancelled or changed launch mode." end
+				if not current.Queue or current.Queue.Token~=source.Token or current.Queue.MatchId~=matchId or queueKind(current.Queue)~=mode then return false,"A source crew cancelled or changed launch mode." end
+				if mode=="LobbyMerge" and current.Queue.MatchmakingType~=intent.MatchmakingType then return false,"A source crew's cross-play settings changed." end
 				if type(current.Members)~="table" or count(current.Members)~=sourceMembers[source.Id] then return false,"A source crew's roster changed." end
+				if source.LeaderId and current.LeaderId~=source.LeaderId then return false,"A source crew's leader changed." end
 				for userId,member in pairs(current.Members) do
 					local original=intent.Members[userId]
 					if type(member)~="table" or not original or original.SourcePartyId~=source.Id or member.UserId~=original.UserId
@@ -674,6 +771,7 @@ function PartyService:MergeForExpedition(sourceIds,matchId,worldId,leaseToken,la
 			local p,available=self:GetPresence(member.UserId)
 			if not available then return nil,"Connection status is temporarily unavailable.",nil end
 			if not p or not p.Online or p.ExpiresAt<=os.time() or p.Mode~="Lobby" or p.Session~=member.Session or p.SessionAt~=member.SessionAt then return abort("A crew member changed connection before commit.") end
+			if mode=="LobbyMerge" and p.MatchmakingType~=intent.MatchmakingType then return abort("A crew member's cross-play settings changed before commit.") end
 			local ok,link=call(function() return membership:UpdateAsync(userId,function(old)
 				if leaseToken and (intent.LeaseToken~=leaseToken or (intent.LeaseUntil or 0)<=os.time()) then return nil end
 				if not old or old.PartyId~=member.SourcePartyId or old.Session~=p.Session or (old.MergeLock and not sameLock(old.MergeLock,worldId,matchId)) then return nil end
@@ -697,7 +795,7 @@ function PartyService:MergeForExpedition(sourceIds,matchId,worldId,leaseToken,la
 	intent=committed
 	local written,merged=call(function() return parties:UpdateAsync(mergedId,function(old)
 		if old then return old.MatchId==matchId and launchKind(old.LaunchMode)==mode and old or nil end
-		return {Id=mergedId,LeaderId=intent.LeaderId,Members=intent.Members,CreatedAt=intent.CreatedAt,Revision=1,RunId=worldId,MatchId=matchId,MergeLock=lock,LaunchMode=mode}
+		return {Id=mergedId,LeaderId=intent.LeaderId,Members=intent.Members,CreatedAt=intent.CreatedAt,Revision=1,RunId=mode~="LobbyMerge" and worldId or nil,MatchId=matchId,MergeLock=lock,LaunchMode=mode}
 	end,Config.PartyTTL) end)
 	if not written or not merged then return nil,"Committed crew creation is retrying.",true end
 	if intent.State~="Complete" then
@@ -722,6 +820,7 @@ function PartyService:MergeForExpedition(sourceIds,matchId,worldId,leaseToken,la
 		end,Config.PartyTTL) end)
 		if not saved or not result or result.State~="Complete" then return nil,"Crew completion is retrying.",true end
 	end
+	if mode=="LobbyMerge" then return unlockLobbyMerge() end
 	for userId in pairs(intent.Members) do
 		local saved=call(function() return membership:UpdateAsync(userId,function(link)
 			if link and link.PartyId==mergedId and sameLock(link.MergeLock,worldId,matchId) then link.MergeLock=nil; return link end
@@ -756,7 +855,7 @@ function PartyService:RestoreExpeditionParty(worldRecord)
 	local roster,rosterSize=rosterSet(world.Roster)
 	local mode=launchKind(world.LaunchMode)
 	if type(world.PartyId)~="string" or #world.PartyId<1 or #world.PartyId>128 or type(world.MatchId)~="string"
-		or not mode or not roster or type(world.Members)~="table" or count(world.Members)~=rosterSize then return nil,"InvalidDurableCrew" end
+		or not mode or mode=="LobbyMerge" or not roster or type(world.Members)~="table" or count(world.Members)~=rosterSize then return nil,"InvalidDurableCrew" end
 	local members,sources={},{}
 	for _,userId in ipairs(world.Roster) do
 		local member=world.Members[key(userId)]
@@ -800,7 +899,7 @@ function PartyService:RestoreExpeditionParty(worldRecord)
 			if other and other.Id~=targetId and other.Members[userId] then
 				-- An original source still locked to this exact committed match is
 				-- recoverable; a new queue or any unrelated live party is not.
-				if not sources[other.Id] or not other.Queue or other.Queue.Token~=sources[other.Id] or other.Queue.MatchId~=world.MatchId or launchKind(other.Queue.Mode)~=mode then return nil,"CrewPartyConflict" end
+				if not sources[other.Id] or not other.Queue or other.Queue.Token~=sources[other.Id] or other.Queue.MatchId~=world.MatchId or queueKind(other.Queue)~=mode then return nil,"CrewPartyConflict" end
 				for id in pairs(other.Members) do if not roster[id] then return nil,"CrewPartyConflict" end end
 			end
 		end
@@ -896,7 +995,7 @@ function PartyService:RestoreExpeditionParty(worldRecord)
 	if not clearCompletedLocks(restored) then return nil,"CrewRecoveryPending" end
 	for sourceId,sourceToken in pairs(sources) do
 		if sourceId~=targetId then call(function() return parties:UpdateAsync(sourceId,function(source)
-			if not source or not source.Queue or source.Queue.Token~=sourceToken or source.Queue.MatchId~=world.MatchId or launchKind(source.Queue.Mode)~=mode then return nil end
+			if not source or not source.Queue or source.Queue.Token~=sourceToken or source.Queue.MatchId~=world.MatchId or queueKind(source.Queue)~=mode then return nil end
 			for userId in pairs(source.Members) do if not roster[userId] then return nil end end
 			source.MergedInto,source.Closed,source.Queue,source.MergeLock=targetId,true,nil,nil; return source
 		end,Config.PartyTTL) end) end

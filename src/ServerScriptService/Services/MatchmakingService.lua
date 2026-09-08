@@ -10,9 +10,11 @@ local Parties=require(script.Parent.PartyService)
 local Profiles=require(script.Parent.ProfileService)
 local Signals=require(script.Parent.RobloxMatchmakingSignals)
 local Service={_exportedParty={},_processing={}}
-local hints=MemoryStore:GetHashMap(Config.Namespace..":queue-hints")
-local tickets=MemoryStore:GetSortedMap(Config.Namespace..":queue-tickets")
+-- Keep the lobby merger separate from older auto-launch queue workers.
+local hints=MemoryStore:GetHashMap(Config.Namespace..":crew-merge-hints")
+local tickets=MemoryStore:GetSortedMap(Config.Namespace..":crew-merge-tickets")
 local pending=MemoryStore:GetSortedMap(Config.Namespace..":queue-commits")
+local mergePending=MemoryStore:GetSortedMap(Config.Namespace..":crew-merge-commits")
 local workerId=HttpService:GenerateGUID(false)
 local function attempt(callback)
 	local ok,result=pcall(callback)
@@ -20,6 +22,12 @@ local function attempt(callback)
 	return ok,result
 end
 local function size(members) local n=0; for _ in pairs(members) do n+=1 end; return n end
+local function lobbyMergeQueue(queue)
+	return queue and queue.Purpose=="LobbyMerge"
+end
+local function commitStore(record)
+	return record.LaunchMode=="LobbyMerge" and mergePending or pending
+end
 local function removeTicket(id,token)
 	if not token then return end
 	-- Keep a short tombstone: a delayed refresh cannot resurrect the same ticket.
@@ -29,7 +37,7 @@ local function removeTicket(id,token)
 	end,50) end)
 end
 local function terminal(record,stage)
-	local ok,result=attempt(function() return pending:UpdateAsync(record.Id,function(old)
+	local ok,result=attempt(function() return commitStore(record):UpdateAsync(record.Id,function(old)
 		if not old or old.LeaseToken~=record.LeaseToken or (old.LeaseUntil or 0)<=os.time() then return nil end
 		old.Stage=stage; return old,old.CreatedAt
 	end,60) end)
@@ -58,20 +66,19 @@ function Service:Join(player)
 	if party.LeaderId~=player.UserId then return false,"Only the crew leader can queue." end
 	if party.RunId then return false,"Finish or save the current expedition first." end
 	if party.Queue or party.MergeLock then return false,"Your crew is already matchmaking or starting an expedition." end
+	if size(party.Members)>=Config.MaxPartySize then return false,"Your crew is full. Ready up and start your expedition." end
 	local valid,nativeType=self:_validate(party)
 	if not valid then return false,nativeType end
-	local saves=require(script.Parent.WorldSaveService)
-	for _,member in pairs(party.Members) do
-		local room,reason=saves:HasFreeSlot(member.UserId)
-		if room~=true then return false,reason or "Save-slot availability is temporarily unavailable." end
-	end
 	local token=HttpService:GenerateGUID(false)
 	local updated,reason=Parties:Mutate(party.Id,function(current)
 		if current.Revision~=party.Revision or current.Queue or current.RunId then return false,"Your crew changed. Ready up and try again." end
-		current.Queue={Token=token,QueuedAt=os.time(),Generation=DateTime.now().UnixTimestampMillis,MatchmakingType=nativeType,State="Searching"}
+		-- Older servers ignore Mode=Party; Purpose distinguishes this from a
+		-- direct start for current workers and clients.
+		current.Queue={Token=token,QueuedAt=os.time(),Generation=DateTime.now().UnixTimestampMillis,
+			MatchmakingType=nativeType,State="Searching",Mode="Party",Purpose="LobbyMerge"}
 		return true
 	end)
-	return updated~=nil,reason or "Finding a six-player crew with complementary classes."
+	return updated~=nil,reason or "Finding complementary parties. Everyone will ready up again after merging."
 end
 
 -- A party-only launch uses the same recoverable reservation/crew commit as a
@@ -128,12 +135,12 @@ function Service:Cancel(player)
 	if not party.Queue then return true,"You are not matchmaking." end
 	local updated,reason=Parties:CancelQueue(party.Id,party.Queue.Token)
 	if updated then removeTicket(party.Id,party.Queue.Token) end
-	return updated==true,reason or (party.Queue.Mode=="Party" and "Expedition start cancelled." or "Matchmaking cancelled.")
+	return updated==true,reason or (party.Queue.Mode=="Party" and not lobbyMergeQueue(party.Queue) and "Expedition start cancelled." or "Matchmaking cancelled.")
 end
 
 function Service:_refresh(party)
 	local queue=party.Queue
-	if not queue or queue.Mode=="Party" then return end
+	if not lobbyMergeQueue(queue) then return end
 	if queue.MatchId then return end
 	local valid=self:_validate(party)
 	if not valid then
@@ -168,7 +175,8 @@ function Service:_notifyAbort(record)
 	for _,userId in ipairs(record.Roster or {}) do
 		local player=Players:GetPlayerByUserId(userId)
 		if player then remote:FireClient(player,"Notice",{Success=false,
-			Message="The expedition could not start because crew or save availability changed. Check your crew and try again."}) end
+			Message=record.LaunchMode=="LobbyMerge" and "The party merge could not finish because a crew changed. Check your crew and try again."
+				or "The expedition could not start because crew or save availability changed. Check your crew and try again."}) end
 	end
 end
 
@@ -178,7 +186,7 @@ function Service:_process(record)
 	local worked,problem=pcall(function()
 	-- Unique acquisition tokens fence even an earlier worker on this same server.
 	local leaseToken=HttpService:GenerateGUID(false)
-	local ok,claimed=attempt(function() return pending:UpdateAsync(record.Id,function(old)
+	local ok,claimed=attempt(function() return commitStore(record):UpdateAsync(record.Id,function(old)
 		if not old or old.Stage=="Done" or old.Stage=="Aborted" then return nil end
 		if old.LeaseToken and (old.LeaseUntil or 0)>os.time() then return nil end
 		old.Owner=workerId; old.LeaseToken=leaseToken; old.LeaseUntil=os.time()+90; return old,old.CreatedAt
@@ -189,12 +197,28 @@ function Service:_process(record)
 		if os.time()-claimed.CreatedAt>90 and self:_release(claimed) then self:_notifyAbort(claimed) end
 		return
 	end
-	local module=script.Parent:FindFirstChild("WorldSessionService")
-	if not module then return end
-	local success,result=pcall(function() return require(module):CreateMatchedExpedition(claimed) end)
+	local success,result=pcall(function()
+		if claimed.LaunchMode=="LobbyMerge" then
+			local sourceIds={}
+			for _,source in ipairs(claimed.Sources) do table.insert(sourceIds,source.Id) end
+			local party,_,decision=Parties:MergeForExpedition(sourceIds,claimed.Id,claimed.WorldId,leaseToken,"LobbyMerge")
+			if party then return true end
+			if decision==false then return false end
+			return nil
+		end
+		local module=script.Parent:FindFirstChild("WorldSessionService")
+		return module and require(module):CreateMatchedExpedition(claimed)
+	end)
 	if success and result==true then
 		for _,source in ipairs(claimed.Sources) do removeTicket(source.Id,source.Token) end
-		terminal(claimed,"Done")
+		local done=terminal(claimed,"Done")
+		if done and claimed.LaunchMode=="LobbyMerge" then
+			local remote=RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Lobby")
+			if remote then for _,userId in ipairs(claimed.Roster) do
+				local player=Players:GetPlayerByUserId(userId)
+				if player then remote:FireClient(player,"Notice",{Success=true,Message="Parties merged. Everyone must ready up again, then the new leader can start."}) end
+			end end
+		end
 	elseif success and result==false then
 		-- The world service returns false only before any irreversible crew commit.
 		if self:_release(claimed) then self:_notifyAbort(claimed) end
@@ -211,26 +235,29 @@ function Service:_match()
 	local match=Policy.Choose(candidates,{Now=os.time(),MatchmakingType=Signals.MatchmakingType()})
 	if not match then return end
 	local id=HttpService:GenerateGUID(false)
-	local record={Id=id,WorldId=HttpService:GenerateGUID(false),Sources={},Roster={},CreatedAt=os.time(),MatchmakingType=match.MatchmakingType,
+	local record={Id=id,WorldId=HttpService:GenerateGUID(false),LaunchMode="LobbyMerge",Sources={},Roster={},CreatedAt=os.time(),MatchmakingType=match.MatchmakingType,
 		Stage="Preparing",Owner=workerId,LeaseToken=HttpService:GenerateGUID(false),LeaseUntil=os.time()+90}
 	for _,ticket in ipairs(match.Parties) do table.insert(record.Sources,{Id=ticket.Id,Token=ticket.Token}) end
 	for _,member in ipairs(match.Members) do table.insert(record.Roster,member.UserId) end
 	table.sort(record.Roster)
 	-- Write recovery intent before claiming any party. No chat-group data is copied.
-	local saved=attempt(function() pending:SetAsync(id,record,Config.PartyTTL,record.CreatedAt) end)
+	local saved=attempt(function() mergePending:SetAsync(id,record,Config.PartyTTL,record.CreatedAt) end)
 	if not saved then return end
 	if not Parties:ClaimMerge(record.WorldId,id,record.LeaseToken) then return end
 	for _,source in ipairs(record.Sources) do
 		local current=Parties:GetPartyById(source.Id)
-		if not current or not self:_validate(current) then self:_release(record); return end
+		if not current or not lobbyMergeQueue(current.Queue) then self:_release(record); return end
+		local valid,nativeType=self:_validate(current)
+		if not valid or nativeType~=record.MatchmakingType then self:_release(record); return end
 		local claimed=Parties:Mutate(source.Id,function(party)
 			if record.LeaseUntil<=os.time() then return false,"The matching worker lease expired." end
-			if not party.Queue or party.Queue.Token~=source.Token or party.Queue.MatchId then return false,"Already claimed." end
+			if not lobbyMergeQueue(party.Queue) or party.Queue.Token~=source.Token or party.Queue.MatchId
+				or party.Queue.MatchmakingType~=record.MatchmakingType then return false,"Already claimed or platform settings changed." end
 			party.Queue.MatchId=id; party.Queue.State="Matching"; return true
 		end)
 		if not claimed then self:_release(record); return end
 	end
-	local committed,ready=attempt(function() return pending:UpdateAsync(id,function(old)
+	local committed,ready=attempt(function() return mergePending:UpdateAsync(id,function(old)
 		if not old or old.LeaseToken~=record.LeaseToken or old.LeaseUntil<=os.time() then return nil end
 		old.Stage="Claimed"; old.LeaseUntil=0; return old,old.CreatedAt
 	end,Config.PartyTTL) end)
@@ -249,7 +276,7 @@ function Service:Init()
 		-- Remove every ticket containing this player, even before the next refresh.
 		local player=Players:GetPlayerByUserId(userId)
 		if player then local party=Parties:GetParty(player); if party then
-			if party.Queue and party.Queue.Mode~="Party" then
+			if lobbyMergeQueue(party.Queue) then
 				removeTicket(party.Id,party.Queue.Token)
 				Parties:CancelQueue(party.Id,party.Queue.Token)
 			end
@@ -260,7 +287,7 @@ function Service:Init()
 			local seen={}
 			for _,player in ipairs(Players:GetPlayers()) do
 				local party=Parties:GetParty(player)
-				if party and party.Queue and party.Queue.Mode~="Party" and not party.RunId and Profiles:IsLoaded(player) then
+				if party and lobbyMergeQueue(party.Queue) and not party.RunId and Profiles:IsLoaded(player) then
 					local hint=Signals.Capture(player)
 					if hint then
 						local p=Parties:GetPresence(player.UserId)
@@ -283,6 +310,8 @@ function Service:Init()
 			for _,party in pairs(seen) do self:_refresh(party) end
 			local ok,commits=attempt(function() return pending:GetRangeAsync(Enum.SortDirection.Ascending,20) end)
 			if ok then for _,entry in ipairs(commits) do self:_process(entry.value) end end
+			local merged,merges=attempt(function() return mergePending:GetRangeAsync(Enum.SortDirection.Ascending,20) end)
+			if merged then for _,entry in ipairs(merges) do self:_process(entry.value) end end
 			self:_match()
 			task.wait(5)
 		end

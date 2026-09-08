@@ -51,8 +51,13 @@ content.CanvasSize = UDim2.new(); content.AutomaticCanvasSize = Enum.AutomaticSi
 Theme.Bind(content, "ScrollBarImageColor3", "Moss")
 local feedback = label(panel, "Assemble your crew. Prepare for the changing world.", 282, 691, 805, 36, 15, "TextMuted")
 feedback.Name = "ActionFeedback"; feedback.TextWrapped = true; feedback.TextTruncate = Enum.TextTruncate.None
+local memberNote, memberMessage
 local function notify(text, token)
 	feedback.Text = text; Theme.Bind(feedback, "TextColor3", token or "TextMuted")
+	if memberNote and memberNote.Parent then
+		memberMessage = {Text = text, Token = token or "TextMuted"}
+		memberNote.Text = text; Theme.Bind(memberNote, "TextColor3", memberMessage.Token)
+	end
 end
 
 local snapshot, page = {}, "Party"
@@ -61,6 +66,7 @@ local requestPrefix = HttpService:GenerateGUID(false) .. ":"
 local sectionIds, scrollByPage, nameDrafts, nav = {}, {}, {}, {}
 local submittedNames = {}
 local pending, render, openPicker, queueLabel
+local selectedMemberId, memberOverlay
 local controls, removalId, removalUntil = {}, nil, 0
 local friends, friendsLoading, friendsError, friendsLoadedAt = {}, false, nil, -math.huge
 local inviteStatus, inviteExpiry, nativeInvite = {}, {}, nil
@@ -76,10 +82,11 @@ end
 local function applyControls()
 	for _, control in ipairs(controls) do
 		local b = control.Button
+		if not b.Parent then continue end
 		local active = pending and pending.Action == control.Action and pending.Key == control.Key
 		b.Interactable = not pending and not control.Disabled
 		local text = active and control.Waiting or control.Text
-		if b:IsA("TextButton") then b.Text = text; b.TextTransparency = pending and not active and .3 or 0
+		if b:IsA("TextButton") then b.Text = text; b.TextTransparency = control.Disabled and .45 or pending and not active and .3 or 0
 		elseif control.Status then control.Status.Text = active and "Inviting…" or control.Text end
 		Theme.Bind(b, "BackgroundColor3", active and "SlotSelected" or control.Primary and "Moss" or "SlotEmpty")
 	end
@@ -87,7 +94,7 @@ end
 local function send(action, data, waiting)
 	if pending then notify("Your previous action is still finishing…", "Amber"); return end
 	data = table.clone(data or {}); data.RequestId = requestId()
-	pending = {Id = data.RequestId, Action = action, Data = data, Key = tostring(data.Id or data.UserId or ""), Started = os.clock()}
+	pending = {Id = data.RequestId, Action = action, Data = data, Key = tostring(data.Id or data.UserId or ""), Started = os.clock(), PartyId = (snapshot.Party or {}).Id}
 	notify(waiting or "Updating…", "Amber"); applyControls()
 	remote:FireServer(action, data)
 end
@@ -98,7 +105,7 @@ local function actionButton(parent, text, waiting, action, data, x, y, w, h, pri
 	return b
 end
 local function navigate(nextPage)
-	page = nextPage; render()
+	selectedMemberId = nil; page = nextPage; render()
 	if page == "Saves" then refresh("Archive") else refresh("Core") end
 end
 for index, entry in ipairs({{"Party", "01  EXPEDITION CREW"}, {"Classes", "02  CLASS OUTFITTER"}, {"Saves", "03  WORLD ARCHIVE"}}) do
@@ -117,7 +124,13 @@ local openHost = Instance.new("Frame"); openHost.Name = "DeskShortcut"; openHost
 openHost.Size = open.Size; openHost.AnchorPoint = Vector2.new(.5, 0); openHost.Position = UDim2.new(.5, 0, 0, 12); openHost.Parent = gui
 open.Parent = openHost; Theme.Fit(openHost, 1120, 740, nil, true)
 open.Visible = not panel.Visible
-panel:GetPropertyChangedSignal("Visible"):Connect(function() open.Visible = not panel.Visible end)
+panel:GetPropertyChangedSignal("Visible"):Connect(function()
+	open.Visible = not panel.Visible
+	if not panel.Visible then
+		selectedMemberId = nil
+		if memberOverlay then memberOverlay:Destroy(); memberOverlay = nil end
+	end
+end)
 
 local function textbox(parent, world, x, y, w)
 	local b = Instance.new("TextBox"); b.Name = "WorldName"; b.PlaceholderText = "Expedition"
@@ -134,19 +147,48 @@ local descriptions = {
 	Engineer = "Process supplies and craft equipment faster.", Medic = "Help fallen teammates return to the expedition.",
 }
 
+-- Roblox loads thumbnails asynchronously; placeholders stay visible until ready.
+local function loadPortrait(image, userId, width, height)
+	image.Image = "rbxthumb://type=AvatarHeadShot&id=" .. userId .. "&w=150&h=150"
+	image.ScaleType = Enum.ScaleType.Fit
+	local fallback = label(image, "?", 0, 0, width, height, math.floor(height * .38), "TextMuted", true)
+	fallback.Name = "PortraitPlaceholder"; fallback.TextXAlignment = Enum.TextXAlignment.Center
+	fallback.Visible = not image.IsLoaded
+	image:GetPropertyChangedSignal("IsLoaded"):Connect(function() fallback.Visible = not image.IsLoaded end)
+end
+local function portrait(parent, userId, x, y, size)
+	local image = Instance.new("ImageLabel"); image.Name = "AvatarPortrait"
+	image.Size = UDim2.fromOffset(size, size); image.Position = UDim2.fromOffset(x, y)
+	image.BorderSizePixel = 0; image.Parent = parent
+	Theme.Bind(image, "BackgroundColor3", "SlotEmpty"); Theme.Corner(image, 8)
+	loadPortrait(image, userId, size, size)
+	return image
+end
+local function startingExpedition(party)
+	return party.Queue and party.Queue.Mode == "Party" and party.Queue.Purpose ~= "LobbyMerge"
+end
+local function readiness(member)
+	return member.Online and (member.Ready and "READY" or "NOT READY") or "OFFLINE"
+end
+local function crewReady(party)
+	if #(party.Members or {}) == 0 then return false end
+	for _, member in ipairs(party.Members) do if not member.Online or not member.Ready then return false end end
+	return true
+end
+
 local function updateQueue()
 	if not queueLabel or not queueLabel.Parent then return end
 	local party = snapshot.Party or {}
-	if party.Queue and party.Queue.Mode == "Party" then
+	if startingExpedition(party) then
 		queueLabel.Text = string.format("%d / 6  ·  STARTING YOUR CREW'S EXPEDITION", #(party.Members or {}))
 		Theme.Bind(queueLabel, "TextColor3", "Amber")
 	elseif party.Queue then
 		local started = tonumber(party.QueueStartedAt)
 		local elapsed = started and math.max(0, math.floor(workspace:GetServerTimeNow() - started)) or 0
-		queueLabel.Text = string.format("%d / 6  ·  FINDING EXPEDITION  ·  %02d:%02d", #(party.Members or {}), math.floor(elapsed / 60), elapsed % 60)
+		queueLabel.Text = string.format("%d / 6  ·  FINDING TEAMMATES  ·  %02d:%02d", #(party.Members or {}), math.floor(elapsed / 60), elapsed % 60)
 		Theme.Bind(queueLabel, "TextColor3", "Amber")
 	else
-		queueLabel.Text = party.Id and (#(party.Members or {}) .. " / 6  ·  " .. (party.RunId and "EXPEDITION ASSIGNED" or "PREPARING")) or "Start solo or invite friends. Matchmaking is optional."
+		queueLabel.Text = party.Id and (#(party.Members or {}) .. " / 6  ·  " .. (party.RunId and "EXPEDITION ASSIGNED" or party.MergedCrew and (crewReady(party) and "CREW READY · LEADER CAN START" or "CREWS JOINED · READY UP AGAIN") or "PREPARING")) or "Start solo or invite friends. Matchmaking is optional."
 		Theme.Bind(queueLabel, "TextColor3", "TextMuted")
 	end
 end
@@ -156,7 +198,7 @@ local function directoryRequest()
 	refresh("InviteDirectory", {FriendIds = ids})
 end
 openPicker = function()
-	page = "Invite"; render()
+	selectedMemberId = nil; page = "Invite"; render()
 	if friendsLoading then return end
 	if os.clock() - friendsLoadedAt < 30 then directoryRequest(); return end
 	friendsLoading = true; friendsError = nil; render()
@@ -255,12 +297,8 @@ local function renderPicker()
 		end
 		local tile = Instance.new("ImageButton"); tile.Name = "Invite_" .. entry.UserId
 		tile.Size = UDim2.fromOffset(190, 210); tile.Position = UDim2.fromOffset(column * 202, y)
-		tile.Image = "rbxthumb://type=AvatarHeadShot&id=" .. entry.UserId .. "&w=150&h=150"
-		tile.ScaleType = Enum.ScaleType.Fit; tile.Parent = content; Theme.Button(tile, false)
-		local fallback = label(tile, "?", 0, 0, 190, 146, 48, "TextMuted", true)
-		fallback.Name = "PortraitPlaceholder"; fallback.TextXAlignment = Enum.TextXAlignment.Center
-		fallback.Visible = not tile.IsLoaded
-		tile:GetPropertyChangedSignal("IsLoaded"):Connect(function() fallback.Visible = not tile.IsLoaded end)
+		tile.Parent = content; Theme.Button(tile, false)
+		loadPortrait(tile, entry.UserId, 190, 146)
 		local plate = Instance.new("Frame"); plate.Name = "Nameplate"; plate.BorderSizePixel = 0
 		plate.Size = UDim2.new(1, 0, 0, 64); plate.Position = UDim2.new(0, 0, 1, -64); plate.Parent = tile
 		Theme.Bind(plate, "BackgroundColor3", "Panel"); Theme.Corner(plate, 6)
@@ -277,16 +315,59 @@ local function renderPicker()
 	if #entries == 0 and not friendsLoading then label(content, "No online friends or other server players right now.", 0, y, 790, 50, 17, "TextMuted") end
 end
 
+local function renderMemberMenu()
+	if not selectedMemberId or page ~= "Party" then return end
+	local party = snapshot.Party or {}
+	local member
+	for _, candidate in ipairs(party.Members or {}) do if candidate.UserId == selectedMemberId then member = candidate; break end end
+	if not member then selectedMemberId = nil; return end
+	local function closeMenu() selectedMemberId = nil; render() end
+	local overlay = Instance.new("TextButton"); overlay.Name = "MemberDetailOverlay"
+	overlay.Text = ""; overlay.AutoButtonColor = false; overlay.Size = UDim2.fromScale(1, 1)
+	overlay.BackgroundTransparency = .2; overlay.BorderSizePixel = 0; overlay.ZIndex = 20; overlay.Parent = panel
+	Theme.Bind(overlay, "BackgroundColor3", "Night"); Theme.Corner(overlay, 10)
+	overlay.Activated:Connect(closeMenu); memberOverlay = overlay
+	local menu = box(overlay, "MemberDetails", 0, 0, 448, 454)
+	menu.AnchorPoint = Vector2.new(.5, .5); menu.Position = UDim2.fromScale(.5, .5); menu.Active = true
+	label(menu, "CREW PROFILE", 20, 17, 344, 30, 20, "Text", true)
+	button(menu, "×", 386, 13, 42, 42, closeMenu).TextSize = 26
+	portrait(menu, member.UserId, 20, 66, 100)
+	label(menu, member.DisplayName or member.Name or "Explorer", 136, 69, 292, 32, 23, "Text", true)
+	label(menu, "@" .. (member.Name or "Explorer"), 136, 105, 292, 23, 15, "TextMuted")
+	label(menu, readiness(member) .. (member.UserId == party.LeaderId and "  /  LEADER" or ""), 136, 139, 292, 25, 14,
+		member.Online and member.Ready and "Success" or "TextMuted", true)
+	label(menu, member.Role or "Generalist", 20, 184, 408, 29, 21, "Text", true)
+	label(menu, descriptions[member.Role] or "Expedition crew member.", 20, 218, 408, 43, 15, "TextMuted").TextWrapped = true
+	local records = box(menu, "FieldRecords", 20, 274, 408, 62)
+	label(records, "FIELD RECORDS", 12, 8, 384, 20, 12, "TextMuted", true)
+	label(records, "Career statistics are not available yet.", 12, 31, 384, 23, 14, "TextMuted")
+	local leader = party.LeaderId == player.UserId and member.UserId ~= player.UserId
+	local locked = Mode ~= "Lobby" or party.Queue or party.RunId or party.ManagementLocked
+	if leader then
+		actionButton(menu, "KICK MEMBER", "REMOVING…", "KickMember", {UserId = member.UserId}, 20, 352, 198, 44, false, locked)
+		actionButton(menu, "MAKE LEADER", "UPDATING…", "TransferLeader", {UserId = member.UserId}, 230, 352, 198, 44, true, locked or not member.Online)
+		memberNote = label(menu, locked and "Crew changes are locked while queued or on an expedition." or "Leadership can be passed to an online crew member.", 20, 404, 408, 34, 13, "TextMuted")
+	else
+		memberNote = label(menu, member.UserId == player.UserId and "This is your expedition profile." or "Only the crew leader can manage other members.", 20, 355, 408, 58, 15, "TextMuted")
+	end
+	memberNote.TextWrapped = true; memberNote.TextTruncate = Enum.TextTruncate.None
+	if memberMessage then memberNote.Text = memberMessage.Text; Theme.Bind(memberNote, "TextColor3", memberMessage.Token) end
+	menu.Visible = false; Theme.AnimatePanel(menu); menu.Visible = true
+end
+
 -- Compare only visible state; heartbeat timestamps should never rebuild buttons.
 local function visualKey()
 	local party = snapshot.Party or {}
 	local crew = {}
-	for _, member in ipairs(party.Members or {}) do table.insert(crew, {member.UserId, member.DisplayName, member.Role, member.Ready == true, member.Online == true}) end
+	for _, member in ipairs(party.Members or {}) do table.insert(crew, {member.UserId, member.DisplayName, member.Name, member.Role, member.Ready == true, member.Online == true}) end
 	return HttpService:JSONEncode({page, snapshot.Currency, snapshot.Classes, party.Id, party.LeaderId, party.RunId,
-		party.Queue and party.Queue.Mode or false, party.Queue ~= nil and party.Queue ~= false, party.QueueStartedAt, crew, party.Invites, snapshot.Rejoin, page == "Saves" and snapshot.Worlds or false,
+		party.Queue and party.Queue.Mode or false, party.Queue and party.Queue.Purpose or false, party.ManagementLocked == true, party.MergedCrew == true, selectedMemberId or false,
+		party.Queue ~= nil and party.Queue ~= false, party.QueueStartedAt, crew, party.Invites, snapshot.Rejoin, page == "Saves" and snapshot.Worlds or false,
 		page == "Saves" and snapshot.ArchiveAvailable, page == "Invite" and snapshot.InviteDirectory or false})
 end
 render = function()
+	if memberOverlay then memberOverlay:Destroy(); memberOverlay = nil end
+	memberNote = nil
 	scrollByPage[lastPage] = content.CanvasPosition
 	for _, child in ipairs(content:GetChildren()) do child:Destroy() end
 	controls = {}; queueLabel = nil
@@ -300,25 +381,36 @@ render = function()
 		local party = snapshot.Party or {Members = {}, Invites = {}}
 		label(content, "YOUR EXPEDITION CREW", 0, 0, 790, 34, 25, "Text", true)
 		queueLabel = label(content, "", 0, 41, 790, 28, 16, "TextMuted"); queueLabel.Name = "QueueStatus"; updateQueue()
+		local crewTop = 84
+		if party.MergedCrew and not party.RunId then
+			label(content, crewReady(party) and "Your crew is ready. The leader can now press Start Expedition." or "Everyone readies again. Your chosen leader then presses Start Expedition.", 0, 76, 796, 40, 16, "TextMuted").TextWrapped = true
+			crewTop = 128
+		end
 		local selfMember
 		for index = 1, 6 do
 			local member = (party.Members or {})[index]
-			local card = box(content, "Crew" .. index, ((index - 1) % 2) * 404, 84 + math.floor((index - 1) / 2) * 104, 392, 92)
 			if member then
-				label(card, member.DisplayName .. (member.UserId == party.LeaderId and "  /  LEADER" or ""), 16, 14, 360, 29, 18, "Text", true)
-				local status = member.Online and (member.Ready and "READY" or "NOT READY") or "OFFLINE"
-				local detail = label(card, (member.Role or "Generalist") .. "  ·  " .. status, 16, 51, 360, 25, 16, member.Online and member.Ready and "Success" or "TextMuted")
+				local card = Instance.new("ImageButton"); card.Name = "Crew" .. index; card.Image = ""
+				card.Position = UDim2.fromOffset(((index - 1) % 2) * 404, crewTop + math.floor((index - 1) / 2) * 104)
+				card.Size = UDim2.fromOffset(392, 92); card.Parent = content; Theme.Button(card, false)
+				portrait(card, member.UserId, 14, 14, 64)
+				label(card, (member.DisplayName or member.Name or "Explorer") .. (member.UserId == party.LeaderId and "  /  LEADER" or ""), 92, 16, 284, 29, 18, "Text", true)
+				local detail = label(card, (member.Role or "Generalist") .. "  ·  " .. readiness(member), 92, 51, 284, 25, 16, member.Online and member.Ready and "Success" or "TextMuted")
 				detail.Name = "Readiness"
+				card.Activated:Connect(function() selectedMemberId = member.UserId; memberMessage = nil; render() end)
 				if member.UserId == player.UserId then selfMember = member end
-			else label(card, "OPEN CREW SLOT", 16, 30, 360, 28, 15, "TextMuted", true) end
+			else
+				local card = box(content, "Crew" .. index, ((index - 1) % 2) * 404, crewTop + math.floor((index - 1) / 2) * 104, 392, 92)
+				label(card, "OPEN CREW SLOT", 16, 30, 360, 28, 15, "TextMuted", true)
+			end
 		end
-		local y = 416
+		local y = crewTop + 332
 		if not party.Id then actionButton(content, "CREATE PARTY", "CREATING…", "CreateParty", nil, 0, y, 250, 46, true)
 		else
 			if not party.RunId then actionButton(content, selfMember and selfMember.Ready and "NOT READY" or "READY UP", "UPDATING…", "Ready", {Ready = not (selfMember and selfMember.Ready)}, 0, y, 190, 46, true) end
 			actionButton(content, "LEAVE PARTY", "LEAVING…", "LeaveParty", nil, 202, y, 190, 46)
 			if party.LeaderId == player.UserId and Mode == "Lobby" and not party.RunId then
-				local starting = party.Queue and party.Queue.Mode == "Party"
+				local starting = startingExpedition(party)
 				actionButton(content, starting and "STARTING EXPEDITION…" or "START EXPEDITION", "STARTING…", "StartExpedition", nil, 404, y, 392, 46, true, party.Queue ~= nil and party.Queue ~= false)
 			end
 			if party.LeaderId == player.UserId and not party.RunId then
@@ -326,11 +418,11 @@ render = function()
 				local inviteButton = button(content, "+  INVITE EXPLORERS", 0, y, 392, 46, openPicker)
 				inviteButton.Interactable = not party.Queue and #(party.Members or {}) < 6
 				if Mode == "Lobby" then
-					local starting = party.Queue and party.Queue.Mode == "Party"
+					local starting = startingExpedition(party)
 					actionButton(content, party.Queue and (starting and "CANCEL START" or "CANCEL MATCHMAKING") or "MATCHMAKE · FILL CREW", party.Queue and "CANCELLING…" or "JOINING QUEUE…", party.Queue and "CancelQueue" or "Queue", nil, 404, y, 392, 46, false, not party.Queue and #(party.Members or {}) >= 6)
 				end
 				y += 52
-				label(content, "Start with 1–6 ready players. Matchmaking fills open seats with other explorers.", 0, y, 796, 42, 14, "TextMuted").TextWrapped = true
+				label(content, "Matchmaking joins parties and randomly picks an existing leader. Everyone readies again; that leader starts the expedition.", 0, y, 796, 42, 14, "TextMuted").TextWrapped = true
 			end
 		end
 		y += 62
@@ -378,7 +470,7 @@ render = function()
 			else label(card, "EMPTY SLOT  /  " .. index, 16, 44, 764, 32, 16, "TextMuted", true) end
 		end
 	end
-	applyControls()
+	renderMemberMenu(); applyControls()
 end
 
 local function reconcile(request, result)
@@ -395,6 +487,13 @@ local function reconcile(request, result)
 	elseif request.Action == "Ready" then
 		for _, member in ipairs(party.Members or {}) do if member.UserId == player.UserId then member.Ready = request.Data.Ready end end
 	elseif request.Action == "CancelQueue" then party.Queue = false; party.QueueStartedAt = nil
+	elseif request.Action == "KickMember" and party.Id == request.PartyId then
+		for index, member in ipairs(party.Members or {}) do if member.UserId == request.Data.UserId then table.remove(party.Members, index); break end end
+		for _, member in ipairs(party.Members or {}) do member.Ready = false end
+		if selectedMemberId == request.Data.UserId then selectedMemberId = nil end
+	elseif request.Action == "TransferLeader" and party.Id == request.PartyId then
+		party.LeaderId = request.Data.UserId; selectedMemberId = nil
+		for _, member in ipairs(party.Members or {}) do member.Ready = false end
 	elseif request.Action == "BuyClass" then
 		for _, class in ipairs(snapshot.Classes or {}) do if class.Id == request.Data.Id then class.Owned = true end end
 	elseif request.Action == "Invite" then inviteStatus[request.Data.UserId] = "Invite sent"; inviteExpiry[request.Data.UserId] = os.clock() + 15
@@ -440,6 +539,7 @@ remote.OnClientEvent:Connect(function(action, data)
 end)
 UIS.TextBoxFocusReleased:Connect(function() task.defer(function() if not UIS:GetFocusedTextBox() and visualKey() ~= lastVisual then render() end end) end)
 UIS.InputBegan:Connect(function(input, processed)
+	if not processed and input.KeyCode == Enum.KeyCode.Escape and selectedMemberId then selectedMemberId = nil; render(); return end
 	if not processed and input.KeyCode == Enum.KeyCode.F2 then panel.Visible = not panel.Visible; if panel.Visible then refresh("All") end end
 end)
 player:GetAttributeChangedSignal("LobbyPanelVersion"):Connect(function()

@@ -9,7 +9,7 @@ local Roles=require(script.Parent.RoleService)
 local Parties=require(script.Parent.PartyService)
 local HttpService=game:GetService("HttpService")
 local Service={_clients={}}
-local actions={Snapshot=true,CreateParty=true,Invite=true,AcceptInvite=true,LeaveParty=true,Ready=true,
+local actions={Snapshot=true,CreateParty=true,Invite=true,AcceptInvite=true,LeaveParty=true,Ready=true,KickMember=true,TransferLeader=true,
 	SelectClass=true,BuyClass=true,StartExpedition=true,Queue=true,CancelQueue=true,ResumeWorld=true,Rejoin=true,ReturnLobby=true,RenameWorld=true,RemoveWorld=true}
 local sections={Core=true,Archive=true,Rejoin=true,InviteDirectory=true}
 local messages={
@@ -77,6 +77,8 @@ function Service:_handle(player,action,data)
 	elseif action=="Invite" then return Parties:Invite(player,data.UserId~=nil and data.UserId or data.Username)
 	elseif action=="AcceptInvite" then return Parties:Accept(player,data.Id)
 	elseif action=="LeaveParty" then return Parties:Leave(player)
+	elseif action=="KickMember" then return Parties:KickMember(player,data.UserId)
+	elseif action=="TransferLeader" then return Parties:TransferLeader(player,data.UserId)
 	elseif action=="Ready" then return Parties:SetReady(player,data.Ready)
 	elseif action=="SelectClass" then return Roles:SetRole(player,data.Id)
 	elseif action=="BuyClass" then return Roles:PurchaseRole(player,data.Id)
