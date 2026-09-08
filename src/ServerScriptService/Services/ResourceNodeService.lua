@@ -148,7 +148,7 @@ local function attachDurationPrompt(instance)
 	local function canHarvest(plr)
 		if claimed or ReplicatedStorage:GetAttribute("WorldRestoring") or not prompt.Enabled or not instance:IsDescendantOf(Workspace)
 			or not attachment:IsDescendantOf(instance) or plr.Parent ~= Players
-			or plr:GetAttribute("IsDead") then
+			or plr:GetAttribute("IsDead") or plr:GetAttribute("WorldPlayerRestoring") or plr:GetAttribute("WorldPlayerLoading") then
 			return false
 		end
 		local character = plr.Character

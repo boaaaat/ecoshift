@@ -391,13 +391,14 @@ local function destroyNodeWithDrop(node, plr)
 
 	local nodePos = getNodePosition(node)
 	if nodePos then
-		ItemDropService:SpawnDrop(itemId, count, nodePos + Vector3.new(0, 2, 0), dropOptions)
+		local drop = ItemDropService:SpawnDrop(itemId, count, nodePos + Vector3.new(0, 2, 0), dropOptions)
+		if drop then node:Destroy() end
 	end
-	node:Destroy()
 end
 
 local function handleHarvest(plr, payload)
-	if GameStateService:IsGameOver() then
+	if GameStateService:IsGameOver() or ReplicatedStorage:GetAttribute("WorldRestoring")
+		or plr:GetAttribute("WorldPlayerRestoring") or plr:GetAttribute("WorldPlayerLoading") then
 		return
 	end
 	local node = resolveHarvestNode(payload)

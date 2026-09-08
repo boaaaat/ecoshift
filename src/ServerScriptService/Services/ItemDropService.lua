@@ -142,6 +142,7 @@ local function attachPrompt(model)
 	local claimed = false
 	prompt.Triggered:Connect(function(plr)
 		if claimed or ReplicatedStorage:GetAttribute("WorldRestoring") or not model:IsDescendantOf(Workspace) then return end
+		if plr:GetAttribute("WorldPlayerRestoring") or plr:GetAttribute("WorldPlayerLoading") then return end
 		local char = plr.Character
 		local hum = char and char:FindFirstChildOfClass("Humanoid")
 		local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -191,22 +192,32 @@ function ItemDropService:SpawnDrop(itemId, count, position, options)
 		part.Parent = model
 		model.PrimaryPart = part
 	end
-	setAnchoredRecursive(model, false)
-	-- Harvest/art prefabs contain several anchored parts. Make one pickup assembly
-	-- before enabling physics, otherwise the model falls into separate pieces.
-	local root=model.PrimaryPart or getPrimary(model)
-	if root then
-		model.PrimaryPart=root
+	-- Held tools/armor intentionally have no collisions, and small resource art
+	-- has very thin pieces. Every pickup needs its own solid physics body.
+	local pivot = model:GetPivot()
+	local bounds, size = model:GetBoundingBox()
+	local root = Instance.new("Part")
+	root.Name = "PickupCollider"
+	root.Size = Vector3.new(math.max(.75, size.X), math.max(.75, size.Y), math.max(.75, size.Z))
+	root.CFrame = bounds
+	root.PivotOffset = bounds:ToObjectSpace(pivot)
+	root.Transparency, root.CanCollide, root.CanTouch = 1, true, false
+	root.CastShadow = false
+	root.Parent = model
+	model.PrimaryPart = root
+	do
 		for _,p in ipairs(model:GetDescendants()) do
 			if p:IsA("BasePart") then
 				p.CanTouch=false
 				if p~=root then
+					p.CanCollide=false
 					p.Massless=true
 					local weld=Instance.new("WeldConstraint"); weld.Part0,weld.Part1,weld.Parent=root,p,p
 				end
 			elseif p:IsA("Script") or p:IsA("LocalScript") or p:IsA("ProximityPrompt") then p:Destroy() end
 		end
 	end
+	setAnchoredRecursive(model, false)
 	model:SetAttribute("ItemId", itemId)
 	model:SetAttribute("Count", count)
 	model:PivotTo(CFrame.new(position))

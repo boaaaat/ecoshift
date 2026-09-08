@@ -793,6 +793,16 @@ local function getOffsetValue(obj)
 	return 0
 end
 
+local function terrainGroundY(position)
+	-- Smooth terrain can end above base_y at voxel boundaries. Keep ground
+	-- placement independent of nearby props, roofs, players, and grass visuals.
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = { Workspace.Terrain }
+	local hit = Workspace:Raycast(Vector3.new(position.X, BASE_Y + 128, position.Z), Vector3.new(0, -256 - TERRAIN_THICKNESS, 0), params)
+	return hit and hit.Position.Y or BASE_Y
+end
+
 local function makeStep()
 	local maxOps = tonumber(STREAM_OPS_PER_YIELD) or 40
 	if maxOps < 1 then
@@ -1354,6 +1364,14 @@ function ChunkStreamingService:_spawnStructureChests(structureClone, biomeName, 
 	local prefixes = cfg.spawn_points or cfg.spawnPoints or {"ChestSpawn"}
 	local spawnPoints = collectSpawnPoints(structureClone, prefixes)
 	if #spawnPoints == 0 then return end
+	if structureClone:GetAttribute("GeneratedChestSockets") == 1 then
+		-- These original sites previously had no sockets. Their newly available
+		-- chest rolls must not advance the chunk RNG and move later saved objects.
+		local seed = (self._seed or WorldGenConfig.seed or 12345) % 2147483647
+		local identity = structureClone:GetAttribute("WorldObjectKey") or structureName
+		for i = 1, #identity do seed = (seed * 33 + string.byte(identity, i)) % 2147483647 end
+		rng = Random.new(seed)
+	end
 
 	local rawCount = cfg.count or cfg.Count
 	local count = randomInRange(rng, rawCount)
@@ -1435,6 +1453,10 @@ function ChunkStreamingService:_spawnStructureChests(structureClone, biomeName, 
 			tryApplyScaleOverride(clone, prefab.Name)
 			local yOffset = getOffsetValue(clone) + (clone:GetAttribute("ArtStyle") == "Expedition" and 0 or getAssetYOffset(prefab.Name))
 			local targetCf = cf * CFrame.new(0, yOffset, 0)
+			if clone:GetAttribute("ArtStyle") == "Expedition" then
+				local clearance = terrainGroundY(targetCf.Position) - targetCf.Position.Y
+				if clearance > 0 then targetCf += Vector3.new(0, clearance, 0) end
+			end
 			if clone:IsA("Model") then
 				clone:PivotTo(targetCf)
 			elseif clone:IsA("BasePart") then
@@ -1913,7 +1935,7 @@ function ChunkStreamingService:_placeChest(biomeName, chunkCenter, chestNames, p
 				local clone = prefab:Clone()
 				tryApplyScaleOverride(clone, prefab.Name)
 				local yOffset = getOffsetValue(clone) + (clone:GetAttribute("ArtStyle") == "Expedition" and 0 or getAssetYOffset(prefab.Name))
-				local targetCf = CFrame.new(position.X, BASE_Y + yOffset, position.Z)
+				local targetCf = CFrame.new(position.X, terrainGroundY(position) + yOffset, position.Z)
 
 				if clone:IsA("Model") then
 					clone:PivotTo(targetCf)
@@ -1967,14 +1989,8 @@ function ChunkStreamingService:_placePrefab(prefab, position, parent, step)
 	local yOffset = getOffsetValue(clone) + (clone:GetAttribute("ArtStyle") == "Expedition" and 0 or getAssetYOffset(prefab.Name))
 	
 	local groundY = BASE_Y
-	if clone:GetAttribute("PrototypePrefab") or clone:GetAttribute("ArtStyle") == "Expedition" then
-		-- Smooth terrain can end above the configured plane at voxel boundaries.
-		-- Ground the base-pivot test art on the actual surface, including small plants.
-		local params = RaycastParams.new()
-		params.FilterType = Enum.RaycastFilterType.Include
-		params.FilterDescendantsInstances = { Workspace.Terrain }
-		local hit = Workspace:Raycast(Vector3.new(position.X, BASE_Y + 32, position.Z), Vector3.new(0, -96, 0), params)
-		if hit then groundY = hit.Position.Y end
+	if parent.Name == "Structures" or clone:GetAttribute("PrototypePrefab") or clone:GetAttribute("ArtStyle") == "Expedition" then
+		groundY = terrainGroundY(position)
 	end
 	local targetCf = CFrame.new(position.X, groundY + yOffset, position.Z)
 	if clone:IsA("Model") then

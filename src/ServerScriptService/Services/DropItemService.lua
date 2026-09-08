@@ -16,6 +16,8 @@ function DropItemService:Init()
 	if not remote then return end
 	self._initialized = true
 	remote.OnServerEvent:Connect(function(plr, payloadOrId, amount)
+		if ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring")
+			or plr:GetAttribute("WorldPlayerLoading") then return end
 		local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
 		local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
 		if not root or not hum or hum.Health <= 0 or plr:GetAttribute("IsDead") then return end

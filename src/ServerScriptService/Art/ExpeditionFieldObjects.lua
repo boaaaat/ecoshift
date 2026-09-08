@@ -133,9 +133,25 @@ function Art.CreateChest(name,biome)
 	if rare then part(m,"ResonanceLine",V(1.4,.055,.075),CF(0,2.09,0),color,nil,Enum.Material.Neon) end
 	return finish(m)
 end
+local structureNames={CabinRuin=true,WatchTower=true,AncientRuins=true,DesertOutpost=true,SunkenShack=true,WreckedSkiff=true}
+function Art.EnsureStructureChestSpawn(m)
+	if not m or m:GetAttribute("ArtStyle")~="Expedition" or not structureNames[m.Name] then return end
+	-- Keep explicit/authored sockets intact when upgrading retained field art.
+	for _,descendant in ipairs(m:GetDescendants()) do
+		if (descendant:IsA("Attachment") or descendant:IsA("BasePart"))
+			and (descendant.Name=="ChestSpawn" or descendant.Name:sub(1,11)=="ChestSpawn_") then return end
+	end
+	local support=m:FindFirstChild("Deck") or m:FindFirstChild("RuinFooting") or m:FindFirstChild("Keel")
+	if not support or not support:IsA("BasePart") then return end
+	local x,z=2.4,1.6
+	if support.Name=="RuinFooting" then x,z=3,-1
+	elseif support.Name=="Keel" then x,z=0,1.5 end
+	local socket=Instance.new("Attachment"); socket.Name="ChestSpawn"
+	socket.CFrame=CF(x,support.Size.Y*.5+.05,z); socket.Parent=support
+	m:SetAttribute("GeneratedChestSockets",1)
+end
 function Art.CreateStructure(name,biome)
-	local supported={CabinRuin=true,WatchTower=true,AncientRuins=true,DesertOutpost=true,SunkenShack=true,WreckedSkiff=true}
-	if not supported[name] then return nil end
+	if not structureNames[name] then return nil end
 	local m=model(name,"AbandonedExpeditionSite")
 	local sand=Color3.fromRGB(172,144,100)
 	if name=="AncientRuins" then
@@ -173,6 +189,7 @@ function Art.CreateStructure(name,biome)
 		part(m,"CanvasRoof",V(12.4,.18,10.5),CF(0,7.1+elevated,0)*A(0,0,.13),name=="DesertOutpost" and C.Paper or C.Moss)
 		part(m,"SurveyPennant",V(1.8,1.1,.06),CF(5.2,8.1+elevated,-4.2),C.Brass,"WedgePart")
 	end
+	Art.EnsureStructureChestSpawn(m)
 	return finish(m)
 end
 return Art

@@ -176,6 +176,11 @@ function Service:Init()
 			if not keepExisting(structures,name) then
 				local site=FieldObjects.CreateStructure(name,biome)
 				if site then publish(site,structures) end
+			else
+				local site=structures:FindFirstChild(name)
+				if site and site:GetAttribute("GeneratedBy")==GENERATOR and site:GetAttribute("PrefabOverride")~=true then
+					FieldObjects.EnsureStructureChestSpawn(site)
+				end
 			end
 		end)
 		for id, def in pairs(Entities.Entities) do
