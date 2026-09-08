@@ -1,6 +1,6 @@
 # Session validation and handoff
 
-The active lobby/persistent-world/original-art goal is not complete. Both places are published and their cloud editors passed fresh Studio startup checks. Real six-player cross-server validation remains pending.
+The active lobby/persistent-world/original-art goal is not complete. The initial place migration was published and checked historically; subsequent fixes through source checkpoint 7affe1b are synced to both Studio editors and built locally, but are not claimed published. The user handles Roblox publishing. Real six-player cross-server validation remains pending by their request. Sections below are chronological evidence; the current requirement audit is in lobby-and-art-milestone.md.
 
 ## Confirmed archive policy
 
