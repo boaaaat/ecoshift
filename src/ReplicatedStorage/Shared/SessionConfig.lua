@@ -1,8 +1,8 @@
 -- Shared place routing and tunable session policy. Never put reserved-server codes here.
 local Config = {
 	UniverseId = 8439909753,
-	LobbyPlaceId = 94125768885713,
-	ExpeditionPlaceId = 120274921310527,
+	LobbyPlaceId = 120274921310527,
+	ExpeditionPlaceId = 94125768885713,
 	MaxPartySize = 6,
 	Namespace = "EcoshiftSessions_v1",
 	PartyTTL = 86400,

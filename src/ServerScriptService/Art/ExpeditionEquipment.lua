@@ -288,7 +288,8 @@ function Equipment.CreateArmor(id)
 		part(accessory, "MantleBrooch", V(0.19, 0.25, 0.11), CF(0, 0.36, -0.3), def.Trim, "WedgePart", false, def.Kind == "Mantle")
 	elseif def.Kind == "Waders" then
 		for side = -1, 1, 2 do
-			part(accessory, "OilskinApron", V(0.64, 0.88, 0.12), CF(side * 0.36, -0.95, 0.03), tint(def.Color, -0.04), "WedgePart")
+			-- Rigid waist tabs end above the forward thigh during a standard walk.
+			part(accessory, "OilskinApron", V(0.64, 0.34, 0.12), CF(side * 0.36, -0.58, 0.03), tint(def.Color, -0.04), "WedgePart")
 			part(accessory, "BibStrap", V(0.14, 1.02, 0.13), CF(side * 0.48, 0.16, -0.16), def.Trim)
 		end
 		part(accessory, "WaterproofPocket", V(0.72, 0.42, 0.15), CF(0, -0.09, -0.2), tint(def.Color, 0.18))
@@ -306,7 +307,7 @@ function Equipment.CreateArmor(id)
 			part(accessory, "PauldronRidge", V(0.45, 0.42, 0.82), CF(side * 0.96, 0.65, 0.28), tint(def.Color, 0.2), "WedgePart")
 			part(accessory, "HeatInlay", V(0.045, 0.58, 0.025), CF(side * 0.49, 0.12, -0.285), def.Trim, nil, false, true)
 		end
-		if def.Kind == "Starplate" then part(accessory, "MeteorTasset", V(1.15, 0.72, 0.15), CF(0, -0.98, 0), tint(def.Color, -0.1), "WedgePart") end
+		if def.Kind == "Starplate" then part(accessory, "MeteorTasset", V(1.15, 0.32, 0.15), CF(0, -0.59, 0), tint(def.Color, -0.1), "WedgePart") end
 	elseif def.Kind == "Weave" then
 		for side = -1, 1, 2 do
 			part(accessory, "PrismChestFacet", V(0.65, 0.83, 0.12), CF(side * 0.31, 0.11, -0.16) * A(0, 0, side * 0.17), tint(def.Color, side == -1 and 0.16 or -0.1), "WedgePart")

@@ -15,6 +15,8 @@ ArmorService._equipped = {} -- [player] = { Id = string, Instance = Instance?, C
 local EQUIP_FOLDER = "EquippedArmor"
 local MOD_ID_ARMOR = "ArmorEquip"
 local MOD_ID_TEMPRES = "TempResEquip"
+local MOUNT_ATTEMPTS = 10
+local MOUNT_RETRY_SECONDS = 0.25
 
 local ARMOR_STATS = SurvivalConfig.ARMOR
 
@@ -31,8 +33,97 @@ local function getPrimary(model)
 	return nil
 end
 
+local function isGeneratedArmor(instance)
+	return instance and instance:IsA("Accessory") and instance:GetAttribute("ArtStyle") == "Expedition"
+		and instance:GetAttribute("ArtKind") == "Armor"
+end
+
+local function mountedHandle(entry)
+	local handle = entry.Instance:FindFirstChild("Handle")
+	local torso = entry.Character:FindFirstChild("UpperTorso") or entry.Character:FindFirstChild("Torso")
+	local weld = handle and handle:FindFirstChild("AccessoryWeld")
+	if torso and handle and handle:IsA("BasePart") and weld and weld:IsA("Weld")
+		and ((weld.Part0 == handle and weld.Part1 == torso) or (weld.Part1 == handle and weld.Part0 == torso)) then return handle end
+	local rigid = handle and handle:FindFirstChild("AccessoryRigidConstraint")
+	if torso and handle and handle:IsA("BasePart") and rigid and rigid:IsA("RigidConstraint") and rigid.Enabled then
+		local a, b = rigid.Attachment0, rigid.Attachment1
+		if a and b and ((a.Parent == handle and b.Parent == torso) or (b.Parent == handle and a.Parent == torso)) then return handle end
+	end
+	return nil
+end
+
+local function clearGeneratedMounts(handle)
+	for _, name in ipairs({ "AccessoryWeld", "AccessoryRigidConstraint" }) do
+		local joint = handle:FindFirstChild(name)
+		if joint then joint:Destroy() end
+	end
+end
+
+local function tryGeneratedMount(entry, allowFallback)
+	local accessory, char = entry.Instance, entry.Character
+	local mounted = mountedHandle(entry)
+	if mounted then mounted.Anchored = false; return true end
+	local handle = accessory:FindFirstChild("Handle")
+	local attachment = handle and handle:FindFirstChild("BodyFrontAttachment")
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	local torso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
+	if not handle or not handle:IsA("BasePart") or not attachment or not attachment:IsA("Attachment")
+		or not hum or not torso or not torso:IsA("BasePart") then return false end
+	local target = torso:FindFirstChild("BodyFrontAttachment")
+	if target and not target:IsA("Attachment") then target = nil end
+	if target and not entry.NativeMountRequested then
+		-- R15 may create its attachment constraint after AddAccessory returns.
+		-- Issue one native request, then poll without interrupting its parenting.
+		entry.NativeMountRequested = true
+		clearGeneratedMounts(handle)
+		accessory.Parent = nil
+		handle.Anchored = false
+		local ok = pcall(function() hum:AddAccessory(accessory) end)
+		if ok and mountedHandle(entry) then handle.Anchored = false; return true end
+		if not accessory.Parent then accessory.Parent = char end
+	end
+	if not allowFallback then return false end
+	-- Legacy/custom rigs may omit the body attachment. Do not modify their rig.
+	local bodyFrame = target and target.CFrame or CFrame.new(0, 0, -torso.Size.Z * 0.5)
+	-- Parenting can rebuild native accessory joints: perform it before our fallback.
+	handle.Anchored = false
+	accessory.Parent = char
+	clearGeneratedMounts(handle)
+	handle.CFrame = torso.CFrame * bodyFrame * attachment.CFrame:Inverse()
+	local weld = Instance.new("Weld")
+	weld.Name, weld.Part0, weld.Part1 = "AccessoryWeld", torso, handle
+	weld.C0, weld.C1, weld.Parent = bodyFrame, attachment.CFrame, handle
+	entry.MountFallback = true
+	return true
+end
+
+local function recoverGeneratedMount(plr, entry)
+	if not isGeneratedArmor(entry.Instance) or entry.MountTicket or entry.MountFinished then return end
+	local ticket = {}
+	entry.MountTicket = ticket
+	entry.NativeMountRequested = nil
+	local function attempt()
+		if entry.MountTicket ~= ticket or ArmorService._equipped[plr] ~= entry or plr.Parent ~= Players
+			or plr.Character ~= entry.Character or not entry.Character.Parent or not entry.Instance.Parent then
+			if entry.MountTicket == ticket then entry.MountTicket = nil end
+			return
+		end
+		entry.MountAttempts = (entry.MountAttempts or 0) + 1
+		if tryGeneratedMount(entry, entry.MountAttempts >= MOUNT_ATTEMPTS) then
+			entry.MountTicket, entry.MountAttempts = nil, 0
+		elseif entry.MountAttempts < MOUNT_ATTEMPTS then
+			task.delay(MOUNT_RETRY_SECONDS, attempt)
+		else
+			entry.MountTicket, entry.MountFinished = nil, true
+			warn("[ArmorService] Generated armor could not mount:", entry.Id, plr.Name)
+		end
+	end
+	attempt()
+end
+
 local function clearArmor(plr)
 	local entry = ArmorService._equipped[plr]
+	if entry then entry.MountTicket = nil end
 	if entry and entry.Instance and entry.Instance.Parent then
 		entry.Instance:Destroy()
 	end
@@ -90,6 +181,7 @@ function ArmorService:Equip(plr, itemId)
 
 	local entry = ArmorService._equipped[plr]
 	if entry and entry.Id == itemId and entry.Character == char and entry.Instance and entry.Instance.Parent then
+		recoverGeneratedMount(plr, entry)
 		return
 	end
 
@@ -108,8 +200,14 @@ function ArmorService:Equip(plr, itemId)
 
 	if clone then
 		if clone:IsA("Accessory") then
-			local hum = char:FindFirstChildOfClass("Humanoid")
-			if hum then hum:AddAccessory(clone) else clone.Parent = char end
+			if isGeneratedArmor(clone) then
+				local handle = clone:FindFirstChild("Handle")
+				if handle and handle:IsA("BasePart") then handle.Anchored = true end
+				clone.Parent = equipFolder
+			else
+				local hum = char:FindFirstChildOfClass("Humanoid")
+				if hum then hum:AddAccessory(clone) else clone.Parent = char end
+			end
 		elseif clone:IsA("Clothing") then
 			clone.Parent = char
 		elseif clone:IsA("Tool") then
@@ -138,6 +236,7 @@ function ArmorService:Equip(plr, itemId)
 	end
 
 	ArmorService._equipped[plr] = { Id = itemId, Instance = clone, Character = char }
+	if clone then recoverGeneratedMount(plr, ArmorService._equipped[plr]) end
 	plr:SetAttribute("EquippedArmor", itemId)
 
 	local stats = ARMOR_STATS[itemId]
@@ -181,11 +280,25 @@ function ArmorService:Init()
 		plr.CharacterAdded:Connect(function()
 			task.defer(function() ArmorService:Sync(plr) end)
 		end)
+		plr.CharacterAppearanceLoaded:Connect(function(char)
+			local entry = ArmorService._equipped[plr]
+			if plr.Character ~= char or not entry or entry.Character ~= char or not isGeneratedArmor(entry.Instance) then return end
+			entry.MountTicket, entry.MountAttempts, entry.MountFinished = nil, 0, nil
+			if entry.MountFallback then
+				local handle = entry.Instance:FindFirstChild("Handle")
+				if handle then clearGeneratedMounts(handle) end
+				if handle and handle:IsA("BasePart") then handle.Anchored = true end
+				entry.MountFallback = nil
+			end
+			recoverGeneratedMount(plr, entry)
+		end)
 		ArmorService:Sync(plr)
 	end
 	Players.PlayerAdded:Connect(bindPlayer)
 	for _, plr in ipairs(Players:GetPlayers()) do bindPlayer(plr) end
 	Players.PlayerRemoving:Connect(function(plr)
+		local entry = ArmorService._equipped[plr]
+		if entry then entry.MountTicket = nil end
 		ArmorService._equipped[plr] = nil
 	end)
 end

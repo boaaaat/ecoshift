@@ -16,7 +16,9 @@ The previous gameplay milestone is complete. This document tracks the full new g
 
 ## Current external state
 
-Universe `8439909753`, group `34468779`: current start/survival place `120274921310527`; existing Lobby `94125768885713`. Inspected through Studio's place inventory. Start-place migration has not happened. Preserve a full survival-place copy before publishing lobby content over the current entry place, as required by Roblox's documented start-place workflow.
+Universe `8439909753`, group `34468779`: the final routing in `Shared/SessionConfig.lua` is `LobbyPlaceId = 120274921310527` and `ExpeditionPlaceId = 94125768885713`. The entry place **Ecoshift** now contains the lobby; the secondary place **Expedition** contains survival gameplay. The experience remains private.
+
+Full Studio backups were saved before replacing either place: `build/backups/Ecoshift-before-lobby-migration-2026-09-07.rbxl` (330,736 bytes) and `build/backups/Lobby-original-2026-09-07.rbxl` (78,880 bytes). The initial migration published expedition v3 and lobby v812. Both cloud editors reached Ready in fresh Studio Play sessions with correct routing and the armor mounting fix; a real Roblox Player join loaded the new lobby. The subsequent walking-clearance fix passed R6/R15 review and both builds, then published as Expedition v5 and Ecoshift v814. Real six-player travel and persistence validation remains pending; see `validation-2026-09-07.md`.
 
 ## Session design
 

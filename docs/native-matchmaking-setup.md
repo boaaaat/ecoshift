@@ -2,7 +2,7 @@
 
 Roblox chooses the **public Lobby server** when someone joins. Its native matching already considers signals including latency, text chat and language. Reserved servers are excluded from that public-server ranking, so EcoShift's cross-server queue must separately assemble and reserve each exact six-player expedition. [Roblox matchmaking](https://create.roblox.com/docs/matchmaking), [native signals](https://create.roblox.com/docs/matchmaking/attributes-and-signals).
 
-On September 7, 2026, `EcoShift Expedition Lobbies` was created and verified in Creator Dashboard's Applied Places table for **Ecoshift** (`120274921310527`) and **Lobby** (`94125768885713`). Roblox's public-server configuration is now enabled; this is separate from the still-in-progress reserved expedition travel and save service.
+On September 7, 2026, `EcoShift Expedition Lobbies` was created and verified in Creator Dashboard's Applied Places table for **Ecoshift** (`120274921310527`) and the secondary place (`94125768885713`, then named Lobby, now **Expedition**). Final routing uses `120274921310527` as the public entry lobby and `94125768885713` as the reserved expedition destination. The configuration was applied to both places, but its public-server ranking governs entry lobby selection, not reserved expedition assignment. Publication and live travel validation are tracked in `validation-2026-09-07.md`.
 
 The configuration uses Occupancy 2, Age 1, Language 3, Latency 4, Friends 15, Device Type 0, Voice Chat 1, Play History 2, Text Chat 5, and the custom class-diversity signal 4. The age signal remains a Roblox-owned ranking preference, not a game-enforced age admission rule. The dashboard's mock preview ran successfully; it does not establish published cross-server party/teleport correctness.
 
@@ -15,7 +15,7 @@ In Creator Dashboard → EcoShift → Configure → Custom Matchmaking:
 1. Create a **player categorical attribute**, named `EcoShiftClass`, type String, default `Generalist`.
 2. Connect it to the existing profile store below; the selected class already persists there.
 3. Create a custom player categorical signal using that attribute and **Diversify**.
-4. Add it to a configuration retaining Roblox's latency, text-chat and language signals. Apply the configuration to **Lobby**, place `94125768885713`.
+4. Add it to a configuration retaining Roblox's latency, text-chat and language signals. Apply the configuration to the public entry lobby, **Ecoshift**, place `120274921310527` (`SessionConfig.LobbyPlaceId`). The secondary place **Expedition**, `94125768885713`, is the expedition destination.
 
 Roblox documents Diversify as favoring servers containing other attribute values. This improves the lobby's potential class mix; it does not guarantee a six-class expedition. Signal weights are deployment tuning, and should be reviewed using the dashboard's configuration preview. [Configuration instructions](https://create.roblox.com/docs/matchmaking/customize-matchmaking).
 
