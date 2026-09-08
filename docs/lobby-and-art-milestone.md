@@ -28,6 +28,18 @@ Shared MemoryStore records coordinate servers; all party mutations and matchmaki
 
 Currency changes and class purchases must be atomic and idempotent across server transfers. Failed profile loads must never overwrite stored data with defaults. Class ownership and theme preferences persist across both places.
 
-## Completion evidence still required
+## Requirement audit
 
-Actual published entry-place routing; dark/light UI inspection; class purchase/reward persistence; party invitations, capacity, disconnect, handoff and dissolution; cross-lobby class-aware matching; correct run rejoin; five-slot saved-world ownership, renaming and full-roster resumption; world restoration after shutdown; return-to-lobby persistence; original art in all required families; complete loot/spawn tuning; final builds and GitHub pushes. The user explicitly authorized Studio gameplay and published multi-server checks for this goal.
+| Requirement | Current evidence | Remaining verification |
+| --- | --- | --- |
+| Dark by default; optional light theme | DefaultTheme is Dark. Actual settings clicks saved both themes across fresh Play sessions; both lobby/shop themes inspected. | Published device coverage beyond desktop Studio. |
+| Lobby is the entry place | Ecoshift v814 contains Lobby mode; Expedition v5 contains survival. Actual Roblox Player join entered the observatory. Full pre-migration backups exist. | Entry join is verified; six-person travel is covered below. |
+| Party, classes and earned-currency shop; no cosmetics | Lobby controls/class catalog implemented and rendered. Generalist is free; permanent class purchase/reward operations passed nine isolated persistence/failure cases. | Earn currency in a real expedition, purchase once, and retain ownership across place changes. |
+| Persistent parties; offline members; dissolve when everyone leaves | Presence ownership, handoff leases and six-member limits implemented. Actual Studio remotes created/readied/queued/cancelled a solo party. | Multiple accounts: invites, disconnect cancellation, offline membership, capacity, return-to-lobby persistence and final dissolution. |
+| Class-aware cross-lobby exact-six queue | Native class-diversity configuration applied; custom queue preserves whole parties, claims a full roster and reserves travel. Solo queue did not launch a partial team. | Six real accounts across lobbies: merge, travel, retry and disconnect races. |
+| Correct run rejoin and shared saved worlds | Generation/lease admission, five personally named copies and exact-original-crew resume implemented. World store passed 16 isolated cases; save ownership passed 22. Actual world/player snapshot restoration checked. | Full crew: live rejoin, shutdown/resume, new leader/any owner, personal names, copy removal/recreation, capacity and shared progress. |
+| Original models and cohesive art | Original resource, prop, tool, armor, build, pickup, chest, landmark and creature families generated. Catalog coverage, 34 tool mounts, 21 armor checks, creature lineup and armor front/rear/walking reviews passed; observed walking clipping fixed. | Custom animation packs/extreme avatar proportions remain outside verified art coverage. |
+| Loot and spawn tuning integrated | Biome cache/resource yields and independent monster levels/caps configured. Catalog references resolve. Real melee/bow/monster death/generated loot/pickup integration passed in a temporary Studio arena. | Full-team survival playthrough for the intended 60–90-minute progression and balance. |
+| Builds, publication and GitHub milestone | Both builds passed; both final places published. Source migration/armor milestone pushed as 4906467. | No publishing gate remains for that revision. |
+
+The goal remains incomplete because full-team live behavior and progression are not established by isolated fixtures or a solo Studio session. Six distinct Roblox accounts with access to this private experience are required for the remaining crew tests. The user explicitly authorized the necessary gameplay and published multi-server checks.
