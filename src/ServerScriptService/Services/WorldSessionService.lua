@@ -356,6 +356,9 @@ function Service:ReturnToLobby(player)
 	local state = { Kind = "Lobby", Attempts = 0 }
 	self._travel[player] = state
 	task.spawn(function() self:_teleport(player, state) end)
+	if self._ending or (self._record and self._record.Ended) then
+		return true, "Returning to the lobby. This ended world's save copies are removed."
+	end
 	return true, "Returning to the lobby. Your expedition state is retained."
 end
 
@@ -576,7 +579,10 @@ function Service:StartExpedition(snapshots)
 				if not current or current.Generation ~= self._record.Generation or current.ServerJobId ~= game.JobId or not active(current) then return nil, "WorldLeaseLost" end
 				current.Ended = true; return current
 			end)
-			if ended then self:_adopt(ended) end
+			if ended then
+				self:_adopt(ended)
+				Saves:UpdateManifest(ended)
+			end
 			self:_save("Ended")
 		end)
 	end)

@@ -251,6 +251,32 @@ function Service:AbortRoster(worldId, token)
 	return aborted, aborted and "Aborted" or abortReason
 end
 
+-- Retain the terminal manifest as a fence against stale resume/save workers,
+-- but remove every owner's playable copy and free their archive capacity.
+function Service:CleanupEndedWorld(worldId)
+	local manifest, reason = self:GetManifest(worldId)
+	if not manifest then return false, reason end
+	if manifest.WorldStatus ~= "Ended" then return false, "WorldNotEnded" end
+	local complete = true
+	for _, userId in ipairs(manifest.OwnerIds) do
+		local removed = updateArchive(userId, function(data)
+			local slotId = manifest.SlotIds[tostring(userId)]
+			local slot = data.Slots[slotId]
+			if slot and (slot.WorldId ~= worldId or slot.Token ~= manifest.Token) then return false, "SlotConflict" end
+			data.Slots[slotId] = nil
+			if data.ResumeLocks then data.ResumeLocks[worldId] = nil end
+			return true
+		end)
+		if not removed then complete = false end
+	end
+	if not complete then return false, "WorldCleanupPending" end
+	return updateManifest(worldId, manifest.Token, function(data)
+		if data.WorldStatus ~= "Ended" then return false, "WorldNotEnded" end
+		data.CopiesRemovedAt = data.CopiesRemovedAt or os.time()
+		return true
+	end)
+end
+
 function Service:List(player)
 	local ok, raw = call(function() return archives:GetAsync(tostring(player.UserId), fresh) end)
 	if not ok then return {}, raw end
@@ -262,7 +288,10 @@ function Service:List(player)
 		local manifest, failure = self:GetManifest(slot.WorldId)
 		if not manifest then return {}, failure end
 		if manifest.SlotIds[tostring(player.UserId)] ~= slotId or manifest.Token ~= slot.Token then return {}, "SlotConflict" end
-		if slot.State == "Committed" and manifest.State == "Committed" then
+		if manifest.WorldStatus == "Ended" then
+			local removed = self:CleanupEndedWorld(slot.WorldId)
+			if not removed then pending += 1 end
+		elseif slot.State == "Committed" and manifest.State == "Committed" then
 			-- Explicit whitelist: no reservation tokens, payloads, currency or travel codes.
 			table.insert(result, {
 				Id = slot.Id, WorldId = slot.WorldId, Name = slot.Name, CreatedAt = slot.CreatedAt,
@@ -322,6 +351,7 @@ function Service:GetOwnedSlot(player, slotId)
 	if not slot or slot.State ~= "Committed" then return nil, "SaveNotFound" end
 	local manifest, reason = self:GetManifest(slot.WorldId)
 	if not manifest or manifest.State ~= "Committed" then return nil, reason or "CommitPending" end
+	if manifest.WorldStatus == "Ended" then return nil, "ExpeditionEnded" end
 	if manifest.Token ~= slot.Token or manifest.SlotIds[tostring(player.UserId)] ~= slotId then return nil, "SaveNotFound" end
 	return Util.DeepCopy(slot), nil, manifest
 end
@@ -347,6 +377,16 @@ function Service:HasFreeSlot(userId)
 	if not ok then return nil, raw end
 	local archive = archiveData(raw)
 	if not archive then return nil, "InvalidArchive" end
+	if slotCount(archive.Slots) >= Config.MaxSlots then
+		-- Recover terminal copies even when the player starts from the crew menu
+		-- without first opening the archive after a failed or interrupted cleanup.
+		local _, cleanupReason = self:List({ UserId = userId })
+		if cleanupReason then return nil, cleanupReason end
+		local refreshed, latest = call(function() return archives:GetAsync(tostring(userId), fresh) end)
+		if not refreshed then return nil, latest end
+		archive = archiveData(latest)
+		if not archive then return nil, "InvalidArchive" end
+	end
 	local available = math.max(0, Config.MaxSlots - slotCount(archive.Slots))
 	return available > 0, available == 0 and "Every crew member needs a free save slot before starting a new world." or nil, available
 end
@@ -375,6 +415,7 @@ function Service:ReconcileRosterForResume(worldId, roster)
 	local proposed = HttpService:GenerateGUID(false)
 	local started, failure, current = updateManifest(worldId, manifest.Token, function(data)
 		if data.State ~= "Committed" then return false, "CommitPending" end
+		if data.WorldStatus == "Ended" then return false, "ExpeditionEnded" end
 		local operation = data.ResumeCopies
 		if not operation or operation.State == "Complete" or operation.State == "Aborted" then
 			operation = { Token = proposed, State = "Reserving", StartedAt = os.time() }
@@ -443,12 +484,16 @@ function Service:ReconcileRosterForResume(worldId, roster)
 		end
 	end
 	local committing, commitError = updateManifest(worldId, manifest.Token, function(data)
+		if data.WorldStatus == "Ended" then return false, "ExpeditionEnded" end
 		local claim = data.ResumeCopies
 		if not claim or claim.Token ~= token or (claim.State ~= "Reserving" and claim.State ~= "Committing") then return false, "ResumeChanged" end
 		if not ownsWorker(claim) then return false, "ResumeLeaseExpired" end
 		claim.State = "Committing"; return true
 	end)
-	if not committing then return false, commitError end
+	if not committing then
+		if commitError == "ExpeditionEnded" then self:CleanupEndedWorld(worldId) end
+		return false, commitError
+	end
 	for _, userId in ipairs(owners) do
 		local committed = updateArchive(userId, function(data)
 			if operation.Until <= os.time() then return false, "ResumeLeaseExpired" end
@@ -461,13 +506,17 @@ function Service:ReconcileRosterForResume(worldId, roster)
 		if not committed then return false, "ResumeSlotRecoveryPending" end
 	end
 	local complete, completeError = updateManifest(worldId, manifest.Token, function(data)
+		if data.WorldStatus == "Ended" then return false, "ExpeditionEnded" end
 		if not data.ResumeCopies or data.ResumeCopies.Token ~= token then return false, "ResumeChanged" end
 		if data.ResumeCopies.State == "Complete" then return true end
 		if not ownsWorker(data.ResumeCopies) then return false, "ResumeLeaseExpired" end
 		if data.ResumeCopies.State ~= "Committing" then return false, "ResumeChanged" end
 		data.ResumeCopies.State = "Complete"; return true
 	end)
-	if not complete then return false, completeError end
+	if not complete then
+		if completeError == "ExpeditionEnded" then self:CleanupEndedWorld(worldId) end
+		return false, completeError
+	end
 	for _, userId in ipairs(owners) do
 		updateArchive(userId, function(data)
 			if data.ResumeLocks and data.ResumeLocks[worldId] and data.ResumeLocks[worldId].Token == token and data.ResumeLocks[worldId].WorkerToken == proposed then data.ResumeLocks[worldId] = nil end
@@ -485,7 +534,7 @@ function Service:UpdateManifest(record)
 	if not nonnegativeInteger(revision) or not nonnegativeInteger(generation) then return false, "InvalidWorldManifest" end
 	local phases = { Preparing = true, CrewCommitted = true, Reserving = true, Launching = true, Active = true, Paused = true, Ended = true }
 	if not phases[record.Phase] then return false, "InvalidWorldStatus" end
-	return updateManifest(record.Id, record.SlotToken, function(data)
+	local updated, reason, manifest = updateManifest(record.Id, record.SlotToken, function(data)
 		if data.State ~= "Committed" then return false, "CommitPending" end
 		if (data.WorldGeneration or 0) > generation or data.SnapshotRevision > revision then return true end
 		if data.WorldStatus == "Ended" and record.Phase ~= "Ended" and not record.Ended then return false, "ExpeditionEnded" end
@@ -493,6 +542,10 @@ function Service:UpdateManifest(record)
 		data.WorldStatus, data.SavedAt = record.Ended and "Ended" or record.Phase, record.SavedAt or data.SavedAt or data.CommittedAt
 		return true
 	end)
+	if updated and manifest.WorldStatus == "Ended" and not manifest.CopiesRemovedAt then
+		return self:CleanupEndedWorld(record.Id)
+	end
+	return updated, reason, manifest
 end
 
 function Service:Init()

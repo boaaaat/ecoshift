@@ -26,6 +26,8 @@ function Config.CacheTable(biome)
 end
 function Config.ResourceProfile(item)
 	local id=item.Id
+	-- Cacti use the equipped harvesting tool, like other substantial plants.
+	if id=="CactusStem" then return {Health=60,Min=2,Max=4} end
 	if id:find("Wood") then return {Health=60,Min=5,Max=8} end
 	if item:HasTag("Ore") then return {Health=80,Min=2,Max=4} end
 	if item:HasTag("Crystal") or id=="PhaseQuartz" or id=="MeteorIron" then return {Health=90,Min=2,Max=3} end

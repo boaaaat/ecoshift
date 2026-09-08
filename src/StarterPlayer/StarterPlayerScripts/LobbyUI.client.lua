@@ -126,12 +126,18 @@ local open = button(gui, Mode == "Lobby" and "EXPEDITION DESK  /  F2" or "CREW  
 	panel.Visible = not panel.Visible
 	if panel.Visible then refresh("All") end
 end, true)
-local openHost = Instance.new("Frame"); openHost.Name = "DeskShortcut"; openHost.BackgroundTransparency = 1
-openHost.Size = open.Size
-openHost.AnchorPoint = Vector2.new(.5, Mode == "Lobby" and 1 or 0)
-openHost.Position = Mode == "Lobby" and UDim2.new(.5, 0, 1, -18) or UDim2.new(.5, 0, 0, 12)
-openHost.Parent = gui
-open.Parent = openHost; Theme.Fit(openHost, 1120, 740, nil, true)
+if Mode == "Expedition" then
+	open.Text = "CREW"
+	open.TextSize = 13
+	require(RS.Shared.UI:WaitForChild("ExpeditionTopbar")).Mount(open, "Crew")
+else
+	local openHost = Instance.new("Frame"); openHost.Name = "DeskShortcut"; openHost.BackgroundTransparency = 1
+	openHost.Size = open.Size
+	openHost.AnchorPoint = Vector2.new(.5, 1)
+	openHost.Position = UDim2.new(.5, 0, 1, -18)
+	openHost.Parent = gui
+	open.Parent = openHost; Theme.Fit(openHost, 1120, 740, nil, true)
+end
 open.Visible = not panel.Visible
 panel:GetPropertyChangedSignal("Visible"):Connect(function()
 	open.Visible = not panel.Visible

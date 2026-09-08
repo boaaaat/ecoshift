@@ -25,7 +25,8 @@ local raw = {
 	{ Id = "WolfFang", Name = "Wolf Fang", StackSize = 99, Tags = { "Resource", "MonsterDrop", "Forest" } },
 
 	-- Desert raw
-	{ Id = "CactusStem", Name = "Cactus Stem", StackSize = 99, Tags = { "Resource", "Raw", "Desert", "Food" } },
+	{ Id = "CactusStem", Name = "Cactus Stem", StackSize = 99, Tags = { "Resource", "Raw", "Desert", "Food" },
+		Description = "Cut a cactus in Sunscar Dunes with your Harvester, then pick up its stems. Weave them into Cactus Fiber at a Loom or Drying Rack." },
 	{ Id = "Sand", Name = "Sand", StackSize = 99, Tags = { "Resource", "Raw", "Desert" } },
 	{ Id = "SandstoneChunk", Name = "Sandstone Chunk", StackSize = 99, Tags = { "Resource", "Raw", "Desert" } },
 	{ Id = "Coal", Name = "Coal", StackSize = 99, Tags = { "Resource", "Raw", "Fuel" } },

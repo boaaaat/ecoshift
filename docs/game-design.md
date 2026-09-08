@@ -9,7 +9,7 @@ The approved scope is 16 biomes: eight playable now and eight on the future road
 - A world-control action requires a majority team vote.
 - World-control devices are reusable, with fuel costs and limits on each activation.
 - The shift countdown is hidden until a player owns FieldClock or an upgraded intel device. BiomePredictor adds the next biome; WeatherPredictor adds the next weather and retains both earlier capabilities.
-- Fallen players leave a ragdoll, spectate, and can return through a teammate's crafted revive kit. A full-team wipe ends the run.
+- Fallen players leave a ragdoll, spectate, and can return through a teammate's crafted revive kit. A full-team wipe ends the run and automatically removes that world's named copies from every owner's archive, freeing their save slots for the return to lobby. Active and paused worlds remain resumable.
 - Temporary Roblox Creator Store models support playtesting; original Blender models come later.
 - The UI direction is a clean animated field kit, with a distinct Ecoshift identity.
 - Approved playable roster: Verdant Reach, Sunscar Dunes, Mirefen, Frostfall, Cinder Rift, Prism Barrens, Aurora Vale, and Starfall Crater.

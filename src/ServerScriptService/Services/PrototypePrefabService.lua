@@ -49,7 +49,33 @@ local function entries(list, callback)
 	end
 end
 local function makeResource(parent, name, biome, resource)
-	if keepExisting(parent, name) then return end
+	if keepExisting(parent, name) then
+		local existing = parent:FindFirstChild(name)
+		-- Generated cactus templates from earlier builds used a hold prompt. Update
+		-- their gameplay binding without replacing art or touching authored overrides.
+		if resource and ResourceMap.Normalize(name) == "CactusStem" and existing
+			and existing:GetAttribute("GeneratedBy") == GENERATOR
+			and existing:GetAttribute("PrefabOverride") ~= true then
+			local profile = LootConfig.ResourceProfile(Items:Get("CactusStem"))
+			existing:SetAttribute("DropItemId", "CactusStem")
+			existing:SetAttribute("DropMin", profile.Min)
+			existing:SetAttribute("DropMax", profile.Max)
+			existing:SetAttribute("Health", profile.Health)
+			existing:SetAttribute("MaxHealth", profile.Health)
+			existing:SetAttribute("CurrentHealth", nil)
+			existing:SetAttribute("Duration", nil)
+			existing:SetAttribute("HarvestDuration", nil)
+			for _, child in ipairs(existing:GetDescendants()) do
+				child:SetAttribute("Duration", nil)
+				child:SetAttribute("HarvestDuration", nil)
+				if child:IsA("ProximityPrompt") or child.Name == "HarvestPromptAttachment"
+					or (child:IsA("ValueBase") and (child.Name == "Duration" or child.Name == "HarvestDuration")) then
+					child:Destroy()
+				end
+			end
+		end
+		return
+	end
 	local model = resource and ExpeditionModels.CreateResource(name, biome) or ExpeditionModels.CreateProp(name, biome)
 	if not model then warn("[Art] No authored resource model:", name); return end
 	if resource then

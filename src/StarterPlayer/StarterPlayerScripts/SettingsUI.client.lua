@@ -3,6 +3,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local Theme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UI"):WaitForChild("UITheme"))
+local isExpedition = require(ReplicatedStorage.Shared.SessionConfig).GetMode() == "Expedition"
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 Theme.TrackRoot(playerGui)
@@ -59,14 +60,18 @@ local outline = Instance.new("UIStroke")
 outline.Thickness = 4
 outline.Parent = ring
 Theme.Bind(outline, "Color", "Paper")
-local shortcut = Instance.new("Frame")
-shortcut.Name = "SettingsShortcut"
-shortcut.BackgroundTransparency = 1
-shortcut.Size, shortcut.Position, shortcut.AnchorPoint = open.Size, open.Position, open.AnchorPoint
-shortcut.Parent = gui
-open.Parent = shortcut
-open.Position, open.AnchorPoint = UDim2.new(), Vector2.zero
-Theme.Fit(shortcut, 900, 610, nil, true)
+if isExpedition then
+	require(ReplicatedStorage.Shared.UI:WaitForChild("ExpeditionTopbar")).Mount(open, "Settings")
+else
+	local shortcut = Instance.new("Frame")
+	shortcut.Name = "SettingsShortcut"
+	shortcut.BackgroundTransparency = 1
+	shortcut.Size, shortcut.Position, shortcut.AnchorPoint = open.Size, open.Position, open.AnchorPoint
+	shortcut.Parent = gui
+	open.Parent = shortcut
+	open.Position, open.AnchorPoint = UDim2.new(), Vector2.zero
+	Theme.Fit(shortcut, 900, 610, nil, true)
+end
 
 local backdrop = Instance.new("TextButton")
 backdrop.Name = "Backdrop"
