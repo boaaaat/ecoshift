@@ -375,11 +375,12 @@ EntityConfig.Entities = {
 -- If UseEntitySpawnConfig is true, entity Spawn blocks are merged into wave tables.
 EntityConfig.EnemyWaves = {
 	UseEntitySpawnConfig = true,
-	BaseCount = 2,
+	BaseCount = 1,
 	MinCount = 1,
-	MaxCount = 24,
-	PlayerScale = 1.0,
-	PeriodSeconds = 24,
+	MaxCount = 12,
+	PlayerScale = 0.5,
+	PeriodSeconds = 40,
+	InitialGraceSeconds = 90,
 	SpawnPointMinDistance = 60,
 	SpawnPointMaxDistance = nil,
 	DistanceSample = "Max", -- Max | Average | Min
@@ -437,4 +438,19 @@ EntityConfig.SpawnPoints = {
 	MaxRadiusPadding = 80,
 }
 
+-- Species defines its silhouette, movement and base strength; the saved monster
+-- level multiplies these values independently of the current biome.
+local health = {Wolf=70,Scorpion=65,SandSerpent=105,GiantLeech=75,BogToad=115,FrostWolf=90,IceWraith=85,
+	MagmaHound=120,LavaGolem=350,CrystalStalker=115,VoidSentinel=450,AuroraStag=150,CometCrawler=230}
+for id,def in pairs(EntityConfig.Entities) do
+	def.Health=health[id] or 85
+	def.Spawn.MinPlayerDistance=def.Spawn.MinPlayerDistance or 60
+	if id=="LavaGolem" or id=="VoidSentinel" then
+		def.Spawn.MaxPerWave=1; def.Spawn.GroupSize=1; def.Spawn.MinDistance=260
+	end
+end
+EntityConfig.Entities.Wolf.AI.Damage=9
+EntityConfig.Entities.Wolf.AI.AttackCooldown=1.3
+EntityConfig.Entities.Wolf.AI.DetectionDistance=95
+EntityConfig.Entities.Wolf.Spawn.GroupSize={min=1,max=3}
 return EntityConfig

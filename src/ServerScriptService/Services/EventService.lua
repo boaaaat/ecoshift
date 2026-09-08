@@ -9,6 +9,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
@@ -34,7 +35,6 @@ EventService._nextMinor = 0
 EventService._nextMajor = 0
 EventService._tickInterval = 0.25
 EventService._started = false
-EventService._dropThreads = {}
 EventService._requestConn = nil
 
 ---------------------------------------------------------------------------
@@ -54,6 +54,21 @@ end
 ---------------------------------------------------------------------------
 local function scheduleWindow(range)
 	return os.clock() + math.random(range[1], range[2])
+end
+local function paused() return ReplicatedStorage:GetAttribute("WorldRestoring") == true end
+local function nonnegative(value)
+	return type(value) == "number" and value == value and value >= 0 and value < math.huge
+end
+local function plain(value, depth, budget)
+	local kind = type(value)
+	if kind == "number" then return value == value and math.abs(value) < math.huge end
+	if kind == "string" or kind == "boolean" or kind == "nil" then return true end
+	if kind ~= "table" or depth > 10 then return false end
+	for key, child in pairs(value) do
+		budget[1] += 1
+		if budget[1] > 5000 or (type(key) ~= "string" and type(key) ~= "number") or not plain(key, depth + 1, budget) or not plain(child, depth + 1, budget) then return false end
+	end
+	return true
 end
 
 local function safeFire(remote, evType, id, payload)
@@ -157,13 +172,15 @@ function EventService:SelectEvent(biomeName, poolType)
 end
 
 function EventService:TriggerEvent(eventId, biomeName, optionalOverrides)
-	if GameStateService:IsGameOver() then
+	if GameStateService:IsGameOver() or paused() then
 		return nil
 	end
 	local resolved = self:ResolveEvent(eventId, biomeName, optionalOverrides)
 	if not resolved then return nil end
 
 	local evType = resolved.Type or "Minor"
+	if evType ~= "Minor" and evType ~= "Major" then return nil end
+	if self._active[evType] then self:EndEvent(evType) end
 
 	-- Compute duration
 	local dur = resolved.Duration
@@ -171,6 +188,7 @@ function EventService:TriggerEvent(eventId, biomeName, optionalOverrides)
 
 	-- Build payload
 	local payload = {
+		InstanceId = HttpService:GenerateGUID(false),
 		Biome = biomeName or BiomeService:GetCurrent(),
 		Threat = ThreatService:Get(),
 		Duration = duration,
@@ -181,33 +199,16 @@ function EventService:TriggerEvent(eventId, biomeName, optionalOverrides)
 	}
 
 	-- Store active
-	self._active[evType] = { Id = eventId, Data = payload }
+	local active = { Id = eventId, Data = payload, OneShotConsumed = false }
+	local dropInterval = tonumber(resolved.DropInterval) or 0
+	if resolved.Drops and #resolved.Drops > 0 and dropInterval > 0 then active.NextDropAt = os.clock() end
+	self._active[evType] = active
 
 	-- Fire remote to clients
 	safeFire(self._remote, evType .. "_Start", eventId, payload)
 
 	-- Fire _G hooks (backward compat)
 	hook("Start", evType, eventId, payload)
-
-	-- Handle drops
-	if resolved.Drops and #resolved.Drops > 0 then
-		local dropInterval = tonumber(resolved.DropInterval) or 0
-		if dropInterval > 0 then
-			-- Recurring drop loop
-			local threadKey = evType .. "_drop"
-			self._dropThreads[threadKey] = true
-			task.spawn(function()
-				while self._dropThreads[threadKey] and self._active[evType] and self._active[evType].Id == eventId do
-					self:_spawnEventDrops(resolved.Drops)
-					task.wait(dropInterval)
-				end
-				self._dropThreads[threadKey] = nil
-			end)
-		else
-			-- One-shot drops
-			self:_spawnEventDrops(resolved.Drops)
-		end
-	end
 
 	return resolved
 end
@@ -216,12 +217,9 @@ function EventService:EndEvent(evType)
 	local active = self._active[evType]
 	if not active then return end
 
-	-- Kill drop thread
-	self._dropThreads[evType .. "_drop"] = nil
-
+	self._active[evType] = nil
 	safeFire(self._remote, evType .. "_End", active.Id, active.Data)
 	hook("End", evType, active.Id, active.Data)
-	self._active[evType] = nil
 end
 
 function EventService:EndAll()
@@ -231,6 +229,79 @@ end
 
 function EventService:GetActive(evType)
 	return self._active[evType]
+end
+
+function EventService:CaptureState()
+	if self._pendingRestore then return Util.DeepCopy(self._pendingRestore) end
+	local stamp, active = os.clock(), {}
+	for evType, entry in pairs(self._active) do
+		local elapsed = math.max(0, stamp - entry.Data.StartedAt)
+		local payload = Util.DeepCopy(entry.Data)
+		payload.StartedAt = nil
+		active[evType] = {
+			Id = entry.Id, Data = payload, Elapsed = elapsed,
+			Remaining = math.max(0, entry.Data.Duration - elapsed), OneShotConsumed = entry.OneShotConsumed == true,
+			NextDropRemaining = entry.NextDropAt and math.max(0, entry.NextDropAt - stamp) or nil,
+		}
+	end
+	return { SchemaVersion = 1, NextMinorRemaining = math.max(0, self._nextMinor - stamp), NextMajorRemaining = math.max(0, self._nextMajor - stamp), Active = active }
+end
+
+function EventService:RestoreState(state)
+	if type(state) ~= "table" or state.SchemaVersion ~= 1 or type(state.Active) ~= "table"
+		or not nonnegative(state.NextMinorRemaining) or not nonnegative(state.NextMajorRemaining) then return false, "InvalidEventSnapshot" end
+	local active = {}
+	for evType, entry in pairs(state.Active) do
+		if (evType ~= "Minor" and evType ~= "Major") or type(entry) ~= "table" or type(entry.Id) ~= "string" or not EventsConfig.Definitions[entry.Id]
+			or not nonnegative(entry.Elapsed) or not nonnegative(entry.Remaining) or not nonnegative(entry.Elapsed + entry.Remaining)
+			or (entry.NextDropRemaining ~= nil and not nonnegative(entry.NextDropRemaining)) or type(entry.OneShotConsumed) ~= "boolean"
+			or type(entry.Data) ~= "table" or not plain(entry.Data, 0, { 0 }) then return false, "InvalidEventSnapshot" end
+		local payload = entry.Data
+		if type(payload.InstanceId) ~= "string" or #payload.InstanceId < 1 or #payload.InstanceId > 80
+			or payload.Type ~= evType or payload.EventId ~= entry.Id or type(payload.Biome) ~= "string" or not nonnegative(payload.Duration)
+			or type(payload.Resolved) ~= "table" then return false, "InvalidEventSnapshot" end
+		local interval = payload.Resolved.DropInterval or 0
+		if not nonnegative(interval) or (interval > 0 and type(payload.Resolved.Drops) == "table" and #payload.Resolved.Drops > 0 and entry.NextDropRemaining == nil) then return false, "InvalidEventSnapshot" end
+		if entry.NextDropRemaining ~= nil and (interval <= 0 or type(payload.Resolved.Drops) ~= "table" or #payload.Resolved.Drops == 0) then return false, "InvalidEventSnapshot" end
+		if payload.Resolved.Drops ~= nil and type(payload.Resolved.Drops) ~= "table" then return false, "InvalidEventSnapshot" end
+		for _, drop in ipairs(payload.Resolved.Drops or {}) do
+			if type(drop) ~= "table" or type(drop.ItemId) ~= "string" or not nonnegative(drop.Chance or 0) or (drop.Chance or 0) > 1 then return false, "InvalidEventSnapshot" end
+			local count = drop.Count or 1
+			local minimum = type(count) == "table" and (count.min or 1) or count
+			local maximum = type(count) == "table" and (count.max or 1) or count
+			if not nonnegative(minimum) or not nonnegative(maximum) or minimum % 1 ~= 0 or maximum % 1 ~= 0 or minimum > maximum then return false, "InvalidEventSnapshot" end
+		end
+		active[evType] = {
+			Id = entry.Id, Data = Util.DeepCopy(payload), Elapsed = entry.Elapsed, Remaining = entry.Remaining,
+			OneShotConsumed = entry.OneShotConsumed, NextDropRemaining = entry.NextDropRemaining,
+		}
+	end
+	self._pendingRestore = { SchemaVersion = 1, NextMinorRemaining = state.NextMinorRemaining, NextMajorRemaining = state.NextMajorRemaining, Active = active }
+	if not paused() then return self:CompleteWorldRestore() end
+	return true
+end
+
+function EventService:CompleteWorldRestore()
+	local saved = self._pendingRestore
+	if not saved then return true end
+	self._pendingRestore = nil
+	for _, active in pairs(self._active) do active.Data.CancelledForRestore = true end
+	self:EndAll()
+	local stamp = os.clock()
+	self._nextMinor, self._nextMajor = stamp + saved.NextMinorRemaining, stamp + saved.NextMajorRemaining
+	for evType, entry in pairs(saved.Active) do
+		local payload = Util.DeepCopy(entry.Data)
+		payload.StartedAt, payload.Duration, payload.Restored = stamp - entry.Elapsed, entry.Elapsed + entry.Remaining, true
+		self._active[evType] = {
+			Id = entry.Id, Data = payload, OneShotConsumed = entry.OneShotConsumed,
+			NextDropAt = entry.NextDropRemaining and stamp + entry.NextDropRemaining or nil,
+		}
+		-- Reapply modifiers; the saved consumed flag prevents replaying one-shot loot.
+		safeFire(self._remote, evType .. "_Start", entry.Id, payload)
+		hook("Start", evType, entry.Id, payload)
+		payload.Restored = nil
+	end
+	return true
 end
 
 function EventService:SendActiveToPlayer(plr)
@@ -246,14 +317,17 @@ end
 ---------------------------------------------------------------------------
 -- Drop spawning
 ---------------------------------------------------------------------------
-function EventService:_spawnEventDrops(drops)
+function EventService:_spawnEventDrops(drops, active)
+	local service = getItemDropService()
+	if paused() or GameStateService:IsGameOver() or (active and self._active[active.Data.Type] ~= active) then return end
 	for _, entry in ipairs(drops) do
 		if math.random() <= (entry.Chance or 0) then
 			local pos = getRandomPlayerPosition()
 			if pos then
 				local count = resolveCount(entry.Count)
 				pcall(function()
-					getItemDropService():SpawnDrop(entry.ItemId, count, pos)
+					if paused() or (active and self._active[active.Data.Type] ~= active) then return end
+					service:SpawnDrop(entry.ItemId, count, pos)
 				end)
 			end
 		end
@@ -264,7 +338,7 @@ end
 -- Tick loop
 ---------------------------------------------------------------------------
 function EventService:_tick()
-	if GameStateService:IsGameOver() then
+	if GameStateService:IsGameOver() or paused() then
 		return
 	end
 	local cadence = EventsConfig.Cadence
@@ -279,6 +353,12 @@ function EventService:_tick()
 				and active.Data.Biome ~= currentBiome
 			if expired or biomeChanged then
 				self:EndEvent(evType)
+			elseif active.NextDropAt and os.clock() >= active.NextDropAt then
+				active.NextDropAt = os.clock() + active.Data.Resolved.DropInterval
+				self:_spawnEventDrops(active.Data.Resolved.Drops, active)
+			elseif not active.NextDropAt and not active.OneShotConsumed then
+				active.OneShotConsumed = true
+				if active.Data.Resolved.Drops and #active.Data.Resolved.Drops > 0 then self:_spawnEventDrops(active.Data.Resolved.Drops, active) end
 			end
 		end
 	end

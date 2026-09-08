@@ -1,3 +1,4 @@
+if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 -- DeathClient.client.lua
 -- Handles death UI, spectate camera, and revival feedback
 local Players = game:GetService("Players")
@@ -16,6 +17,7 @@ local DeathRemote = Remotes and Remotes:WaitForChild("Death", 5)
 local SpectateRemote = Remotes and Remotes:WaitForChild("Spectate", 5)
 local ReviveRemote = Remotes and Remotes:WaitForChild("Revive", 5)
 local GameStateRemote = Remotes and Remotes:WaitForChild("GameStateUpdate", 5)
+local RewardsRemote = Remotes and Remotes:WaitForChild("ExpeditionRewards", 10)
 
 -- State
 local isDead = false
@@ -27,7 +29,12 @@ local deathUI = nil
 local canReturnToLobby = RunService:IsStudio()
 local lastCanSpectate = false
 local teamResults = nil
+local rewardSummaries = {}
+local currencyName = "Field Marks"
 local corpse = nil
+local corpsePosition = nil
+local corpseDeathId = nil
+local corpseRecovery = nil
 
 -- Camera
 local camera = workspace.CurrentCamera
@@ -35,12 +42,51 @@ local originalCameraType = nil
 local originalCameraSubject = nil
 
 local function followCorpse()
+	if not isDead or isSpectating then return true end
 	camera = workspace.CurrentCamera
-	local root = corpse and (corpse.PrimaryPart or corpse:FindFirstChild("HumanoidRootPart"))
+	if not corpse or not corpse:IsDescendantOf(workspace) then
+		local candidate = workspace:FindFirstChild(player.Name .. "_Ragdoll")
+		if candidate and candidate:IsA("Model") and (not corpseDeathId or candidate:GetAttribute("DeathId") == corpseDeathId) then
+			corpse = candidate
+		end
+	end
+	local root = corpse and corpse:IsDescendantOf(workspace) and (corpse.PrimaryPart or corpse:FindFirstChild("HumanoidRootPart") or corpse:FindFirstChildWhichIsA("BasePart"))
 	if camera and root then
+		corpsePosition = root.Position
+		if camera.CameraSubject ~= root then
+			camera.CFrame = CFrame.lookAt(root.Position + Vector3.new(0, 7, 12), root.Position)
+		end
 		camera.CameraType = Enum.CameraType.Custom
 		camera.CameraSubject = root
+		return true
+	elseif camera and corpsePosition then
+		-- Instance references may arrive after the remote; keep a useful view meanwhile.
+		camera.CameraType = Enum.CameraType.Scriptable
+		camera.CFrame = CFrame.lookAt(corpsePosition + Vector3.new(0, 7, 12), corpsePosition)
+		camera.Focus = CFrame.new(corpsePosition)
 	end
+	return false
+end
+
+local function recoverCorpseCamera()
+	if not isDead or isSpectating or corpseRecovery then return end
+	local ticket = {}
+	corpseRecovery = ticket
+	task.spawn(function()
+		for attempt = 1, 80 do
+			if corpseRecovery ~= ticket or not isDead or isSpectating then break end
+			if followCorpse() then break end
+			if DeathRemote and (attempt == 8 or attempt == 24 or attempt == 48) then
+				DeathRemote:FireServer("RequestState")
+			end
+			task.wait(0.25)
+		end
+		if corpseRecovery == ticket then corpseRecovery = nil end
+	end)
+end
+
+local function clearCorpseCamera()
+	corpse, corpsePosition, corpseDeathId, corpseRecovery = nil, nil, nil, nil
 end
 
 local function showReviveNotice(message)
@@ -93,7 +139,7 @@ local function createDeathUI()
 	container.BorderSizePixel = 0
 	container.Parent = screenGui
 	Theme.Panel(container, true)
-	Theme.Fit(container, 440, 450)
+	Theme.Fit(container, 440, 525)
 	
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 12)
@@ -128,6 +174,21 @@ local function createDeathUI()
 	subtitle.Font = Enum.Font.Gotham
 	subtitle.TextWrapped = true
 	subtitle.Parent = container
+
+	local rewards = Instance.new("Frame")
+	rewards.Name = "RunRewards"
+	rewards.Size = UDim2.new(1, -40, 0, 82)
+	rewards.Position = UDim2.fromOffset(20, 142)
+	rewards.Visible = false
+	rewards.Parent = container
+	Theme.Panel(rewards, true)
+	local rewardTitle = Theme.Label(rewards, "EARNED THIS EXPEDITION", UDim2.new(1, -24, 0, 16), UDim2.fromOffset(12, 8), 10, Theme.Colors.Paper, true)
+	rewardTitle.Name = "RewardTitle"
+	local rewardValue = Theme.Label(rewards, "", UDim2.new(1, -24, 0, 25), UDim2.fromOffset(12, 25), 19, Theme.Colors.Amber, true)
+	rewardValue.Name = "RewardValue"
+	local rewardStatus = Theme.Label(rewards, "", UDim2.new(1, -24, 0, 24), UDim2.fromOffset(12, 51), 11, Theme.Colors.Paper)
+	rewardStatus.Name = "RewardStatus"
+	rewardStatus.TextWrapped = true
 	
 	-- Buttons container
 	local buttonsFrame = Instance.new("Frame")
@@ -182,7 +243,7 @@ local function createDeathUI()
 	local results = Instance.new("ScrollingFrame")
 	results.Name = "TeamResults"
 	results.Size = UDim2.new(1, -40, 0, 190)
-	results.Position = UDim2.fromOffset(20, 140)
+	results.Position = UDim2.fromOffset(20, 238)
 	results.BackgroundTransparency = 1
 	results.BorderSizePixel = 0
 	results.ScrollBarThickness = 3
@@ -303,8 +364,30 @@ local function updateDeathUI(canSpectate)
 			subtitle.Text = "A teammate can revive you with a crafted Revival Kit."
 		end
 	end
-	container.Size = UDim2.fromOffset(440, isGameOver and 430 or 300)
-	if buttons then buttons.Position = UDim2.fromOffset(20, isGameOver and 355 or 150) end
+	container.Size = UDim2.fromOffset(440, isGameOver and 525 or 300)
+	if buttons then buttons.Position = UDim2.fromOffset(20, isGameOver and 455 or 150) end
+	local rewards = container:FindFirstChild("RunRewards")
+	if rewards then
+		rewards.Visible = isGameOver
+		local summary = rewardSummaries[player.UserId]
+		local earned = summary and summary.EarnedCurrency or player:GetAttribute("RunFieldMarksEarned") or 0
+		local xp = summary and summary.EarnedXP or player:GetAttribute("RunXPEarned") or 0
+		local pending = summary and summary.PendingClaims or player:GetAttribute("ExpeditionRewardsPending") or 0
+		local complete = summary and summary.TotalsComplete
+		if complete == nil then complete = player:GetAttribute("RunRewardTotalsComplete") ~= false end
+		local preview = RunService:IsStudio()
+		rewards.RewardTitle.Text = preview and "EXPEDITION REWARD PREVIEW" or (complete and "EARNED THIS EXPEDITION" or "RECORDED EXPEDITION REWARDS")
+		rewards.RewardValue.Text = string.format("+%d %s   ·   +%d XP", earned, currencyName, xp)
+		if preview then
+			rewards.RewardStatus.Text = "Studio preview · your permanent balance is unchanged."
+		elseif pending > 0 then
+			rewards.RewardStatus.Text = "Saving earned rewards to your permanent balance…"
+		elseif not complete then
+			rewards.RewardStatus.Text = "Includes the rewards recorded in this older saved world."
+		else
+			rewards.RewardStatus.Text = earned + xp > 0 and "Added to your permanent balance." or "Survive, complete objectives, and revive teammates to earn rewards."
+		end
+	end
 	local results = container:FindFirstChild("TeamResults")
 	if results then
 		results.Visible = isGameOver
@@ -312,10 +395,15 @@ local function updateDeathUI(canSpectate)
 			if child:IsA("TextLabel") then child:Destroy() end
 		end
 		if isGameOver and teamResults then
-			local header = Theme.Label(results, "EXPEDITION CREW                 REVIVES / FALLS", UDim2.new(1, -8, 0, 24), UDim2.new(), 11, Theme.Colors.Amber, true)
+			local header = Theme.Label(results, "EXPEDITION CREW  ·  " .. string.upper(currencyName), UDim2.new(1, -8, 0, 24), UDim2.new(), 11, Theme.Colors.Amber, true)
+			header.Name = "CrewHeader"
 			header.LayoutOrder = 0
 			for index, entry in ipairs(teamResults.Players or {}) do
-				local row = Theme.Label(results, string.format("%s   ·   %d revives / %d falls", entry.DisplayName or entry.Name, entry.Revives or 0, entry.Deaths or 0), UDim2.new(1, -8, 0, 30), UDim2.new(), 14, Theme.Colors.Paper)
+				local summary = rewardSummaries[entry.UserId]
+				local marks = summary and string.format("+%d%s", summary.EarnedCurrency, summary.TotalsComplete == false and " recorded" or "") or "…"
+				local text = string.format("%s\n%d revives  ·  %d falls  ·  %s marks", entry.DisplayName or entry.Name, entry.Revives or 0, entry.Deaths or 0, marks)
+				local row = Theme.Label(results, text, UDim2.new(1, -8, 0, 40), UDim2.new(), 13, Theme.Colors.Paper)
+				row.Name = "CrewMember_" .. tostring(entry.UserId)
 				row.LayoutOrder = index
 			end
 		end
@@ -453,7 +541,7 @@ local function stopSpectateCamera()
 	
 	-- Show death UI if still dead
 	if isDead then
-		followCorpse()
+		recoverCorpseCamera()
 		local deathUIRef = playerGui:FindFirstChild("DeathUI")
 		if deathUIRef then
 			deathUIRef.Enabled = true
@@ -555,12 +643,18 @@ local function onDeathRemote(action, data)
 	print("[DeathClient] Received DeathRemote:", action, data)
 	
 	if action == "Died" then
+		if type(data) ~= "table" then return end
 		print("[DeathClient] Showing death UI")
-		corpse = data.ragdoll
+		if data.DeathId and data.DeathId ~= corpseDeathId then clearCorpseCamera() end
+		corpseDeathId = data.DeathId or corpseDeathId
+		if typeof(data.ragdoll) == "Instance" and data.ragdoll:IsA("Model") then corpse = data.ragdoll end
+		local position = data.ragdollPosition
+		if typeof(position) == "Vector3" and position.X == position.X and position.Y == position.Y and position.Z == position.Z
+			and math.abs(position.X) < math.huge and math.abs(position.Y) < math.huge and math.abs(position.Z) < math.huge then corpsePosition = position end
 		showDeathUI(data.canSpectate)
-		if not isSpectating then followCorpse() end
+		recoverCorpseCamera()
 	elseif action == "Revived" then
-		corpse = nil
+		clearCorpseCamera()
 		print("[DeathClient] Revived - resetting camera")
 		-- Stop spectating first
 		isSpectating = false
@@ -594,7 +688,7 @@ local function onDeathRemote(action, data)
 		end)
 		
 	elseif action == "ReturnedToLobby" then
-		corpse = nil
+		clearCorpseCamera()
 		print("[DeathClient] Returned to lobby - resetting camera")
 		-- Stop spectating
 		isSpectating = false
@@ -633,6 +727,7 @@ local function onDeathRemote(action, data)
 		teamResults = data
 		isGameOver = true
 		showGameOverUI()
+		if RewardsRemote then RewardsRemote:FireServer("RequestSummary") end
 	elseif action == "ReviveNotice" and type(data) == "string" then
 		showReviveNotice(data)
 	elseif action == "PlayerDied" or action == "PlayerRevived" then
@@ -699,6 +794,29 @@ end
 -------------------------------------------------------------------
 local function init()
 	print("[DeathClient] Starting initialization...")
+	local cameraConnections = {}
+	local function cameraChanged()
+		for _, connection in ipairs(cameraConnections) do connection:Disconnect() end
+		cameraConnections = {}
+		camera = workspace.CurrentCamera
+		if camera then
+			for _, property in ipairs({ "CameraSubject", "CameraType" }) do
+				table.insert(cameraConnections, camera:GetPropertyChangedSignal(property):Connect(recoverCorpseCamera))
+			end
+			if isSpectating and spectateTarget and spectateTarget.Character then
+				camera.CameraType = Enum.CameraType.Custom
+				camera.CameraSubject = spectateTarget.Character:FindFirstChildOfClass("Humanoid") or spectateTarget.Character
+			else recoverCorpseCamera() end
+		end
+	end
+	workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(cameraChanged)
+	workspace.ChildAdded:Connect(function(child)
+		if child.Name == player.Name .. "_Ragdoll" then recoverCorpseCamera() end
+	end)
+	workspace.ChildRemoved:Connect(function(child)
+		if child == corpse then corpse = nil; recoverCorpseCamera() end
+	end)
+	cameraChanged()
 	
 	-- Create UIs
 	createDeathUI()
@@ -720,6 +838,16 @@ local function init()
 
 	if GameStateRemote then
 		GameStateRemote.OnClientEvent:Connect(onGameStateRemote)
+	end
+	if RewardsRemote then
+		RewardsRemote.OnClientEvent:Connect(function(action, data)
+			if action ~= "Summary" or type(data) ~= "table" or type(data.Players) ~= "table" then return end
+			currencyName = data.CurrencyName or currencyName
+			rewardSummaries = {}
+			for _, summary in ipairs(data.Players) do rewardSummaries[summary.UserId] = summary end
+			if isGameOver then updateDeathUI(lastCanSpectate) end
+		end)
+		RewardsRemote:FireServer("RequestSummary")
 	end
 	
 	if SpectateRemote then

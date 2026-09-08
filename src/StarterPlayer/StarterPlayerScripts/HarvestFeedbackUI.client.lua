@@ -1,3 +1,4 @@
+if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 -- HarvestFeedbackUI.client.lua
 -- Shows damage numbers and health bars when harvesting resources
 local Players = game:GetService("Players")
@@ -5,7 +6,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 
-local C = require(ReplicatedStorage.Shared.UI.UITheme).Colors
+local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
+local C = Theme.Colors
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local DEBUG = false
@@ -31,6 +33,9 @@ local COLORS = {
 	HealthBarBg = C.Night,
 	Text = C.Paper,
 }
+Theme.Changed:Connect(function()
+	COLORS.DamageCrit, COLORS.HealthBarLow = C.Danger, C.Danger
+end)
 
 -- Create main GUI
 local gui = Instance.new("ScreenGui")

@@ -1,3 +1,4 @@
+if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 -- MinimapClient.client.lua
 -- Tactical minimap + fullscreen world map (M)
 

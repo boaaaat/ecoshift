@@ -136,17 +136,45 @@ end
 function BiomeService:Pause()
 	self._pausedAt = self._pausedAt or os.clock()
 end
+
+function BiomeService:CaptureWorldState()
+	local timing, now = self:GetTiming(), self._pausedAt or os.clock()
+	return { Biome = self._current, Weather = Util.DeepCopy(self._weather), Elapsed = self:GetElapsed(), Remaining = timing.Remaining,
+		Duration = self._duration, ShiftCount = self._shiftCount, Version = self._version, UpcomingBiome = self._upcomingBiome,
+		UpcomingWeather = Util.DeepCopy(self._upcomingWeather), Delayed = self._delayed, Selected = self._selected,
+		SinceChange = math.max(0, now - self._lastChangedAt), WeatherRemaining = self._nextWeatherChange and math.max(0, self._nextWeatherChange - now) or false }
+end
+
+function BiomeService:RestoreWorldState(state)
+	local Codec = require(script.Parent.WorldSnapshotCodec)
+	assert(BiomeConfig.BIOMES[state.Biome] and BiomeConfig.BIOMES[state.UpcomingBiome], "Saved biome is unavailable")
+	local now = os.clock()
+	self._startTime = now - Codec.Number(state.Elapsed, 0, 1e9)
+	self._current, self._data = state.Biome, BiomeConfig.BIOMES[state.Biome]
+	self._weather, self._upcomingWeather = Codec.Copy(state.Weather), Codec.Copy(state.UpcomingWeather)
+	self._upcomingBiome = state.UpcomingBiome
+	self._duration = Codec.Number(state.Duration, 1, 86400)
+	self._nextShift = now + Codec.Number(state.Remaining, 0, 86400)
+	self._shiftCount, self._version = Codec.Number(state.ShiftCount, 0, 1e8), Codec.Number(state.Version, 0, 1e9)
+	self._delayed, self._selected = state.Delayed == true, state.Selected == true
+	self._lastChangedAt = now - Codec.Number(state.SinceChange, 0, 1e9)
+	self._nextWeatherChange = state.WeatherRemaining ~= false and now + Codec.Number(state.WeatherRemaining, 0, 86400) or nil
+	self._pausedAt = nil
+	self._restored = true
+end
+
 function BiomeService:Init()
 	if self._started then return end
-	self._started, self._startTime = true, os.clock()
+	self._started, self._startTime = true, self._startTime or os.clock()
 	_G.Ecoshift = _G.Ecoshift or {}
 	_G.Ecoshift.BiomeChangedCallbacks = _G.Ecoshift.BiomeChangedCallbacks or {}
 	_G.Ecoshift.OnBiomeChangedAdd = function(cb)
 		if type(cb) == "function" then table.insert(_G.Ecoshift.BiomeChangedCallbacks, cb) end
 	end
-	self:SetCurrent(BiomeConfig.BIOME_DEFAULT or "Forest", "Init")
+	if self._restored then self:_broadcast() else self:SetCurrent(BiomeConfig.BIOME_DEFAULT or "Forest", "Init") end
 	task.spawn(function()
 		while not self._pausedAt do
+			if ReplicatedStorage:GetAttribute("WorldRestoring") then task.wait(0.25); continue end
 			if os.clock() >= self._nextShift then self:SetCurrent(self._upcomingBiome, "Timer") end
 			if self._nextWeatherChange and os.clock() >= self._nextWeatherChange then
 				local cycle = self._data.WeatherCycle

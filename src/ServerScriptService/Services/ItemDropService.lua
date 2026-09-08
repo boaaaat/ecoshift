@@ -42,6 +42,14 @@ local function getPrimary(model)
 end
 
 local function toModel(instance, name)
+	if instance:IsA("Tool") or instance:IsA("Accessory") then
+		local wrapper=Instance.new("Model")
+		wrapper.Name=name
+		for _,child in ipairs(instance:GetChildren()) do child.Parent=wrapper end
+		instance:Destroy()
+		wrapper.PrimaryPart=wrapper:FindFirstChild("Handle") or getPrimary(wrapper)
+		return wrapper
+	end
 	if instance:IsA("Model") then
 		if not instance.PrimaryPart then
 			local primary = getPrimary(instance)
@@ -133,7 +141,7 @@ local function attachPrompt(model)
 	prompt.MaxActivationDistance = 10
 	local claimed = false
 	prompt.Triggered:Connect(function(plr)
-		if claimed or not model:IsDescendantOf(Workspace) then return end
+		if claimed or ReplicatedStorage:GetAttribute("WorldRestoring") or not model:IsDescendantOf(Workspace) then return end
 		local char = plr.Character
 		local hum = char and char:FindFirstChildOfClass("Humanoid")
 		local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -162,6 +170,9 @@ function ItemDropService:SpawnDrop(itemId, count, position, options)
 	if type(options) ~= "table" then options = nil end
 	local itemsFolder = ServerStorage:FindFirstChild("GameItems")
 	local prefab = itemsFolder and itemsFolder:FindFirstChild(itemId)
+	local dropsFolder=ServerStorage:FindFirstChild("ItemDropPrefabs")
+	local toolsFolder=ServerStorage:FindFirstChild("Tools")
+	prefab=prefab or (dropsFolder and dropsFolder:FindFirstChild(itemId)) or (toolsFolder and toolsFolder:FindFirstChild(itemId))
 	local fallbackModel = options and options.FallbackModel
 	local fallbackScale = options and options.DropScale
 	local model
@@ -181,15 +192,72 @@ function ItemDropService:SpawnDrop(itemId, count, position, options)
 		model.PrimaryPart = part
 	end
 	setAnchoredRecursive(model, false)
+	-- Harvest/art prefabs contain several anchored parts. Make one pickup assembly
+	-- before enabling physics, otherwise the model falls into separate pieces.
+	local root=model.PrimaryPart or getPrimary(model)
+	if root then
+		model.PrimaryPart=root
+		for _,p in ipairs(model:GetDescendants()) do
+			if p:IsA("BasePart") then
+				p.CanTouch=false
+				if p~=root then
+					p.Massless=true
+					local weld=Instance.new("WeldConstraint"); weld.Part0,weld.Part1,weld.Parent=root,p,p
+				end
+			elseif p:IsA("Script") or p:IsA("LocalScript") or p:IsA("ProximityPrompt") then p:Destroy() end
+		end
+	end
 	model:SetAttribute("ItemId", itemId)
 	model:SetAttribute("Count", count)
 	model:PivotTo(CFrame.new(position))
 	model.Parent = ensureFolder()
+	if root then pcall(function() root:SetNetworkOwner(nil) end) end
 	applyInitialVelocity(model, options and options.InitialVelocity)
 	PromptQueueService:Enqueue(function()
 		attachPrompt(model)
 	end)
 	return model
+end
+
+function ItemDropService:CaptureWorldState()
+	local codec, result = require(script.Parent.WorldSnapshotCodec), {}
+	local folder = Workspace:FindFirstChild("ItemDrops")
+	for _, model in ipairs(folder and folder:GetChildren() or {}) do
+		if model:IsA("Model") and model:GetAttribute("ItemId") then
+			assert(#result < codec.MaxDrops, "Ground drop snapshot capacity exceeded; refusing partial save")
+			table.insert(result, { Id = model:GetAttribute("ItemId"), N = model:GetAttribute("Count"), Transform = codec.CFrame(model:GetPivot()) })
+		end
+	end
+	return result
+end
+
+function ItemDropService:RestoreWorldState(states)
+	local codec = require(script.Parent.WorldSnapshotCodec)
+	assert(type(states) == "table" and #states <= codec.MaxDrops, "Invalid ground drop snapshot")
+	for _, state in ipairs(states) do
+		assert(ItemDatabase:Get(state.Id), "Unknown saved ground item")
+		local count = codec.Number(state.N, 1, 1e8)
+		assert(count % 1 == 0, "Invalid saved ground count")
+		codec.ReadCFrame(state.Transform)
+	end
+	ensureFolder():ClearAllChildren()
+	for _, state in ipairs(states) do
+		local transform = codec.ReadCFrame(state.Transform)
+		local model = assert(self:SpawnDrop(state.Id, state.N, transform.Position), "Could not restore ground drop")
+		model:PivotTo(transform)
+		-- Terrain is generated in Tier3; prevent drops falling before it exists.
+		setAnchoredRecursive(model, true)
+		model:SetAttribute("SnapshotDropFrozen", true)
+	end
+end
+
+function ItemDropService:CompleteWorldRestore()
+	for _, model in ipairs(ensureFolder():GetChildren()) do
+		if model:GetAttribute("SnapshotDropFrozen") then
+			setAnchoredRecursive(model, false)
+			model:SetAttribute("SnapshotDropFrozen", nil)
+		end
+	end
 end
 
 return ItemDropService

@@ -1,3 +1,4 @@
+if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 -- CombatClient.client.lua
 -- Handles client weapon input and sends CombatAction requests.
 local Players = game:GetService("Players")

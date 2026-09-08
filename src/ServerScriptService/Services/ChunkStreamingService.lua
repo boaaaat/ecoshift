@@ -10,6 +10,8 @@ local HttpService = game:GetService("HttpService")
 local WorldGenConfig = require(ReplicatedStorage.Shared.BiomeConfig)
 local BiomeService = require(script.Parent.BiomeService)
 local ResourceNodeService = require(script.Parent.ResourceNodeService)
+local SnapshotCodec = require(script.Parent.WorldSnapshotCodec)
+local DeathService -- Resolved during streaming, after service modules have loaded.
 
 -- Lazy-load LootService to avoid circular dependency
 local LootService = nil
@@ -36,6 +38,9 @@ ChunkStreamingService._loadQueueSet = {}
 ChunkStreamingService._loadQueueHead = 1
 ChunkStreamingService._generation = 0
 ChunkStreamingService._paused = true
+ChunkStreamingService._persistent = {}
+ChunkStreamingService._tracked = {}
+ChunkStreamingService._epoch = 0
 local GENERATION_CANCELLED = {}
 
 -- Config (read from BiomeConfig or use defaults)
@@ -365,7 +370,7 @@ local function getAssetYOffset(prefabName)
 end
 
 local function tryApplyScaleOverride(instance, prefabName)
-	if instance:GetAttribute("PrototypePrefab") then return end
+	if instance:GetAttribute("PrototypePrefab") or instance:GetAttribute("ArtStyle") == "Expedition" then return end
 	local override = getAssetOverrideForPrefab(prefabName)
 	if not override then
 		return
@@ -805,6 +810,104 @@ local function makeStep()
 			end
 		end
 	end
+end
+
+function ChunkStreamingService:_rememberObject(key, entry)
+	local inst = entry.Instance
+	if not inst.Parent then return end
+	local state = { Prefab = inst:GetAttribute("SnapshotPrefab"), Category = entry.Category }
+	if entry.Category == "Enemies" then
+		state.Actor = SnapshotCodec.Actor(inst)
+		if not state.Actor then state.Destroyed = true end
+	else
+		for _, attribute in ipairs({ "CurrentHealth", "Health", "MaxHealth" }) do
+			local value = inst:GetAttribute(attribute)
+			if typeof(value) == "number" then state[attribute] = value end
+		end
+		if CollectionService:HasTag(inst, "Common_Chest") or CollectionService:HasTag(inst, "Rare_Chest")
+			or CollectionService:HasTag(inst, "Legendary_Chest") or CollectionService:HasTag(inst, "Celestial_Chest") then
+			state.Chest = getLootService():CaptureChestState(inst)
+		end
+	end
+	-- Static untouched decoration is regenerated from the seed, not stored per instance.
+	if state.Actor or state.Destroyed or state.Chest or state.CurrentHealth ~= nil then self._persistent[key] = state end
+end
+
+function ChunkStreamingService:_trackPersistent(inst, prefabName, parent, category, explicitKey)
+	local chunk = parent
+	while chunk and chunk:GetAttribute("ChunkX") == nil do chunk = chunk.Parent end
+	if not chunk then return true end
+	local key = explicitKey
+	if not key then
+		local ordinal = (parent:GetAttribute("SnapshotSpawnOrdinal") or 0) + 1
+		parent:SetAttribute("SnapshotSpawnOrdinal", ordinal)
+		local prefix = parent:GetAttribute("WorldObjectKey") or (tostring(self._epoch) .. "|" .. chunk.Name .. "|" .. parent.Name)
+		key = prefix .. "|" .. tostring(ordinal) .. "|" .. prefabName
+	end
+	inst:SetAttribute("WorldObjectKey", key)
+	inst:SetAttribute("SnapshotPrefab", prefabName)
+	local state = self._persistent[key]
+	if state then
+		assert(state.Prefab == prefabName, "Saved generated prefab changed")
+		if state.Destroyed then inst:Destroy(); return false end
+		if state.Actor then SnapshotCodec.ApplyActor(inst, state.Actor) end
+		for _, name in ipairs({ "CurrentHealth", "Health", "MaxHealth" }) do
+			if state[name] ~= nil then
+				inst:SetAttribute(name, SnapshotCodec.Number(state[name], 0, 1e8))
+				local value = inst:FindFirstChild(name)
+				if value and (value:IsA("NumberValue") or value:IsA("IntValue")) then value.Value = state[name] end
+			end
+		end
+		if state.Chest then getLootService():RestoreChestState(inst, state.Chest) end
+	end
+	local entry = { Instance = inst, Category = category or parent.Name, Chunk = chunk }
+	self._tracked[key] = entry
+	inst.Destroying:Connect(function()
+		if self._tracked[key] ~= entry then return end
+		if not self._paused and not chunk:GetAttribute("WorldUnloading") then
+			self._persistent[key] = { Destroyed = true, Prefab = prefabName, Category = entry.Category }
+		end
+		self._tracked[key] = nil
+	end)
+	if not explicitKey and (category == "Resources" or category == "Props") then
+		-- Some prefabs contain individually harvestable submodels/parts. Compute all
+		-- stable paths before applying tombstones, which may remove siblings.
+		local nodes = {}
+		local function visit(container, path)
+			local counts = {}
+			for _, child in ipairs(container:GetChildren()) do
+				counts[child.Name] = (counts[child.Name] or 0) + 1
+				local childPath = path .. "/" .. child.Name .. ":" .. counts[child.Name]
+				if child:IsA("Model") or child:IsA("BasePart") then
+					for _, marker in ipairs({ "Health", "MaxHealth", "Duration", "HarvestDuration", "DropItemId", "DropItemID", "DropCount", "LootCount" }) do
+						if child:GetAttribute(marker) ~= nil or child:FindFirstChild(marker) then table.insert(nodes, { Instance = child, Key = key .. "|Node" .. childPath }); break end
+					end
+				end
+				visit(child, childPath)
+			end
+		end
+		visit(inst, "")
+		for _, node in ipairs(nodes) do
+			if node.Instance:IsDescendantOf(inst) then self:_trackPersistent(node.Instance, node.Instance.Name, parent, "ResourceNode", node.Key) end
+		end
+	end
+	return true
+end
+
+function ChunkStreamingService:CaptureWorldState()
+	assert(not self._snapshotError, "Generated world restore failed; refusing partial save: " .. tostring(self._snapshotError))
+	for key, entry in pairs(self._tracked) do self:_rememberObject(key, entry) end
+	SnapshotCodec.BoundedCount(self._persistent, SnapshotCodec.MaxGeneratedStates)
+	return { Seed = self._seed or WorldGenConfig.seed or 12345, Epoch = self._epoch, Biome = self._currentBiome, Objects = SnapshotCodec.Copy(self._persistent) }
+end
+
+function ChunkStreamingService:RestoreWorldState(state)
+	assert(not self._initialized, "Generated state must be staged before streaming starts")
+	SnapshotCodec.BoundedCount(state.Objects, SnapshotCodec.MaxGeneratedStates)
+	self._seed = SnapshotCodec.Number(state.Seed, -2147483648, 2147483647)
+	self._epoch = SnapshotCodec.Number(state.Epoch, 0, 1e8)
+	self._currentBiome = state.Biome
+	self._persistent = SnapshotCodec.Copy(state.Objects)
 end
 
 function ChunkStreamingService:_newPlacementState()
@@ -1330,7 +1433,7 @@ function ChunkStreamingService:_spawnStructureChests(structureClone, biomeName, 
 		if prefab then
 			local clone = prefab:Clone()
 			tryApplyScaleOverride(clone, prefab.Name)
-			local yOffset = getOffsetValue(clone) + getAssetYOffset(prefab.Name)
+			local yOffset = getOffsetValue(clone) + (clone:GetAttribute("ArtStyle") == "Expedition" and 0 or getAssetYOffset(prefab.Name))
 			local targetCf = cf * CFrame.new(0, yOffset, 0)
 			if clone:IsA("Model") then
 				clone:PivotTo(targetCf)
@@ -1338,6 +1441,7 @@ function ChunkStreamingService:_spawnStructureChests(structureClone, biomeName, 
 				clone.CFrame = targetCf
 			end
 			local lootTable = cfg.loot_table or cfg.lootTable or cfg.LootTable or cfg.lootTableName or cfg.LootTableName
+			if clone:GetAttribute("ArtStyle") == "Expedition" then clone:SetAttribute("LootTable", biomeName .. "Supplies") end
 			if type(lootTable) == "string" and lootTable ~= "" then
 				clone:SetAttribute("LootTable", lootTable)
 			end
@@ -1347,7 +1451,7 @@ function ChunkStreamingService:_spawnStructureChests(structureClone, biomeName, 
 			if not (parent:IsA("Model") or parent:IsA("Folder")) then
 				parent = structureClone.Parent
 			end
-			if parent then
+			if parent and self:_trackPersistent(clone, prefab.Name, parent, "Chests") then
 				clone.Parent = parent
 				local loot = getLootService()
 				if loot and loot._ensureChestData then
@@ -1528,9 +1632,10 @@ function ChunkStreamingService:_loadChunk(cx, cz)
 		end)
 		if not ok then
 			if err ~= GENERATION_CANCELLED then
+				self._snapshotError = tostring(err)
 				warn(string.format("[ChunkStreamingService] Chunk %s failed: %s", key, tostring(err)))
 			end
-			if chunkFolder then chunkFolder:Destroy() end
+			if chunkFolder then chunkFolder:SetAttribute("WorldUnloading", true); chunkFolder:Destroy() end
 			-- A cancelled old worker must not erase the new generation's same chunk.
 			if self._chunkFolders[key] == chunkFolder then
 				self._chunkFolders[key] = nil
@@ -1567,7 +1672,7 @@ function ChunkStreamingService:_generateChunkContent(cx, cz, chunkCenter, chunkF
 	end
 	
 	-- Use chunk coords as seed modifier for deterministic generation
-	local seed = WorldGenConfig.seed or 12345
+	local seed = self._seed or WorldGenConfig.seed or 12345
 	local chunkSeed = seed + cx * 73856093 + cz * 19349663
 	local rng = Random.new(chunkSeed)
 	local distance_t = distanceT(chunkCenter.X, chunkCenter.Z)
@@ -1807,7 +1912,7 @@ function ChunkStreamingService:_placeChest(biomeName, chunkCenter, chestNames, p
 				-- Place the chest
 				local clone = prefab:Clone()
 				tryApplyScaleOverride(clone, prefab.Name)
-				local yOffset = getOffsetValue(clone) + getAssetYOffset(prefab.Name)
+				local yOffset = getOffsetValue(clone) + (clone:GetAttribute("ArtStyle") == "Expedition" and 0 or getAssetYOffset(prefab.Name))
 				local targetCf = CFrame.new(position.X, BASE_Y + yOffset, position.Z)
 
 				if clone:IsA("Model") then
@@ -1818,8 +1923,9 @@ function ChunkStreamingService:_placeChest(biomeName, chunkCenter, chestNames, p
 
 				-- Ensure chest has proper tag for LootService (tag should already be on prefab)
 				ensureChestTag(clone)
+				if clone:GetAttribute("ArtStyle") == "Expedition" then clone:SetAttribute("LootTable", biomeName .. "Supplies") end
 
-				clone.Parent = parent
+				if self:_trackPersistent(clone, prefab.Name, parent, "Chests") then clone.Parent = parent end
 				self:_registerRect(placementState, "Chests", rect)
 				self:_registerPoint(placementState, "Chests", x, z)
 				return clone
@@ -1858,10 +1964,10 @@ function ChunkStreamingService:_placePrefab(prefab, position, parent, step)
 	end
 	
 	-- Get Y offset
-	local yOffset = getOffsetValue(clone) + getAssetYOffset(prefab.Name)
+	local yOffset = getOffsetValue(clone) + (clone:GetAttribute("ArtStyle") == "Expedition" and 0 or getAssetYOffset(prefab.Name))
 	
 	local groundY = BASE_Y
-	if clone:GetAttribute("PrototypePrefab") then
+	if clone:GetAttribute("PrototypePrefab") or clone:GetAttribute("ArtStyle") == "Expedition" then
 		-- Smooth terrain can end above the configured plane at voxel boundaries.
 		-- Ground the base-pivot test art on the actual surface, including small plants.
 		local params = RaycastParams.new()
@@ -1876,7 +1982,7 @@ function ChunkStreamingService:_placePrefab(prefab, position, parent, step)
 	elseif clone:IsA("BasePart") then
 		clone.CFrame = targetCf
 	end
-	clone.Parent = parent
+	if self:_trackPersistent(clone, prefab.Name, parent, parent.Name) then clone.Parent = parent end
 	return clone
 end
 
@@ -1887,6 +1993,8 @@ function ChunkStreamingService:_unloadChunk(cx, cz)
 	
 	-- Destroy chunk folder and all contents
 	if data.folder and data.folder.Parent then
+		for objectKey, entry in pairs(self._tracked) do if entry.Chunk == data.folder then self:_rememberObject(objectKey, entry) end end
+		data.folder:SetAttribute("WorldUnloading", true)
 		data.folder:Destroy()
 	end
 	
@@ -1900,8 +2008,14 @@ function ChunkStreamingService:_getPlayerChunks()
 	for _, player in ipairs(Players:GetPlayers()) do
 		local char = player.Character
 		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		if hrp then
-			local cx, cz = worldToChunk(hrp.Position.X, hrp.Position.Z)
+		local position = hrp and hrp.Position
+		if player:GetAttribute("IsDead") then
+			DeathService = DeathService or require(script.Parent.DeathService)
+			position = DeathService:GetDeathPosition(player) or position
+		end
+		if position and position.X == position.X and position.Z == position.Z
+			and math.abs(position.X) < math.huge and math.abs(position.Z) < math.huge then
+			local cx, cz = worldToChunk(position.X, position.Z)
 			playerChunks[chunkKey(cx, cz)] = {cx = cx, cz = cz}
 		end
 	end
@@ -1953,15 +2067,18 @@ function ChunkStreamingService:_updateChunks()
 end
 
 function ChunkStreamingService:Pause()
+	for key, entry in pairs(self._tracked) do self:_rememberObject(key, entry) end
 	self._paused = true
 	self._generation += 1
 	-- Includes partially generated chunks, not just completed workers.
 	for _, folder in pairs(self._chunkFolders) do
 		if folder.Parent then
+			folder:SetAttribute("WorldUnloading", true)
 			folder:Destroy()
 		end
 	end
 	self._loadedChunks = {}
+	self._tracked = {}
 	self._chunkFolders = {}
 	self._loadingChunks = {}
 	self._loadQueue = {}
@@ -1972,6 +2089,9 @@ end
 function ChunkStreamingService:SetBiome(biomeName, force)
 	if self._currentBiome == biomeName and not force and not self._paused then return end
 	self:Pause()
+	local epoch = BiomeService:GetTiming().ShiftCount
+	if self._epoch ~= epoch or self._currentBiome ~= biomeName then self._persistent = {} end
+	self._epoch = epoch
 	self._currentBiome = biomeName
 	self:_ensureWorldFolder()
 	self._paused = false

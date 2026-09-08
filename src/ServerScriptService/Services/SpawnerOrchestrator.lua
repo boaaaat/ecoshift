@@ -28,11 +28,11 @@ function SpawnerOrchestrator:Bind()
 	if tonumber(waves.PeriodSeconds) then
 		self._period = math.max(4, tonumber(waves.PeriodSeconds))
 	end
-	self._nextTime = os.clock() + self._period
+	self._nextTime = os.clock() + math.max(self._period,tonumber(waves.InitialGraceSeconds) or 0)
 	-- OPTIMIZED: Use task.spawn with sleep instead of Heartbeat
 	task.spawn(function()
 		while true do
-			if GameStateService:IsGameOver() then
+			if GameStateService:IsGameOver() or ReplicatedStorage:GetAttribute("WorldRestoring") then
 				task.wait(1)
 				continue
 			end

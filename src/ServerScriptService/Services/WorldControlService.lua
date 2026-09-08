@@ -76,6 +76,7 @@ function WorldControlService:_finish(success, message)
 end
 
 function WorldControlService:_validateProposer(player, action, biome, version)
+	if ReplicatedStorage:GetAttribute("WorldRestoring") then return false, "The expedition is loading." end
 	local def = ControlConfig.Actions[action]
 	if not def then return false, "Unknown world control." end
 	if GameStateService:IsGameOver() then return false, "The expedition has ended." end
@@ -180,13 +181,8 @@ function WorldControlService:Init()
 	Players.PlayerRemoving:Connect(function(player)
 		self._lastRequest[player] = nil
 		local ballot = self._ballot
-		if ballot then
-			if ballot.Proposer == player then self:_finish(false, "The proposer left. No fuel was spent.")
-			else
-				local voter = ballot.Voters[player.UserId]
-				if voter then voter.Left, ballot.Votes[player.UserId] = true, nil end
-				self:_evaluate()
-			end
+		if ballot and (ballot.Proposer==player or ballot.Voters[player.UserId]) then
+			self:_finish(false,"A teammate disconnected. No fuel was spent.")
 		end
 	end)
 	task.spawn(function()
@@ -196,6 +192,24 @@ function WorldControlService:Init()
 			task.wait(1)
 		end
 	end)
+end
+
+function WorldControlService:CaptureWorldState()
+	local cooldowns = {}
+	for action, expires in pairs(self._cooldowns) do cooldowns[action] = math.max(0, expires - os.clock()) end
+	return { Cooldowns = cooldowns, Serial = self._serial }
+end
+
+function WorldControlService:RestoreWorldState(state)
+	local codec = require(script.Parent.WorldSnapshotCodec)
+	local cooldowns = {}
+	for action, remaining in pairs(state.Cooldowns) do
+		assert(ControlConfig.Actions[action], "Unknown restored world control")
+		cooldowns[action] = os.clock() + codec.Number(remaining, 0, 86400)
+	end
+	self._cooldowns, self._serial = cooldowns, codec.Number(state.Serial, 0, 1e9)
+	-- Votes authorize a present team; a disconnected session cannot carry consent.
+	self._ballot, self._lastRequest = nil, {}
 end
 
 return WorldControlService

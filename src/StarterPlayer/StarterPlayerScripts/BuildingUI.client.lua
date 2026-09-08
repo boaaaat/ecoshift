@@ -1,3 +1,4 @@
+if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 -- BuildingUI.client.lua
 -- Allows players to place items from their inventory (workbenches, campfires, etc.)
 -- Press B to open building mode, or right-click placeable items in inventory

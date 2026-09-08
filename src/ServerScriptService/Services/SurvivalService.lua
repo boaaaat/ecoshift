@@ -56,6 +56,7 @@ local function applySprintModifier(plr, enabled)
 end
 
 function SurvivalService:_tickPlayer(plr, dt)
+	if ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring") then return end
 	local char = plr.Character
 	if not char then
 		applySprintModifier(plr, false)

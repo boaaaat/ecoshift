@@ -3,6 +3,7 @@
 local Players = game:GetService("Players")
 
 local function initAttrs(char)
+	if char:GetAttribute("WorldStateRestored") then return end
 	-- basic resist defaults (0..0.5 typical)
 	char:SetAttribute("Res_Heat", 0)
 	char:SetAttribute("Res_Cold", 0)

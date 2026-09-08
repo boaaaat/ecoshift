@@ -1,6 +1,7 @@
 -- StatsService.lua
 -- Centralized player stats with base values and additive/multiplicative modifiers.
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local StatsService = {}
@@ -312,8 +313,9 @@ end
 function StatsService:_bindPlayer(plr)
 	getData(self, plr)
 	self:_recompute(plr, { Force = true, HealthChanged = true })
-	plr.CharacterAdded:Connect(function()
+	plr.CharacterAdded:Connect(function(char)
 		task.defer(function()
+			if plr:GetAttribute("WorldPlayerRestoring") or char:GetAttribute("WorldStateRestored") then return end
 			self:_recompute(plr, { Force = true, HealthChanged = true })
 		end)
 	end)
@@ -335,9 +337,10 @@ function StatsService:Init()
 		local last = self._regenLast > 0 and self._regenLast or now
 		local elapsed = now - last
 		self._regenLast = now
+		if ReplicatedStorage:GetAttribute("WorldRestoring") then return end
 		for _, plr in ipairs(Players:GetPlayers()) do
 			local data = self._data[plr]
-			if data and plr.Character then
+			if data and plr.Character and not plr:GetAttribute("WorldPlayerRestoring") then
 				local hum = plr.Character:FindFirstChildOfClass("Humanoid")
 				if hum and hum.Health > 0 and hum.Health < hum.MaxHealth then
 					local regen = data.Cache.HealthRegen or computeStat(data, "HealthRegen")
@@ -351,6 +354,42 @@ function StatsService:Init()
 
 	_G.Ecoshift = _G.Ecoshift or {}
 	_G.Ecoshift.StatsService = self
+end
+
+function StatsService:CaptureWorldState(plr)
+	local data = getData(self, plr)
+	local state = { Base = table.clone(data.Base), Modifiers = {} }
+	local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+	if hum then state.Health = hum.Health end
+	for stat, modifiers in pairs(data.Mods) do
+		cleanupExpired(modifiers)
+		for _, mod in ipairs(modifiers) do
+			-- Gear is rebuilt from inventory. Held sprint input is never persisted.
+			if mod.Id ~= "Sprint" and mod.Id ~= "ArmorEquip" and mod.Id ~= "TempResEquip" then
+				table.insert(state.Modifiers, { Stat = stat, Id = tostring(mod.Id), Value = mod.Value, Mode = mod.Mode,
+					Remaining = mod.ExpiresAt and math.max(0, mod.ExpiresAt - os.clock()) or false })
+			end
+		end
+	end
+	return state
+end
+
+function StatsService:RestoreWorldState(plr, state)
+	local Codec = require(script.Parent.WorldSnapshotCodec)
+	assert(type(state) == "table" and type(state.Base) == "table", "Missing saved stats")
+	Codec.BoundedCount(state.Modifiers or {}, 128)
+	local data = newPlayerData()
+	for stat in pairs(self.DEFAULTS) do data.Base[stat] = Codec.Number(state.Base[stat], -1e6, 1e6) end
+	for _, mod in ipairs(state.Modifiers or {}) do
+		assert(data.Mods[mod.Stat] and (mod.Mode == "Add" or mod.Mode == "Mult"), "Invalid saved stat modifier")
+		local remaining = mod.Remaining ~= false and Codec.Number(mod.Remaining, 0, 86400 * 30) or nil
+		table.insert(data.Mods[mod.Stat], { Id = Codec.Text(mod.Id), Value = Codec.Number(mod.Value, -1e6, 1e6), Mode = mod.Mode,
+			ExpiresAt = remaining and os.clock() + remaining or nil })
+	end
+	self._data[plr] = data
+	self:_recompute(plr, { Force = true, HealthChanged = true })
+	local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+	if hum and state.Health then hum.Health = Codec.Number(state.Health, 0, hum.MaxHealth) end
 end
 
 return StatsService

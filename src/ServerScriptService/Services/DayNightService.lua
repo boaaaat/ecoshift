@@ -203,7 +203,7 @@ function DayNightService:_updateLighting()
 end
 
 function DayNightService:_tick(dt)
-	if self._paused then return end
+	if self._paused or ReplicatedStorage:GetAttribute("WorldRestoring") then return end
 	
 	local cfg = getConfig()
 	local cycleDuration = cfg.CycleDurationSeconds or 600
@@ -226,7 +226,7 @@ function DayNightService:Init()
 	self:_ensureRemote()
 	
 	-- Set initial time and lighting
-	self._currentTime = getConfig().StartTime or 6
+	if not self._restored then self._currentTime = getConfig().StartTime or 6 end
 	self:_updateLighting()
 	
 	-- OPTIMIZED: Use task.spawn with controlled loop instead of Heartbeat
@@ -270,6 +270,16 @@ function DayNightService:Init()
 	_G.Ecoshift.GetEnemyMultiplier = function() return self:GetEnemyMultiplier() end
 	
 	print("[DayNightService] Initialized - Starting at", self:GetTimeFormatted())
+end
+
+function DayNightService:CaptureWorldState()
+	return { Time = self._currentTime, Paused = self._paused }
+end
+
+function DayNightService:RestoreWorldState(state)
+	self._currentTime = require(script.Parent.WorldSnapshotCodec).Number(state.Time, 0, 24) % 24
+	self._paused, self._restored = state.Paused == true, true
+	self:_updateLighting()
 end
 
 return DayNightService

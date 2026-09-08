@@ -1,10 +1,6 @@
 -- RewardsObserver.lua
--- Grants simple rewards on objective completion via InventoryAdapter; no instance creation.
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
-
-local InventoryAdapter = require(ReplicatedStorage.Shared.InventoryAdapter)
-local ProfileService = require(script.Parent.ProfileService)
+-- Registers objective payouts; the reward service owns durable claims and delivery.
+local ExpeditionRewards = require(script.Parent.ExpeditionRewardsService)
 
 local RewardsObserver = {}
 RewardsObserver._initialized = false
@@ -20,28 +16,18 @@ local REWARDS = {
 	DamSluice      = { {Id="StaminaRation",N=5}, {Id="SaltCrystal",N=4} },
 }
 
-local function giveAll(rewardList)
-	for _,plr in ipairs(Players:GetPlayers()) do
-		local inv = InventoryAdapter.Provider(plr)
-		for _,r in ipairs(rewardList) do inv.Give(r.Id, r.N) end
-	end
-end
-
 -- hook from ObjectiveService (_G)
 function RewardsObserver:Init()
 	if self._initialized then return end
 	self._initialized = true
+	ExpeditionRewards:Init()
 	_G.Ecoshift = _G.Ecoshift or {}
 	task.spawn(function()
 		for _ = 1, 200 do
 			if type(_G.Ecoshift.OnObjectiveEndAdd) == "function" then
 				_G.Ecoshift.OnObjectiveEndAdd(function(id, entry)
 					if entry and entry.State == "Completed" then
-						local r = REWARDS[id]
-						if r then pcall(giveAll, r) end
-						for _, plr in ipairs(Players:GetPlayers()) do
-							ProfileService:AddXP(plr, 15)
-						end
+						ExpeditionRewards:OnObjective(id, entry, REWARDS[id] or {})
 					end
 				end)
 				return

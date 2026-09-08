@@ -1,23 +1,122 @@
--- EcoShift's expedition field kit: paper records, moss cases, amber instruments.
+-- EcoShift's expedition field kit: charcoal cases, paper records, amber instruments.
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
 
 local Theme = {}
-Theme.Colors = {
-	Background = Color3.fromRGB(224, 217, 195), Panel = Color3.fromRGB(245, 239, 218),
-	SlotEmpty = Color3.fromRGB(226, 223, 204), SlotFilled = Color3.fromRGB(235, 231, 209),
-	SlotHover = Color3.fromRGB(218, 225, 194), SlotSelected = Color3.fromRGB(191, 209, 161),
-	Border = Color3.fromRGB(163, 166, 133), Text = Color3.fromRGB(37, 53, 39),
-	TextMuted = Color3.fromRGB(98, 107, 83), Accent = Color3.fromRGB(65, 97, 59),
-	Success = Color3.fromRGB(69, 108, 58), Warning = Color3.fromRGB(156, 97, 33),
-	Danger = Color3.fromRGB(171, 66, 49), Paper = Color3.fromRGB(245, 239, 218),
-	Moss = Color3.fromRGB(67, 88, 55), Amber = Color3.fromRGB(226, 177, 82),
-	Night = Color3.fromRGB(29, 43, 34), Sage = Color3.fromRGB(170, 185, 143),
-	Cold = Color3.fromRGB(129, 179, 189), ValidPlacement = Color3.fromRGB(114, 173, 93),
-	InvalidPlacement = Color3.fromRGB(205, 85, 64), Tier1 = Color3.fromRGB(101, 111, 86),
-	Tier2 = Color3.fromRGB(67, 109, 109), Tier3 = Color3.fromRGB(159, 109, 42),
-	Special = Color3.fromRGB(120, 87, 128),
+local common = {
+	Accent = Color3.fromRGB(65, 97, 59),
+	Paper = Color3.fromRGB(245, 239, 218), Moss = Color3.fromRGB(67, 88, 55),
+	Amber = Color3.fromRGB(226, 177, 82), Night = Color3.fromRGB(22, 31, 27),
+	Sage = Color3.fromRGB(170, 185, 143), Cold = Color3.fromRGB(129, 179, 189),
+	ValidPlacement = Color3.fromRGB(114, 173, 93), InvalidPlacement = Color3.fromRGB(205, 85, 64),
+	SuccessFill = Color3.fromRGB(70, 107, 57), DangerFill = Color3.fromRGB(170, 65, 48),
 }
+local palettes = {
+	Dark = {
+		Background = Color3.fromRGB(25, 33, 29), Panel = Color3.fromRGB(34, 43, 37),
+		SlotEmpty = Color3.fromRGB(40, 49, 41), SlotFilled = Color3.fromRGB(47, 57, 46),
+		SlotHover = Color3.fromRGB(59, 73, 53), SlotSelected = Color3.fromRGB(73, 91, 60),
+		Border = Color3.fromRGB(94, 108, 80), Text = Color3.fromRGB(235, 233, 211),
+		TextMuted = Color3.fromRGB(167, 180, 149), Success = Color3.fromRGB(167, 204, 126),
+		Warning = Color3.fromRGB(231, 185, 105), Danger = Color3.fromRGB(246, 143, 119),
+		Tier1 = Color3.fromRGB(176, 186, 152), Tier2 = Color3.fromRGB(135, 195, 194),
+		Tier3 = Color3.fromRGB(230, 181, 101), Special = Color3.fromRGB(204, 169, 211),
+	},
+	Light = {
+		Background = Color3.fromRGB(224, 217, 195), Panel = Color3.fromRGB(244, 238, 216),
+		SlotEmpty = Color3.fromRGB(226, 223, 204), SlotFilled = Color3.fromRGB(235, 231, 209),
+		SlotHover = Color3.fromRGB(218, 225, 194), SlotSelected = Color3.fromRGB(191, 209, 161),
+		Border = Color3.fromRGB(163, 166, 133), Text = Color3.fromRGB(37, 53, 39),
+		TextMuted = Color3.fromRGB(98, 107, 83),
+		Success = Color3.fromRGB(69, 108, 58), Warning = Color3.fromRGB(156, 97, 33),
+		Danger = Color3.fromRGB(171, 66, 49), Tier1 = Color3.fromRGB(101, 111, 86),
+		Tier2 = Color3.fromRGB(67, 109, 109), Tier3 = Color3.fromRGB(159, 109, 42),
+		Special = Color3.fromRGB(120, 87, 128),
+	},
+}
+for _, palette in pairs(palettes) do
+	for key, value in pairs(common) do palette[key] = value end
+end
+
+local player = Players.LocalPlayer
+Theme.Mode = player and player:GetAttribute("UITheme") == "Light" and "Light" or "Dark"
+-- Never replace this table: existing inventory and crafting controllers retain it.
+Theme.Colors = table.clone(palettes[Theme.Mode])
+local changed = Instance.new("BindableEvent")
+Theme.Changed = changed.Event
+local roots = setmetatable({}, { __mode = "k" })
+local bindings = setmetatable({}, { __mode = "k" })
+local revision = 0
+
+local function colorProperties(object)
+	if object:IsA("UIStroke") then return { "Color" } end
+	if not object:IsA("GuiObject") then return {} end
+	local properties = { "BackgroundColor3", "BorderColor3" }
+	if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
+		table.insert(properties, "TextColor3")
+	end
+	if object:IsA("ImageLabel") or object:IsA("ImageButton") then table.insert(properties, "ImageColor3") end
+	if object:IsA("ScrollingFrame") then table.insert(properties, "ScrollBarImageColor3") end
+	return properties
+end
+
+-- Old controllers assign palette colors directly. Adapt their existing controls
+-- in place, preserving selected recipes, drag state, text input and scroll offsets.
+-- Fixed illustration previews can opt out with a ThemeFixed attribute.
+local function recolor(object, previous)
+	if object:GetAttribute("ThemeFixed") then return end
+	local explicit = bindings[object]
+	for _, property in ipairs(colorProperties(object)) do
+		local token = explicit and explicit[property]
+		if token then
+			object[property] = Theme.Colors[token]
+		else
+			local current = object[property]
+			for key, color in pairs(previous) do
+				if current == color and color ~= Theme.Colors[key] then
+					object[property] = Theme.Colors[key]
+					break
+				end
+			end
+		end
+	end
+	for _, child in ipairs(object:GetChildren()) do recolor(child, previous) end
+end
+
+function Theme.TrackRoot(root)
+	roots[root] = true
+end
+
+-- Prefer explicit tokens in new UI; legacy direct assignments remain supported.
+function Theme.Bind(object, property, token)
+	assert(Theme.Colors[token], "Unknown EcoShift theme token: " .. tostring(token))
+	bindings[object] = bindings[object] or {}
+	bindings[object][property] = token
+	object[property] = Theme.Colors[token]
+	return object
+end
+
+function Theme.SetMode(mode)
+	mode = mode == "Light" and "Light" or "Dark"
+	if Theme.Mode == mode then return end
+	local previous = table.clone(Theme.Colors)
+	Theme.Mode = mode
+	for key, value in pairs(palettes[mode]) do Theme.Colors[key] = value end
+	revision += 1
+	local currentRevision = revision
+	for root in pairs(roots) do recolor(root, previous) end
+	changed:Fire(mode)
+	-- An in-flight hover tween may finish with its old endpoint after this switch.
+	task.delay(0.35, function()
+		if revision ~= currentRevision then return end
+		for root in pairs(roots) do recolor(root, previous) end
+	end)
+end
+
+function Theme.Palette(mode)
+	return table.clone(palettes[mode == "Light" and "Light" or "Dark"])
+end
 
 function Theme.Tween(object, properties, duration)
 	local tween = TweenService:Create(object, TweenInfo.new(duration or 0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), properties)

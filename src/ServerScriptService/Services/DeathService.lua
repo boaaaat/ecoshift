@@ -3,6 +3,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
 local DEBUG = false
 
 local function dprint(...)
@@ -205,7 +206,7 @@ function DeathService:Init()
 		if data then
 			DeathRemote:FireClient(player, "Died", {
 				canSpectate = #self:_getAlivePlayers(player) > 0,
-				ragdoll = data.ragdoll, ragdollPosition = data.deathPosition,
+				ragdoll = data.ragdoll, ragdollPosition = self:GetDeathPosition(player), DeathId = data.DeathId,
 			})
 		end
 	end)
@@ -219,6 +220,22 @@ end
 function DeathService:GetRagdoll(player)
 	local data = self._deadPlayers[player]
 	return data and data.ragdoll or nil
+end
+
+function DeathService:GetDeathPosition(player)
+	local data = self._deadPlayers[player]
+	if not data then return nil end
+	local body = data.ragdoll
+	return body and body.Parent and body:GetPivot().Position or data.deathPosition
+end
+
+function DeathService:_focusCorpse(player)
+	local data = self._deadPlayers[player]
+	local body = data and data.ragdoll
+	if not body then return end
+	body:SetAttribute("OriginalUserId", player.UserId)
+	body:SetAttribute("DeathId", data.DeathId)
+	player.ReplicationFocus = body.PrimaryPart or body:FindFirstChild("HumanoidRootPart") or body:FindFirstChildWhichIsA("BasePart")
 end
 
 function DeathService:_dropPlayerInventory(player, deathPosition)
@@ -248,6 +265,7 @@ function DeathService:_dropPlayerInventory(player, deathPosition)
 end
 
 function DeathService:KillPlayer(player)
+	if ReplicatedStorage:GetAttribute("WorldRestoring") or player:GetAttribute("WorldPlayerRestoring") then return end
 	dprint("[DeathService] KillPlayer called for", player.Name)
 	
 	if self:IsDead(player) then 
@@ -278,10 +296,12 @@ function DeathService:KillPlayer(player)
 	
 	-- Store death data
 	self._deadPlayers[player] = {
+		DeathId = HttpService:GenerateGUID(false),
 		ragdoll = ragdoll,
 		deathTime = os.clock(),
 		deathPosition = deathPosition,
 	}
+	self:_focusCorpse(player)
 
 	player:SetAttribute("IsDead", true)
 	self._reviveHolds[player] = nil
@@ -310,6 +330,7 @@ function DeathService:KillPlayer(player)
 		canSpectate = canSpectate,
 		ragdoll = ragdoll,
 		ragdollPosition = ragdoll and ragdoll:GetPivot().Position or deathPosition,
+		DeathId = self._deadPlayers[player].DeathId,
 	})
 	
 	-- Notify other players about the death (for revival prompts)
@@ -381,11 +402,17 @@ function DeathService:RevivePlayer(player, reviver)
 		warn("[DeathService] Revival failed:", err)
 		return false
 	end
+	player.ReplicationFocus = nil
 	data.ragdoll:Destroy()
 	self._deadPlayers[player] = nil
 	self._spectating[player] = nil
 	local stats = self._runStats[reviver.UserId]
 	if stats then stats.Revives += 1 end
+	local rewardsModule = script.Parent:FindFirstChild("ExpeditionRewardsService")
+	if rewardsModule then
+		local rewarded, rewardError = pcall(function() require(rewardsModule):OnRevive(reviver, player, data.DeathId) end)
+		if not rewarded then warn("[DeathService] Revival reward failed:", rewardError) end
+	end
 	DeathRemote:FireClient(player, "Revived", { reviver = reviver.DisplayName })
 	DeathRemote:FireAllClients("PlayerRevived", { player = player })
 	return true
@@ -732,6 +759,7 @@ function DeathService:_returnToLobby(player)
 	local data = self._deadPlayers[player]
 	if data and data.Reviving then return end
 	local respawnPosition = data and data.deathPosition or nil
+	player.ReplicationFocus = nil
 	if data and data.ragdoll then
 		data.ragdoll:Destroy()
 	end
@@ -759,6 +787,7 @@ end
 
 function DeathService:_cleanupPlayer(player)
 	self._reviveHolds[player] = nil
+	player.ReplicationFocus = nil
 	local data = self._deadPlayers[player]
 	if data and data.ragdoll then
 		data.ragdoll:Destroy()
@@ -766,6 +795,51 @@ function DeathService:_cleanupPlayer(player)
 	self._deadPlayers[player] = nil
 	self._spectating[player] = nil
 	task.defer(function() self:_refreshSpectators(player) end)
+end
+
+function DeathService:CaptureWorldState(player)
+	local data = self._deadPlayers[player]
+	return {
+		Downed = data ~= nil,
+		DeathId = data and data.DeathId or nil,
+		Transform = data and require(script.Parent.WorldSnapshotCodec).CFrame(data.ragdoll and data.ragdoll:GetPivot() or CFrame.new(data.deathPosition)) or nil,
+		DownedFor = data and math.max(0, os.clock() - data.deathTime) or 0,
+	}
+end
+
+function DeathService:CaptureRunState()
+	local state = {}
+	for userId, stats in pairs(self._runStats) do state[tostring(userId)] = table.clone(stats) end
+	return state
+end
+
+function DeathService:RestoreRunState(state)
+	local codec, restored = require(script.Parent.WorldSnapshotCodec), {}
+	codec.BoundedCount(state, 100)
+	for userId, stats in pairs(state) do
+		local id = tonumber(userId)
+		assert(id and id % 1 == 0, "Invalid run participant")
+		restored[id] = { Name = codec.Text(stats.Name, 64), DisplayName = codec.Text(stats.DisplayName, 64), Deaths = codec.Number(stats.Deaths, 0, 1e8), Revives = codec.Number(stats.Revives, 0, 1e8) }
+	end
+	self._runStats = restored
+end
+
+function DeathService:RestoreWorldState(player, state)
+	assert(self._initialized, "DeathService must initialize before player restore")
+	self:_cleanupPlayer(player)
+	player:SetAttribute("IsDead", state.Downed == true)
+	if not state.Downed then return end
+	local codec, character = require(script.Parent.WorldSnapshotCodec), player.Character
+	assert(character, "A loaded character is required to reconstruct the downed body")
+	local transform = codec.ReadCFrame(state.Transform)
+	character:PivotTo(transform)
+	local ragdoll = assert(self:_createRagdoll(character), "Unable to restore downed body")
+	ragdoll:PivotTo(transform)
+	self._deadPlayers[player] = { DeathId = codec.Text(state.DeathId, 80), ragdoll = ragdoll, deathTime = os.clock() - codec.Number(state.DownedFor, 0, 1e9), deathPosition = transform.Position }
+	self:_focusCorpse(player)
+	character:Destroy()
+	DeathRemote:FireClient(player, "Died", { canSpectate = #self:_getAlivePlayers(player) > 0, ragdoll = ragdoll, ragdollPosition = transform.Position, DeathId = self._deadPlayers[player].DeathId })
+	-- No KillPlayer call: inventory was already spilled and the death counted in the saved run.
 end
 
 return DeathService

@@ -1,3 +1,4 @@
+if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 -- DayNightClient.client.lua
 -- Handles smooth client-side lighting transitions and UI
 local ReplicatedStorage = game:GetService("ReplicatedStorage")

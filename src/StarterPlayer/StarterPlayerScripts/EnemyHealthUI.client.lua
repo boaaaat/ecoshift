@@ -1,3 +1,4 @@
+if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 -- EnemyHealthUI.client.lua
 -- Shows health bars above enemies when damaged
 local Players = game:GetService("Players")

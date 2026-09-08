@@ -9,6 +9,7 @@ local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 
 local InventoryService = {}
 InventoryService._inventories = {} -- [player] = { Hotbar = {}, Storage = {}, Armor = nil }
+InventoryService._worldInitialized = {}
 InventoryService._remote = nil
 InventoryService._callbacks = {}
 InventoryService._requestConn = nil
@@ -118,9 +119,16 @@ function InventoryService:Init()
 			end
 		end)
 	end
+	-- Expedition startup can deliberately wait for the full crew before requiring
+	-- this module, so their earlier PlayerAdded events were not observed here.
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if not self._worldInitialized[plr] then self:Reset(plr) end
+	end
 end
 
 function InventoryService:Reset(plr)
+	if plr:GetAttribute("WorldPlayerRestoring") then return end
+	self._worldInitialized[plr] = true
 	local inv = {
 		Hotbar = emptySlots(HOTBAR_SLOTS),
 		Storage = emptySlots(STORAGE_SLOTS),
@@ -169,6 +177,28 @@ end
 
 function InventoryService:GetAll(plr)
 	return getInv(plr)
+end
+
+function InventoryService:CaptureWorldState(plr)
+	return snapshot(getInv(plr))
+end
+
+function InventoryService:RestoreWorldState(plr, state)
+	assert(type(state) == "table", "Missing saved inventory")
+	local function read(slot, armor)
+		if slot == false or slot == nil then return nil end
+		assert(type(slot) == "table" and type(slot.Id) == "string" and ItemDatabase:Get(slot.Id), "Unknown saved inventory item")
+		assert(type(slot.N) == "number" and slot.N % 1 == 0 and slot.N > 0 and slot.N <= maxStack(slot.Id), "Invalid saved stack")
+		assert(not armor or (slot.N == 1 and isArmor(slot.Id)), "Invalid saved armor")
+		return cloneSlot(slot)
+	end
+	assert(type(state.Hotbar) == "table" and #state.Hotbar == HOTBAR_SLOTS and type(state.Storage) == "table" and #state.Storage == STORAGE_SLOTS, "Saved inventory shape changed")
+	local inv = { Hotbar = {}, Storage = {}, Armor = read(state.Armor, true) }
+	for i = 1, HOTBAR_SLOTS do inv.Hotbar[i] = read(state.Hotbar[i]) end
+	for i = 1, STORAGE_SLOTS do inv.Storage[i] = read(state.Storage[i]) end
+	self._inventories[plr] = inv
+	self._worldInitialized[plr] = true
+	self:Sync(plr)
 end
 
 function InventoryService:TotalCount(plr, itemId)
@@ -220,6 +250,7 @@ local function addToSlots(slots, slotCount, itemId, amount)
 end
 
 function InventoryService:CanFit(plr, itemId, amount)
+	if type(itemId) ~= "string" or not ItemDatabase:Get(itemId) or type(amount) ~= "number" or amount ~= amount or amount == math.huge or amount < 0 or amount % 1 ~= 0 then return false end
 	local inv = getInv(plr)
 	local remaining = amount
 	local stackMax = maxStack(itemId)
@@ -244,7 +275,7 @@ end
 
 function InventoryService:Give(plr, itemId, amount, requireFit)
 	amount = math.floor(tonumber(amount) or 0)
-	if amount ~= amount or amount == math.huge or amount <= 0 or not itemId then return 0 end
+	if amount ~= amount or amount == math.huge or amount <= 0 or type(itemId) ~= "string" or not ItemDatabase:Get(itemId) then return 0 end
 	local inv = getInv(plr)
 	if requireFit and not self:CanFit(plr, itemId, amount) then
 		return 0
@@ -549,6 +580,7 @@ end)
 
 Players.PlayerRemoving:Connect(function(plr)
 	InventoryService._inventories[plr] = nil
+	InventoryService._worldInitialized[plr] = nil
 end)
 
 return InventoryService

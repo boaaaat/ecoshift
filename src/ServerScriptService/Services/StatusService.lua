@@ -26,6 +26,7 @@ end
 local function resist(v) return math.clamp(tonumber(v) or 0, -0.9, 0.9) end
 
 function StatusService:_tickPlayer(plr)
+	if ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring") then return end
 	local char = plr.Character
 	if not char then return end
 	local hum = char:FindFirstChildWhichIsA("Humanoid")

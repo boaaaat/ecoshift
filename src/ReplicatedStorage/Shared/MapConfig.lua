@@ -1,5 +1,6 @@
 local MapConfig = {}
-local C = require(script.Parent.UI.UITheme).Colors
+local Theme = require(script.Parent.UI.UITheme)
+local C = Theme.Colors
 
 MapConfig.GeneratedWorldFolderName = nil -- nil = read from BiomeConfig.spawn_folder_name
 
@@ -124,5 +125,12 @@ MapConfig.Colors = {
 		Unknown = Color3.fromRGB(72, 78, 86),
 	},
 }
+
+-- These aliases are also used when minimap markers are rebuilt after a switch.
+Theme.Changed:Connect(function()
+	for key, token in pairs({ UIBackground = "Background", UIPanel = "Panel", UIBorder = "Border", TextPrimary = "Text", TextMuted = "TextMuted" }) do
+		MapConfig.Colors[key] = C[token]
+	end
+end)
 
 return MapConfig

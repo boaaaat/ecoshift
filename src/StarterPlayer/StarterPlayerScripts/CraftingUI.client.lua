@@ -1,3 +1,4 @@
+if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 -- CraftingUI.client.lua
 -- Inventory crafting interface (Hand crafting only - basic recipes)
 -- For advanced crafting, place and interact with workbenches
@@ -471,12 +472,12 @@ function updateCraftButton()
 	if canCraft then
 		craftBtn.Text = "Craft " .. name
 		craftBtn.TextColor3 = COLORS.Paper
-		craftBtn.BackgroundColor3 = COLORS.Success
+		craftBtn.BackgroundColor3 = COLORS.SuccessFill
 		craftBtnStroke.Color = COLORS.Success
 	else
 		craftBtn.Text = "Missing Materials"
 		craftBtn.TextColor3 = COLORS.Paper
-		craftBtn.BackgroundColor3 = COLORS.Danger
+		craftBtn.BackgroundColor3 = COLORS.DangerFill
 		craftBtnStroke.Color = COLORS.Danger
 	end
 end

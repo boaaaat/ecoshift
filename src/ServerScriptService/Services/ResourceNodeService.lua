@@ -146,7 +146,7 @@ local function attachDurationPrompt(instance)
 	local holds = setmetatable({}, { __mode = "k" })
 	local claimed = false
 	local function canHarvest(plr)
-		if claimed or not prompt.Enabled or not instance:IsDescendantOf(Workspace)
+		if claimed or ReplicatedStorage:GetAttribute("WorldRestoring") or not prompt.Enabled or not instance:IsDescendantOf(Workspace)
 			or not attachment:IsDescendantOf(instance) or plr.Parent ~= Players
 			or plr:GetAttribute("IsDead") then
 			return false

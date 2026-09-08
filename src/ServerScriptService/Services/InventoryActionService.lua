@@ -10,6 +10,7 @@ local StatsService = require(script.Parent.StatsService)
 local ToolService = require(script.Parent.ToolService)
 
 local InventoryActionService = {}
+local resistEffects = setmetatable({}, { __mode = "k" })
 
 local FOOD_RESTORE = {
 	BrownMushroom = 6,
@@ -40,7 +41,13 @@ local function applyTimedCharacterResist(char, key, delta, duration)
 	local nextValue = math.clamp(cur + (tonumber(delta) or 0), -0.9, 0.9)
 	local applied = nextValue - cur
 	char:SetAttribute(key, nextValue)
+	local entries = resistEffects[char] or {}
+	resistEffects[char] = entries
+	local effect = { Key = key, Applied = applied, ExpiresAt = os.clock() + duration }
+	entries[effect] = true
 	task.delay(duration, function()
+		if not entries[effect] then return end
+		entries[effect] = nil
 		if not char.Parent then return end
 		local now = tonumber(char:GetAttribute(key)) or 0
 		char:SetAttribute(key, math.clamp(now - applied, -0.9, 0.9))
@@ -173,6 +180,26 @@ function InventoryActionService:Init()
 			return
 		end
 	end)
+end
+
+function InventoryActionService:CaptureCharacterState(char)
+	local effects = {}
+	for effect in pairs(resistEffects[char] or {}) do
+		local remaining = effect.ExpiresAt - os.clock()
+		if remaining > 0 then table.insert(effects, { Key = effect.Key, Applied = effect.Applied, Remaining = remaining }) end
+	end
+	return effects
+end
+
+function InventoryActionService:RestoreCharacterState(char, effects)
+	local codec = require(script.Parent.WorldSnapshotCodec)
+	codec.BoundedCount(effects, 128)
+	for effect in pairs(resistEffects[char] or {}) do resistEffects[char][effect] = nil end
+	for _, key in ipairs({ "Res_Heat", "Res_Cold", "Res_Toxin", "Res_Wet" }) do char:SetAttribute(key, 0) end
+	for _, effect in ipairs(effects) do
+		assert(effect.Key == "Res_Heat" or effect.Key == "Res_Cold" or effect.Key == "Res_Toxin" or effect.Key == "Res_Wet", "Unknown saved resistance")
+		applyTimedCharacterResist(char, effect.Key, codec.Number(effect.Applied, -0.9, 0.9), codec.Number(effect.Remaining, 0, 86400))
+	end
 end
 
 return InventoryActionService

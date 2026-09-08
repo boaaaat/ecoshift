@@ -1,3 +1,4 @@
+if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 -- InventoryUI.client.lua
 -- Polished inventory system with modern UI
 local Players = game:GetService("Players")

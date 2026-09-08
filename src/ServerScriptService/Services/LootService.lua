@@ -113,7 +113,8 @@ local function maxStack(itemId)
 end
 
 local function getChestSlotCount(chest)
-	return DEFAULT_CHEST_SLOT_COUNT
+	local saved = chest and chest:GetAttribute("SlotCount")
+	return type(saved) == "number" and saved % 1 == 0 and saved >= 1 and saved <= 100 and saved or DEFAULT_CHEST_SLOT_COUNT
 end
 
 local function normalizeChestSlots(slots, slotCount)
@@ -243,6 +244,13 @@ end
 function LootService:_ensureChestData(chest)
 	local data = self._chests[chest]
 	if data then return data end
+	local restoreKey = chest:GetAttribute("WorldObjectKey")
+	local saved = restoreKey and self._restoreChests and self._restoreChests[restoreKey]
+	if saved then
+		self._restoreChests[restoreKey] = nil
+		self:RestoreChestState(chest, saved)
+		return self._chests[chest]
+	end
 	local id = HttpService:GenerateGUID(false)
 	local tier = getTierFromTags(chest, CHEST_TAGS)
 	local tableName = getLootTableName(chest)
@@ -274,6 +282,36 @@ function LootService:_ensureChestData(chest)
 	self._chests[chest] = data
 	self._chestById[id] = chest
 	return data
+end
+
+function LootService:CaptureChestState(chest)
+	local data = self:_ensureChestData(chest)
+	return { Tier = data.Tier, Table = data.Table, SlotCount = data.SlotCount, Slots = encodeChestSlotsForClient(data.Slots, data.SlotCount) }
+end
+
+function LootService:StageChestState(key, state)
+	self._restoreChests = self._restoreChests or {}
+	self._restoreChests[key] = state
+end
+
+function LootService:RestoreChestState(chest, state)
+	assert(type(state) == "table" and type(state.Slots) == "table", "Invalid saved chest")
+	assert(type(state.SlotCount) == "number" and state.SlotCount % 1 == 0 and state.SlotCount >= 1 and state.SlotCount <= 100, "Invalid saved chest size")
+	assert(#state.Slots == state.SlotCount, "Saved chest slots changed")
+	local slots = {}
+	for i = 1, state.SlotCount do
+		local slot = state.Slots[i]
+		if slot ~= false then
+			assert(type(slot) == "table" and type(slot.Id) == "string" and ItemDatabase:Get(slot.Id) and positiveInteger(slot.N) and slot.N <= maxStack(slot.Id), "Invalid saved chest item")
+			slots[i] = { Id = slot.Id, N = slot.N }
+		end
+	end
+	local old = self._chests[chest]
+	if old then self:_closeChestViewers(old.Id); self._chestById[old.Id] = nil end
+	local id = HttpService:GenerateGUID(false)
+	chest:SetAttribute("SlotCount", state.SlotCount)
+	self._chests[chest] = { Id = id, Tier = state.Tier, Table = state.Table, SlotCount = state.SlotCount, Slots = slots }
+	self._chestById[id] = chest
 end
 
 function LootService:_clearChestData(chest)

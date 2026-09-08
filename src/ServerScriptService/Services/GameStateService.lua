@@ -129,4 +129,15 @@ function GameStateService:Init()
 	end)
 end
 
+function GameStateService:CaptureWorldState()
+	return { MatchState = self._state.MatchState, EndReason = self._state.EndReason, FinalElapsed = self._state.FinalElapsed }
+end
+
+function GameStateService:RestoreWorldState(state)
+	assert(state.MatchState == "Active" or state.MatchState == "GameOver", "Invalid saved match state")
+	self._state.MatchState = state.MatchState
+	self._state.EndReason = state.EndReason
+	self._state.FinalElapsed = state.FinalElapsed
+end
+
 return GameStateService

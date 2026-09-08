@@ -1,3 +1,4 @@
+if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 -- ClientMain.client.lua
 -- OPTIMIZED: Non-blocking initialization
 local ReplicatedStorage = game:GetService("ReplicatedStorage")

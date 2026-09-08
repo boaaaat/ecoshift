@@ -1,3 +1,4 @@
+if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 -- ChestUI.client.lua
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -624,7 +625,7 @@ local function createSlot(index, x, y)
 	qty.BackgroundTransparency = 1
 	qty.Font = Enum.Font.GothamBold
 	qty.TextSize = 10
-	qty.TextColor3 = COLORS.Text
+	qty.TextColor3 = COLORS.Paper
 	qty.Text = "1"
 	qty.Parent = qtyBadge
 

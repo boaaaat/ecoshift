@@ -16,6 +16,7 @@ local GameStateService = require(script.Parent.GameStateService)
 local ItemDropService = require(script.Parent.ItemDropService)
 
 local BuildService = {}
+local SnapshotCodec = require(script.Parent.WorldSnapshotCodec)
 BuildService._remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
 BuildService._remoteBuild = Util.GetRemote(BuildService._remotesFolder, Config.RemoteNames.Build)
 
@@ -127,7 +128,9 @@ local function refundItems(plr, entries)
 end
 
 local function applyDurability(inst)
-	local dur = Instance.new("NumberValue")
+	local dur = inst:FindFirstChild("Durability")
+	if dur and not dur:IsA("NumberValue") then dur:Destroy(); dur = nil end
+	dur = dur or Instance.new("NumberValue")
 	dur.Name = "Durability"
 	dur.Value = 100
 	dur.Parent = inst
@@ -193,6 +196,9 @@ local function setupChestInteraction(inst)
 end
 
 function BuildService:Place(plr, buildType, worldPos)
+	local count = 0
+	for _, inst in ipairs(CollectionService:GetTagged("Structure")) do if inst:GetAttribute("BuildType") then count += 1 end end
+	if count >= SnapshotCodec.MaxStructures then return false, "StructureLimit" end
 	if type(buildType) ~= "string" or typeof(worldPos) ~= "Vector3" then
 		return false, "InvalidPayload"
 	end
@@ -344,6 +350,59 @@ function BuildService:Remove(plr, target)
 	end
 	placed:Destroy()
 	return true, "Success"
+end
+
+function BuildService:CaptureWorldState()
+	local result = {}
+	for _, inst in ipairs(CollectionService:GetTagged("Structure")) do
+		if inst:IsDescendantOf(workspace) and inst:GetAttribute("BuildType") then
+			assert(#result < SnapshotCodec.MaxStructures, "Saved structure capacity exceeded")
+			local durability = inst:FindFirstChild("Durability")
+			local state = { Type = inst:GetAttribute("BuildType"), Owner = inst:GetAttribute("OwnerUserId"),
+				GridX = inst:GetAttribute("GridX"), GridZ = inst:GetAttribute("GridZ"), Transform = SnapshotCodec.CFrame(inst:GetPivot()),
+				Durability = durability and durability.Value or 100, DurabilityMax = inst:GetAttribute("DurabilityMax") or 100 }
+			if isChestStructure(inst, state.Type) then state.Chest = LootService:CaptureChestState(inst) end
+			table.insert(result, state)
+		end
+	end
+	table.sort(result, function(a, b) if a.GridX ~= b.GridX then return a.GridX < b.GridX end; return a.GridZ < b.GridZ end)
+	return result
+end
+
+function BuildService:RestoreWorldState(states)
+	SnapshotCodec.BoundedCount(states, SnapshotCodec.MaxStructures)
+	local occupied, prepared = {}, {}
+	for _, state in ipairs(states) do
+		assert(isAllowedType(state.Type), "Saved build type unavailable: " .. tostring(state.Type))
+		local gx, gz = SnapshotCodec.Number(state.GridX, -1e5, 1e5), SnapshotCodec.Number(state.GridZ, -1e5, 1e5)
+		assert(gx % 1 == 0 and gz % 1 == 0 and not occupied[gx .. ":" .. gz], "Invalid saved grid occupancy")
+		occupied[gx .. ":" .. gz] = true
+		local cf = SnapshotCodec.ReadCFrame(state.Transform)
+		local prefab = getPrefab(state.Type)
+		local inst = prefab and prefab:Clone() or createFallbackPart(state.Type, cf.Position)
+		inst:PivotTo(cf)
+		inst:SetAttribute("OwnerUserId", SnapshotCodec.Number(state.Owner))
+		inst:SetAttribute("GridX", gx); inst:SetAttribute("GridZ", gz)
+		inst:SetAttribute("BuildType", state.Type)
+		inst:SetAttribute("MapMarkerType", "PlayerBuiltStructure")
+		inst:SetAttribute("MapMarkerLabel", state.Type)
+		applyDurability(inst)
+		inst.Durability.Value = SnapshotCodec.Number(state.Durability, 0, 1e6)
+		inst:SetAttribute("DurabilityMax", SnapshotCodec.Number(state.DurabilityMax, 1, 1e6))
+		if WorkbenchConfig.STATIONS[state.Type] then setupWorkbenchInteraction(inst, state.Type) end
+		if state.Chest then LootService:RestoreChestState(inst, state.Chest) end
+		table.insert(prepared, inst)
+	end
+	for _, inst in ipairs(CollectionService:GetTagged("Structure")) do
+		if inst:IsDescendantOf(workspace) and inst:GetAttribute("BuildType") then inst:Destroy() end
+	end
+	GridService:Clear()
+	for _, inst in ipairs(prepared) do
+		inst.Parent = workspace
+		CollectionService:AddTag(inst, "Structure")
+		if inst:GetAttribute("BuildType") == "Chest" then setupChestInteraction(inst) end
+		assert(GridService:Reserve(inst:GetAttribute("GridX"), inst:GetAttribute("GridZ"), inst:GetAttribute("OwnerUserId"), inst), "Saved structure grid conflict")
+	end
 end
 
 function BuildService:Bind()
