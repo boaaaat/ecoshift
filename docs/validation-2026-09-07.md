@@ -126,3 +126,9 @@ Remaining: live place routing, native communication-API opt-in if desired, real 
 - Both Rojo place builds and the diff check passed. This change is intentionally not published to Roblox; the user will handle publishing.
 - Final fresh-Play map checks measured zero centering error at UI scales 0.4838407, 1.0 and 1.4; the original scale was restored. Capture: MapQA_CenteredMinimap. The prior offset was 18.87px on each axis at the smallest tested scale.
 - A final isolated seated-movement check confirmed stamina recovery from 50 to 58 in one second while sprint stayed disabled, bringing bounded sprint checks to 27. Final builds passed after this adjustment. Both Studios are stopped in Edit; nothing was published.
+
+## Stable end-of-run menu
+
+- Repeated GameStateUpdate broadcasts called showOverlayUI during game over, resetting the panel to 60% screen height and restarting its entrance tween every update. The overlay now refreshes content but returns before animation when it is already enabled.
+- A fresh Studio session with the final Rojo source ran a disposable client against fake remotes only. Thirty-six repeated state/results/reward messages produced zero measured position drift across 180 frame samples, while the displayed survival time and rewards updated correctly. Resetting the isolated match hid the panel; reopening played the entrance once and settled at the center again.
+- Both Rojo builds passed. Play was stopped, removing all disposable fixtures. No real run state, rewards, invitations or publishing were changed.

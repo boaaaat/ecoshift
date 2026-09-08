@@ -445,6 +445,9 @@ local function showOverlayUI(canSpectate)
 	local ui = playerGui:FindFirstChild("DeathUI")
 	if ui then
 		updateDeathUI(canSpectate)
+		-- Repeated game-state/results updates refresh the open panel without
+		-- restarting its entrance tween and moving it down again.
+		if ui.Enabled then return end
 		ui.Enabled = true
 
 		local overlay = ui:FindFirstChild("Overlay")
