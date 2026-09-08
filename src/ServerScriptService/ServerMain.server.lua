@@ -53,6 +53,7 @@ local tier2Services = {
 	{ name = "InteractService", method = "Bind" },
 	{ name = "StatusService", method = "Bind" },
 	{ name = "SurvivalService", method = "Init" },
+	{ name = "MapTrackingService", method = "Init" },
 	{ name = "RoundService", method = "Bind" },
 	{ name = "DropItemService", method = "Init" },
 	{ name = "InventoryService", method = "Init" },

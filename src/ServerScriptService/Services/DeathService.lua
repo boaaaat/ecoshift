@@ -32,7 +32,7 @@ local SpectateRemote = nil -- Client -> Server spectate requests
 
 local REVIVAL_TIME = 3 -- seconds to hold E to revive
 local REVIVAL_RANGE = 8 -- studs from body
-local REVIVAL_HP_PERCENT = 0.25 -- revive with 25% HP
+local REVIVAL_STATS = { Health = 30, Temperature = 0, Hunger = 50, Stamina = 50 }
 local DROP_RADIUS = 3
 local DROP_HORIZONTAL_SPEED_MIN = 10
 local DROP_HORIZONTAL_SPEED_MAX = 24
@@ -384,13 +384,14 @@ function DeathService:RevivePlayer(player, reviver)
 	if not InventoryService:Consume(reviver, REVIVE_ITEM, 1) then data.Reviving = nil return false end
 	local position = data.ragdoll:GetPivot().Position
 	player:SetAttribute("IsDead", false)
-	StatsService:SetBase(player, "Health", (StatsService:GetStat(player, "MaxHealth") or 100) * REVIVAL_HP_PERCENT)
+	-- Clear the old exposure before the new character can receive survival ticks.
+	StatsService:SetBaseStats(player, REVIVAL_STATS)
 	local ok, err = pcall(function()
 		player:LoadCharacterAsync()
 		local char = player.Character
 		local hum = char and char:WaitForChild("Humanoid", 5)
 		if not hum then error("Revived character did not load") end
-		StatsService:SetBase(player, "Health", hum.MaxHealth * REVIVAL_HP_PERCENT)
+		StatsService:SetBaseStats(player, REVIVAL_STATS)
 		char:PivotTo(CFrame.new(position + Vector3.new(0, 3, 0)))
 	end)
 	if not ok then

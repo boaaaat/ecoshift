@@ -54,9 +54,6 @@ local STATE = {
 	},
 	spawnPosition = nil,
 	customBlips = {},
-	playerEmojiByUserId = {},
-	usedPlayerEmojis = {},
-	playerEmojiRng = Random.new(),
 	enemyEmojiByTypeKey = {},
 	usedEnemyEmojis = {},
 	enemyEmojiRng = Random.new(),
@@ -127,7 +124,9 @@ local INPUT = {
 local getMarkerGlyph
 local applyGlyphToFrame
 local clearGlyphFromFrame
+local applyPlayerPortrait
 local setFullMapOpen
+local playerPortraitCache = {}
 
 local function tableClear(t)
 	for k in pairs(t) do
@@ -153,6 +152,26 @@ local function getCharacterRoot(plr)
 	local char = plr and plr.Character
 	if not char then return nil end
 	return char:FindFirstChild("HumanoidRootPart")
+end
+
+local function finiteVector3(value)
+	return typeof(value) == "Vector3"
+		and value.X == value.X and value.Y == value.Y and value.Z == value.Z
+		and math.abs(value.X) < math.huge and math.abs(value.Y) < math.huge and math.abs(value.Z) < math.huge
+end
+
+local function getPlayerMapPose(plr)
+	if not plr or plr:GetAttribute("IsDead") == true then return nil end
+	-- Streamed characters are smoother than the server's map telemetry.
+	local root = getCharacterRoot(plr)
+	if root and root:IsA("BasePart") and root:IsDescendantOf(Workspace) then
+		return root.Position, root.CFrame.LookVector
+	end
+	local position = plr:GetAttribute("MapPosition")
+	local look = plr:GetAttribute("MapLookVector")
+	if not finiteVector3(position) or not finiteVector3(look) then return nil end
+	if look.Magnitude < .001 or look.Magnitude > 1.1 then return nil end
+	return position, look
 end
 
 local function getObjectPosition(obj)
@@ -259,7 +278,6 @@ local function glyphPoolPick(pool, seedText)
 	return value
 end
 
-local FALLBACK_PLAYER_EMOJIS = { "😀", "😃", "😄", "😁", "😆", "😎", "🥳", "🤠", "🙂", "😊", "😺", "😸" }
 local FALLBACK_ENEMY_EMOJIS = { "👹", "👺", "👻", "💀", "🧟", "🧌", "🕷️", "🦂", "🐍", "🐺", "🦇", "🪳" }
 
 local function getUniqueEmojiPool(kind)
@@ -271,9 +289,6 @@ local function getUniqueEmojiPool(kind)
 		if t == "emoji_pool" and type(values) == "table" and #values > 0 then
 			return values
 		end
-	end
-	if kind == "PlayerUnique" then
-		return FALLBACK_PLAYER_EMOJIS
 	end
 	return FALLBACK_ENEMY_EMOJIS
 end
@@ -295,46 +310,26 @@ local function allocateUniqueEmoji(pool, usedCounts, rng)
 	return pick
 end
 
-local function poolContainsEmoji(pool, emoji)
-	if type(pool) ~= "table" or type(emoji) ~= "string" then
-		return false
-	end
-	for i = 1, #pool do
-		if pool[i] == emoji then
-			return true
+local function cachePlayerPortrait(plr)
+	local userId = plr.UserId
+	if playerPortraitCache[userId] then return end
+	local entry = { Image = "", Ready = false, Initial = plr.Name:sub(1, 1):upper() }
+	playerPortraitCache[userId] = entry
+	-- Thumbnail calls yield; fetch on join, never inside map rendering.
+	if userId <= 0 then return end -- Local Studio test players may not have avatars.
+	local function attempt(number)
+		if playerPortraitCache[userId] ~= entry or plr.Parent ~= Players then return end
+		local ok, image, ready = pcall(function()
+			return Players:GetUserThumbnailAsync(userId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
+		end)
+		if playerPortraitCache[userId] ~= entry or plr.Parent ~= Players then return end
+		if ok and ready and type(image) == "string" and image ~= "" then
+			entry.Image, entry.Ready = image, true
+		elseif number < 3 then
+			task.delay(number * 2, function() attempt(number + 1) end)
 		end
 	end
-	return false
-end
-
-local function releaseEmoji(usedCounts, emoji)
-	if type(emoji) ~= "string" then return end
-	local n = usedCounts[emoji]
-	if not n then return end
-	if n <= 1 then
-		usedCounts[emoji] = nil
-	else
-		usedCounts[emoji] = n - 1
-	end
-end
-
-local function getPlayerEmoji(plr)
-	local userId = plr and plr.UserId
-	if type(userId) ~= "number" then
-		return "🙂"
-	end
-	local pool = getUniqueEmojiPool("PlayerUnique")
-	local existing = STATE.playerEmojiByUserId[userId]
-	if existing and poolContainsEmoji(pool, existing) then
-		return existing
-	end
-	if existing then
-		releaseEmoji(STATE.usedPlayerEmojis, existing)
-		STATE.playerEmojiByUserId[userId] = nil
-	end
-	local emoji = allocateUniqueEmoji(pool, STATE.usedPlayerEmojis, STATE.playerEmojiRng)
-	STATE.playerEmojiByUserId[userId] = emoji
-	return emoji
+	task.spawn(attempt, 1)
 end
 
 local function getEnemyTypeKey(inst)
@@ -390,15 +385,10 @@ local function getEnemyEmoji(inst)
 end
 
 local function getPlayerGlyph(plr)
-	if plr == player then
-		-- The self marker is authored facing up; its parent rotates with the
-		-- character's heading after the same axis flips as map positions.
-		return (MapConfig.MarkerGlyphs and MapConfig.MarkerGlyphs.PlayerSelf)
-			or { Type = "emoji", Value = "▲" }
-	end
 	return {
-		Type = "emoji",
-		Value = getPlayerEmoji(plr),
+		Type = "portrait",
+		UserId = plr.UserId,
+		IsSelf = plr == player,
 	}
 end
 
@@ -617,7 +607,7 @@ local function createUI()
 	local playerCorner = Instance.new("UICorner")
 	playerCorner.CornerRadius = UDim.new(1, 0)
 	playerCorner.Parent = playerBlip
-	applyGlyphToFrame(playerBlip, getPlayerGlyph(player), MapConfig.Colors.Player, 28)
+	applyPlayerPortrait(playerBlip, getPlayerGlyph(player))
 
 	local coords = buildLabel(miniContainer, "X: 0  Z: 0", UDim2.new(1, -12, 0, 16), UDim2.fromOffset(8, miniH - 38), Enum.Font.GothamMedium, 11, MapConfig.Colors.TextPrimary)
 	coords.Name = "Coords"
@@ -1140,6 +1130,64 @@ clearGlyphFromFrame = function(frame)
 	if icon then icon.Visible = false end
 end
 
+applyPlayerPortrait = function(frame, descriptor)
+	clearGlyphFromFrame(frame)
+	local portrait = frame:FindFirstChild("PlayerPortrait")
+	if not portrait then
+		portrait = Instance.new("ImageLabel")
+		portrait.Name = "PlayerPortrait"
+		portrait.Size = UDim2.fromScale(1, 1)
+		portrait.BackgroundTransparency = 1
+		portrait.ImageColor3 = Color3.new(1, 1, 1)
+		portrait.ScaleType = Enum.ScaleType.Crop
+		portrait.ZIndex = 11
+		portrait:SetAttribute("ThemeFixed", true)
+		portrait.Parent = frame
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(1, 0)
+		corner.Parent = portrait
+		local fallback = Instance.new("TextLabel")
+		fallback.Name = "PortraitFallback"
+		fallback.Size = UDim2.fromScale(1, 1)
+		fallback.BackgroundTransparency = 1
+		fallback.Font = Enum.Font.GothamBold
+		fallback.TextScaled = true
+		fallback.ZIndex = 11
+		fallback.Parent = frame
+		local border = Instance.new("UIStroke")
+		border.Name = "PortraitBorder"
+		border.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		border.Parent = frame
+		local notch = Instance.new("Frame")
+		notch.Name = "HeadingNotch"
+		notch.AnchorPoint = Vector2.new(.5, .5)
+		notch.Position = UDim2.fromScale(.5, 0)
+		notch.Size = UDim2.fromScale(.2, .1)
+		notch.BorderSizePixel = 0
+		notch.ZIndex = 12
+		notch.Parent = frame
+	end
+	local entry = playerPortraitCache[descriptor.UserId]
+	local url = entry and entry.Image or ""
+	if portrait.Image ~= url then portrait.Image = url end
+	local ready = entry ~= nil and entry.Ready and portrait.IsLoaded
+	-- Allow the image to load while the initial remains above it as a fallback.
+	portrait.Visible = url ~= ""
+	local fallback = frame.PortraitFallback
+	fallback.Text = entry and entry.Initial or "?"
+	fallback.Visible = not ready
+	fallback.TextColor3 = MapConfig.Colors.Player
+	local outlineColor = descriptor.IsSelf and MapConfig.Colors.MinimapRing or MapConfig.Colors.Teammate
+	frame.PortraitBorder.Color = outlineColor
+	frame.PortraitBorder.Thickness = descriptor.IsSelf and 2 or 1
+	frame.HeadingNotch.BackgroundColor3 = outlineColor
+	frame.BackgroundColor3 = MapConfig.Colors.MinimapBackground
+	frame.BackgroundTransparency = 0
+	frame.ZIndex = 10
+	frame:SetAttribute("PortraitUserId", descriptor.UserId)
+	frame:SetAttribute("PortraitReady", ready)
+end
+
 local function getOptionalMarkers()
 	local now = os.clock()
 	if now - WORLD.lastOptionalScan < 0.8 then
@@ -1551,6 +1599,12 @@ local function styleMarkerFrame(frame, markerKind, rotation, markerSize, glyphKe
 	if direction then
 		direction:Destroy() -- remove legacy triangle symbol
 	end
+	if markerKind == "Players" and type(glyphKey) == "table" and glyphKey.Type == "portrait" then
+		-- The whole headshot turns; its top notch uses the same zero/up heading
+		-- as the old arrow and the map's existing axis-flipped projection.
+		applyPlayerPortrait(frame, glyphKey)
+		return
+	end
 
 	if glyphKey then
 		applyGlyphToFrame(frame, glyphKey, colorForMarkerType(markerKind), math.max(12, markerSize - 1))
@@ -1560,10 +1614,6 @@ local function styleMarkerFrame(frame, markerKind, rotation, markerSize, glyphKe
 		frame.BackgroundTransparency = 0
 	end
 
-	-- Player markers are glyph-only; never show a backing box.
-	if markerKind == "Players" then
-		frame.BackgroundTransparency = 1
-	end
 end
 
 local function renderFullscreen(playerPos)
@@ -1646,7 +1696,7 @@ local function renderFullscreen(playerPos)
 			return
 		end
 		local markerSize = size
-		if markerKind == "Players" or markerKind == "Enemies" or markerKind == "Spawn" then
+		if markerKind == "Enemies" or markerKind == "Spawn" then
 			local zoomScale = math.clamp(STATE.fullZoom, 0.75, 2.5)
 			markerSize = math.max(10, math.floor(size * zoomScale + 0.5))
 		end
@@ -1681,12 +1731,11 @@ local function renderFullscreen(playerPos)
 
 	if STATE.markerVisibility.Players then
 		for _, plr in ipairs(Players:GetPlayers()) do
-			local hrp = getCharacterRoot(plr)
-			if hrp then
-				local look = hrp.CFrame.LookVector
+			local position, look = getPlayerMapPose(plr)
+			if position then
 				local heading = headingDegFromLook(look)
-				local size = plr == player and 26 or 22
-				drawMarker("player_" .. tostring(plr.UserId), hrp.Position.X, hrp.Position.Z, "Players", heading, size, getPlayerGlyph(plr))
+				local size = (MapConfig.PlayerPortraits and MapConfig.PlayerPortraits.FullscreenSize) or 20
+				drawMarker("player_" .. tostring(plr.UserId), position.X, position.Z, "Players", heading, size, getPlayerGlyph(plr))
 			end
 		end
 	end
@@ -1775,6 +1824,10 @@ local function renderMinimap(playerRoot)
 	local scale = radiusPx / math.max(STATE.minimapRange, 1)
 	local miniZoomScale = math.clamp((MapConfig.Minimap.Range or STATE.minimapRange) / math.max(STATE.minimapRange, 1), 0.75, 2.5)
 	local minimapEmojiScale = math.clamp(tonumber(MapConfig.Minimap.EmojiScale) or 0.7, 0.4, 1.5)
+	local screenScale = math.max(.1, UI.minimapFrame.AbsoluteSize.X / mapSize.X)
+	-- Keep portraits small at large UI scales and legible when the HUD shrinks.
+	local portraitPixels = math.min((MapConfig.PlayerPortraits and MapConfig.PlayerPortraits.MinimapSize) or 18, UI.minimapFrame.AbsoluteSize.X * .2)
+	local miniPortraitSize = portraitPixels / screenScale
 
 	tableClear(RENDER_CACHE.usedMinimapChunkKeys)
 	tableClear(RENDER_CACHE.usedMinimapRegionKeys)
@@ -1869,10 +1922,10 @@ local function renderMinimap(playerRoot)
 			return
 		end
 		local markerSize = size
-		if markerKind == "Players" or markerKind == "Enemies" or markerKind == "Spawn" then
+		if markerKind == "Enemies" or markerKind == "Spawn" then
 			markerSize = math.max(10, math.floor(size * miniZoomScale + 0.5))
 		end
-		if glyphKey then
+		if glyphKey and markerKind ~= "Players" then
 			markerSize = math.max(8, math.floor(markerSize * minimapEmojiScale + 0.5))
 		end
 		local frame = acquireMinimapMarkerFrame(key)
@@ -1884,7 +1937,7 @@ local function renderMinimap(playerRoot)
 
 	-- Always center local player marker, styled like main map markers.
 	local playerHeading = headingDegFromLook(playerRoot.CFrame.LookVector)
-	local localPlayerSize = math.max(8, math.floor(26 * miniZoomScale * minimapEmojiScale + 0.5))
+	local localPlayerSize = miniPortraitSize
 	styleMarkerFrame(UI.minimapPlayer, "Players", playerHeading, localPlayerSize, getPlayerGlyph(player))
 	UI.minimapPlayer.Position = UDim2.fromOffset(centerX, centerY)
 
@@ -1910,10 +1963,10 @@ local function renderMinimap(playerRoot)
 	if STATE.markerVisibility.Players then
 		for _, plr in ipairs(Players:GetPlayers()) do
 			if plr ~= player then
-				local hrp = getCharacterRoot(plr)
-				if hrp then
-					local heading = headingDegFromLook(hrp.CFrame.LookVector)
-					drawMiniMarker("player_" .. tostring(plr.UserId), hrp.Position.X, hrp.Position.Z, "Players", heading, 22, getPlayerGlyph(plr), false)
+				local position, look = getPlayerMapPose(plr)
+				if position then
+					local heading = headingDegFromLook(look)
+					drawMiniMarker("player_" .. tostring(plr.UserId), position.X, position.Z, "Players", heading, miniPortraitSize, getPlayerGlyph(plr), false)
 				end
 			end
 		end
@@ -2122,18 +2175,27 @@ function MinimapClient:ForceRescan()
 end
 
 local function init()
+	local portraitAdded = Players.PlayerAdded:Connect(cachePlayerPortrait)
+	for _, plr in ipairs(Players:GetPlayers()) do cachePlayerPortrait(plr) end
 	createUI()
 	initWorldBindings()
 	initSpawnCapture()
 	bindInput()
 
-	Players.PlayerRemoving:Connect(function(plr)
+	local portraitRemoving = Players.PlayerRemoving:Connect(function(plr)
 		local userId = plr and plr.UserId
 		if type(userId) == "number" then
-			local emoji = STATE.playerEmojiByUserId[userId]
-			STATE.playerEmojiByUserId[userId] = nil
-			releaseEmoji(STATE.usedPlayerEmojis, emoji)
+			playerPortraitCache[userId] = nil
+			local key = "player_" .. tostring(userId)
+			for _, cache in ipairs({ RENDER_CACHE.markerFrames, RENDER_CACHE.minimapMarkerFrames }) do
+				if cache[key] then cache[key]:Destroy(); cache[key] = nil end
+			end
 		end
+	end)
+	script.Destroying:Connect(function()
+		portraitAdded:Disconnect()
+		portraitRemoving:Disconnect()
+		tableClear(playerPortraitCache) -- Invalidate any pending fetch/retry jobs.
 	end)
 
 	RunService.RenderStepped:Connect(function(dt)

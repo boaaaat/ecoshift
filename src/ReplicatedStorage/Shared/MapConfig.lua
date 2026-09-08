@@ -56,6 +56,11 @@ MapConfig.MarkerRotation = {
 	SpawnOffset = 0,
 }
 
+MapConfig.PlayerPortraits = {
+	FullscreenSize = 20, -- Screen pixels; portraits do not grow with map zoom.
+	MinimapSize = 18,
+}
+
 -- Marker glyph source:
 -- Type = "emoji" uses Value as text glyph
 -- Type = "icon" uses Value as Image (rbxassetid://...)
