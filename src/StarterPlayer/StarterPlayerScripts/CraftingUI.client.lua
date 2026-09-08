@@ -1,3 +1,4 @@
+local Settings = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("ClientSettings"))
 if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 -- CraftingUI.client.lua
 -- Inventory crafting interface (Hand crafting only - basic recipes)
@@ -8,6 +9,7 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
+local ItemDescriptionUI = require(ReplicatedStorage.Shared.UI.ItemDescriptionUI)
 local RecipeGuideUI = require(ReplicatedStorage.Shared.UI:WaitForChild("RecipeGuideUI"))
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
@@ -558,6 +560,7 @@ local function createRecipeCard(recipeId, recipeData)
 	ingredientsFrame.BackgroundTransparency = 1
 	ingredientsFrame.ZIndex = 13
 	ingredientsFrame.Parent = card
+	ItemDescriptionUI.Mount(card, item, ingredientsFrame, 32, 10)
 	
 	local ingredientLayout = Instance.new("UIGridLayout")
 	ingredientLayout.FillDirection = Enum.FillDirection.Horizontal
@@ -871,7 +874,7 @@ end)
 -- Keyboard toggle (C key)
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
-	if input.KeyCode == Enum.KeyCode.C then
+	if Settings.Matches(input, "Craft") then
 		if isOpen then
 			closeCrafting()
 		else

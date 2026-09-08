@@ -7,6 +7,7 @@ local player = Players.LocalPlayer
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
+local Settings = require(ReplicatedStorage.Shared.ClientSettings)
 
 local remotesFolder = Util.GetDescendant(Config.Paths.Remotes) or Util.WaitForDescendant(Config.Paths.Remotes, 5)
 local rSprint = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.SprintToggle)
@@ -16,7 +17,7 @@ end
 
 local held, requested = {}, false
 local function isSprintKey(keyCode)
-	return keyCode == Enum.KeyCode.LeftShift or keyCode == Enum.KeyCode.RightShift
+	return keyCode == Settings.Key("Sprint")
 end
 local function request(enabled)
 	if requested == enabled then return end
@@ -27,21 +28,23 @@ local function release()
 end
 
 UserInputService.InputBegan:Connect(function(input, processed)
-	if processed then return end
+	if processed or not Settings.CanInput() then return end
 	if UserInputService:GetFocusedTextBox() or player:GetAttribute("IsDead") then return end
 	if isSprintKey(input.KeyCode) then
-		held[input.KeyCode] = true; request(true)
+		if Settings.Get("SprintMode") == "Toggle" then request(not requested)
+		else held[input.KeyCode] = true; request(true) end
 	end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
 	-- Release even after a menu or text field consumed the input.
-	if isSprintKey(input.KeyCode) then
+	if held[input.KeyCode] then
 		held[input.KeyCode] = nil; request(next(held) ~= nil)
 	end
 end)
 
 UserInputService.WindowFocusReleased:Connect(release)
+Settings.Changed:Connect(release)
 UserInputService.TextBoxFocused:Connect(release)
 GuiService.MenuOpened:Connect(release)
 player:GetAttributeChangedSignal("IsDead"):Connect(function() if player:GetAttribute("IsDead") then release() end end)

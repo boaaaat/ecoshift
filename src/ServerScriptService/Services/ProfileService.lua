@@ -6,6 +6,7 @@ local HttpService = game:GetService("HttpService")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Economy = require(ReplicatedStorage.Shared.EconomyConfig)
 local Util = require(ReplicatedStorage.Shared.Util)
+local SettingsConfig = require(ReplicatedStorage.Shared.SettingsConfig)
 
 local ProfileService = {
 	_profiles = {}, _sessions = {}, _loadCallbacks = {}, _changeCallbacks = {},
@@ -61,6 +62,7 @@ local function decode(raw)
 	if type(data.Role) ~= "string" or not Config.ROLES.Definitions[data.Role] or not data.UnlockedRoles[data.Role] then data.Role = Config.ROLES.Default end
 	data.Preferences = type(data.Preferences) == "table" and data.Preferences or {}
 	if data.Preferences.UITheme ~= "Light" and data.Preferences.UITheme ~= "Dark" then data.Preferences.UITheme = Economy.DefaultTheme end
+	data.Preferences = SettingsConfig.Normalize(data.Preferences)
 	data.RewardReceipts = type(data.RewardReceipts) == "table" and data.RewardReceipts or {}
 	data.Revision = integer(data.Revision, 0)
 	return data
@@ -95,6 +97,7 @@ function ProfileService:_accept(plr, data)
 	self._profiles[plr] = publicProfile(data)
 	if plr.Parent == Players then
 		plr:SetAttribute("UITheme", data.Preferences.UITheme)
+		plr:SetAttribute("PersonalSettings", HttpService:JSONEncode(data.Preferences))
 		plr:SetAttribute("FieldMarks", data.Currency)
 	end
 	for _, callback in ipairs(self._changeCallbacks) do
@@ -193,6 +196,17 @@ local function reduce(data, op)
 		if not data.UnlockedRoles[op.Role] then return false, "RoleLocked", false end
 		if (tonumber(data.RoleUpdatedAt) or 0) > op.UpdatedAt then return true, "Superseded", false end
 		data.Role, data.RoleUpdatedAt = op.Role, op.UpdatedAt
+	elseif op.Kind == "SetSettings" then
+		data.PreferenceUpdatedAt = type(data.PreferenceUpdatedAt) == "table" and data.PreferenceUpdatedAt or {}
+		local effective = {}
+		for key, value in pairs(op.Patch) do
+			if (tonumber(data.PreferenceUpdatedAt[key]) or 0) <= op.UpdatedAt then
+				effective[key] = value
+			end
+		end
+		if not next(effective) then return true, "Superseded", false end
+		if not SettingsConfig.ValidatePatch(effective, data.Preferences) then return false, "InvalidSettings", false end
+		for key, value in pairs(effective) do data.Preferences[key], data.PreferenceUpdatedAt[key] = value, op.UpdatedAt end
 	elseif op.Kind == "SetTheme" then
 		if (tonumber(data.ThemeUpdatedAt) or 0) > op.UpdatedAt then return true, "Superseded", false end
 		data.Preferences.UITheme, data.ThemeUpdatedAt = op.Theme, op.UpdatedAt
@@ -319,7 +333,23 @@ function ProfileService:Init()
 		requests[plr] = os.clock()
 		self:Send(plr)
 	end)
-	self._preferenceRemote.OnServerEvent:Connect(function(plr, action, theme)
+	self._preferenceRemote.OnServerEvent:Connect(function(plr, action, theme, requestId)
+		if action == "SetSettings" then
+			if type(requestId) ~= "number" or requestId % 1 ~= 0 or requestId < 1 or requestId > 1e9 then return end
+			local profile = self:GetProfile(plr)
+			local ok, reason = false, "InvalidSettings"
+			if not profile or not self:IsLoaded(plr) then reason = "ProfileUnavailable"
+			elseif os.clock() - (preferences[plr] or -math.huge) < 0.75 then reason = "RateLimited"
+			elseif SettingsConfig.ValidatePatch(theme, profile.Preferences) then
+				preferences[plr] = os.clock()
+				ok, reason = self:_submit(plr, newOperation("SetSettings", { Patch = Util.DeepCopy(theme) }))
+			end
+			if plr.Parent == Players then
+				local updated = self:GetProfile(plr)
+				self._preferenceRemote:FireClient(plr, "Result", { Success = ok, Reason = reason, RequestId = requestId, Preferences = updated and updated.Preferences })
+			end
+			return
+		end
 		if action ~= "SetTheme" or (theme ~= "Dark" and theme ~= "Light") then return end
 		local ok, reason
 		if os.clock() - (preferences[plr] or -math.huge) < 0.75 then

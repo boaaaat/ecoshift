@@ -1,3 +1,4 @@
+local Settings = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("ClientSettings"))
 if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 -- ChestUI.client.lua
 local Players = game:GetService("Players")
@@ -746,7 +747,7 @@ UserInputService.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 and contextMenu.Visible and not isPointInsideGui(contextMenu, input.Position) then
 		hideContextMenu()
 	end
-	if input.KeyCode ~= Enum.KeyCode.G then return end
+	if not Settings.Matches(input, "Pack") then return end
 	if UserInputService:GetFocusedTextBox() then return end
 	if currentChestId then
 		closeChest(true)

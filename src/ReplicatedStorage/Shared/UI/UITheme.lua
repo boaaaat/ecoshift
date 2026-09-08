@@ -119,7 +119,8 @@ function Theme.Palette(mode)
 end
 
 function Theme.Tween(object, properties, duration)
-	local tween = TweenService:Create(object, TweenInfo.new(duration or 0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), properties)
+	local seconds = player and player:GetAttribute("ReducedMotion") and 0 or (duration or 0.18)
+	local tween = TweenService:Create(object, TweenInfo.new(seconds, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), properties)
 	tween:Play()
 	return tween
 end
@@ -240,7 +241,7 @@ function Theme.AnimatePanel(frame)
 	local scale = frame:FindFirstChild("ViewportScale") or Instance.new("UIScale")
 	if not scale.Parent then scale.Name = "PanelMotion"; scale.Parent = frame end
 	frame:GetPropertyChangedSignal("Visible"):Connect(function()
-		if frame.Visible then
+		if frame.Visible and not (player and player:GetAttribute("ReducedMotion")) then
 			local target = scale:GetAttribute("TargetScale") or scale.Scale
 			scale.Scale = target * 0.96
 			Theme.Tween(scale, { Scale = target }, 0.24)

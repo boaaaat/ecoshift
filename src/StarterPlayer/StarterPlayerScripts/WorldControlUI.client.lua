@@ -1,3 +1,4 @@
+local Settings = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("ClientSettings"))
 if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 -- Expedition instruments and team ballots. Secret forecasts arrive personalized.
 local Players = game:GetService("Players")
@@ -95,7 +96,7 @@ end
 local destination = button(cards.Select.Description.Parent, "CHOOSE BIOME  ›", 14, 78, 220, 26, false)
 destination.Name = "BiomeButton"
 cards.Select.Reason.Visible = false
-label(panel, "V  CLOSE   ·   Reusable devices. Fuel is spent only after team approval.", 24, 565, 552, 22, 10, C.Sage)
+label(panel, "ESC  CLOSE   ·   Reusable devices. Fuel is spent only after team approval.", 24, 565, 552, 22, 10, C.Sage)
 
 -- A separate surface keeps ballots available to spectators over the death screen.
 local voteGui = Instance.new("ScreenGui")
@@ -206,7 +207,8 @@ end
 player:GetAttributeChangedSignal("FieldKitSurvey"):Connect(toggle)
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed or UserInputService:GetFocusedTextBox() then return end
-	if input.KeyCode == Enum.KeyCode.V then toggle() end
+	if Settings.Matches(input, "Survey") then toggle()
+	elseif Settings.CanInput() and input.KeyCode == Enum.KeyCode.Escape then panel.Visible = false end
 end)
 remote.OnClientEvent:Connect(function(action, data)
 	if action == "Snapshot" and type(data) == "table" then

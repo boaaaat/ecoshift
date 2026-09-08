@@ -9,6 +9,7 @@ local ProximityPromptService = game:GetService("ProximityPromptService")
 local CollectionService = game:GetService("CollectionService")
 
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
+local ItemDescriptionUI = require(ReplicatedStorage.Shared.UI.ItemDescriptionUI)
 local RecipeGuideUI = require(ReplicatedStorage.Shared.UI:WaitForChild("RecipeGuideUI"))
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
@@ -631,6 +632,7 @@ local function createRecipeCard(recipeId, recipe)
 	ingredientsFrame.ClipsDescendants = true
 	ingredientsFrame.ZIndex = 13
 	ingredientsFrame.Parent = card
+	ItemDescriptionUI.Mount(card, item, ingredientsFrame, 48, 12)
 	
 	local ingredientLayout = Instance.new("UIGridLayout")
 	ingredientLayout.FillDirection = Enum.FillDirection.Horizontal

@@ -25,8 +25,7 @@ local raw = {
 	{ Id = "WolfFang", Name = "Wolf Fang", StackSize = 99, Tags = { "Resource", "MonsterDrop", "Forest" } },
 
 	-- Desert raw
-	{ Id = "CactusStem", Name = "Cactus Stem", StackSize = 99, Tags = { "Resource", "Raw", "Desert", "Food" },
-		Description = "Cut a cactus in Sunscar Dunes with your Harvester, then pick up its stems. Weave them into Cactus Fiber at a Loom or Drying Rack." },
+	{ Id = "CactusStem", Name = "Cactus Stem", StackSize = 99, Tags = { "Resource", "Raw", "Desert", "Food" } },
 	{ Id = "Sand", Name = "Sand", StackSize = 99, Tags = { "Resource", "Raw", "Desert" } },
 	{ Id = "SandstoneChunk", Name = "Sandstone Chunk", StackSize = 99, Tags = { "Resource", "Raw", "Desert" } },
 	{ Id = "Coal", Name = "Coal", StackSize = 99, Tags = { "Resource", "Raw", "Fuel" } },
@@ -173,8 +172,7 @@ local raw = {
 	{ Id = "VoidEdge", Name = "Void Edge", StackSize = 1, Tags = { "Weapon", "Holdable" } },
 
 	-- Armor
-	{ Id = "ReedSunwrap", Name = "Reed Sunwrap", StackSize = 1, Tags = { "Armor" },
-		Description = "Basic heat protection woven from Verdant Reach plants. Craft and equip before the first Sunscar Dunes shift. Upgrade to a Desert Cloak for stronger protection." },
+	{ Id = "ReedSunwrap", Name = "Reed Sunwrap", StackSize = 1, Tags = { "Armor" } },
 	{ Id = "AuroraMantle", Name = "Aurora Mantle", StackSize = 1, Tags = { "Armor" } },
 	{ Id = "StarforgedPlate", Name = "Starforged Plate", StackSize = 1, Tags = { "Armor" } },
 	{ Id = "DesertCloak", Name = "Desert Cloak", StackSize = 1, Tags = { "Armor" } },
@@ -198,6 +196,8 @@ local raw = {
 	{ Id = "PathfinderBeacon", Name = "Pathfinder Beacon", StackSize = 1, Tags = { "Utility", "Intel" } },
 	{ Id = "HazardAnalyzer", Name = "Hazard Analyzer", StackSize = 1, Tags = { "Utility", "Intel" } },
 }
+
+require(script.Parent.ItemDescriptions).Apply(raw)
 
 -- OPTIMIZED: Pre-build lookup table for O(1) access
 local rawLookup = {}

@@ -1,3 +1,4 @@
+local Settings = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("ClientSettings"))
 if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 -- InventoryUI.client.lua
 -- Polished inventory system with modern UI
@@ -533,6 +534,7 @@ local function setInventoryOpen(open, force)
 end
 
 local function bindInventoryToggleAction()
+	ContextActionService:UnbindAction(INVENTORY_TOGGLE_ACTION)
 	local priority = Enum.ContextActionPriority.High.Value + 200
 	local ok = pcall(function()
 		ContextActionService:BindActionAtPriority(INVENTORY_TOGGLE_ACTION, function(_, inputState)
@@ -542,12 +544,12 @@ local function bindInventoryToggleAction()
 			if isChestTransferLockActive() then
 				return Enum.ContextActionResult.Sink
 			end
-			if UserInputService:GetFocusedTextBox() then
+			if not Settings.CanInput() then
 				return Enum.ContextActionResult.Sink
 			end
 			setInventoryOpen(not inventoryOpen)
 			return Enum.ContextActionResult.Sink
-		end, false, priority, Enum.KeyCode.G)
+		end, false, priority, Settings.Key("Pack"))
 	end)
 	inventoryToggleActionBound = ok
 end
@@ -1373,8 +1375,8 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 UserInputService.InputBegan:Connect(function(input, processed)
-	if input.KeyCode == Enum.KeyCode.G and not inventoryToggleActionBound then
-		if UserInputService:GetFocusedTextBox() then return end
+	if Settings.Matches(input, "Pack") and not inventoryToggleActionBound then
+		if not Settings.CanInput() then return end
 		if isChestTransferLockActive() then return end
 		setInventoryOpen(not inventoryOpen)
 		return
@@ -1553,3 +1555,5 @@ end
 gui:GetAttributeChangedSignal("ChestOpen"):Connect(arrangePack)
 arrangePack()
 for _, button in ipairs({ contextUse, contextDrop, contextSplit, contextPlace }) do Theme.Button(button) end
+
+Settings.Changed:Connect(bindInventoryToggleAction)

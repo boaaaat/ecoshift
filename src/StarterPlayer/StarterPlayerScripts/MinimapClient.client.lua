@@ -1,3 +1,4 @@
+local Settings = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("ClientSettings"))
 if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 -- MinimapClient.client.lua
 -- Tactical minimap + fullscreen world map (M)
@@ -647,7 +648,7 @@ local function createUI()
 	local header = buildCoreFrame(panel, UDim2.new(1, -16, 0, 40), UDim2.fromOffset(8, 8), Color3.new(), 1)
 	header.Name = "Header"
 	buildLabel(header, "EXPEDITION ATLAS", UDim2.new(1, -54, 0, 22), UDim2.fromOffset(0, 0), Enum.Font.GothamBlack, 18, MapConfig.Colors.TextPrimary)
-	buildLabel(header, "M CLOSE  /  SCROLL ZOOM  /  DRAG PAN", UDim2.new(1, -54, 0, 16), UDim2.fromOffset(0, 24), Enum.Font.Gotham, 11, MapConfig.Colors.TextMuted)
+	buildLabel(header, "ESC CLOSE  /  SCROLL ZOOM  /  DRAG PAN", UDim2.new(1, -54, 0, 16), UDim2.fromOffset(0, 24), Enum.Font.Gotham, 11, MapConfig.Colors.TextMuted)
 	local closeButton = Instance.new("TextButton")
 	closeButton.Name = "CloseMapButton"
 	closeButton.Size = UDim2.fromOffset(40, 40)
@@ -1430,14 +1431,19 @@ local function updateMouseDrag()
 	markFullMapInteraction()
 end
 
-local function bindInput()
+local function bindMapKey()
+	ContextActionService:UnbindAction(MAP_TOGGLE_ACTION)
 	ContextActionService:BindAction(MAP_TOGGLE_ACTION, function(_, inputState)
-		if inputState ~= Enum.UserInputState.Begin then
+		if not Settings.CanInput() or inputState ~= Enum.UserInputState.Begin then
 			return Enum.ContextActionResult.Pass
 		end
 		toggleFullMap()
 		return Enum.ContextActionResult.Sink
-	end, false, Enum.KeyCode.M, Enum.KeyCode.ButtonSelect)
+	end, false, Settings.Key("Map"), Enum.KeyCode.ButtonSelect)
+end
+Settings.Changed:Connect(bindMapKey)
+local function bindInput()
+	bindMapKey()
 
 	if UI.fullCanvas then
 		UI.fullCanvas.InputBegan:Connect(function(input)

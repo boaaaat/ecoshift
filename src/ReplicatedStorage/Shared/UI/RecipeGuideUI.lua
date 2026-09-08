@@ -287,10 +287,21 @@ render=function()
 		local query=string.lower(node.Query or ""); local shown=0
 		for _,id in ipairs(ids) do
 			local recipe=Recipes.RECIPES[id]
+			local item=Items:Get(recipe.Output.Id)
+			local description=item and item.Description or ""
 			local stationNames={}; for _,s in ipairs(Resolver.GetStations(id,player)) do table.insert(stationNames,s.Name) end
 			local text=itemName(recipe.Output.Id).."\n"..table.concat(stationNames," / ")
-			if query=="" or string.find(string.lower(text.." "..id),query,1,true) then
-				local b=button(content,id,text,54); b.LayoutOrder=shown; shown+=1
+			if query=="" or string.find(string.lower(text.." "..description.." "..id),query,1,true) then
+				local b=button(content,id,"",0); b.LayoutOrder=shown; shown+=1
+				b.AutomaticSize=Enum.AutomaticSize.Y
+				create("UIPadding",b,{PaddingTop=UDim.new(0,10),PaddingBottom=UDim.new(0,10),PaddingLeft=UDim.new(0,12),PaddingRight=UDim.new(0,12)})
+				create("UIListLayout",b,{Padding=UDim.new(0,4),SortOrder=Enum.SortOrder.LayoutOrder})
+				local name=label(b,itemName(recipe.Output.Id),0,15)
+				name.Name="ItemName"; name.AutomaticSize=Enum.AutomaticSize.Y; name.Font=Enum.Font.GothamBold; name.LayoutOrder=0
+				local detail=label(b,description,0,12)
+				detail.Name="ItemDescription"; detail.AutomaticSize=Enum.AutomaticSize.Y; detail.TextColor3=colors.TextMuted; detail.LayoutOrder=1
+				local stations=label(b,table.concat(stationNames," / "),0,11)
+				stations.AutomaticSize=Enum.AutomaticSize.Y; stations.TextColor3=colors.TextMuted; stations.LayoutOrder=2
 				b.Activated:Connect(function() push(recipe.Output.Id,id) end)
 			end
 		end
