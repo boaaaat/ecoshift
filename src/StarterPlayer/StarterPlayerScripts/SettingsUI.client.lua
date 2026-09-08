@@ -95,7 +95,7 @@ panel.Visible = false
 panel.Parent = gui
 Theme.Panel(panel)
 Theme.Fit(panel, 464, 320)
-Theme.AnimatePanel(panel)
+Theme.CaptureCursor(panel); Theme.AnimatePanel(panel)
 
 Theme.Label(panel, "ECOSHIFT  /  PERSONAL FIELD KIT", UDim2.fromOffset(390, 18), UDim2.fromOffset(22, 16), 10, Theme.Colors.TextMuted, true)
 Theme.Label(panel, "Make camp your own.", UDim2.fromOffset(390, 32), UDim2.fromOffset(22, 38), 24, nil, true)

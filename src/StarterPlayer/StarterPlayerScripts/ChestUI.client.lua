@@ -771,6 +771,6 @@ end)
 
 Theme.Panel(panel)
 Theme.Fit(panel, 900, 590)
-Theme.AnimatePanel(panel)
+Theme.CaptureCursor(panel); Theme.AnimatePanel(panel)
 Theme.Button(closeButton, true)
 for _, button in ipairs({contextTake, contextToHotbar, contextToStorage}) do Theme.Button(button) end

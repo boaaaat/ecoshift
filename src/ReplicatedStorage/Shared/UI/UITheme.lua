@@ -232,6 +232,10 @@ function Theme.Fit(frame, width, height, maximum, scaleEdgeOffsets)
 	return scale
 end
 
+function Theme.CaptureCursor(frame)
+	require(script.Parent.MenuCursor).Bind(frame)
+end
+
 function Theme.AnimatePanel(frame)
 	local scale = frame:FindFirstChild("ViewportScale") or Instance.new("UIScale")
 	if not scale.Parent then scale.Name = "PanelMotion"; scale.Parent = frame end

@@ -57,8 +57,8 @@ MapConfig.MarkerRotation = {
 }
 
 MapConfig.PlayerPortraits = {
-	FullscreenSize = 20, -- Screen pixels; portraits do not grow with map zoom.
-	MinimapSize = 18,
+	FullscreenSize = 24, -- Screen pixels; portraits do not grow with map zoom.
+	MinimapSize = 21.6,
 }
 
 -- Marker glyph source:
@@ -111,6 +111,7 @@ MapConfig.Colors = {
 	MinimapBackground = C.Night,
 	MinimapRing = C.Amber,
 	Player = C.Paper,
+	PlayerDead = Color3.fromRGB(255, 105, 105),
 	Teammate = C.Sage,
 	Structure = C.Cold,
 	Objective = C.Amber,

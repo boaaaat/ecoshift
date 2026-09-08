@@ -161,17 +161,20 @@ local function finiteVector3(value)
 end
 
 local function getPlayerMapPose(plr)
-	if not plr or plr:GetAttribute("IsDead") == true then return nil end
+	if not plr then return nil end
+	local dead = plr:GetAttribute("IsDead") == true
 	-- Streamed characters are smoother than the server's map telemetry.
 	local root = getCharacterRoot(plr)
-	if root and root:IsA("BasePart") and root:IsDescendantOf(Workspace) then
-		return root.Position, root.CFrame.LookVector
+	if not dead and root and root:IsA("BasePart") and root:IsDescendantOf(Workspace) then
+		return root.Position, root.CFrame.LookVector, false
 	end
+	-- Fallen players use server telemetry from DeathService's ragdoll, never
+	-- their hidden or removed character root.
 	local position = plr:GetAttribute("MapPosition")
 	local look = plr:GetAttribute("MapLookVector")
 	if not finiteVector3(position) or not finiteVector3(look) then return nil end
 	if look.Magnitude < .001 or look.Magnitude > 1.1 then return nil end
-	return position, look
+	return position, look, dead
 end
 
 local function getObjectPosition(obj)
@@ -389,6 +392,7 @@ local function getPlayerGlyph(plr)
 		Type = "portrait",
 		UserId = plr.UserId,
 		IsSelf = plr == player,
+		IsDead = plr:GetAttribute("IsDead") == true,
 	}
 end
 
@@ -724,6 +728,7 @@ local function createUI()
 	cursorLabel.TextYAlignment = Enum.TextYAlignment.Top
 
 	Theme.AnimatePanel(fullRoot)
+	Theme.CaptureCursor(fullRoot)
 	UI.fullRoot = fullRoot
 	UI.fullCanvas = canvas
 	UI.fullChunkLayer = chunkLayer
@@ -1171,13 +1176,15 @@ applyPlayerPortrait = function(frame, descriptor)
 	local url = entry and entry.Image or ""
 	if portrait.Image ~= url then portrait.Image = url end
 	local ready = entry ~= nil and entry.Ready and portrait.IsLoaded
+	local deadTint = MapConfig.Colors.PlayerDead or Color3.fromRGB(255, 105, 105)
+	portrait.ImageColor3 = descriptor.IsDead and deadTint or Color3.new(1, 1, 1)
 	-- Allow the image to load while the initial remains above it as a fallback.
 	portrait.Visible = url ~= ""
 	local fallback = frame.PortraitFallback
 	fallback.Text = entry and entry.Initial or "?"
 	fallback.Visible = not ready
-	fallback.TextColor3 = MapConfig.Colors.Player
-	local outlineColor = descriptor.IsSelf and MapConfig.Colors.MinimapRing or MapConfig.Colors.Teammate
+	fallback.TextColor3 = descriptor.IsDead and deadTint or MapConfig.Colors.Player
+	local outlineColor = descriptor.IsDead and deadTint or (descriptor.IsSelf and MapConfig.Colors.MinimapRing or MapConfig.Colors.Teammate)
 	frame.PortraitBorder.Color = outlineColor
 	frame.PortraitBorder.Thickness = descriptor.IsSelf and 2 or 1
 	frame.HeadingNotch.BackgroundColor3 = outlineColor
@@ -1186,6 +1193,7 @@ applyPlayerPortrait = function(frame, descriptor)
 	frame.ZIndex = 10
 	frame:SetAttribute("PortraitUserId", descriptor.UserId)
 	frame:SetAttribute("PortraitReady", ready)
+	frame:SetAttribute("PortraitDead", descriptor.IsDead == true)
 end
 
 local function getOptionalMarkers()
@@ -1734,7 +1742,7 @@ local function renderFullscreen(playerPos)
 			local position, look = getPlayerMapPose(plr)
 			if position then
 				local heading = headingDegFromLook(look)
-				local size = (MapConfig.PlayerPortraits and MapConfig.PlayerPortraits.FullscreenSize) or 20
+				local size = (MapConfig.PlayerPortraits and MapConfig.PlayerPortraits.FullscreenSize) or 24
 				drawMarker("player_" .. tostring(plr.UserId), position.X, position.Z, "Players", heading, size, getPlayerGlyph(plr))
 			end
 		end
@@ -1801,13 +1809,11 @@ local function renderFullscreen(playerPos)
 	end
 end
 
-local function renderMinimap(playerRoot)
+local function renderMinimap(playerPos, playerLook)
 	if not UI.minimapContainer then return end
-	UI.minimapContainer.Visible = STATE.minimapVisible
+	UI.minimapContainer.Visible = STATE.minimapVisible and playerPos ~= nil
 	if not STATE.minimapVisible then return end
-	if not playerRoot then return end
-
-	local playerPos = playerRoot.Position
+	if not playerPos then return end
 	local playerMapX, playerMapZ = mapOrientedXZ(playerPos.X, playerPos.Z)
 
 	UI.minimapCoords.Text = string.format("X: %d  Z: %d", math.floor(playerPos.X), math.floor(playerPos.Z))
@@ -1826,7 +1832,7 @@ local function renderMinimap(playerRoot)
 	local minimapEmojiScale = math.clamp(tonumber(MapConfig.Minimap.EmojiScale) or 0.7, 0.4, 1.5)
 	local screenScale = math.max(.1, UI.minimapFrame.AbsoluteSize.X / mapSize.X)
 	-- Keep portraits small at large UI scales and legible when the HUD shrinks.
-	local portraitPixels = math.min((MapConfig.PlayerPortraits and MapConfig.PlayerPortraits.MinimapSize) or 18, UI.minimapFrame.AbsoluteSize.X * .2)
+	local portraitPixels = math.min((MapConfig.PlayerPortraits and MapConfig.PlayerPortraits.MinimapSize) or 21.6, UI.minimapFrame.AbsoluteSize.X * .24)
 	local miniPortraitSize = portraitPixels / screenScale
 
 	tableClear(RENDER_CACHE.usedMinimapChunkKeys)
@@ -1936,7 +1942,7 @@ local function renderMinimap(playerRoot)
 	end
 
 	-- Always center local player marker, styled like main map markers.
-	local playerHeading = headingDegFromLook(playerRoot.CFrame.LookVector)
+	local playerHeading = headingDegFromLook(playerLook)
 	local localPlayerSize = miniPortraitSize
 	styleMarkerFrame(UI.minimapPlayer, "Players", playerHeading, localPlayerSize, getPlayerGlyph(player))
 	UI.minimapPlayer.Position = UDim2.fromOffset(centerX, centerY)
@@ -2050,17 +2056,17 @@ local lastFullRender = 0
 
 local function update()
 	local now = os.clock()
-	local root = getCharacterRoot(player)
-	if root then
-		revealAround(root.Position)
+	local position, look, dead = getPlayerMapPose(player)
+	if position and not dead then
+		revealAround(position)
 	end
 	if STATE.markerVisibility.Enemies or STATE.markerVisibility.Resources then
 		getOptionalMarkers()
 	end
 
-	if root and (now - lastMinimapRender) >= (MapConfig.Minimap.UpdateRate or 0.12) then
+	if (now - lastMinimapRender) >= (MapConfig.Minimap.UpdateRate or 0.12) then
 		lastMinimapRender = now
-		renderMinimap(root)
+		renderMinimap(position, look)
 	end
 
 	local fullRate = tonumber(MapConfig.Fullscreen.UpdateRate) or 0.1
@@ -2073,7 +2079,7 @@ local function update()
 
 	if STATE.fullMapOpen and (fullInterval <= 0 or (now - lastFullRender) >= fullInterval) then
 		lastFullRender = now
-		renderFullscreen(root and root.Position or nil)
+		renderFullscreen(position)
 	end
 end
 

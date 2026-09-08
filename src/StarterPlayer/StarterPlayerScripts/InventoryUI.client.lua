@@ -1528,7 +1528,7 @@ player.CharacterAdded:Connect(bindCharacter)
 -- Paper pack and shared field-kit navigation.
 Theme.Panel(mainContainer)
 Theme.Fit(mainContainer, 900, 590)
-Theme.AnimatePanel(mainContainer)
+Theme.CaptureCursor(mainContainer); Theme.AnimatePanel(mainContainer)
 Theme.Panel(hotbarPanel)
 Theme.Fit(hotbarRoot, 900, 610, nil, true)
 shadow.Visible = false

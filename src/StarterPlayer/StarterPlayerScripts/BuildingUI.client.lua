@@ -570,7 +570,7 @@ print("[BuildingUI] Craft workbenches (Press C) then place them!")
 Theme.Panel(modeIndicator)
 Theme.Panel(selectionPanel)
 Theme.Fit(selectionPanel, 730, 610)
-Theme.AnimatePanel(selectionPanel)
+Theme.CaptureCursor(selectionPanel); Theme.AnimatePanel(selectionPanel)
 Theme.Fit(modeIndicator, 900, 610)
 Theme.Fit(hintLabel, 900, 610)
 hintLabel.TextWrapped = true

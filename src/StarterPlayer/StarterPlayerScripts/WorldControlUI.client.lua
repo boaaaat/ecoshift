@@ -48,7 +48,7 @@ panel.Position, panel.AnchorPoint = UDim2.fromScale(0.5, 0.5), Vector2.new(0.5, 
 panel.Visible, panel.Parent = false, gui
 Theme.Panel(panel, true)
 Theme.Fit(panel, 600, 600)
-Theme.AnimatePanel(panel)
+Theme.CaptureCursor(panel); Theme.AnimatePanel(panel)
 label(panel, "ECOSHIFT  /  SURVEY INSTRUMENTS", 24, 14, 470, 18, 10, C.Amber, true)
 label(panel, "Read the world. Shape the next shift.", 24, 36, 510, 28, 22, C.Paper, true)
 local close = button(panel, "×", 546, 18, 30, 30, false)
@@ -107,7 +107,7 @@ ballotPanel.Position, ballotPanel.AnchorPoint = UDim2.new(0.5, 0, 1, -26), Vecto
 ballotPanel.Visible, ballotPanel.Parent = false, voteGui
 Theme.Panel(ballotPanel, true)
 Theme.Fit(ballotPanel, 450, 166)
-Theme.AnimatePanel(ballotPanel)
+Theme.CaptureCursor(ballotPanel); Theme.AnimatePanel(ballotPanel)
 label(ballotPanel, "TEAM DECISION", 18, 10, 410, 18, 10, C.Amber, true)
 local ballotTitle = label(ballotPanel, "World control proposal", 18, 31, 414, 25, 18, C.Paper, true)
 local ballotDetail = label(ballotPanel, "", 18, 60, 414, 20, 12, C.Sage)

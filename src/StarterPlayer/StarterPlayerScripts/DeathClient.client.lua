@@ -141,7 +141,7 @@ local function createDeathUI()
 	container.BackgroundTransparency = 0.1
 	container.BorderSizePixel = 0
 	container.Parent = screenGui
-	Theme.Panel(container, true)
+	Theme.CaptureCursor(container); Theme.Panel(container, true)
 	Theme.Fit(container, 440, 525)
 	
 	local corner = Instance.new("UICorner")

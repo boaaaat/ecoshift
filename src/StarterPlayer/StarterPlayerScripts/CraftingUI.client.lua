@@ -961,7 +961,7 @@ end
 print("[CraftingUI] Ready - Press C for hand crafting (basic items)")
 print("[CraftingUI] Place workbenches for advanced recipes!")
 
-Theme.Panel(mainPanel)
+Theme.CaptureCursor(mainPanel); Theme.Panel(mainPanel)
 Theme.Fit(mainPanel, 452, 610)
 Theme.Button(closeBtn)
 Theme.Button(craftBtn)

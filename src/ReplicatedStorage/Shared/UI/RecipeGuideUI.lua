@@ -56,7 +56,7 @@ local panel=create("Frame",gui,{
 	Name="MainPanel",Size=UDim2.fromOffset(620,670),Position=UDim2.fromScale(.5,.5),
 	AnchorPoint=Vector2.new(.5,.5),BackgroundColor3=colors.Panel,ZIndex=2,Active=true,
 })
-Theme.Panel(panel); Theme.Fit(panel,620,670)
+Theme.CaptureCursor(panel); Theme.Panel(panel); Theme.Fit(panel,620,670)
 local back=button(panel,"Back","‹ Back",34)
 back.Position=UDim2.fromOffset(16,12); back.Size=UDim2.fromOffset(76,34)
 local title=label(panel,"Recipe field guide",34,20)

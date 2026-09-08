@@ -1107,7 +1107,7 @@ end
 
 print("[WorkbenchUI] Ready - interact with placed workbenches to craft")
 
-Theme.Panel(mainPanel)
+Theme.CaptureCursor(mainPanel); Theme.Panel(mainPanel)
 Theme.Fit(mainPanel, 500, 630)
 Theme.Button(closeBtn)
 Theme.Button(craftBtn)

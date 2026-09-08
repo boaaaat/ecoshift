@@ -18,7 +18,7 @@ local panel = Instance.new("Frame")
 panel.Name = "Assembly"; panel.AnchorPoint = Vector2.new(.5, .5)
 panel.Position = UDim2.fromScale(.5, .5); panel.Size = UDim2.fromOffset(1120, 740)
 panel.Visible = Mode == "Lobby"; panel.Parent = gui
-Theme.Panel(panel); Theme.Fit(panel, 1120, 740); Theme.AnimatePanel(panel)
+Theme.Panel(panel); Theme.Fit(panel, 1120, 740); Theme.CaptureCursor(panel); Theme.AnimatePanel(panel)
 
 local function label(parent, text, x, y, w, h, size, token, bold)
 	local l = Theme.Label(parent, text, UDim2.fromOffset(w, h), UDim2.fromOffset(x, y), size or 16, nil, bold)
@@ -217,7 +217,7 @@ updateInvitePopup = function()
 				local popup = box(gui, "InvitationPopup", 0, 0, 470, 242)
 				invitePopup = popup; popup.Active = true; popup.ZIndex = 60; popup.AnchorPoint = Vector2.new(1, 1)
 				popup.Position = UDim2.new(1, -20, 1, -20); popup.Visible = false
-				Theme.Fit(popup, 470, 242); Theme.AnimatePanel(popup)
+				Theme.Fit(popup, 470, 242); Theme.CaptureCursor(popup); Theme.AnimatePanel(popup)
 				label(popup, "YOU'RE INVITED", 20, 15, 345, 30, 23, "Amber", true)
 				button(popup, "×", 410, 12, 40, 40, function() closeInvitePopup(); updateInvitePopup() end).TextSize = 25
 				local nameX = 20
@@ -442,7 +442,7 @@ local function renderMemberMenu()
 	end
 	memberNote.TextWrapped = true; memberNote.TextTruncate = Enum.TextTruncate.None
 	if memberMessage then memberNote.Text = memberMessage.Text; Theme.Bind(memberNote, "TextColor3", memberMessage.Token) end
-	menu.Visible = false; Theme.AnimatePanel(menu); menu.Visible = true
+	menu.Visible = false; Theme.CaptureCursor(menu); Theme.AnimatePanel(menu); menu.Visible = true
 end
 
 -- Compare only visible state; heartbeat timestamps should never rebuild buttons.
