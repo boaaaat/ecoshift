@@ -63,7 +63,7 @@ Proposed stage gates depend on materials and achievements rather than character 
 
 | Stage | Crafting and survival goals | Cross-biome dependency |
 | --- | --- | --- |
-| Establish | Hand craft StoneSpear, camp basics, and ReviveKit; build Workbench, then Loom/Furnace; make StoneHatchet and StonePickaxe | Forest alone enables gathering, fighting, recovery, and food; BoneSpear can add a Desert encounter objective |
+| Establish | Hand craft StoneSpear, ReedSunwrap, camp basics, and ReviveKit; build Workbench, then Loom/Furnace; make StoneHatchet and StonePickaxe | Forest alone enables gathering, fighting, recovery, food, and first-desert heat preparation; BoneSpear can add a Desert encounter objective |
 | Adapt | Add FieldClock, DesertCloak, SwampWaders, medicine, improved food, and Sandite tools; construct AlchemyTable | Two biome inputs for protective kits and countdown access; Forest supplies still consumed |
 | Coordinate | AdvancedWorkbench; forecast equipment; choose whether to delay or force the next shift | Forest + Desert + Swamp processing; monster-derived catalysts give hunting a purpose |
 | Endure | FrostParka, VolcanicPlate, Cryo tools; Refinery; stronger specialized weapons | Three to four biomes; cooling and heat materials complement one another |
@@ -83,7 +83,8 @@ New content should reduce redundant materials rather than add many synonymous ro
 
 Protection has separate heat, cold, toxin, and wetness channels. Armor still reduces physical damage. Resistances remove a fraction of matching exposure, never all hazards automatically. The shared `SurvivalConfig` supplies provisional exposure fractions and weather variations.
 
-- DesertCloak: cactus weave + Forest cloth + Desert glass; strong heat protection, little cold protection.
+- ReedSunwrap: hand craft ReedFiber ×6, MossBloom ×2 and SapResin ×2 in five seconds. All ingredients come from Verdant Reach. Provides 4 armor and 70% heat resistance, with no cold/toxin/wet resistance; prepare and equip it before the first desert shift.
+- DesertCloak: cactus weave + Forest cloth + Desert glass; upgrades heat resistance to 85%, with 12 armor and modest other protection.
 - SwampWaders: marsh thread + BioGel + Forest resin waterproofing; excels against wetness/toxins.
 - FrostParka: frost fur/cloth + Swamp-treated lining + Desert glass fasteners; excellent cold protection, poor heat protection.
 - VolcanicPlate: obsidite + heat plate + insulated lining; best heat protection and physical defense, modest other coverage.

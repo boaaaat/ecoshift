@@ -973,6 +973,18 @@ WorkbenchConfig.RECIPES = {
 		BaseCraftTime = 14,
 	},
 
+	-- First-shift heat protection: gather and assemble entirely in Verdant Reach.
+	ReedSunwrap = {
+		Ingredients = {
+			{ Id = "ReedFiber", N = 6 },
+			{ Id = "MossBloom", N = 2 },
+			{ Id = "SapResin", N = 2 },
+		},
+		Output = { Id = "ReedSunwrap", N = 1 },
+		AllowedStations = { "Hand" },
+		Category = "Armor",
+		BaseCraftTime = 5,
+	},
 	DesertCloak = {
 		Ingredients = {
 			{ Id = "CactusFiber", N = 4 },

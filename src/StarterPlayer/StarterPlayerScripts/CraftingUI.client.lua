@@ -8,6 +8,7 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
+local RecipeGuideUI = require(ReplicatedStorage.Shared.UI:WaitForChild("RecipeGuideUI"))
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
@@ -117,7 +118,7 @@ header.Parent = mainPanel
 
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Name = "Title"
-titleLabel.Size = UDim2.new(1, -80, 1, 0)
+titleLabel.Size = UDim2.new(1, -184, 1, 0)
 titleLabel.Position = UDim2.new(0, MARGIN, 0, 0)
 titleLabel.BackgroundTransparency = 1
 titleLabel.Text = "Field crafting"
@@ -127,6 +128,22 @@ titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 titleLabel.ZIndex = 11
 titleLabel.Parent = header
+
+local recipeBookBtn = Instance.new("TextButton")
+recipeBookBtn.Name = "RecipeBook"
+recipeBookBtn.Size = UDim2.fromOffset(104, 32)
+recipeBookBtn.Position = UDim2.new(1, -166, 0, 10)
+recipeBookBtn.BackgroundColor3 = COLORS.SlotEmpty
+recipeBookBtn.TextColor3 = COLORS.Text
+recipeBookBtn.Text = "Recipe book"
+recipeBookBtn.TextSize = 13
+recipeBookBtn.Font = Enum.Font.GothamBold
+recipeBookBtn.ZIndex = 12
+recipeBookBtn.Parent = header
+Theme.Button(recipeBookBtn)
+recipeBookBtn.Activated:Connect(function()
+	RecipeGuideUI.OpenBook({ PreferredStationType = "Hand" })
+end)
 
 -- Close button
 local closeBtn = Instance.new("TextButton")
@@ -158,6 +175,8 @@ recipeContainer.BorderSizePixel = 0
 recipeContainer.ScrollBarThickness = 4
 recipeContainer.ScrollBarImageColor3 = COLORS.Border
 recipeContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
+recipeContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
+recipeContainer.ClipsDescendants = true
 recipeContainer.ZIndex = 11
 recipeContainer.Parent = mainPanel
 
@@ -408,15 +427,25 @@ local function outputDescription(recipeId, quantity)
 	return string.format("%d × %s", (output.N or 1) * quantity, item and item.Name or output.Id)
 end
 
-local function createIngredientDisplay(ingredient, parent)
+local function createIngredientDisplay(ingredient, parent, recipeId)
 	local needed = ingredientCost(ingredient)
 	local have = getItemCount(ingredient.Id)
 	local item = ItemDatabase:Get(ingredient.Id)
 	local name = item and item.Name or ingredient.Id
 	local canAfford = have >= needed
 	
-	local frame = Instance.new("Frame")
+	local frame = Instance.new("TextButton")
+	frame.Name = "Ingredient_" .. ingredient.Id
+	frame.Text = ""
+	frame.AutoButtonColor = false
 	frame:SetAttribute("IngredientId", ingredient.Id)
+	frame.Activated:Connect(function()
+		RecipeGuideUI.Open(ingredient.Id, {
+			PreferredStationType = "Hand",
+			RootRecipeId = recipeId,
+			RootQuantity = selectedRecipe == recipeId and craftQuantity or 1,
+		})
+	end)
 	frame.Size = UDim2.new(0, 80, 0, 44)
 	frame.BackgroundColor3 = COLORS.SlotEmpty
 	frame.BackgroundTransparency = 0.5
@@ -434,7 +463,7 @@ local function createIngredientDisplay(ingredient, parent)
 	itemLabel.Size = UDim2.new(1, -8, 0, 30)
 	itemLabel.Position = UDim2.new(0, 2, 0, 3)
 	itemLabel.BackgroundTransparency = 1
-	itemLabel.Text = name
+	itemLabel.Text = name .. " ›"
 	itemLabel.TextColor3 = canAfford and COLORS.Text or COLORS.Danger
 	itemLabel.TextSize = 10
 	itemLabel.Font = Enum.Font.GothamBold
@@ -540,7 +569,7 @@ local function createRecipeCard(recipeId, recipeData)
 	
 	-- Add ingredient displays
 	for _, ingredient in ipairs(ingredients) do
-		createIngredientDisplay(ingredient, ingredientsFrame)
+		createIngredientDisplay(ingredient, ingredientsFrame, recipeId)
 	end
 	
 	-- Interactions
@@ -743,11 +772,6 @@ local function refreshRecipes()
 	
 	print(string.format("[CraftingUI] Total hand recipes: %d", recipeCount))
 	print("[CraftingUI] Tip: Build a Workbench for more recipes!")
-	
-	-- Update canvas size after a frame to let layout calculate
-	task.defer(function()
-		recipeContainer.CanvasSize = UDim2.new(0, 0, 0, recipeLayout.AbsoluteContentSize.Y + 12)
-	end)
 	
 	-- Update craft button
 	updateCraftButton()

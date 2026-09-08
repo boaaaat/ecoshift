@@ -172,6 +172,8 @@ local raw = {
 	{ Id = "VoidEdge", Name = "Void Edge", StackSize = 1, Tags = { "Weapon", "Holdable" } },
 
 	-- Armor
+	{ Id = "ReedSunwrap", Name = "Reed Sunwrap", StackSize = 1, Tags = { "Armor" },
+		Description = "Basic heat protection woven from Verdant Reach plants. Craft and equip before the first Sunscar Dunes shift. Upgrade to a Desert Cloak for stronger protection." },
 	{ Id = "AuroraMantle", Name = "Aurora Mantle", StackSize = 1, Tags = { "Armor" } },
 	{ Id = "StarforgedPlate", Name = "Starforged Plate", StackSize = 1, Tags = { "Armor" } },
 	{ Id = "DesertCloak", Name = "Desert Cloak", StackSize = 1, Tags = { "Armor" } },
@@ -245,6 +247,7 @@ function ItemDatabase:Get(id)
 		local item = Item.new({
 			Id = def.Id,
 			Name = def.Name,
+			Description = def.Description,
 			StackSize = def.StackSize,
 			Tags = def.Tags,
 			Icon = icon,
@@ -262,6 +265,7 @@ function ItemDatabase:All()
 		list[#list + 1] = Item.new({
 			Id = def.Id,
 			Name = def.Name,
+			Description = def.Description,
 			StackSize = def.StackSize,
 			Tags = def.Tags,
 			Icon = resolveIcon(def),

@@ -6,6 +6,7 @@ function Item.new(def)
 	local self = setmetatable({}, Item)
 	self.Id = def.Id
 	self.Name = def.Name or def.Id
+	self.Description = def.Description
 	self.StackSize = def.StackSize or 99
 	self.Tags = def.Tags or {}
 	self.Icon = def.Icon

@@ -3,7 +3,8 @@
 local SurvivalConfig = {}
 
 SurvivalConfig.ARMOR = {
-	DesertCloak = { Armor = 12, HeatResistance = 0.70, ColdResistance = 0.10, ToxinResistance = 0.10, WetResistance = 0.20 },
+	ReedSunwrap = { Armor = 4, HeatResistance = 0.70, ColdResistance = 0, ToxinResistance = 0, WetResistance = 0 },
+	DesertCloak = { Armor = 12, HeatResistance = 0.85, ColdResistance = 0.10, ToxinResistance = 0.10, WetResistance = 0.20 },
 	SwampWaders = { Armor = 16, HeatResistance = 0.15, ColdResistance = 0.20, ToxinResistance = 0.70, WetResistance = 0.85 },
 	FrostParka = { Armor = 20, HeatResistance = 0.10, ColdResistance = 0.80, ToxinResistance = 0.10, WetResistance = 0.45 },
 	VolcanicPlate = { Armor = 26, HeatResistance = 0.85, ColdResistance = 0.20, ToxinResistance = 0.45, WetResistance = 0.25 },

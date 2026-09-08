@@ -249,6 +249,7 @@ function Equipment.CreateBuild(id)
 end
 
 local ARMOR_DEFS = {
+	ReedSunwrap = { Color = Color3.fromRGB(203, 192, 139), Trim = Color3.fromRGB(104, 134, 88), Kind = "Sunwrap" },
 	DesertCloak = { Color = Color3.fromRGB(196, 171, 125), Trim = LEAF, Kind = "Cloak" },
 	SwampWaders = { Color = Color3.fromRGB(76, 109, 98), Trim = LINEN, Kind = "Waders" },
 	FrostParka = { Color = Color3.fromRGB(119, 157, 176), Trim = LINEN, Kind = "Parka" },
@@ -269,17 +270,31 @@ function Equipment.CreateArmor(id)
 	accessory:SetAttribute("ArtVersion", 1)
 	accessory:SetAttribute("ArtKind", "Armor")
 	-- Attachment sits against the torso front; positive Z art wraps toward its back.
-	local handle = part(accessory, "Handle", V(1.5, 1.3, 0.19), CF(0, 0, 0), def.Color)
+	local sunwrap = def.Kind == "Sunwrap"
+	local handle = part(accessory, "Handle", sunwrap and V(1.36, 0.65, 0.13) or V(1.5, 1.3, 0.19), CF(0, 0, 0), def.Color)
 	local attachment = Instance.new("Attachment")
 	attachment.Name = "BodyFrontAttachment"
 	attachment.CFrame = CF(0, 0, 0.15)
 	attachment.Parent = handle
-	for side = -1, 1, 2 do
-		part(accessory, "SidePanel", V(0.3, 1.18, 0.67), CF(side * 0.82, -0.05, 0.27) * A(0, 0, side * -0.04), tint(def.Color, -0.14), "WedgePart")
-		part(accessory, "ShoulderPanel", V(0.61, 0.23, 0.8), CF(side * 0.81, 0.61, 0.29) * A(0, 0, side * -0.12), tint(def.Color, 0.12), "WedgePart")
+	if sunwrap then
+		-- A short woven shoulder shade and asymmetrical moss tie, without plated sides.
+		for side = -1, 1, 2 do
+			part(accessory, "ReedShoulderShade", V(0.78, 0.17, 0.91), CF(side * 0.78, 0.6, 0.35) * A(0, 0, side * -0.15), def.Color, "WedgePart")
+			part(accessory, "ShortReedCape", V(0.84, 0.8, 0.1), CF(side * 0.42, 0.17, 1.13) * A(-0.1, 0, side * 0.12), tint(def.Color, side * 0.06), "WedgePart")
+		end
+		for index = -2, 2 do
+			part(accessory, "WovenReed", V(0.055, 0.61, 0.045), CF(index * 0.24, 0, -0.09) * A(0, 0, -0.2), tint(def.Color, -0.16))
+		end
+		part(accessory, "MossTie", V(0.25, 1.12, 0.09), CF(-0.14, 0.1, -0.15) * A(0, 0, -0.6), def.Trim, "WedgePart")
+		part(accessory, "ResinKnot", V(0.18, 0.18, 0.1), CF(0.12, 0.43, -0.21), AMBER, "WedgePart")
+	else
+		for side = -1, 1, 2 do
+			part(accessory, "SidePanel", V(0.3, 1.18, 0.67), CF(side * 0.82, -0.05, 0.27) * A(0, 0, side * -0.04), tint(def.Color, -0.14), "WedgePart")
+			part(accessory, "ShoulderPanel", V(0.61, 0.23, 0.8), CF(side * 0.81, 0.61, 0.29) * A(0, 0, side * -0.12), tint(def.Color, 0.12), "WedgePart")
+		end
+		part(accessory, "FieldBelt", V(1.68, 0.16, 0.15), CF(0, -0.53, -0.13), TIMBER)
+		part(accessory, "BeltClasp", V(0.24, 0.21, 0.1), CF(0, -0.53, -0.24), def.Trim)
 	end
-	part(accessory, "FieldBelt", V(1.68, 0.16, 0.15), CF(0, -0.53, -0.13), TIMBER)
-	part(accessory, "BeltClasp", V(0.24, 0.21, 0.1), CF(0, -0.53, -0.24), def.Trim)
 	if def.Kind == "Cloak" or def.Kind == "Mantle" then
 		for side = -1, 1, 2 do
 			part(accessory, "SplitCape", V(0.86, 1.85, 0.13), CF(side * 0.43, -0.27, 1.21) * A(-0.08, 0, side * 0.07), tint(def.Color, side == -1 and -0.07 or 0.1), "WedgePart")
