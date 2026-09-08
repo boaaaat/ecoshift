@@ -70,6 +70,10 @@ local selectedMemberId, memberOverlay
 local controls, removalId, removalUntil = {}, nil, 0
 local friends, friendsLoading, friendsError, friendsLoadedAt = {}, false, nil, -math.huge
 local inviteStatus, inviteExpiry, nativeInvite = {}, {}, nil
+local invitePopup, popupAccept, popupStatus, popupTimer, popupBar, activeInvitation, popupDeadline, popupMessage
+local seenInvitations = {}
+local inboxEpoch, inboxReads = 0, {}
+local updateInvitePopup, updatePopupControls
 local lastPage, lastVisual = page, nil
 
 local function requestId()
@@ -77,6 +81,7 @@ local function requestId()
 end
 local function refresh(scope, extra)
 	local data = extra or {}; data.RequestId = requestId(); data.Scope = scope or "Core"
+	if data.Scope == "Invites" then inboxReads[data.RequestId] = {Epoch = inboxEpoch, At = os.clock()} end
 	remote:FireServer("Snapshot", data)
 end
 local function applyControls()
@@ -90,6 +95,7 @@ local function applyControls()
 		elseif control.Status then control.Status.Text = active and "Inviting…" or control.Text end
 		Theme.Bind(b, "BackgroundColor3", active and "SlotSelected" or control.Primary and "Moss" or "SlotEmpty")
 	end
+	if updatePopupControls then updatePopupControls() end
 end
 local function send(action, data, waiting)
 	if pending then notify("Your previous action is still finishing…", "Amber"); return end
@@ -147,22 +153,91 @@ local descriptions = {
 	Engineer = "Process supplies and craft equipment faster.", Medic = "Help fallen teammates return to the expedition.",
 }
 
--- Roblox loads thumbnails asynchronously; placeholders stay visible until ready.
-local function loadPortrait(image, userId, width, height)
+-- Roblox loads thumbnails asynchronously over the neutral portrait background.
+local function loadPortrait(image, userId)
 	image.Image = "rbxthumb://type=AvatarHeadShot&id=" .. userId .. "&w=150&h=150"
 	image.ScaleType = Enum.ScaleType.Fit
-	local fallback = label(image, "?", 0, 0, width, height, math.floor(height * .38), "TextMuted", true)
-	fallback.Name = "PortraitPlaceholder"; fallback.TextXAlignment = Enum.TextXAlignment.Center
-	fallback.Visible = not image.IsLoaded
-	image:GetPropertyChangedSignal("IsLoaded"):Connect(function() fallback.Visible = not image.IsLoaded end)
 end
 local function portrait(parent, userId, x, y, size)
 	local image = Instance.new("ImageLabel"); image.Name = "AvatarPortrait"
 	image.Size = UDim2.fromOffset(size, size); image.Position = UDim2.fromOffset(x, y)
 	image.BorderSizePixel = 0; image.Parent = parent
 	Theme.Bind(image, "BackgroundColor3", "SlotEmpty"); Theme.Corner(image, 8)
-	loadPortrait(image, userId, size, size)
+	loadPortrait(image, userId)
 	return image
+end
+local function liveInvitations()
+	local list = {}
+	for _, invitation in ipairs(snapshot.Invites or (snapshot.Party or {}).Invites or {}) do
+		if type(invitation.Id) == "string" and type(invitation.ExpiresAt) == "number"
+			and invitation.ExpiresAt > workspace:GetServerTimeNow() then table.insert(list, invitation) end
+	end
+	return list
+end
+local function closeInvitePopup()
+	if invitePopup then invitePopup:Destroy() end
+	invitePopup, popupAccept, popupStatus, popupTimer, popupBar, activeInvitation = nil, nil, nil, nil, nil, nil
+end
+updatePopupControls = function()
+	if not popupAccept then return end
+	local joining = pending and pending.Action == "AcceptInvite" and pending.Key == activeInvitation.Id
+	-- Membership can change on another server while this panel is closed.
+	-- The accept endpoint validates the current crew instead of a stale UI lock.
+	popupAccept.Interactable = not pending
+	popupAccept.Text = joining and "JOINING…" or "ACCEPT INVITE"
+	popupAccept.TextTransparency = popupAccept.Interactable and 0 or .35
+	if joining then popupStatus.Text = "Confirming your place in the crew…"
+	else popupStatus.Text = popupMessage or ((snapshot.Party or {}).Id and "Leave your current crew before accepting." or "You can also accept from the crew menu.") end
+end
+updateInvitePopup = function()
+	if Mode ~= "Lobby" then return end
+	local list = liveInvitations()
+	if activeInvitation then
+		local stillLive = false
+		for _, invitation in ipairs(list) do if invitation.Id == activeInvitation.Id then stillLive = true; break end end
+		if not stillLive or os.clock() >= popupDeadline then closeInvitePopup() end
+	end
+	if not activeInvitation then
+		for _, invitation in ipairs(list) do
+			if not seenInvitations[invitation.Id] then
+				seenInvitations[invitation.Id] = invitation.ExpiresAt
+				activeInvitation = invitation
+				popupMessage = nil
+				refresh("Core")
+				popupDeadline = os.clock() + math.min(20, invitation.ExpiresAt - workspace:GetServerTimeNow())
+				local popup = box(gui, "InvitationPopup", 0, 0, 470, 242)
+				invitePopup = popup; popup.Active = true; popup.ZIndex = 60; popup.AnchorPoint = Vector2.new(1, 1)
+				popup.Position = UDim2.new(1, -20, 1, -20); popup.Visible = false
+				Theme.Fit(popup, 470, 242); Theme.AnimatePanel(popup)
+				label(popup, "YOU'RE INVITED", 20, 15, 345, 30, 23, "Amber", true)
+				button(popup, "×", 410, 12, 40, 40, function() closeInvitePopup(); updateInvitePopup() end).TextSize = 25
+				local nameX = 20
+				if type(invitation.FromUserId) == "number" and invitation.FromUserId > 0 then portrait(popup, invitation.FromUserId, 20, 62, 62); nameX = 98 end
+				label(popup, invitation.From or "An explorer", nameX, 63, 450 - nameX, 29, 21, "Text", true)
+				label(popup, "invited you to their expedition crew", nameX, 95, 450 - nameX, 26, 15, "TextMuted")
+				popupAccept = button(popup, "ACCEPT INVITE", 20, 139, 210, 44, function() send("AcceptInvite", {Id = invitation.Id}, "Joining the crew…") end, true)
+				button(popup, "VIEW IN MENU", 240, 139, 210, 44, function()
+					panel.Visible = true; scrollByPage.Party = Vector2.zero; navigate("Party"); content.CanvasPosition = Vector2.zero
+				end)
+				popupStatus = label(popup, "You can also accept from the crew menu.", 20, 192, 373, 31, 14, "TextMuted")
+				popupStatus.TextWrapped = true; popupStatus.TextTruncate = Enum.TextTruncate.None
+				popupTimer = label(popup, "20s", 399, 192, 51, 31, 15, "Amber", true)
+				local track = Instance.new("Frame"); track.Name = "Lifetime"; track.BackgroundTransparency = 1
+				track.Position = UDim2.fromOffset(20, 232); track.Size = UDim2.fromOffset(430, 3); track.Parent = popup
+				popupBar = Instance.new("Frame"); popupBar.BorderSizePixel = 0; popupBar.Size = UDim2.fromScale(1, 1); popupBar.Parent = track
+				Theme.Bind(popupBar, "BackgroundColor3", "Amber")
+				popup.Visible = true
+				task.delay(math.max(0, popupDeadline - os.clock()), function() if activeInvitation == invitation then updateInvitePopup() end end)
+				break
+			end
+		end
+	end
+	if invitePopup then
+		local remaining = math.max(0, popupDeadline - os.clock())
+		popupTimer.Text = tostring(math.ceil(remaining)) .. "s"
+		popupBar.Size = UDim2.fromScale(math.clamp(remaining / 20, 0, 1), 1)
+		updatePopupControls()
+	end
 end
 local function startingExpedition(party)
 	return party.Queue and party.Queue.Mode == "Party" and party.Queue.Purpose ~= "LobbyMerge"
@@ -264,7 +339,11 @@ end)
 local function renderPicker()
 	label(content, "INVITE EXPLORERS", 0, 0, 550, 34, 25, "Text", true)
 	button(content, "BACK TO CREW", 600, 0, 196, 40, function() navigate("Party") end)
-	label(content, "Choose a profile to invite them.", 0, 43, 790, 27, 16, "TextMuted")
+	local party = snapshot.Party or {}
+	local guidance = not party.Id and "Create a party from the crew menu before inviting players."
+		or party.LeaderId ~= player.UserId and "Your crew leader can send invitations."
+		or "Choose a profile to invite them."
+	label(content, guidance, 0, 43, 790, 27, 16, "TextMuted")
 	local entries, byId, inCrew = {}, {}, {}
 	for _, member in ipairs((snapshot.Party or {}).Members or {}) do inCrew[member.UserId] = true end
 	for _, friend in ipairs(friends) do local entry = table.clone(friend); byId[entry.UserId] = entry; table.insert(entries, entry) end
@@ -297,8 +376,10 @@ local function renderPicker()
 		end
 		local tile = Instance.new("ImageButton"); tile.Name = "Invite_" .. entry.UserId
 		tile.Size = UDim2.fromOffset(190, 210); tile.Position = UDim2.fromOffset(column * 202, y)
-		tile.Parent = content; Theme.Button(tile, false)
-		loadPortrait(tile, entry.UserId, 190, 146)
+		tile.Image = ""; tile.Parent = content; Theme.Button(tile, false)
+		-- A square portrait ends above the nameplate; text never covers the face.
+		local avatar = portrait(tile, entry.UserId, 28, 6, 134)
+		avatar.BackgroundTransparency = 1
 		local plate = Instance.new("Frame"); plate.Name = "Nameplate"; plate.BorderSizePixel = 0
 		plate.Size = UDim2.new(1, 0, 0, 64); plate.Position = UDim2.new(0, 0, 1, -64); plate.Parent = tile
 		Theme.Bind(plate, "BackgroundColor3", "Panel"); Theme.Corner(plate, 6)
@@ -362,7 +443,7 @@ local function visualKey()
 	for _, member in ipairs(party.Members or {}) do table.insert(crew, {member.UserId, member.DisplayName, member.Name, member.Role, member.Ready == true, member.Online == true}) end
 	return HttpService:JSONEncode({page, snapshot.Currency, snapshot.Classes, party.Id, party.LeaderId, party.RunId,
 		party.Queue and party.Queue.Mode or false, party.Queue and party.Queue.Purpose or false, party.ManagementLocked == true, party.MergedCrew == true, selectedMemberId or false,
-		party.Queue ~= nil and party.Queue ~= false, party.QueueStartedAt, crew, party.Invites, snapshot.Rejoin, page == "Saves" and snapshot.Worlds or false,
+		party.Queue ~= nil and party.Queue ~= false, party.QueueStartedAt, crew, liveInvitations(), snapshot.Rejoin, page == "Saves" and snapshot.Worlds or false,
 		page == "Saves" and snapshot.ArchiveAvailable, page == "Invite" and snapshot.InviteDirectory or false})
 end
 render = function()
@@ -382,9 +463,20 @@ render = function()
 		label(content, "YOUR EXPEDITION CREW", 0, 0, 790, 34, 25, "Text", true)
 		queueLabel = label(content, "", 0, 41, 790, 28, 16, "TextMuted"); queueLabel.Name = "QueueStatus"; updateQueue()
 		local crewTop = 84
+		local invitations = liveInvitations()
+		if #invitations > 0 then
+			label(content, "PARTY INVITATIONS", 0, crewTop, 796, 25, 16, "Amber", true); crewTop += 34
+			for _, invitation in ipairs(invitations) do
+				local row = box(content, "Invitation_" .. invitation.Id, 0, crewTop, 796, 72)
+				label(row, (invitation.From or "An explorer") .. " invited you", 16, 9, 546, 28, 19, "Text", true)
+				label(row, party.Id and "Leave your current crew before accepting." or "Join their expedition crew.", 16, 39, 546, 23, 14, "TextMuted")
+				actionButton(row, "ACCEPT", "JOINING…", "AcceptInvite", {Id = invitation.Id}, 594, 14, 186, 44, true, party.Id ~= nil and party.Id ~= false)
+				crewTop += 84
+			end
+		end
 		if party.MergedCrew and not party.RunId then
-			label(content, crewReady(party) and "Your crew is ready. The leader can now press Start Expedition." or "Everyone readies again. Your chosen leader then presses Start Expedition.", 0, 76, 796, 40, 16, "TextMuted").TextWrapped = true
-			crewTop = 128
+			label(content, crewReady(party) and "Your crew is ready. The leader can now press Start Expedition." or "Everyone readies again. Your chosen leader then presses Start Expedition.", 0, crewTop - 8, 796, 40, 16, "TextMuted").TextWrapped = true
+			crewTop += 44
 		end
 		local selfMember
 		for index = 1, 6 do
@@ -400,8 +492,10 @@ render = function()
 				card.Activated:Connect(function() selectedMemberId = member.UserId; memberMessage = nil; render() end)
 				if member.UserId == player.UserId then selfMember = member end
 			else
-				local card = box(content, "Crew" .. index, ((index - 1) % 2) * 404, crewTop + math.floor((index - 1) / 2) * 104, 392, 92)
-				label(card, "OPEN CREW SLOT", 16, 30, 360, 28, 15, "TextMuted", true)
+				local card = button(content, "", ((index - 1) % 2) * 404, crewTop + math.floor((index - 1) / 2) * 104, 392, 92, openPicker)
+				card.Name = "Crew" .. index
+				label(card, "+  OPEN CREW SLOT", 16, 17, 360, 28, 17, "TextMuted", true)
+				label(card, "Browse players to invite", 16, 51, 360, 25, 15, "TextMuted")
 			end
 		end
 		local y = crewTop + 332
@@ -428,10 +522,6 @@ render = function()
 		y += 62
 		if Mode == "Expedition" then actionButton(content, "RETURN TO OBSERVATORY", "RETURNING…", "ReturnLobby", nil, 0, y, 796, 46, true); y += 62 end
 		if snapshot.Rejoin and snapshot.Rejoin.Available then actionButton(content, "REJOIN ACTIVE EXPEDITION", "REJOINING…", "Rejoin", nil, 0, y, 796, 46, true); y += 62 end
-		for _, invitation in ipairs(party.Invites or {}) do
-			label(content, invitation.From .. " invited you to a party", 0, y, 575, 44, 16)
-			actionButton(content, "ACCEPT", "JOINING…", "AcceptInvite", {Id = invitation.Id}, 610, y, 186, 44, true); y += 58
-		end
 	elseif page == "Classes" then
 		label(content, "CLASS OUTFITTER", 0, 0, 796, 34, 25, "Text", true)
 		label(content, "Permanent unlocks · earn Field Marks on expeditions", 0, 43, 796, 28, 16, "TextMuted")
@@ -497,6 +587,11 @@ local function reconcile(request, result)
 	elseif request.Action == "BuyClass" then
 		for _, class in ipairs(snapshot.Classes or {}) do if class.Id == request.Data.Id then class.Owned = true end end
 	elseif request.Action == "Invite" then inviteStatus[request.Data.UserId] = "Invite sent"; inviteExpiry[request.Data.UserId] = os.clock() + 15
+	elseif request.Action == "AcceptInvite" then
+		local kept = {}; for _, invitation in ipairs(liveInvitations()) do if invitation.Id ~= request.Data.Id then table.insert(kept, invitation) end end
+		snapshot.Invites = kept
+		if activeInvitation and activeInvitation.Id == request.Data.Id then closeInvitePopup() end
+		refresh("Invites")
 	elseif request.Action == "RenameWorld" then submittedNames[request.Data.Id] = request.Data.Name end
 end
 remote.OnClientEvent:Connect(function(action, data)
@@ -504,6 +599,9 @@ remote.OnClientEvent:Connect(function(action, data)
 	local incoming = tonumber(data.StateRevision) or 0
 	if action == "Snapshot" then
 		local section = data.Section or "Core"
+		local inboxRead = inboxReads[data.RequestId]
+		local olderInbox = section == "Invites" and inboxRead and inboxRead.Epoch < inboxEpoch
+		if section == "Invites" and data.RequestId then inboxReads[data.RequestId] = nil end
 		if incoming < revision or (tonumber(data.SnapshotId) or 0) <= (sectionIds[section] or -1) then return end
 		revision = incoming; sectionIds[section] = tonumber(data.SnapshotId) or 0
 		if section == "Archive" then
@@ -513,10 +611,27 @@ remote.OnClientEvent:Connect(function(action, data)
 			end
 		end
 		for key, value in pairs(data) do
-			if key ~= "StateRevision" and key ~= "SnapshotId" and key ~= "RequestId" and key ~= "Section" and key ~= "Partial" and key ~= "ServerTime" then snapshot[key] = value end
+			if key ~= "StateRevision" and key ~= "SnapshotId" and key ~= "RequestId" and key ~= "Section" and key ~= "Partial" and key ~= "ServerTime"
+				and not (key == "Invites" and (data.InvitesAvailable == false or olderInbox)) then snapshot[key] = value end
 		end
 		if not UIS:GetFocusedTextBox() and visualKey() ~= lastVisual then render() end
 		updateQueue()
+		updateInvitePopup()
+	elseif action == "Invitation" then
+		-- This event is emitted only after a confirmed inbox write. Show it now;
+		-- an older in-flight read must not erase it while the refresh catches up.
+		if type(data.Id) == "string" and type(data.PartyId) == "string" and type(data.From) == "string"
+			and type(data.ExpiresAt) == "number" and data.ExpiresAt > workspace:GetServerTimeNow() then
+			inboxEpoch += 1
+			local inbox = {}
+			for _, invitation in ipairs(liveInvitations()) do
+				if invitation.Id ~= data.Id and invitation.PartyId ~= data.PartyId then table.insert(inbox, invitation) end
+			end
+			table.insert(inbox, data); snapshot.Invites = inbox
+			updateInvitePopup()
+			if panel.Visible and not UIS:GetFocusedTextBox() and visualKey() ~= lastVisual then render() end
+		end
+		refresh("Invites")
 	elseif action == "Accepted" then
 		revision = math.max(revision, incoming)
 	elseif action == "Result" and data.Action ~= "Snapshot" then
@@ -528,7 +643,10 @@ remote.OnClientEvent:Connect(function(action, data)
 		if data.Success and completed.Action == "SelectClass" then message = (data.ConfirmedRole or completed.Data.Id) .. " equipped."
 		elseif data.Success and completed.Action == "BuyClass" then message = "Class unlocked. Choose Equip Class to use it." end
 		notify(message, data.Success and "Success" or "Danger")
+		if completed.Action == "AcceptInvite" and not data.Success and activeInvitation
+			and activeInvitation.Id == completed.Data.Id then popupMessage = message end
 		if not UIS:GetFocusedTextBox() then render() else applyControls() end
+		updateInvitePopup()
 	elseif action == "Notice" and type(data.Message) == "string" then
 		notify(data.Message, data.Success and "Success" or "Amber")
 	elseif action == "SnapshotError" and incoming >= revision then
@@ -546,11 +664,15 @@ player:GetAttributeChangedSignal("LobbyPanelVersion"):Connect(function()
 	page = player:GetAttribute("LobbyPanel") or "Party"; panel.Visible = true; render(); refresh("All")
 end)
 for _, event in ipairs({Players.PlayerAdded, Players.PlayerRemoving}) do event:Connect(function() task.defer(function() if page == "Invite" then render() end end) end) end
-render(); refresh("All")
+render(); refresh("All"); if Mode == "Lobby" then refresh("Invites") end
 task.spawn(function()
 	local tick = 0
 	while gui.Parent do
-		task.wait(1); tick += 1; updateQueue()
+		task.wait(1); tick += 1; updateQueue(); updateInvitePopup()
+		for id, expiresAt in pairs(seenInvitations) do if expiresAt <= workspace:GetServerTimeNow() then seenInvitations[id] = nil end end
+		for id, read in pairs(inboxReads) do if os.clock() - read.At > 120 then inboxReads[id] = nil end end
+		if Mode == "Lobby" and tick % 3 == 0 then refresh("Invites") end
+		if page == "Party" and panel.Visible and not UIS:GetFocusedTextBox() and visualKey() ~= lastVisual then render() end
 		if pending and os.clock() - pending.Started > 8 then notify("Still confirming your action… You can keep browsing.", "Amber") end
 		if tick % 5 == 0 and panel.Visible then refresh("Core") end
 		local expired = false

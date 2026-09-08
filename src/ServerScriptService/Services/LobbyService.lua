@@ -11,7 +11,7 @@ local HttpService=game:GetService("HttpService")
 local Service={_clients={}}
 local actions={Snapshot=true,CreateParty=true,Invite=true,AcceptInvite=true,LeaveParty=true,Ready=true,KickMember=true,TransferLeader=true,
 	SelectClass=true,BuyClass=true,StartExpedition=true,Queue=true,CancelQueue=true,ResumeWorld=true,Rejoin=true,ReturnLobby=true,RenameWorld=true,RemoveWorld=true}
-local sections={Core=true,Archive=true,Rejoin=true,InviteDirectory=true}
+local sections={Core=true,Archive=true,Rejoin=true,InviteDirectory=true,Invites=true}
 local messages={
 	InsufficientCurrency="You need more "..Economy.CurrencyName.." to unlock this class. Earn them on expeditions.",
 	InsufficientFunds="You need more "..Economy.CurrencyName.." to unlock this class. Earn them on expeditions.",
@@ -46,7 +46,10 @@ local function displayMessage(action,success,reason)
 end
 local function optional(name) local module=script.Parent:FindFirstChild(name); return module and require(module) end
 function Service:Snapshot(player,section,data)
-	if section=="Archive" then
+	if section=="Invites" then
+		local inbox,available=Parties:GetInvites(player)
+		return {Invites=inbox,InvitesAvailable=available}
+	elseif section=="Archive" then
 		local worlds=optional("WorldSaveService")
 		local saves,archiveError,archiveStatus={}
 		if worlds then saves,archiveError,archiveStatus=worlds:List(player) end
@@ -219,6 +222,7 @@ function Service:Init()
 	if self._started then return end; self._started=true
 	local remote=RS.Remotes:FindFirstChild("Lobby") or Instance.new("RemoteEvent")
 	remote.Name="Lobby"; remote.Parent=RS.Remotes; self._remote=remote
+	Parties.OnInvitation=function(recipient,invitation) self:_send(recipient,"Invitation",invitation) end
 	remote.OnServerEvent:Connect(function(player,action,data) self:_receive(player,action,data) end)
 	Players.PlayerRemoving:Connect(function(player)
 		self._clients[player]=nil

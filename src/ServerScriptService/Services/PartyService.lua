@@ -220,14 +220,41 @@ function PartyService:Invite(player, target)
 		if targetPresence.Mode~="Lobby" then return false,"That player must return to the lobby before joining a new crew." end
 	end
 	local inviteId=guid()
-	local saved=call(function() invites:UpdateAsync(key(userId),function(list)
+	local createdAt=os.time()
+	local invitation={Id=inviteId,PartyId=party.Id,From=player.DisplayName,FromUserId=player.UserId,
+		CreatedAt=createdAt,ExpiresAt=createdAt+Config.InviteSeconds}
+	local saved,stored=call(function() return invites:UpdateAsync(key(userId),function(list)
 		local nextList={}
 		for _,v in ipairs(list or {}) do if v.ExpiresAt>os.time() and v.PartyId~=party.Id then table.insert(nextList,v) end end
 		while #nextList>=8 do table.remove(nextList,1) end
-		table.insert(nextList,{Id=inviteId,PartyId=party.Id,From=player.DisplayName,ExpiresAt=os.time()+Config.InviteSeconds})
+		table.insert(nextList,invitation)
 		return nextList
 	end,Config.InviteSeconds) end)
-	return saved,saved and "Invitation sent." or "Could not send invitation."
+	local confirmed=false
+	if saved and type(stored)=="table" then
+		for _,item in ipairs(stored) do if item.Id==inviteId then confirmed=true; break end end
+	end
+	if confirmed and self.OnInvitation then
+		local recipient=Players:GetPlayerByUserId(userId)
+		if recipient and recipient.Parent==Players then
+			-- Delivery is a convenience; the persisted inbox remains authoritative
+			-- when the recipient reconnects or receives an invite from another server.
+			local delivered,reason=pcall(self.OnInvitation,recipient,table.clone(invitation))
+			if not delivered then warn("[PartyService] Invitation notice will refresh from the inbox:",reason) end
+		end
+	end
+	return confirmed,confirmed and "Invitation sent." or "Could not send invitation."
+end
+
+function PartyService:GetInvites(player)
+	local ok,list=call(function() return invites:GetAsync(key(player.UserId)) end)
+	if not ok then return {},false end
+	local active={}
+	for _,item in ipairs(type(list)=="table" and list or {}) do
+		if type(item)=="table" and type(item.Id)=="string" and type(item.PartyId)=="string"
+			and type(item.ExpiresAt)=="number" and item.ExpiresAt>os.time() then table.insert(active,table.clone(item)) end
+	end
+	return active,true
 end
 
 function PartyService:Accept(player, inviteId)
@@ -540,8 +567,7 @@ function PartyService:Snapshot(player)
 		end
 		table.sort(snapshot.Members,function(a,b) if a.JoinedAt==b.JoinedAt then return a.UserId<b.UserId end; return a.JoinedAt<b.JoinedAt end)
 	elseif not err then player:SetAttribute("PartyId",nil) end
-	local ok,list=call(function() return invites:GetAsync(key(player.UserId)) end)
-	if ok then for _,v in ipairs(list or {}) do if v.ExpiresAt>os.time() then table.insert(snapshot.Invites,v) end end end
+	snapshot.Invites,snapshot.InvitesAvailable=self:GetInvites(player)
 	return snapshot
 end
 
