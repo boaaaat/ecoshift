@@ -17,14 +17,14 @@ if not rSprint then
 end
 
 local held, requested = {}, false
-local sprintButton, touchInput
+local sprintButton, touchInput, heldGlow
 local function isSprintKey(keyCode)
 	return keyCode == Settings.Key("Sprint")
 end
 local function request(enabled)
 	if requested == enabled then return end
 	requested = enabled; rSprint:FireServer(enabled)
-	if sprintButton then sprintButton.Text = enabled and "RUNNING" or "SPRINT" end
+	if heldGlow then heldGlow.Enabled = enabled end
 end
 local function release()
 	touchInput = nil
@@ -40,12 +40,17 @@ sprintButton = Instance.new("TextButton")
 sprintButton.Name = "HoldSprint"
 sprintButton.AnchorPoint = Vector2.new(1, 1)
 sprintButton.Position = UDim2.new(1, -100, 1, -94)
-sprintButton.Size = UDim2.fromOffset(90, 48)
-sprintButton.Text = "SPRINT"
+sprintButton.Size = UDim2.fromOffset(44, 44)
+sprintButton.Text = ""
 sprintButton.TextSize = 15
 sprintButton.Font = Enum.Font.GothamBold
 sprintButton.Parent = touchGui
 Theme.Button(sprintButton, true)
+ sprintButton.BackgroundTransparency = .48
+Theme.Icon(sprintButton, "Sprint", 26)
+heldGlow = Instance.new("UIStroke")
+heldGlow.Name, heldGlow.Color, heldGlow.Thickness = "HeldGlow", Theme.Colors.Amber, 2
+heldGlow.Enabled, heldGlow.Parent = false, sprintButton
 local function updateTouchVisibility()
 	sprintButton.Visible = Theme.IsMobile() and not player:GetAttribute("IsDead") and not touchGui.Parent:GetAttribute("MenuCursorOpen") and not touchGui.Parent:GetAttribute("BuildPlacementActive")
 	if not sprintButton.Visible then release() end

@@ -607,7 +607,7 @@ player:GetAttributeChangedSignal("FieldKitBuild"):Connect(togglePanel)
 
 -- Touch building uses center aim plus explicit actions; camera gestures never place.
 local toolbar = Instance.new("Frame")
-toolbar.Name, toolbar.Size = "TouchPlacement", UDim2.fromOffset(220, 48)
+toolbar.Name, toolbar.Size = "TouchPlacement", UDim2.fromOffset(152, 48)
 toolbar.AnchorPoint, toolbar.Position = Vector2.new(.5, 1), UDim2.new(.5, 0, 1, -156)
 toolbar.BackgroundTransparency, toolbar.Parent, toolbar.Visible = 1, gui, false
 local function actionButton(parent, name, text, x, width)
@@ -617,9 +617,12 @@ local function actionButton(parent, name, text, x, width)
 	b.Parent=parent; Theme.Button(b,name=="Place")
 	return b
 end
-local place=actionButton(toolbar,"Place","PLACE",0,84)
-local rotate=actionButton(toolbar,"Rotate","↻ 90°",88,64)
-local cancel=actionButton(toolbar,"Cancel","CANCEL",156,64)
+local place=actionButton(toolbar,"Place","",0,48)
+local rotate=actionButton(toolbar,"Rotate","",52,48)
+local cancel=actionButton(toolbar,"Cancel","",104,48)
+Theme.TouchIcon(place,"Place",26)
+Theme.TouchIcon(rotate,"Rotate",26)
+Theme.TouchIcon(cancel,"Close",26)
 local salvage=actionButton(selectionPanel,"Salvage","SALVAGE AIMED BUILD",0,240)
 salvage.AnchorPoint,salvage.Position=Vector2.new(.5,1),UDim2.new(.5,0,1,-12)
 salvage.Activated:Connect(function()
@@ -644,13 +647,14 @@ local function updateTouchControls()
 	reticle.Visible=toolbar.Visible
 	local camera=workspace.CurrentCamera
 	if camera then reticle.Position=UDim2.fromOffset(camera.ViewportSize.X*.5-gui.AbsolutePosition.X,camera.ViewportSize.Y*.5-gui.AbsolutePosition.Y) end
-	place.Text=isSalvageMode and "SALVAGE" or "PLACE"
+	local kind=isSalvageMode and "Harvest" or "Place"
+	if place.Glyph:GetAttribute("IconKind")~=kind then Theme.Icon(place,kind,26) end
 	rotate.Visible=not isSalvageMode
 	if mobile then
 		modeIndicator.AnchorPoint,modeIndicator.Position=Vector2.new(.5,1),UDim2.new(.5,0,1,-212)
 		hintLabel.AnchorPoint,hintLabel.Position=Vector2.new(.5,1),UDim2.new(.5,0,1,-254)
 		hintLabel.Size=UDim2.new(1,-32,0,44)
-		DEFAULT_HINT_TEXT="Aim at the ground, then tap PLACE · Camp radius: 100 studs"
+		DEFAULT_HINT_TEXT="Aim at the ground, then tap ✓ · Camp radius: 100 studs"
 	else
 		modeIndicator.AnchorPoint,modeIndicator.Position=Vector2.new(.5,0),UDim2.new(.5,0,0,66)
 		hintLabel.AnchorPoint,hintLabel.Position=Vector2.new(.5,0),UDim2.new(.5,0,0,110)

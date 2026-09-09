@@ -40,6 +40,7 @@ for _, entry in ipairs({ { biomeLabel, "Biome", 66, 29 }, { weatherLabel, "Condi
 	local arrow = Theme.Label(hit, ">", UDim2.fromOffset(16, 18), UDim2.new(1, -16, .5, -9), 14, C.Amber, true)
 	arrow.TextXAlignment = Enum.TextXAlignment.Center
 	hit.Activated:Connect(function()
+		if os.clock() - (gui.Parent:GetAttribute("MobileHUDSwipeAt") or -1) < .3 then return end
 		local attribute = "FieldGuide" .. entry[2]
 		player:SetAttribute(attribute, (player:GetAttribute(attribute) or 0) + 1)
 	end)
@@ -104,18 +105,28 @@ for index, entry in ipairs({ { "Pack", "G" }, { "Craft", "C" }, { "Build", "B" }
 	button.Position = UDim2.fromOffset((index - 1) * 76, 0)
 	button.Font = Enum.Font.GothamBold
 	button.TextSize = 10
-	local function updateHint() button.Text = (Theme.IsMobile() and "" or Settings.Key(entry[1]).Name .. "  ") .. string.upper(entry[1]) end
+	local function updateHint() button.Text = Theme.IsMobile() and "" or Settings.Key(entry[1]).Name .. "  " .. string.upper(entry[1]) end
 	Settings.Changed:Connect(updateHint)
 	UserInputService:GetPropertyChangedSignal("PreferredInput"):Connect(updateHint)
 	updateHint()
 	button.Parent = kit
 	Theme.Button(button, true)
+	Theme.TouchIcon(button,entry[1],24)
+	updateHint()
 	table.insert(navigationButtons, button)
 	button.Activated:Connect(function()
 		local attribute = "FieldKit" .. entry[1]
 		player:SetAttribute(attribute, (player:GetAttribute(attribute) or 0) + 1)
 	end)
 end
+local vitalsPages=player.PlayerGui:WaitForChild("PlayerVitalsUI"):WaitForChild("VitalsContainer"):WaitForChild("SwipePages")
+local biomeTween
+local function slideBiome()
+	if not Theme.IsMobile() then return end
+	if biomeTween then biomeTween:Cancel() end
+	biomeTween=Theme.Tween(card,{Position=UDim2.fromScale(gui.Parent:GetAttribute("MobileBiomePage") and 0 or 1,0)},.24)
+end
+gui.Parent:GetAttributeChangedSignal("MobileBiomePage"):Connect(slideBiome)
 
 local mobileDetails = false
 local detailsButton = Instance.new("TextButton")
@@ -138,10 +149,10 @@ local function updateHUDPreferences()
 	local mobile = Theme.IsMobile()
 	local placing = mobile and gui.Parent:GetAttribute("BuildPlacementActive") == true
 	card.Visible = not placing
-	notes.Visible = Settings.Get("ShowFieldNotes") and (not mobile or mobileDetails)
-	roleButton.Visible = not mobile or mobileDetails
+	notes.Visible = Settings.Get("ShowFieldNotes") and not mobile
+	roleButton.Visible = not mobile
 	roleButton.Position = UDim2.fromOffset(0, mobile and (notes.Visible and 222 or 112) or (notes.Visible and 308 or 200))
-	kit.Visible = Settings.Get("ShowNavigation") and not (mobile and mobileDetails) and not placing
+	kit.Visible = Settings.Get("ShowNavigation") and not placing and not (mobile and gui.Parent:GetAttribute("MenuCursorOpen"))
 end
 detailsButton.Activated:Connect(function()
 	mobileDetails = not mobileDetails
@@ -181,30 +192,45 @@ local function layout(_, available)
 		notes.Position = UDim2.fromOffset(0, 112)
 		roleButton.Size = UDim2.fromOffset(272, 44)
 	end
-	local count = 0
-	local landscape = mobile and available.X > available.Y
-	local narrowLandscape = landscape and available.X <= 710
-	local buttonWidth = landscape and 56 or 64
-	for _, button in ipairs(navigationButtons) do
-		button.Visible = not (mobile and button.Name == "Map")
+	card.Parent=mobile and vitalsPages or gui
+	card.BackgroundTransparency=mobile and 1 or .04
+	local stroke=card:FindFirstChildOfClass('UIStroke');if stroke then stroke.Enabled=not mobile end
+	for _,hit in ipairs({card.InspectBiome,card.InspectConditions}) do
+		for _,child in ipairs(hit:GetChildren()) do if child:IsA('TextLabel') then child.Visible=not mobile end end
+	end
+	if mobile then
+		cardScale.Scale=1;card.AnchorPoint=Vector2.zero;card.Size=UDim2.fromOffset(184,90)
+		card.Position=UDim2.fromScale(gui.Parent:GetAttribute('MobileBiomePage') and 0 or 1,0)
+		biomeLabel.Position=UDim2.fromOffset(8,4);biomeLabel.Size=UDim2.fromOffset(170,22);biomeLabel.TextSize=16
+		weatherLabel.Position=UDim2.fromOffset(8,27);weatherLabel.Size=UDim2.fromOffset(170,17);weatherLabel.TextSize=11
+		shiftLabel.Position=UDim2.fromOffset(8,46);shiftLabel.Size=UDim2.fromOffset(126,15);shiftLabel.TextSize=9
+		countdown.Position=UDim2.fromOffset(132,43);countdown.Size=UDim2.fromOffset(46,20);countdown.TextSize=12
+		cycleLabel.Position=UDim2.fromOffset(8,62);cycleLabel.Size=UDim2.fromOffset(170,14);cycleLabel.TextSize=9
+		card.InspectBiome.Position=UDim2.fromOffset(0,0);card.InspectBiome.Size=UDim2.fromOffset(184,26)
+		card.InspectConditions.Position=UDim2.fromOffset(0,26);card.InspectConditions.Size=UDim2.fromOffset(184,20)
+		for _,hit in ipairs({card.InspectBiome,card.InspectConditions}) do for _,child in ipairs(hit:GetChildren()) do if child:IsA('TextLabel') then child.Visible=false end end end
+		detailsButton.Visible=false
+	end
+	local count=0;local portrait=mobile and available.X<available.Y
+	for _,button in ipairs(navigationButtons) do
+		button.Visible=not(mobile and button.Name=='Map')
+		button.Glyph.Visible=mobile;button.BackgroundTransparency=mobile and .48 or 0
 		if button.Visible then
-			button.Size = UDim2.fromOffset(mobile and buttonWidth or 70, mobile and 44 or 28)
-			button.Position = narrowLandscape and UDim2.fromOffset((count % 2) * 62, math.floor(count / 2) * 48)
-				or UDim2.fromOffset(count * (mobile and (buttonWidth + 6) or 76), 0)
-			button.TextSize = mobile and 13 or 10
-			count += 1
+			button.Size=UDim2.fromOffset(mobile and 44 or 70,mobile and 44 or 28)
+			button.Position=portrait and UDim2.fromOffset((count%2)*48,math.floor(count/2)*48) or UDim2.fromOffset(count*(mobile and 48 or 76),0)
+			count+=1
 		end
 	end
-	kit.Size = narrowLandscape and UDim2.fromOffset(118, 92) or UDim2.fromOffset(mobile and (buttonWidth * 4 + 18) or 376, mobile and 44 or 32)
-	local portrait = mobile and available.X < available.Y
-	kit.AnchorPoint = Vector2.new(.5, portrait and 0 or 1)
-	kit.Position = portrait and UDim2.new(.5, 0, 0, compactPortrait and 300 or 338)
-		or UDim2.new(.5, landscape and (narrowLandscape and -58 or -52) or 0, 1, mobile and (narrowLandscape and -72 or -84) or -94 * desktopScale)
+	kit.Size=portrait and UDim2.fromOffset(92,92) or UDim2.fromOffset(mobile and 188 or 376,mobile and 44 or 32)
+	kit.AnchorPoint=Vector2.new(portrait and 0 or .5,1)
+	kit.Position=portrait and UDim2.new(0,8,1,-176) or UDim2.new(.5,mobile and -36 or 0,1,mobile and -64 or -94*desktopScale)
+
 	updateHUDPreferences()
 end
 Theme.BindResponsive(card, layout)
 Settings.Changed:Connect(updateHUDPreferences)
 gui.Parent:GetAttributeChangedSignal("BuildPlacementActive"):Connect(updateHUDPreferences)
+gui.Parent:GetAttributeChangedSignal("MenuCursorOpen"):Connect(updateHUDPreferences)
 updateHUDPreferences()
 
 local remotes = Util.GetDescendant(Config.Paths.Remotes) or Util.WaitForDescendant(Config.Paths.Remotes, 15)

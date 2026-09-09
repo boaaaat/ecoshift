@@ -11,16 +11,25 @@ local gui = Instance.new("ScreenGui")
 gui.Name, gui.ResetOnSpawn, gui.DisplayOrder = "MobileActionUI", false, 10
 gui.Parent = playerGui
 local action = Instance.new("TextButton")
-action.Name, action.Size = "HeldToolAction", UDim2.fromOffset(64, 64)
-action.AnchorPoint, action.Position = Vector2.new(1, 1), UDim2.new(1, -16, 1, -178)
-action.Text, action.TextSize, action.Font = "USE", 14, Enum.Font.GothamBold
+action.Name, action.Size = "HeldToolAction", UDim2.fromOffset(44, 44)
+action.AnchorPoint, action.Position = Vector2.new(1, 1), UDim2.new(1, -16, 1, -170)
+action.Text, action.TextSize, action.Font = "", 14, Enum.Font.GothamBold
 action.Visible, action.Parent = false, gui
 Theme.Button(action, true)
+action.BackgroundTransparency = .48
+local glyphs = {}
+for _, name in ipairs({"Attack", "Harvest", "Bow", "Shield"}) do
+	local glyph = Theme.Icon(action, name, 26)
+	glyph.Name = name .. "Glyph"
+	glyph.Visible = false
+	glyphs[name] = glyph
+end
+local heldGlow = Instance.new("UIStroke")
+heldGlow.Name, heldGlow.Color, heldGlow.Thickness = "HeldGlow", Theme.Colors.Amber, 2
+heldGlow.Enabled, heldGlow.Parent = false, action
 Theme.BindResponsive(action, function(_, available)
-	-- Short landscape screens put the map above the jump control. Keep the
-	-- tool action beside Sprint, rather than covering that map.
 	action.Position = available.X >= available.Y
-		and UDim2.new(1, -206, 1, -88) or UDim2.new(1, -16, 1, -192)
+		and UDim2.new(1, -16, 1, -170) or UDim2.new(1, -16, 1, -192)
 end)
 
 -- A separate viewport GUI keeps the reticle exactly on the ray used by the tools.
@@ -59,7 +68,7 @@ end
 local function release(cancelled)
 	local tool = heldTool
 	heldInput, heldTool = nil, nil
-	action.Text = "USE"
+	heldGlow.Enabled = false
 	if tool and tool.Parent then
 		tool:SetAttribute("CancelMobileRelease", cancelled and true or nil)
 		tool:Deactivate()
@@ -78,9 +87,10 @@ local function update()
 	action.Visible, reticle.Visible = available, available
 	if available and not heldInput then
 		local kind = string.lower(toolValue(tool, "WeaponType"))
-		action.Text = (kind == "shield" or kind == "shields") and "BLOCK"
-			or (kind == "bow" or kind == "bows") and "DRAW"
-			or (kind ~= "" and "ATTACK") or (toolValue(tool, "ToolType") ~= "" and "HARVEST") or "USE"
+		local icon = (kind == "shield" or kind == "shields") and "Shield"
+			or (kind == "bow" or kind == "bows") and "Bow"
+			or (kind ~= "" and "Attack") or (toolValue(tool, "ToolType") ~= "" and "Harvest") or "Attack"
+		for name, glyph in pairs(glyphs) do glyph.Visible = name == icon end
 	end
 end
 local function registerTool(tool)
@@ -95,7 +105,7 @@ action.InputBegan:Connect(function(input)
 	if not tool or not tool.Enabled then return end
 	heldInput, heldTool = input, tool
 	tool:SetAttribute("CancelMobileRelease", nil)
-	action.Text = "HOLD"
+	heldGlow.Enabled = true
 	tool:Activate()
 end)
 UserInputService.InputEnded:Connect(function(input)

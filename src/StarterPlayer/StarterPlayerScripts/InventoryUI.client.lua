@@ -728,6 +728,7 @@ end
 
 local function renderSlot(slot)
 	local data = getSlotData(slot.Type, slot.Index)
+	if slot.HarvestGlyph then slot.HarvestGlyph.Visible = false end
 	
 	if not data then
 		slot.Icon.Image = ""
@@ -762,6 +763,11 @@ local function renderSlot(slot)
 		slot.ItemText.Text = name:gsub(" ", "\n", 1)
 		slot.ItemText.TextColor3 = COLORS.Text
 		slot.ItemText.Visible = true
+		if Theme.IsMobile() and slot.Type == "Hotbar" and not mainContainer.Visible and data.Id == "Harvester" then
+			if not slot.HarvestGlyph then slot.HarvestGlyph = Theme.Icon(slot.Frame, "Harvest", 30) end
+			slot.HarvestGlyph.Visible = true
+			slot.ItemText.Visible = false
+		end
 	end
 	
 	if data.N > 1 then
@@ -1618,7 +1624,8 @@ local function arrangePack()
  local chestHeight = tonumber(gui:GetAttribute("ChestLayoutHeight")) or 200
  local availableHeight = math.max(120, height - (mobile and (portrait and 192 or 96) or 40))
  local maxScale = mobile and 1.65 or 2.5
- hotbarScale.Scale = math.min(mobile and 1 or 1.5, (width - 64) / 290)
+ hotbarScale.Scale = math.min(mobile and 0.8 or 1.5, (width - 64) / 290)
+ hotbarRoot.BackgroundTransparency = mobile and .48 or .04
  hotbarRoot.Position = UDim2.new(0.5, 0, 1, mobile and (portrait and -104 or -8) or -18)
  local totalWidth = chestOpen and not portrait and (packWidth + 382 + 24) or packWidth
  local totalHeight = chestOpen and (portrait and (packHeight + chestHeight + 12) or math.max(packHeight, chestHeight)) or packHeight
@@ -1654,6 +1661,7 @@ local function arrangePack()
  transferStatusLabel.TextXAlignment = mobile and Enum.TextXAlignment.Left or Enum.TextXAlignment.Right
  for _, slot in ipairs(slots) do
   local slotScale = slot.Type == "Hotbar" and hotbarScale.Scale or scale
+  slot.Frame.BackgroundTransparency = mobile and slot.Type == "Hotbar" and not mainContainer.Visible and .4 or 0
   slot.ItemText.TextSize = mobile and 12 / slotScale or 12
   slot.QtyLabel.TextSize = mobile and 12 / slotScale or 12
   if mobile then
@@ -1679,6 +1687,7 @@ local function arrangePack()
   button.Position = UDim2.fromOffset(4, 4 + (index - 1) * (mobile and 48 or 32))
   button.TextSize = mobile and 17 or 14
  end
+ renderAll()
 end
 gui:GetAttributeChangedSignal("ChestOpen"):Connect(arrangePack)
 gui:GetAttributeChangedSignal("ChestLayoutHeight"):Connect(arrangePack)

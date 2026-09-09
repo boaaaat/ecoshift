@@ -49,6 +49,49 @@ local stamina = meter("ENERGY", 56, C.Cold)
 local hunger = meter("FOOD", 78, C.Amber)
 local temperature = meter("EXPOSURE", 100, C.Sage)
 local armor = meter("ARMOR", 122, C.Paper)
+local pages=Instance.new("Frame")
+pages.Name="SwipePages";pages.Size=UDim2.fromScale(1,1);pages.BackgroundTransparency=1;pages.ClipsDescendants=true;pages.Parent=panel
+local healthPage=Instance.new("Frame")
+healthPage.Name="HealthPage";healthPage.Size=UDim2.fromScale(1,1);healthPage.BackgroundTransparency=1;healthPage.Parent=pages
+for index,bar in ipairs(meters) do
+	bar.Icon=Theme.Icon(healthPage,({"Health","Energy","Food","Exposure","Armor"})[index],16)
+	bar.Icon.Name="VitalIcon"..index
+end
+local pager=Instance.new("TextButton")
+pager.Name="SwipeHint";pager.BackgroundTransparency=1;pager.Text="•  ○  ›";pager.TextColor3=C.Amber;pager.TextSize=13
+pager.Size=UDim2.new(1,0,0,16);pager.Position=UDim2.new(0,0,1,-16);pager.ZIndex=10;pager.Parent=panel
+pager.Activated:Connect(function()
+	if os.clock() - (gui.Parent:GetAttribute("MobileHUDSwipeAt") or -1) < .3 then return end
+	gui.Parent:SetAttribute("MobileBiomePage",not gui.Parent:GetAttribute("MobileBiomePage"))
+end)
+local pageTween
+local function updatePage()
+	if pageTween then pageTween:Cancel() end
+	local biome=gui.Parent:GetAttribute("MobileBiomePage")==true
+	pageTween=Theme.Tween(healthPage,{Position=UDim2.fromScale(biome and -1 or 0,0)},.24)
+	pager.Text=biome and "‹  ○  •" or "•  ○  ›"
+end
+gui.Parent:GetAttributeChangedSignal("MobileBiomePage"):Connect(updatePage)
+local touch,startPosition
+local inputService=game:GetService("UserInputService")
+inputService.InputBegan:Connect(function(input)
+	if input.UserInputType~=Enum.UserInputType.Touch or not Theme.IsMobile() or not panel.Visible or gui.Parent:GetAttribute("MenuCursorOpen") then return end
+	local p=input.Position;local a,s=panel.AbsolutePosition,panel.AbsoluteSize
+	if p.X>=a.X and p.X<=a.X+s.X and p.Y>=a.Y and p.Y<=a.Y+s.Y then touch=input;startPosition=p end
+end)
+inputService.InputChanged:Connect(function(input)
+	if input == touch and math.abs(input.Position.X - startPosition.X) > 28 then
+		gui.Parent:SetAttribute("MobileHUDSwipeAt", os.clock())
+	end
+end)
+inputService.InputEnded:Connect(function(input)
+	if input~=touch then return end
+	touch=nil;local delta=input.Position-startPosition
+	if input.UserInputState~=Enum.UserInputState.Cancel and math.abs(delta.X)>28 and math.abs(delta.X)>math.abs(delta.Y)*1.25 then
+		gui.Parent:SetAttribute("MobileBiomePage",delta.X<0)
+		gui.Parent:SetAttribute("MobileHUDSwipeAt", os.clock())
+	end
+end)
 local function updatePlacementVisibility()
 	panel.Visible = not (Theme.IsMobile() and gui.Parent:GetAttribute("BuildPlacementActive"))
 end
@@ -76,8 +119,28 @@ local function layout(_, available)
 		bar.Track.Position = UDim2.fromOffset(mobile and 90 or 79, y + 7)
 		bar.Track.Size = UDim2.fromOffset(mobile and 42 or 84, mobile and 6 or 5)
 	end
+	pages.Visible=mobile;pager.Visible=mobile
+	panel.Active=mobile
+	panel.BackgroundTransparency=mobile and .4 or .04
+	if mobile then
+		scale.Scale=1;panel.Size=UDim2.fromOffset(184,90)
+		panel.Position=UDim2.fromOffset(8,gui.Parent:GetAttribute("MobileTopbarFallback") and 54 or 6)
+	end
+	for i,bar in ipairs(meters) do
+		bar.Label.Visible=not mobile;bar.Icon.Visible=mobile
+		bar.Track.Parent=mobile and healthPage or panel;bar.Value.Parent=mobile and healthPage or panel
+		if mobile then
+			local x=i==1 and 8 or (i%2==0 and 8 or 96)
+			local y=i==1 and 5 or (i<=3 and 29 or 52)
+			bar.Icon.Position=UDim2.fromOffset(x+8,y+8)
+			bar.Value.Position=UDim2.fromOffset(i==1 and 138 or x+39,y-1)
+			bar.Value.Size=UDim2.fromOffset(i==1 and 36 or 40,18);bar.Value.TextSize=12
+			bar.Track.Position=UDim2.fromOffset(x+24,y+7);bar.Track.Size=UDim2.fromOffset(i==1 and 98 or 13,4)
+		end
+	end
 end
 Theme.BindResponsive(panel, layout)
+gui.Parent:GetAttributeChangedSignal("MobileTopbarFallback"):Connect(function() layout(nil,gui.AbsoluteSize) end)
 local function updateMeter(bar, percent, value, color)
 	bar.Value.Text = value
 	local props = { Size = UDim2.fromScale(math.clamp(percent, 0, 1), 1) }

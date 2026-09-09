@@ -7,6 +7,7 @@ local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
+local Topbar = require(ReplicatedStorage.Shared.UI.ExpeditionTopbar)
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 
@@ -89,9 +90,23 @@ local function createTimeUI()
 		local mobile = Theme.IsMobile()
 		updatePlacementVisibility()
 		scale.Scale = mobile and 1 or math.min(math.clamp(math.min(viewport.X / 1440, viewport.Y / 900), 1, 2.5), (viewport.X - 40) / 900, (viewport.Y - 90) / 610)
-		frame.Position = UDim2.new(.5, 0, 0, 2)
-		timeLabel.TextSize = mobile and 15 or 12
-		phaseLabel.TextSize = mobile and 12 or 9
+		if mobile then
+			Topbar.Mount(frame, "Time")
+		else
+			frame.Parent = screenGui
+			frame.AnchorPoint = Vector2.new(.5, 0)
+			frame.Position = UDim2.new(.5, 0, 0, 2)
+			frame.Size = UDim2.fromOffset(170, 36)
+		end
+		frame.BackgroundTransparency = mobile and .48 or .04
+		phaseLabel.Visible = not mobile
+		dot.Size = UDim2.fromOffset(mobile and 5 or 8, mobile and 5 or 8)
+		dot.Position = mobile and UDim2.fromOffset(6, 10) or UDim2.fromOffset(13, 14)
+		timeLabel.Position = mobile and UDim2.fromOffset(16, 0) or UDim2.fromOffset(29, 6)
+		timeLabel.Size = UDim2.fromOffset(mobile and 72 or 80, 24)
+		timeLabel.TextSize = mobile and 13 or 12
+		local tab = frame:FindFirstChild("FieldTab")
+		if tab then tab.Visible = not mobile end
 	end
 	Theme.BindResponsive(frame, layout)
 	return { Frame = frame, Icon = dot, TimeLabel = timeLabel, PhaseLabel = phaseLabel }
@@ -172,6 +187,11 @@ function DayNightClient:ShowPhaseNotification(phase)
 	corner.Parent = label
 	
 	notification.Parent = playerGui
+	Theme.BindResponsive(label, function(mobile, available)
+		label.AnchorPoint = Vector2.new(.5, 0)
+		label.Position = UDim2.new(.5, 0, 0, mobile and (available.X < available.Y and 160 or 104) or 62)
+		label.Size = UDim2.fromOffset(mobile and math.min(240, available.X - 32) or 280, mobile and 28 or 36)
+	end)
 	
 	-- Fade in
 	local fadeIn = TweenService:Create(label, TweenInfo.new(0.5), {TextTransparency = 0, BackgroundTransparency = 0.3})

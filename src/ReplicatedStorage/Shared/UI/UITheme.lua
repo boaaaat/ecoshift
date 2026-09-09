@@ -346,6 +346,62 @@ function Theme.CaptureCursor(frame)
 	require(script.Parent.MenuCursor).Bind(frame)
 end
 
+-- Small, resolution-independent expedition glyphs. No font/asset loading dependency.
+function Theme.Icon(parent, kind, size)
+	local old=parent:FindFirstChild("Glyph")
+	if old then old:Destroy() end
+	local paths={
+		Pack={{{7,6},{7,3},{17,3},{17,6}},{{5,6},{19,6},{20,21},{4,21},{5,6}},{{7,13},{17,13},{17,18},{7,18},{7,13}}},
+		Craft={{{5,4},{20,19}},{{3,7},{8,2},{12,6},{7,11},{3,7}},{{4,20},{18,6}},{{16,3},{21,3},{21,8}}},
+		Build={{{3,11},{12,3},{21,11}},{{6,10},{6,21},{18,21},{18,10}},{{10,21},{10,14},{14,14},{14,21}}},
+		Survey={{{12,2},{21,12},{12,22},{3,12},{12,2}},{{15,8},{13,14},{9,16},{11,10},{15,8}}},
+		Crew={{{8,4},{11,6},{11,9},{8,11},{5,9},{5,6},{8,4}},{{3,21},{3,16},{8,13},{13,16},{13,21}},{{16,5},{19,7},{19,10},{16,12}},{{17,14},{21,17},{21,21}}},
+		Sprint={{{14,3},{16,3},{16,5},{14,5},{14,3}},{{5,9},{10,8},{15,11},{19,10}},{{13,7},{10,14},{15,17},{13,22}},{{10,14},{7,18},{2,18}}},
+		Harvest={{{5,21},{17,5}},{{8,5},{13,3},{18,5},{21,10}}},
+		Attack={{{5,21},{19,3},{21,3},{21,6},{6,21}},{{3,14},{11,21}}},
+		Bow={{{6,3},{14,7},{17,12},{14,17},{6,21},{6,3}},{{3,12},{22,12}},{{18,8},{22,12},{18,16}}},
+		Shield={{{12,2},{21,6},{19,16},{12,22},{5,16},{3,6},{12,2}},{{12,7},{12,16}}},
+		Armor={{{12,2},{21,6},{19,16},{12,22},{5,16},{3,6},{12,2}}},
+		Health={{{12,21},{3,12},{3,7},{7,4},{12,8},{17,4},{21,7},{21,12},{12,21}}},
+		Energy={{{14,2},{5,14},{11,14},{9,22},{20,9},{13,9},{14,2}}},
+		Food={{{5,19},{5,9},{9,4},{18,3},{21,7},{20,14},{16,19},{5,19}},{{5,19},{16,8}}},
+		Exposure={{{10,14},{10,4},{12,2},{14,4},{14,14},{17,17},{17,20},{14,23},{10,23},{7,20},{7,17},{10,14}},{{12,8},{12,18}}},
+		Chevron={{{8,5},{15,12},{8,19}}},
+		Close={{{5,5},{19,19}},{{19,5},{5,19}}},
+		Rotate={{{5,8},{9,3},{17,4},{21,10},{19,17},{12,21},{5,18}},{{5,3},{5,8},{10,8}}},
+		Place={{{3,12},{9,19},{21,5}}},
+	}
+	local root=Instance.new("Frame");root.Name="Glyph";root.BackgroundTransparency=1
+	root.Size=UDim2.fromOffset(size or 24,size or 24);root.AnchorPoint=Vector2.new(.5,.5);root.Position=UDim2.fromScale(.5,.5)
+	root.ZIndex=parent:IsA("GuiObject") and parent.ZIndex+1 or 1;root.Parent=parent
+	root:SetAttribute("IconKind",kind)
+	for _,points in ipairs(paths[kind] or paths.Survey) do
+		for i=2,#points do
+			local a,b=Vector2.new(unpack(points[i-1])),Vector2.new(unpack(points[i]));local delta=b-a
+			local line=Instance.new("Frame");line.BorderSizePixel=0;line.AnchorPoint=Vector2.new(.5,.5)
+			line.Size=UDim2.new(delta.Magnitude/24,1,0,1.7);line.Position=UDim2.fromScale((a.X+b.X)/48,(a.Y+b.Y)/48)
+			line.Rotation=math.deg(math.atan2(delta.Y,delta.X));line.BackgroundTransparency=.12;line.ZIndex=root.ZIndex;line.Parent=root
+			Theme.Bind(line,"BackgroundColor3","Paper");Theme.Corner(line,2)
+		end
+	end
+	return root
+end
+
+function Theme.TouchIcon(button,kind,size)
+	button.Text="";button:SetAttribute("ActionLabel",kind)
+	local glyph=Theme.Icon(button,kind,size or 24)
+	button.BackgroundTransparency=.48
+	local stroke=button:FindFirstChildOfClass("UIStroke") or Instance.new("UIStroke")
+	stroke.Thickness=1;stroke.Transparency=.6;stroke.Parent=button;Theme.Bind(stroke,"Color","Sage")
+	button.InputBegan:Connect(function(input)
+		if input.UserInputType==Enum.UserInputType.Touch then Theme.Tween(button,{BackgroundTransparency=.15},.1);Theme.Bind(stroke,"Color","Amber") end
+	end)
+	button.InputEnded:Connect(function(input)
+		if input.UserInputType==Enum.UserInputType.Touch then Theme.Tween(button,{BackgroundTransparency=.48},.2);Theme.Bind(stroke,"Color","Sage") end
+	end)
+	return glyph
+end
+
 function Theme.AnimatePanel(frame)
 	local scale = frame:FindFirstChild("ViewportScale") or frame:FindFirstChild("PanelMotion") or Instance.new("UIScale")
 	if not scale.Parent then scale.Name = "PanelMotion"; scale.Parent = frame end

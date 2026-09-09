@@ -585,6 +585,10 @@ local function createUI()
 	local miniH = MapConfig.Minimap.Size + 54
 	local miniContainer = buildCoreFrame(gui, UDim2.fromOffset(miniW, miniH), getPositionPreset(), MapConfig.Colors.UIPanel, 0.18)
 	miniContainer.Name = "MinimapContainer"
+	local mobileLayer = Instance.new("ScreenGui")
+	mobileLayer.Name, mobileLayer.ResetOnSpawn, mobileLayer.DisplayOrder = "MobileMinimapLayer", false, gui.DisplayOrder
+	mobileLayer.ScreenInsets = Enum.ScreenInsets.DeviceSafeInsets
+	mobileLayer.Parent = gui.Parent
 	miniContainer.AnchorPoint = Vector2.new(1, 1)
 	miniContainer.Position = UDim2.new(1, -18, 1, -18)
 	local miniScale = Instance.new("UIScale")
@@ -646,7 +650,7 @@ local function createUI()
 	UI.minimapCoords = coords
 	UI.minimapZoom = zoom
 	playerGui:GetAttributeChangedSignal("BuildPlacementActive"):Connect(function()
-		miniContainer.Visible = STATE.minimapVisible and not (Theme.IsMobile() and playerGui:GetAttribute("BuildPlacementActive"))
+		miniContainer.Visible = STATE.minimapVisible and not (Theme.IsMobile() and (playerGui:GetAttribute("BuildPlacementActive") or playerGui:GetAttribute("MenuCursorOpen")))
 	end)
 
 	-- Fullscreen map
@@ -784,17 +788,18 @@ local function createUI()
 		local compactPortrait = mobile and safeSize.X < safeSize.Y and safeSize.Y < 680
 		local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or safeSize
 		gui.IgnoreGuiInset = not mobile
-		local width = math.min(152, (safeSize.X - 24) * .43)
-		if compactPortrait then width = math.min(width, 128) end
-		if safeSize.X > safeSize.Y and safeSize.X < 700 then width = math.min(width, 128) end
+		local width = 106
+		miniContainer.Parent = mobile and mobileLayer or gui
+		miniContainer.BackgroundTransparency = mobile and .48 or .04
 		miniScale.Scale = mobile and 1 or math.min(math.clamp(math.min(viewport.X / 1440, viewport.Y / 900), 1, 2.5), (viewport.X - 40) / 900, (viewport.Y - 90) / 610)
 		miniContainer.AnchorPoint = Vector2.new(1, mobile and 0 or 1)
-		miniContainer.Position = mobile and UDim2.new(1, -8, 0, safeSize.X < safeSize.Y and 46 or 6) or UDim2.new(1, -18 * miniScale.Scale, 1, -18 * miniScale.Scale)
-		miniContainer.Size = UDim2.fromOffset(mobile and width or miniW, mobile and (compactPortrait and 132 or width + 20) or miniH)
-		local mapSize = mobile and (compactPortrait and math.min(96, width - 16) or width - 16) or MapConfig.Minimap.Size
+		miniContainer.Position = mobile and UDim2.new(1, -4, 0, 4) or UDim2.new(1, -18 * miniScale.Scale, 1, -18 * miniScale.Scale)
+		miniContainer.Size = UDim2.fromOffset(mobile and width or miniW, mobile and width or miniH)
+		local mapSize = mobile and 98 or MapConfig.Minimap.Size
 		mapFrame.Size = UDim2.fromOffset(mapSize, mapSize)
-		mapFrame.Position = UDim2.fromOffset(mobile and (width - mapSize) / 2 or 10, mobile and 8 or 10)
+		mapFrame.Position = UDim2.fromOffset(mobile and 4 or 10, mobile and 4 or 10)
 		coords.Visible = not mobile
+		zoom.Visible = not mobile
 		zoom.Position = mobile and UDim2.new(0, 6, 1, -23) or UDim2.fromOffset(8, miniH - 22)
 		zoom.TextSize = mobile and 13 or 10
 		panel.Size = mobile and UDim2.new(1, -12, 1, -12) or UDim2.fromScale(.92, .9)
@@ -1908,7 +1913,7 @@ end
 
 local function renderMinimap(playerPos, playerLook)
 	if not UI.minimapContainer then return end
-	UI.minimapContainer.Visible = STATE.minimapVisible and playerPos ~= nil and not (Theme.IsMobile() and playerGui:GetAttribute("BuildPlacementActive"))
+	UI.minimapContainer.Visible = STATE.minimapVisible and playerPos ~= nil and not (Theme.IsMobile() and (playerGui:GetAttribute("BuildPlacementActive") or playerGui:GetAttribute("MenuCursorOpen")))
 	if not STATE.minimapVisible then return end
 	if not playerPos then return end
 	local playerMapX, playerMapZ = mapOrientedXZ(playerPos.X, playerPos.Z)
@@ -2190,7 +2195,7 @@ end
 function MinimapClient:SetVisible(visible)
 	STATE.minimapVisible = visible == true
 	if UI.minimapContainer then
-		UI.minimapContainer.Visible = STATE.minimapVisible and not (Theme.IsMobile() and playerGui:GetAttribute("BuildPlacementActive"))
+		UI.minimapContainer.Visible = STATE.minimapVisible and not (Theme.IsMobile() and (playerGui:GetAttribute("BuildPlacementActive") or playerGui:GetAttribute("MenuCursorOpen")))
 	end
 end
 
