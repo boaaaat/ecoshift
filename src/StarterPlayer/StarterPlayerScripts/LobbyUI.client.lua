@@ -226,7 +226,7 @@ updateInvitePopup = function()
 				label(popup, "invited you to their expedition crew", nameX, 95, 450 - nameX, 26, 15, "TextMuted")
 				popupAccept = button(popup, "ACCEPT INVITE", 20, 139, 210, 44, function() send("AcceptInvite", {Id = invitation.Id}, "Joining the crew…") end, true)
 				button(popup, "VIEW IN MENU", 240, 139, 210, 44, function()
-					panel.Visible = true; scrollByPage.Party = Vector2.zero; navigate("Party"); content.CanvasPosition = Vector2.zero
+					panel.Visible = true; scrollByPage.Party = Vector2.zero; navigate(Theme.IsMobile() and "Inbox" or "Party"); content.CanvasPosition = Vector2.zero
 				end)
 				popupStatus = label(popup, "You can also accept from the crew menu.", 20, 192, 373, 31, 14, "TextMuted")
 				popupStatus.TextWrapped = true; popupStatus.TextTruncate = Enum.TextTruncate.None
@@ -417,6 +417,29 @@ local function renderMemberMenu()
 	overlay.BackgroundTransparency = .2; overlay.BorderSizePixel = 0; overlay.ZIndex = 20; overlay.Parent = panel
 	Theme.Bind(overlay, "BackgroundColor3", "Night"); Theme.Corner(overlay, 10)
 	overlay.Activated:Connect(closeMenu); memberOverlay = overlay
+	if Theme.IsMobile() then
+		local wide=panel.AbsoluteSize.X>panel.AbsoluteSize.Y
+		local w=math.min(panel.AbsoluteSize.X-16,wide and 560 or 380)
+		local h=math.min(panel.AbsoluteSize.Y-12,wide and 260 or 350)
+		local menu=box(overlay,"MemberDetails",0,0,w,h)
+		menu.AnchorPoint=Vector2.new(.5,.5);menu.Position=UDim2.fromScale(.5,.5);menu.Active=true
+		button(menu,"×",w-46,2,44,44,closeMenu).TextSize=24
+		portrait(menu,member.UserId,12,12,48)
+		label(menu,member.DisplayName or member.Name or "Explorer",72,10,w-128,25,19,"Text",true)
+		label(menu,(member.Role or "Generalist").." · "..readiness(member),72,37,w-84,22,13,"Success")
+		label(menu,descriptions[member.Role] or "Expedition crew member.",12,70,w-24,42,14,"TextMuted").TextWrapped=true
+		label(menu,"Career statistics are not available yet.",12,116,w-24,30,13,"TextMuted").TextWrapped=true
+		local leader=party.LeaderId==player.UserId and member.UserId~=player.UserId
+		local locked=Mode~="Lobby" or party.Queue or party.RunId or party.ManagementLocked
+		if leader then
+			actionButton(menu,"KICK","REMOVING…","KickMember",{UserId=member.UserId},12,h-90,(w-30)/2,44,false,locked).TextSize=14
+			actionButton(menu,"MAKE LEADER","UPDATING…","TransferLeader",{UserId=member.UserId},(w+6)/2,h-90,(w-30)/2,44,true,locked or not member.Online).TextSize=14
+		end
+		memberNote=label(menu,leader and "Only the leader can change this crew." or "Expedition crew profile",12,h-38,w-24,30,13,"TextMuted")
+		if memberMessage then memberNote.Text=memberMessage.Text;Theme.Bind(memberNote,"TextColor3",memberMessage.Token) end
+		Theme.CaptureCursor(menu)
+		return
+	end
 	local menu = box(overlay, "MemberDetails", 0, 0, 448, 454)
 	menu.AnchorPoint = Vector2.new(.5, .5); menu.Position = UDim2.fromScale(.5, .5); menu.Active = true
 	label(menu, "CREW PROFILE", 20, 17, 344, 30, 20, "Text", true)
@@ -573,106 +596,192 @@ local function renderContents()
 end
 
 
--- Touch layouts use one readable column instead of shrinking the entire desk.
-local function flowChildren(parent, width, padding)
-	local children = {}
-	for _, child in ipairs(parent:GetChildren()) do
-		if child:IsA("GuiObject") then table.insert(children, child) end
-	end
-	table.sort(children, function(a,b)
-		return a.Position.Y.Offset == b.Position.Y.Offset and a.Position.X.Offset < b.Position.X.Offset or a.Position.Y.Offset < b.Position.Y.Offset
-	end)
-	local y = padding
-	for _, child in ipairs(children) do
-		local h = child.Size.Y.Offset
-		if child:IsA("TextLabel") then
-			child.TextWrapped = true; child.TextTruncate = Enum.TextTruncate.None
-			child.TextSize = math.max(15, child.TextSize)
-			h = math.max(h, child.TextSize >= 22 and 58 or 48)
-		elseif child:IsA("GuiButton") or child:IsA("TextBox") then h = math.max(46,h) end
-		child.Position = UDim2.fromOffset(padding,y); child.Size = UDim2.fromOffset(width-padding*2,h)
-		y += h + 10
-	end
-	return y + padding
+-- The mobile desk is a fixed viewport. Only the selected list can scroll.
+local mobileInbox = button(panel, "INVITES", 0, 0, 86, 40, function() navigate("Inbox"); refresh("Invites") end)
+mobileInbox.Visible = false
+local function mobileText(l, x, y, w, h, size)
+	l.Position = UDim2.fromOffset(x,y); l.Size = UDim2.fromOffset(w,h)
+	l.TextSize = size; l.TextWrapped = false; l.TextTruncate = Enum.TextTruncate.AtEnd
 end
-local function fitCardChildren(card, width)
-	local oldWidth = card.Size.X.Offset
-	if oldWidth <= 0 then return end
-	local factor = width / oldWidth
-	for _, child in ipairs(card:GetChildren()) do
-		if child:IsA("GuiObject") then
-			child.Position = UDim2.new(child.Position.X.Scale, child.Position.X.Offset*factor, child.Position.Y.Scale, child.Position.Y.Offset)
-			child.Size = UDim2.new(child.Size.X.Scale, child.Size.X.Offset*factor, child.Size.Y.Scale, child.Size.Y.Offset)
-			if child:IsA("TextLabel") or child:IsA("TextButton") then child.TextSize=math.max(15,child.TextSize); child.TextWrapped=true end
+local function mobileReset()
+	if memberOverlay then memberOverlay:Destroy(); memberOverlay=nil end
+	memberNote=nil; controls={}; queueLabel=nil
+	for _,child in ipairs(content:GetChildren()) do child:Destroy() end
+	content.CanvasPosition=Vector2.zero; content.CanvasSize=UDim2.new()
+	content.AutomaticCanvasSize=Enum.AutomaticSize.None; content.ScrollingEnabled=false
+	lastPage=page; lastVisual=visualKey()
+	funds.Text=tostring(snapshot.Currency or 0).." MARKS"
+	for key,b in pairs(nav) do Theme.Bind(b,"BackgroundColor3",key==page and "SlotSelected" or "SlotEmpty") end
+end
+local function mobileParty()
+	mobileReset()
+	local w,h=content.AbsoluteSize.X,content.AbsoluteSize.Y
+	local party=snapshot.Party or {}; local landscape=panel.AbsoluteSize.X>panel.AbsoluteSize.Y
+	local selfMember
+	for _,member in ipairs(party.Members or {}) do if member.UserId==player.UserId then selfMember=member end end
+	local gridW=landscape and math.floor(w*.64)-8 or w
+	queueLabel=label(content,"",0,0,gridW,24,13,"TextMuted");queueLabel.Name="QueueStatus";updateQueue()
+	local columns=landscape and 3 or 2
+	local cardW=(gridW-(columns-1)*6)/columns
+	local cardH=landscape and math.floor((h-30)/2)-3 or math.min(80,math.floor((h-180)/3))
+	cardH=math.max(62,cardH)
+	for index=1,6 do
+		local member=(party.Members or {})[index]
+		local x=((index-1)%columns)*(cardW+6);local y=28+math.floor((index-1)/columns)*(cardH+6)
+		local card=button(content,"",x,y,cardW,cardH,function()
+			if member then selectedMemberId=member.UserId;memberMessage=nil;render() else openPicker() end
+		end)
+		card.Name="Crew"..index
+		if member then
+			portrait(card,member.UserId,6,6,32)
+			label(card,member.DisplayName or member.Name or "Explorer",44,5,cardW-50,19,14,"Text",true)
+			label(card,member.UserId==party.LeaderId and "LEADER" or "EXPLORER",44,23,cardW-50,15,10,"TextMuted",true)
+			local detail=label(card,(member.Role or "Generalist").."\n"..readiness(member),6,38,cardW-12,cardH-40,12,member.Online and member.Ready and "Success" or "TextMuted")
+			detail.Name="Readiness";detail.TextWrapped=true;detail.TextTruncate=Enum.TextTruncate.None
+		else
+			label(card,"+ INVITE",8,math.floor(cardH/2)-18,cardW-16,22,15,"TextMuted",true)
+			label(card,"Open crew slot",8,math.floor(cardH/2)+4,cardW-16,18,12,"TextMuted")
+		end
+	end
+	local ax=landscape and gridW+12 or 0
+	local ay=landscape and 0 or 28+3*(cardH+6)+4
+	local aw=landscape and w-ax or w
+	local gap=6;local half=(aw-gap)/2;local bh=44
+	local canRejoin=snapshot.Rejoin and snapshot.Rejoin.Available
+	local function action(text,waiting,kind,data,x,y,width,primary,disabled)
+		local b=actionButton(content,text,waiting,kind,data,ax+x,ay+y,width,bh,primary,disabled)
+		b.TextSize=13;b.TextWrapped=true;return b
+	end
+	if not party.Id then
+		action("CREATE PARTY","CREATING…","CreateParty",nil,0,0,aw,true)
+		label(content,"Start with 1–6 players.\nMatchmaking is optional.",ax,ay+52,aw,42,13,"TextMuted").TextWrapped=true
+	elseif party.RunId or Mode~="Lobby" then
+		action("LEAVE PARTY","LEAVING…","LeaveParty",nil,0,0,aw)
+		if Mode=="Expedition" then action("RETURN TO LOBBY","RETURNING…","ReturnLobby",nil,0,50,aw,true) end
+	else
+		local leader=party.LeaderId==player.UserId
+		if leader then action(startingExpedition(party) and "STARTING…" or "START EXPEDITION","STARTING…","StartExpedition",nil,0,0,canRejoin and half or aw,true,party.Queue~=nil and party.Queue~=false)
+		else label(content,"Your leader starts when everyone is ready.",ax,ay,canRejoin and half or aw,44,14,"TextMuted").TextWrapped=true end
+		if canRejoin then action("REJOIN RUN","REJOINING…","Rejoin",nil,half+gap,0,half,true) end
+		action(selfMember and selfMember.Ready and "NOT READY" or "READY UP","UPDATING…","Ready",{Ready=not(selfMember and selfMember.Ready)},0,50,half,true)
+		action("LEAVE","LEAVING…","LeaveParty",nil,half+gap,50,half)
+		local inviteButton=button(content,"INVITE",ax,ay+100,half,bh,openPicker)
+		inviteButton.TextSize=13;inviteButton.Interactable=leader and not party.Queue and #(party.Members or {})<6
+		if leader then action(party.Queue and "CANCEL QUEUE" or "MATCHMAKE",party.Queue and "CANCELLING…" or "QUEUING…",party.Queue and "CancelQueue" or "Queue",nil,half+gap,100,half,false,not party.Queue and #(party.Members or {})>=6) end
+	end
+	if canRejoin and (not party.Id or party.RunId or Mode~="Lobby") then action("REJOIN RUN","REJOINING…","Rejoin",nil,0,100,aw,true) end
+	renderMemberMenu();applyControls()
+end
+local function mobileInboxContents()
+	mobileReset();content.ScrollingEnabled=true;content.AutomaticCanvasSize=Enum.AutomaticSize.Y
+	local w=content.AbsoluteSize.X;local invites=liveInvitations()
+	if #invites==0 then label(content,"No pending invitations.",8,16,w-16,30,16,"TextMuted") end
+	for i,invitation in ipairs(invites) do
+		local row=box(content,"Invitation_"..invitation.Id,0,(i-1)*92,w-6,84)
+		label(row,(invitation.From or "An explorer").." invited you",10,8,w-140,26,15,"Text",true)
+		label(row,(snapshot.Party or {}).Id and "Leave your crew before accepting." or "Join their expedition crew.",10,38,w-140,36,13,"TextMuted").TextWrapped=true
+		actionButton(row,"ACCEPT","JOINING…","AcceptInvite",{Id=invitation.Id},w-122,20,106,44,true,(snapshot.Party or {}).Id~=nil and (snapshot.Party or {}).Id~=false).TextSize=14
+	end
+	applyControls()
+end
+local function mobileLists()
+	local w=content.AbsoluteSize.X-6
+	content.ScrollingEnabled=true;content.AutomaticCanvasSize=Enum.AutomaticSize.Y
+	local children={}
+	for _,c in ipairs(content:GetChildren()) do if c:IsA("GuiObject") then table.insert(children,c) end end
+	table.sort(children,function(a,b) return a.Position.Y.Offset==b.Position.Y.Offset and a.Position.X.Offset<b.Position.X.Offset or a.Position.Y.Offset<b.Position.Y.Offset end)
+	local column,y=0,0
+	local columns=math.max(2,math.floor(w/160));local cw=(w-(columns-1)*8)/columns
+	if page=="Invite" then columns=math.max(2,math.floor(w/130));cw=(w-(columns-1)*8)/columns end
+	for _,c in ipairs(children) do
+		if c:IsA("TextLabel") then
+			if column>0 then y+=page=="Invite" and 138 or 152;column=0 end
+			local heading=c.TextSize>=22
+			if heading and page=="Classes" then c.Text="CLASSES · "..tostring(snapshot.Currency or 0).." MARKS" end
+			if page=="Invite" and y==30 then y=48 end
+			mobileText(c,0,y,w-(page=="Invite" and y==0 and 112 or 0),heading and 26 or 22,heading and 18 or 13)
+			y+=heading and 30 or 26
+		elseif c:IsA("TextButton") and page=="Invite" then
+			c.Text="BACK";c.Position=UDim2.fromOffset(w-96,0);c.Size=UDim2.fromOffset(96,44);c.TextSize=14
+		elseif c.Name:match("^Invite_") then
+			c.Position=UDim2.fromOffset(column*(cw+8),y);c.Size=UDim2.fromOffset(cw,130)
+			local avatar=c.AvatarPortrait;avatar.Size=UDim2.fromOffset(72,72);avatar.AnchorPoint=Vector2.new(.5,0);avatar.Position=UDim2.new(.5,0,0,4)
+			local plate=c.Nameplate;plate.Size=UDim2.new(1,0,0,50);plate.Position=UDim2.new(0,0,1,-50)
+			for _,l in ipairs(plate:GetChildren()) do if l:IsA("TextLabel") then mobileText(l,6,l.Position.Y.Offset<20 and 2 or 26,cw-12,22,l.Position.Y.Offset<20 and 14 or 12) end end
+			column+=1;if column==columns then column=0;y+=138 end
+		elseif page=="Classes" then
+			c.Position=UDim2.fromOffset(column*(cw+8),y);c.Size=UDim2.fromOffset(cw,144)
+			for _,l in ipairs(c:GetChildren()) do
+				if l:IsA("TextButton") then l.Position=UDim2.fromOffset(8,92);l.Size=UDim2.fromOffset(cw-16,44);l.TextSize=12;l.TextWrapped=true
+				elseif l:IsA("TextLabel") then local title=l.Position.Y.Offset<30;mobileText(l,8,title and 8 or 34,cw-16,title and 24 or 50,title and 17 or 13);l.TextWrapped=not title end
+			end
+			column+=1;if column==columns then column=0;y+=152 end
+		elseif c.Name:match("^Save%d") then
+			c.Position=UDim2.fromOffset(0,y);c.Size=UDim2.fromOffset(w,148)
+			local name=c:FindFirstChild("WorldName")
+			if name then
+				name.Position=UDim2.fromOffset(8,8);name.Size=UDim2.fromOffset(w-108,44)
+				for _,l in ipairs(c:GetChildren()) do
+					if l:IsA("TextButton") then
+						local rename=l.Name=="RENAMEButton";local resume=l.Name=="RESUMEButton"
+						l.Position=rename and UDim2.fromOffset(w-94,8) or UDim2.fromOffset(resume and (w+6)/2 or 8,96)
+						l.Size=UDim2.fromOffset(rename and 86 or (w-22)/2,44);l.TextSize=13
+					elseif l:IsA("TextLabel") then mobileText(l,8,58,w-16,32,13);l.TextWrapped=true end
+				end
+			else c.Size=UDim2.fromOffset(w,58);for _,l in ipairs(c:GetChildren()) do if l:IsA("TextLabel") then mobileText(l,8,14,w-16,30,14) end end end
+			y+=c.Size.Y.Offset+8
 		end
 	end
 end
-local function mobileContent()
-	if not Theme.IsMobile() then return end
-	local width = math.max(300,panel.Size.X.Offset-40)
-	local children = {}
-	for _,child in ipairs(content:GetChildren()) do if child:IsA("GuiObject") then table.insert(children,child) end end
-	table.sort(children,function(a,b)
-		return a.Position.Y.Offset == b.Position.Y.Offset and a.Position.X.Offset < b.Position.X.Offset or a.Position.Y.Offset < b.Position.Y.Offset
-	end)
-	local y=0
-	for _,child in ipairs(children) do
-		local height=child.Size.Y.Offset
-		if child.Name:match("^Save%d") or child.Name:match("^Invitation_") then
-			height=flowChildren(child,width,14)
-		elseif child.Name:match("^Invite_") then
-			local avatar=child:FindFirstChild("AvatarPortrait")
-			if avatar then avatar.AnchorPoint=Vector2.new(.5,0); avatar.Position=UDim2.new(.5,0,0,6) end
-			local plate=child:FindFirstChild("Nameplate")
-			if plate then for _,text in ipairs(plate:GetChildren()) do if text:IsA("TextLabel") then text.Size=UDim2.new(1,-18,0,text.Size.Y.Offset) end end end
-		elseif child:IsA("TextLabel") then
-			child.TextWrapped=true; child.TextTruncate=Enum.TextTruncate.None; child.TextSize=math.max(15,child.TextSize)
-			height=math.max(height,child.TextSize>=22 and 58 or 48)
-		elseif child:IsA("TextButton") and child.Text ~= "" then
-			height=math.max(48,height); child.TextWrapped=true
-		else fitCardChildren(child,width) end
-		child.Position=UDim2.fromOffset(0,y); child.Size=UDim2.fromOffset(width,height)
-		y+=height+12
-	end
-	if memberOverlay then
-		local menu=memberOverlay:FindFirstChild("MemberDetails")
-		if menu then
-			local widthNow=math.min(448,width); fitCardChildren(menu,widthNow)
-			menu.Size=UDim2.fromOffset(widthNow,454)
-			local records=menu:FindFirstChild("FieldRecords")
-			if records then for _,l in ipairs(records:GetChildren()) do if l:IsA("TextLabel") then l.Size=UDim2.new(1,-24,0,l.Size.Y.Offset); l.TextWrapped=true end end end
-		end
+render=function()
+	mobileInbox.Text="INVITES"..(#liveInvitations()>0 and " "..#liveInvitations() or "")
+	if Theme.IsMobile() and page=="Party" then mobileParty()
+	elseif Theme.IsMobile() and page=="Inbox" then mobileInboxContents()
+	else
+		content.ScrollingEnabled=true;content.AutomaticCanvasSize=Enum.AutomaticSize.Y
+		renderContents();if Theme.IsMobile() then mobileLists() end
 	end
 end
-render=function() renderContents(); mobileContent() end
-Theme.FitMenu(panel,1120,740,{MobileWidth=360,MobileHeight=740,OnResize=function(width,_,mobile)
-	for _,child in ipairs(panel:GetChildren()) do if child:IsA("TextButton") and child.Text=="×" then child.Visible=not mobile end end
-	if not mobile then
-		for _,child in ipairs(side:GetChildren()) do if child:IsA("GuiObject") then child.Visible=true end end
-		for index,entry in ipairs({{"Party","01  EXPEDITION CREW"},{"Classes","02  CLASS OUTFITTER"},{"Saves","03  WORLD ARCHIVE"}}) do
-			nav[entry[1]].Text=entry[2]; nav[entry[1]].Visible=Mode=="Lobby" or entry[1]=="Party"
+local desktopGeometry={}
+for _,root in ipairs({panel,side}) do
+	for _,c in ipairs(root:GetChildren()) do if c:IsA("GuiObject") then
+		desktopGeometry[c]={Position=c.Position,Size=c.Size,Visible=c.Visible,TextSize=(c:IsA("TextLabel") or c:IsA("TextButton")) and c.TextSize or nil}
+	end end
+end
+local deskScale=panel:FindFirstChild("PanelMotion") or Instance.new("UIScale")
+deskScale.Name="ViewportScale";deskScale.Parent=panel
+Theme.BindResponsive(panel,function(mobile,available)
+	if not mobile and page=="Inbox" then page="Party" end
+	for c,properties in pairs(desktopGeometry) do if c.Parent then for k,v in pairs(properties) do c[k]=v end end end
+	panel.AnchorPoint=Vector2.new(.5,.5);panel.Position=UDim2.fromScale(.5,.5)
+	if mobile then
+		deskScale.Scale=1;panel.Size=UDim2.fromOffset(available.X-12,available.Y-12)
+		for _,c in ipairs(panel:GetChildren()) do
+			if c:IsA("TextLabel") and c~=funds and c~=feedback then
+				c.Visible=c.Text=="ECO / SHIFT";if c.Visible then mobileText(c,12,4,128,34,19) end
+			elseif c:IsA("TextButton") and c.Text=="×" then c.Position=UDim2.new(1,-44,0,0);c.Size=UDim2.fromOffset(44,44) end
 		end
-		if render then render() end
-		return
+		local width=panel.Size.X.Offset
+		mobileInbox.Visible=Mode=="Lobby";mobileInbox.Position=UDim2.new(1,-136,0,0);mobileInbox.Size=UDim2.fromOffset(90,40);mobileInbox.TextSize=12
+		funds.Visible=width>=520;funds.Position=UDim2.fromOffset(146,6);funds.Size=UDim2.fromOffset(width-296,30);funds.TextSize=12
+		side.Position=UDim2.fromOffset(10,44);side.Size=UDim2.new(1,-20,0,40)
+		for _,c in ipairs(side:GetChildren()) do if c:IsA("GuiObject") then c.Visible=false end end
+		for i,id in ipairs({"Party","Classes","Saves"}) do
+			local b=nav[id];b.Visible=Mode=="Lobby" or id=="Party";b.Text=({"Crew","Classes","Worlds"})[i];b.TextSize=14
+			b.Position=UDim2.new((i-1)/3,0,0,0);b.Size=UDim2.new(1/3,-4,0,40)
+		end
+		content.Position=UDim2.fromOffset(10,90);content.Size=UDim2.new(1,-20,1,-122)
+		feedback.Position=UDim2.new(0,10,1,-28);feedback.Size=UDim2.new(1,-20,0,24);feedback.TextSize=12;feedback.TextWrapped=false;feedback.TextTruncate=Enum.TextTruncate.AtEnd
+	else
+		panel.Size=UDim2.fromOffset(1120,740);mobileInbox.Visible=false;funds.Visible=true;funds.TextXAlignment=Enum.TextXAlignment.Right
+		deskScale.Scale=math.min(math.clamp(math.min(available.X/1280,available.Y/800),1.1,2.5),(available.X-32)/1120,(available.Y-24)/740)
+		feedback.TextWrapped=true;feedback.TextTruncate=Enum.TextTruncate.None
+		for i,entry in ipairs({{"Party","01  EXPEDITION CREW"},{"Classes","02  CLASS OUTFITTER"},{"Saves","03  WORLD ARCHIVE"}}) do nav[entry[1]].Text=entry[2];nav[entry[1]].Visible=Mode=="Lobby" or entry[1]=="Party" end
 	end
-	for _,child in ipairs(panel:GetChildren()) do
-		if child:IsA("TextLabel") and child ~= feedback and child ~= funds then
-			child.Position=UDim2.fromOffset(20,child.Position.Y.Offset); child.Size=UDim2.new(1,-90,0,child.Size.Y.Offset)
-			if child.Text=="ECO / SHIFT" then child.TextSize=27 end
-		elseif child:IsA("TextButton") and child.Text=="×" then child.Position=UDim2.new(1,-62,0,18); child.Size=UDim2.fromOffset(44,44) end
-	end
-	funds.Position=UDim2.fromOffset(20,86); funds.Size=UDim2.new(1,-40,0,28); funds.TextXAlignment=Enum.TextXAlignment.Left
-	side.Position=UDim2.fromOffset(20,122); side.Size=UDim2.new(1,-40,0,48)
-	for _,child in ipairs(side:GetChildren()) do child.Visible=false end
-	for index,id in ipairs({"Party","Classes","Saves"}) do
-		local b=nav[id]; b.Visible=Mode=="Lobby" or id=="Party"
-		b.Text=({"Crew","Classes","Worlds"})[index]; b.TextSize=15
-		b.Position=UDim2.new((index-1)/3,0,0,0); b.Size=UDim2.new(1/3,-6,0,46)
-	end
-	content.Position=UDim2.fromOffset(20,182); content.Size=UDim2.new(1,-40,0,482)
-	feedback.Position=UDim2.fromOffset(20,676); feedback.Size=UDim2.new(1,-40,0,52)
-	if render then render() end
-end})
+	deskScale:SetAttribute("TargetScale",deskScale.Scale)
+	render()
+end)
+
 
 local function reconcile(request, result)
 	local party = snapshot.Party or {}

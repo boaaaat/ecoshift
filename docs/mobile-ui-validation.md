@@ -21,5 +21,11 @@
 
 ## Limits and cleanup
 
+### Lobby layout correction
+
+The first mobile lobby layout still forced the entire desk through a tall outer scroll area. It has been replaced with a fixed viewport: a compact header and persistent tabs, six crew cards, a separate action area, and a fixed feedback line. Landscape uses a 3-by-2 crew grid with actions alongside it; portrait uses 2-by-3 cards with actions below. Only classes, friends, invitations and saved-world lists scroll. Pending invitations have their own inbox, and crew profiles use a compact modal.
+
+Studio iPhone 7 checks used a six-member display fixture (no real party or save mutations). At 666×374 landscape and 374×666 portrait, every crew card and party action remained inside the content bounds with scrolling disabled. The final landscape readiness label displayed both `Engineer` and `NOT READY` within its 116×33 area. Class cards formed a two-column list in portrait, and switching back to desktop restored the original desktop arrangement. Both Rojo builds and the whitespace check passed; Studio reported no script errors. The updated lobby script was compared against local source in both Studio places, and Play/device emulation were stopped afterward.
+
 - These are Studio emulator checks, not physical-device performance or simultaneous multi-finger hardware testing. Bow/shield touch wiring and spectate navigation were reviewed but not exercised with a live crew in this pass. Existing deferred multi-server crew checks remain pending.
 - Temporary inventory, chest, movement observer and placed Workbench existed only in Play mode. Both sessions were stopped and device simulation reset. No real saved-world records were changed. Nothing was published to Roblox; the user handles publishing.
