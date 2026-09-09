@@ -38,6 +38,8 @@ local corpse = nil
 local corpsePosition = nil
 local corpseDeathId = nil
 local corpseRecovery = nil
+local stopSpectateCamera
+local updateDeathUI
 
 -- Camera
 local camera = workspace.CurrentCamera
@@ -115,6 +117,26 @@ end
 -------------------------------------------------------------------
 -- UI CREATION
 -------------------------------------------------------------------
+local function mobileDeathLayout(container)
+	if not Theme.IsMobile() then return end
+	local title, subtitle = container:FindFirstChild("DeathText"), container:FindFirstChild("Subtitle")
+	if title then title.Position=UDim2.fromOffset(20,20); title.Size=UDim2.new(1,-40,0,64); title.TextSize=24; title.TextWrapped=true end
+	if subtitle then subtitle.Position=UDim2.fromOffset(20,88); subtitle.Size=UDim2.new(1,-40,0,54); subtitle.TextSize=17 end
+	local rewards=container:FindFirstChild("RunRewards")
+	if rewards then
+		rewards.Size=UDim2.new(1,-40,0,106); rewards.Position=UDim2.fromOffset(20,154)
+		rewards.RewardTitle.TextSize=14; rewards.RewardTitle.Size=UDim2.new(1,-24,0,20)
+		rewards.RewardValue.Position=UDim2.fromOffset(12,32); rewards.RewardValue.TextSize=18; rewards.RewardValue.TextWrapped=true
+		rewards.RewardStatus.Position=UDim2.fromOffset(12,62); rewards.RewardStatus.Size=UDim2.new(1,-24,0,38); rewards.RewardStatus.TextSize=14
+	end
+	local results=container:FindFirstChild("TeamResults")
+	if results then results.Position=UDim2.fromOffset(20,274); results.Size=UDim2.new(1,-40,0,204); results.ScrollBarThickness=6 end
+	local buttons=container:FindFirstChild("Buttons")
+	if buttons then buttons.Position=UDim2.fromOffset(20,isGameOver and 492 or 166) end
+	local travel=container:FindFirstChild("TravelStatus")
+	if travel then travel.Position=UDim2.fromOffset(20,550); travel.Size=UDim2.new(1,-40,0,44); travel.TextSize=14 end
+end
+
 local function createDeathUI()
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "DeathUI"
@@ -142,7 +164,7 @@ local function createDeathUI()
 	container.BorderSizePixel = 0
 	container.Parent = screenGui
 	Theme.CaptureCursor(container); Theme.Panel(container, true)
-	Theme.Fit(container, 440, 525)
+
 	
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 12)
@@ -265,7 +287,11 @@ local function createDeathUI()
 	
 	screenGui.Enabled = false
 	screenGui.Parent = playerGui
-	
+	Theme.FitMenu(container,440,525,{MobileWidth=360,MobileHeight=610,HideClose=true,OnResize=function(_,_,mobile)
+		screenGui.IgnoreGuiInset = not mobile
+		if mobile then mobileDeathLayout(container)
+		elseif updateDeathUI then updateDeathUI(lastCanSpectate) end
+	end})
 	return screenGui
 end
 
@@ -325,7 +351,7 @@ local function createSpectateUI()
 	controlsBar.BorderSizePixel = 0
 	controlsBar.Parent = screenGui
 	Theme.Panel(controlsBar, true)
-	Theme.Fit(controlsBar, 400, 40)
+
 	
 	local ctrlCorner = Instance.new("UICorner")
 	ctrlCorner.CornerRadius = UDim.new(0, 8)
@@ -340,18 +366,45 @@ local function createSpectateUI()
 	controlsLabel.TextSize = 14
 	controlsLabel.Font = Enum.Font.Gotham
 	controlsLabel.Parent = controlsBar
+	local touchButtons={}
+	for index,entry in ipairs({{"Previous", "PrevTarget"},{"Next", "NextTarget"},{"Stop", "StopSpectate"}}) do
+		local button=Instance.new("TextButton")
+		button.Name,button.Text=entry[2].."Button",entry[1]
+		button.Font,button.TextSize=Enum.Font.GothamBold,16
+		button.Size=UDim2.new(1/3,-10,1,-12); button.Position=UDim2.new((index-1)/3,6,0,6)
+		button.Visible=false; button.Parent=controlsBar; Theme.Button(button,index==3)
+		button.Activated:Connect(function()
+			if not isSpectating then return end
+			if SpectateRemote then SpectateRemote:FireServer(entry[2]) end
+			if entry[2]=="StopSpectate" and stopSpectateCamera then stopSpectateCamera() end
+		end)
+		table.insert(touchButtons,button)
+	end
 	
 	screenGui.Enabled = false
 	screenGui.Parent = playerGui
-	
+	Theme.BindResponsive(controlsBar,function(mobile,safe)
+		screenGui.IgnoreGuiInset=not mobile
+		controlsLabel.Visible=not mobile
+		for _,button in ipairs(touchButtons) do button.Visible=mobile end
+		if mobile then
+			controlsBar.Size=UDim2.fromOffset(math.min(480,safe.X-24),60)
+			controlsBar.Position,controlsBar.AnchorPoint=UDim2.new(.5,0,1,-12),Vector2.new(.5,1)
+			topBar.Size=UDim2.fromOffset(math.min(360,safe.X-24),56); topBar.Position=UDim2.new(.5,0,0,8)
+			spectateLabel.TextSize=14
+		else
+			controlsBar.Size=UDim2.fromOffset(400,40); controlsBar.Position,controlsBar.AnchorPoint=UDim2.new(.5,0,1,-60),Vector2.new(.5,0)
+			topBar.Size=UDim2.fromOffset(300,50); topBar.Position=UDim2.new(.5,0,0,20); spectateLabel.TextSize=12
+		end
+	end)
 	return screenGui
 end
 
-local function updateDeathUI(canSpectate)
+updateDeathUI = function(canSpectate)
 	lastCanSpectate = canSpectate == true
 	local ui = playerGui:FindFirstChild("DeathUI")
 	if not ui then return end
-	local container = ui:FindFirstChild("Container")
+	local container = ui:FindFirstChild("Container", true)
 	if not container then return end
 	local deathText = container:FindFirstChild("DeathText")
 	local subtitle = container:FindFirstChild("Subtitle")
@@ -371,7 +424,7 @@ local function updateDeathUI(canSpectate)
 			subtitle.Text = "A teammate can revive you with a crafted Revival Kit."
 		end
 	end
-	container.Size = UDim2.fromOffset(440, isGameOver and 525 or 300)
+	if not Theme.IsMobile() then container.Size = UDim2.fromOffset(440, isGameOver and 525 or 300) end
 	if buttons then buttons.Position = UDim2.fromOffset(20, isGameOver and 440 or 150) end
 	local travelStatus = container:FindFirstChild("TravelStatus")
 	if travelStatus then
@@ -407,14 +460,15 @@ local function updateDeathUI(canSpectate)
 			if child:IsA("TextLabel") then child:Destroy() end
 		end
 		if isGameOver and teamResults then
-			local header = Theme.Label(results, "EXPEDITION CREW  ·  " .. string.upper(currencyName), UDim2.new(1, -8, 0, 24), UDim2.new(), 11, Theme.Colors.Amber, true)
+			local header = Theme.Label(results, "EXPEDITION CREW  ·  " .. string.upper(currencyName), UDim2.new(1, -8, 0, Theme.IsMobile() and 38 or 24), UDim2.new(), Theme.IsMobile() and 15 or 11, Theme.Colors.Amber, true)
 			header.Name = "CrewHeader"
 			header.LayoutOrder = 0
 			for index, entry in ipairs(teamResults.Players or {}) do
 				local summary = rewardSummaries[entry.UserId]
 				local marks = summary and string.format("+%d%s", summary.EarnedCurrency, summary.TotalsComplete == false and " recorded" or "") or "…"
 				local text = string.format("%s\n%d revives  ·  %d falls  ·  %s marks", entry.DisplayName or entry.Name, entry.Revives or 0, entry.Deaths or 0, marks)
-				local row = Theme.Label(results, text, UDim2.new(1, -8, 0, 40), UDim2.new(), 13, Theme.Colors.Paper)
+				local row = Theme.Label(results, text, UDim2.new(1, -8, 0, Theme.IsMobile() and 58 or 40), UDim2.new(), Theme.IsMobile() and 16 or 13, Theme.Colors.Paper)
+				row.TextWrapped = true
 				row.Name = "CrewMember_" .. tostring(entry.UserId)
 				row.LayoutOrder = index
 			end
@@ -448,6 +502,7 @@ local function updateDeathUI(canSpectate)
 			lobbyBtn.Text = "RESPAWN (STUDIO)"
 		end
 	end
+	mobileDeathLayout(container)
 end
 
 local function showOverlayUI(canSpectate)
@@ -467,12 +522,12 @@ local function showOverlayUI(canSpectate)
 		ui.Enabled = true
 
 		local overlay = ui:FindFirstChild("Overlay")
-		local container = ui:FindFirstChild("Container")
+		local container = ui:FindFirstChild("Container", true)
 		if overlay then
 			overlay.BackgroundTransparency = 1
 			TweenService:Create(overlay, TweenInfo.new(0.5), {BackgroundTransparency = 0.4}):Play()
 		end
-		if container then
+		if container and not Theme.IsMobile() then
 			container.Position = UDim2.new(0.5, 0, 0.6, 0)
 			TweenService:Create(container, TweenInfo.new(0.3, Enum.EasingStyle.Back), {Position = UDim2.new(0.5, 0, 0.5, 0)}):Play()
 		end
@@ -530,7 +585,7 @@ local function startSpectateCamera(target)
 	end
 end
 
-local function stopSpectateCamera()
+stopSpectateCamera = function()
 	local restoreType = originalCameraType
 	local restoreSubject = originalCameraSubject
 
@@ -737,8 +792,8 @@ local function onDeathRemote(action, data)
 		end)
 	elseif action == "LobbyDisabled" then
 		local ui = playerGui:FindFirstChild("DeathUI")
-		local subtitle = ui and ui:FindFirstChild("Container")
-			and ui.Container:FindFirstChild("Subtitle")
+		local subtitle = ui and ui:FindFirstChild("Container", true)
+			and ui:FindFirstChild("Container", true):FindFirstChild("Subtitle")
 		if subtitle then
 			subtitle.Text = "Return to lobby is only available in Studio."
 		end
@@ -783,7 +838,7 @@ local function setupButtonHandlers()
 	local ui = playerGui:WaitForChild("DeathUI", 10)
 	if not ui then return end
 	
-	local container = ui:WaitForChild("Container", 5)
+	local container = ui:FindFirstChild("Container", true)
 	if not container then return end
 	
 	local buttons = container:WaitForChild("Buttons", 5)
@@ -793,7 +848,7 @@ local function setupButtonHandlers()
 	local lobbyBtn = buttons:FindFirstChild("LobbyButton")
 	
 	if spectateBtn then
-		spectateBtn.MouseButton1Click:Connect(function()
+		spectateBtn.Activated:Connect(function()
 			if SpectateRemote then
 				SpectateRemote:FireServer("StartSpectate")
 			end
@@ -801,7 +856,7 @@ local function setupButtonHandlers()
 	end
 	
 	if lobbyBtn then
-		lobbyBtn.MouseButton1Click:Connect(function()
+		lobbyBtn.Activated:Connect(function()
 			if isGameOver and not RunService:IsStudio() then
 				if not LobbyRemote or returnRequest then return end
 				local requestId = "DeathReturn:" .. HttpService:GenerateGUID(false)

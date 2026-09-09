@@ -48,7 +48,7 @@ panel.Size = UDim2.fromOffset(600, 600)
 panel.Position, panel.AnchorPoint = UDim2.fromScale(0.5, 0.5), Vector2.new(0.5, 0.5)
 panel.Visible, panel.Parent = false, gui
 Theme.Panel(panel, true)
-Theme.Fit(panel, 600, 600)
+-- Responsive layout is installed after the instrument controls.
 Theme.CaptureCursor(panel); Theme.AnimatePanel(panel)
 label(panel, "ECOSHIFT  /  SURVEY INSTRUMENTS", 24, 14, 470, 18, 10, C.Amber, true)
 label(panel, "Read the world. Shape the next shift.", 24, 36, 510, 28, 22, C.Paper, true)
@@ -107,7 +107,7 @@ ballotPanel.Name, ballotPanel.Size = "TeamBallot", UDim2.fromOffset(450, 166)
 ballotPanel.Position, ballotPanel.AnchorPoint = UDim2.new(0.5, 0, 1, -26), Vector2.new(0.5, 1)
 ballotPanel.Visible, ballotPanel.Parent = false, voteGui
 Theme.Panel(ballotPanel, true)
-Theme.Fit(ballotPanel, 450, 166)
+-- Keep team votes readable on touch screens.
 Theme.CaptureCursor(ballotPanel); Theme.AnimatePanel(ballotPanel)
 label(ballotPanel, "TEAM DECISION", 18, 10, 410, 18, 10, C.Amber, true)
 local ballotTitle = label(ballotPanel, "World control proposal", 18, 31, 414, 25, 18, C.Paper, true)
@@ -224,3 +224,54 @@ gameStateRemote.OnClientEvent:Connect(function(data)
 end)
 remote:FireServer("RequestSnapshot")
 render()
+
+Theme.FitMenu(panel,600,600,{MobileWidth=360,MobileHeight=1010,OnResize=function(width,_,mobile)
+	close.Visible = not mobile
+	if not mobile then return end
+	close.Position=UDim2.new(1,-60,0,12); close.Size=UDim2.fromOffset(44,44)
+	for _,child in ipairs(panel:GetChildren()) do
+		if child:IsA("TextLabel") then
+			child.Size=UDim2.new(1,-84,0,child.Position.Y.Offset==36 and 54 or 38)
+			child.TextSize=math.max(14,child.TextSize); child.TextWrapped=true
+			if child.Position.Y.Offset==565 then child.Position=UDim2.fromOffset(24,946); child.Size=UDim2.new(1,-48,0,52) end
+		end
+	end
+	intel.Position=UDim2.fromOffset(16,104); intel.Size=UDim2.new(1,-32,0,180)
+	for _,child in ipairs(intel:GetChildren()) do
+		if child:IsA("TextLabel") then
+			local index=table.find(instrumentLabels,child)
+			if index then
+				child.Position=UDim2.fromOffset(12,26+(index-1)*56); child.Size=UDim2.new(1,-24,0,28); child.TextSize=16
+			else
+				local column=child:GetAttribute("MobileInstrumentColumn") or math.floor((child.Position.X.Offset-12)/182)
+				child:SetAttribute("MobileInstrumentColumn",column)
+				child.Position=UDim2.fromOffset(12,8+column*56); child.Size=UDim2.new(1,-24,0,20); child.TextSize=14
+			end
+		end
+	end
+	for index,action in ipairs(ControlConfig.Order) do
+		local refs=cards[action]; local card=refs.Description.Parent
+		card.Position=UDim2.fromOffset(16,298+(index-1)*212); card.Size=UDim2.new(1,-32,0,200)
+		for _,child in ipairs(card:GetChildren()) do
+			if child:IsA("TextLabel") then child.TextSize=math.max(14,child.TextSize); child.TextWrapped=true end
+		end
+		local heading=card:FindFirstChildWhichIsA("TextLabel")
+		if heading then heading.Size=UDim2.new(1,-28,0,24) end
+		refs.Ownership.Position=UDim2.fromOffset(14,36); refs.Ownership.Size=UDim2.new(1,-28,0,20); refs.Ownership.TextXAlignment=Enum.TextXAlignment.Left
+		refs.Description.Position=UDim2.fromOffset(14,60); refs.Description.Size=UDim2.new(1,-28,0,42)
+		refs.Fuel.Position=UDim2.fromOffset(14,106); refs.Fuel.Size=UDim2.new(1,-28,0,24)
+		refs.Reason.Position=UDim2.fromOffset(14,132); refs.Reason.Size=UDim2.new(1,-28,0,20)
+		refs.Propose.Position=UDim2.new(.5,4,0,152); refs.Propose.Size=UDim2.new(.5,-18,0,44); refs.Propose.TextSize=14
+	end
+	destination.Position=UDim2.fromOffset(14,152); destination.Size=UDim2.new(.5,-18,0,44); destination.TextSize=14
+end})
+Theme.FitMenu(ballotPanel,450,166,{MobileWidth=360,MobileHeight=220,OnResize=function(width,_,mobile)
+	if not mobile then return end
+	for _,child in ipairs(ballotPanel:GetChildren()) do
+		if child:IsA("TextLabel") then child.Size=UDim2.new(1,-36,0,child.Size.Y.Offset); child.TextSize=math.max(14,child.TextSize); child.TextWrapped=true end
+	end
+	ballotDetail.Size=UDim2.new(1,-36,0,44)
+	ballotCount.Position=UDim2.fromOffset(18,110); ballotCount.Size=UDim2.new(1,-36,0,34)
+	yes.Position=UDim2.fromOffset(18,156); yes.Size=UDim2.new(.5,-27,0,46)
+	no.Position=UDim2.new(.5,9,0,156); no.Size=UDim2.new(.5,-27,0,46)
+end})

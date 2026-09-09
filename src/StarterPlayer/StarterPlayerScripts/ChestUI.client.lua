@@ -125,7 +125,8 @@ local slotData = {}
 local slotCount = FIXED_SLOTS
 local currentChestId = nil
 local lastOpenRequestAt = 0
-local dragging = { Active = false, Source = nil, ChestIndex = nil, Inv = nil, Ghost = nil, InvFrames = nil, ChestFrames = nil }
+local dragging = { Active = false, Source = nil, ChestIndex = nil, Inv = nil, Ghost = nil, InvFrames = nil, ChestFrames = nil, Input = nil, PendingIndex = nil, StartPos = nil }
+local arrangeChest
 local transferStatusToken = 0
 local contextChestIndex = nil
 
@@ -267,8 +268,9 @@ local function getChestSlotFrames()
 	return frames
 end
 
-local function slotAtPoint(point, frames)
+local function slotAtPoint(point, frames, touch)
 	local inset = GuiService:GetGuiInset()
+	if touch then inset = Vector2.zero end
 	local adjusted = Vector2.new(point.X - inset.X, point.Y - inset.Y)
 	for _, frame in ipairs(frames) do
 		local pos = frame.AbsolutePosition
@@ -334,7 +336,7 @@ local function renderSlot(slot)
 	else
 		slot.Icon.Image = ""
 		slot.Icon.Visible = false
-		slot.ItemText.Text = item and item.Name or data.Id
+		slot.ItemText.Text = (item and item.Name or data.Id):gsub(" ", "\n", 1)
 		slot.ItemText.TextColor3 = hashColor(data.Id)
 		slot.ItemText.Visible = true
 	end
@@ -430,7 +432,7 @@ local function beginChestDrag(index)
 	dragging.Ghost = createGhost(data.Id, data.N)
 end
 
-local function endDrag(mousePoint)
+local function endDrag(mousePoint, touch)
 	if not dragging.Active then return end
 	if dragging.Ghost then
 		dragging.Ghost:Destroy()
@@ -448,11 +450,12 @@ local function endDrag(mousePoint)
 	dragging.Ghost = nil
 	dragging.InvFrames = nil
 	dragging.ChestFrames = nil
+	dragging.Input, dragging.PendingIndex, dragging.StartPos = nil, nil, nil
 
 	if not currentChestId or not chestRemote then return end
 
-	local chestTarget = slotAtPoint(mousePoint, chestFrames)
-	local invTarget = slotAtPoint(mousePoint, invFrames)
+	local chestTarget = slotAtPoint(mousePoint, chestFrames, touch)
+	local invTarget = slotAtPoint(mousePoint, invFrames, touch)
 
 	if source == "Chest" and fromChestIndex then
 		if chestTarget then
@@ -636,18 +639,17 @@ local function createSlot(index, x, y)
 	button.Text = ""
 	button.Parent = slot
 
-	button.MouseButton1Down:Connect(function()
-		if not currentChestId then return end
-		if isShiftDown() then
-			quickTakeFromChest(index, true)
-			return
-		end
-		hideContextMenu()
-		beginChestDrag(index)
-	end)
 	button.InputBegan:Connect(function(input)
+		if not currentChestId or dragging.Active or dragging.Input then return end
 		if input.UserInputType == Enum.UserInputType.MouseButton2 then
 			showContextMenu(index, input.Position)
+		elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+			hideContextMenu()
+			if isShiftDown() then quickTakeFromChest(index, true); return end
+			beginChestDrag(index)
+		elseif input.UserInputType == Enum.UserInputType.Touch and chestSlotData(index) then
+			hideContextMenu()
+			dragging.Input, dragging.PendingIndex, dragging.StartPos = input, index, input.Position
 		end
 	end)
 
@@ -676,6 +678,7 @@ local function ensureSlotCount(count)
 		local y = row * (SLOT_SIZE + SLOT_GAP)
 		slots[#slots + 1] = createSlot(i, x, y)
 	end
+	if arrangeChest then arrangeChest() end
 end
 
 local function closeChest(sendCloseEvent)
@@ -689,6 +692,7 @@ local function closeChest(sendCloseEvent)
 	dragging.Ghost = nil
 	dragging.InvFrames = nil
 	dragging.ChestFrames = nil
+	dragging.Input, dragging.PendingIndex, dragging.StartPos = nil, nil, nil
 	showTransferStatus(nil)
 	hideContextMenu()
 	panel.Visible = false
@@ -729,16 +733,34 @@ if chestRemote then
 end
 
 UserInputService.InputChanged:Connect(function(input)
-	if dragging.Active and input.UserInputType == Enum.UserInputType.MouseMovement then
+	local touch = input == dragging.Input
+	if touch and dragging.PendingIndex and dragging.StartPos and (input.Position - dragging.StartPos).Magnitude >= 10 then
+		local index = dragging.PendingIndex
+		dragging.PendingIndex = nil
+		beginChestDrag(index)
+	end
+	if dragging.Active and (touch or (not dragging.Input and input.UserInputType == Enum.UserInputType.MouseMovement)) then
 		if dragging.Ghost then
 			local size = dragging.Ghost.AbsoluteSize
-			dragging.Ghost.Position = UDim2.fromOffset(input.Position.X - size.X * 0.5, input.Position.Y - size.Y * 0.5)
+			local inset = GuiService:GetGuiInset()
+			if touch then inset = Vector2.zero end
+			dragging.Ghost.Position = UDim2.fromOffset(input.Position.X - inset.X - size.X * 0.5, input.Position.Y - inset.Y - size.Y * 0.5)
 		end
 	end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 and dragging.Active then
+	if input == dragging.Input then
+		local point = Vector2.new(input.Position.X, input.Position.Y)
+		if dragging.Active then
+			endDrag(point, true)
+		else
+			local index = dragging.PendingIndex
+			local target = slotAtPoint(point, getChestSlotFrames(), true)
+			dragging.Input, dragging.PendingIndex, dragging.StartPos = nil, nil, nil
+			if index and target and target:GetAttribute("ChestIndex") == index then quickTakeFromChest(index, true) end
+		end
+	elseif input.UserInputType == Enum.UserInputType.MouseButton1 and not dragging.Input and dragging.Active then
 		endDrag(UserInputService:GetMouseLocation())
 	end
 end)
@@ -771,7 +793,59 @@ ProximityPromptService.PromptTriggered:Connect(function(prompt, playerWhoTrigger
 end)
 
 Theme.Panel(panel)
-Theme.Fit(panel, 900, 590)
+local chestScale = Instance.new("UIScale")
+chestScale.Name, chestScale.Parent = "ViewportScale", panel
 Theme.CaptureCursor(panel); Theme.AnimatePanel(panel)
 Theme.Button(closeButton, true)
 for _, button in ipairs({contextTake, contextToHotbar, contextToStorage}) do Theme.Button(button) end
+
+arrangeChest = function()
+	local camera = workspace.CurrentCamera
+	if not camera then return end
+	local mobile = Theme.IsMobile()
+	local viewport = camera.ViewportSize
+	local topInset, bottomInset = GuiService:GetGuiInset()
+	local width, height = viewport.X - topInset.X - bottomInset.X, viewport.Y - topInset.Y - bottomInset.Y
+	local portrait = mobile and width < height
+	local packWidth, packHeight = 446, mobile and 292 or 380
+	local chestHeight = (mobile and 78 or 60) + math.max(1, math.ceil(slotCount / COLS)) * (SLOT_SIZE + SLOT_GAP)
+	local availableHeight = math.max(120, height - (mobile and (portrait and 192 or 96) or 40))
+	local totalWidth = portrait and math.max(packWidth, 382) or packWidth + 382 + 24
+	local totalHeight = portrait and (packHeight + chestHeight + 12) or math.max(packHeight, chestHeight)
+	local scale = math.min(mobile and 1.65 or 2.5, (width - 24) / totalWidth, availableHeight / totalHeight)
+	chestScale.Scale = scale
+	chestScale:SetAttribute("TargetScale", scale)
+	panel.Size = UDim2.fromOffset(382, chestHeight)
+	panel.AnchorPoint = Vector2.new(0.5, 0.5)
+	panel.Position = UDim2.fromOffset(width * 0.5 - (portrait and 0 or (packWidth + 24) * scale * 0.5), availableHeight * 0.5 + 8 - (portrait and (packHeight + 12) * scale * 0.5 or 0))
+	title.TextSize = mobile and 22 or 20
+	closeButton.Size = UDim2.fromOffset(mobile and 64 / scale or 64, mobile and 44 / scale or 40)
+	closeButton.Text = mobile and "X" or "Close"
+	closeButton.TextSize = mobile and 18 / scale or 12
+	closeButton.AnchorPoint = Vector2.new(1, 0)
+	closeButton.Position = UDim2.new(1, -MARGIN, 0, 4)
+	transferStatusLabel.TextSize = mobile and 14 or 12
+	transferStatusLabel.Position = UDim2.new(0, MARGIN, 1, 12)
+	slotContainer.Position = UDim2.fromOffset(MARGIN, mobile and 76 or 58)
+	for _, slot in ipairs(slots) do
+		slot.ItemText.TextSize = mobile and 12 / scale or 12
+		slot.ItemText.TextWrapped = false
+		slot.ItemText.TextTruncate = Enum.TextTruncate.AtEnd
+		slot.ItemText.Size = UDim2.new(1, -8, 0, mobile and 26 / scale or 40)
+		slot.ItemText.Position = UDim2.fromOffset(4, mobile and 2 / scale or 7)
+		slot.Qty.TextSize = mobile and 12 / scale or 12
+		slot.QtyBadge.Size = UDim2.fromOffset(mobile and 30 / scale or 30, mobile and 16 / scale or 16)
+		slot.QtyBadge.Position = UDim2.new(1, mobile and -32 / scale or -34, 1, mobile and -18 / scale or -20)
+	end
+	local invGui = playerGui:FindFirstChild("InventoryUI")
+	if invGui then invGui:SetAttribute("ChestLayoutHeight", chestHeight) end
+end
+UserInputService:GetPropertyChangedSignal("PreferredInput"):Connect(arrangeChest)
+local chestViewportConnection
+local function bindChestViewport()
+	if chestViewportConnection then chestViewportConnection:Disconnect() end
+	if workspace.CurrentCamera then chestViewportConnection = workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(arrangeChest) end
+	arrangeChest()
+end
+workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(bindChestViewport)
+bindChestViewport()

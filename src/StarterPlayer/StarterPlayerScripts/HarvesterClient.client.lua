@@ -9,6 +9,7 @@ local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 local Remotes = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage:WaitForChild("Remotes", 5)
 local function resolveInteractRemote()
 	if not Remotes then return nil end
@@ -26,6 +27,7 @@ local function inputBlocked()
 	local gui = player:FindFirstChildOfClass("PlayerGui")
 	return player:GetAttribute("IsDead") == true
 		or (gui and gui:GetAttribute("MenuCursorOpen") == true)
+		or (gui and gui:GetAttribute("BuildPlacementActive") == true)
 		or UserInputService:GetFocusedTextBox() ~= nil
 end
 
@@ -47,7 +49,8 @@ local function getMouseRay()
 	if not camera then return nil, nil end
 	local mousePos = UserInputService:GetMouseLocation()
 	local inset = GuiService:GetGuiInset()
-	local ray = camera:ViewportPointToRay(mousePos.X - inset.X, mousePos.Y - inset.Y)
+	local aim = Theme.IsMobile() and camera.ViewportSize * 0.5 or Vector2.new(mousePos.X - inset.X, mousePos.Y - inset.Y)
+	local ray = camera:ViewportPointToRay(aim.X, aim.Y)
 	return ray.Origin, ray.Direction
 end
 
@@ -263,7 +266,7 @@ local function bindTool(tool)
 end
 
 inputBeganConn = UserInputService.InputBegan:Connect(function(input, processed)
-	if processed or inputBlocked() then return end
+	if processed or inputBlocked() or Theme.IsMobile() then return end
 	if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
 	if not activeTool or activeTool.Parent ~= player.Character then return end
 	holding = true
@@ -271,6 +274,7 @@ inputBeganConn = UserInputService.InputBegan:Connect(function(input, processed)
 end)
 
 inputEndedConn = UserInputService.InputEnded:Connect(function(input, processed)
+	if Theme.IsMobile() then return end
 	if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
 	holding = false
 end)

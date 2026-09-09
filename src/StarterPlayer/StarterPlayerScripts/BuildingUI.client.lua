@@ -43,6 +43,8 @@ local PLACE_REQUEST_NONCE_ATTR = "BuildPlaceItemRequestNonce"
 
 -- State
 local isPlacementMode = false
+local isSalvageMode = false
+local rotation = 0
 local selectedItem = nil
 local inventorySnapshot = nil
 local previewPart = nil
@@ -151,7 +153,7 @@ local panelTitle = Instance.new("TextLabel")
 panelTitle.Name = "Title"
 panelTitle.Size = UDim2.new(1, 0, 0, 30)
 panelTitle.BackgroundTransparency = 1
-panelTitle.Text = "CAMP EQUIPMENT  /  B CLOSE"
+panelTitle.Text = "CAMP EQUIPMENT"
 panelTitle.TextColor3 = COLORS.Text
 panelTitle.TextSize = 14
 panelTitle.Font = Enum.Font.GothamBold
@@ -207,7 +209,8 @@ local function getPlacementPosition()
 	local camera = workspace.CurrentCamera
 	if not camera then return nil end
 	
-	local unitRay = camera:ViewportPointToRay(mouse.X, mouse.Y)
+	local aim = Theme.IsMobile() and camera.ViewportSize * 0.5 or Vector2.new(mouse.X, mouse.Y)
+	local unitRay = camera:ViewportPointToRay(aim.X, aim.Y)
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 	raycastParams.FilterDescendantsInstances = {player.Character, previewPart}
@@ -223,7 +226,8 @@ local function getHoveredBuildTarget()
 	local camera = workspace.CurrentCamera
 	if not camera then return nil end
 
-	local unitRay = camera:ViewportPointToRay(mouse.X, mouse.Y)
+	local aim = Theme.IsMobile() and camera.ViewportSize * 0.5 or Vector2.new(mouse.X, mouse.Y)
+	local unitRay = camera:ViewportPointToRay(aim.X, aim.Y)
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 	raycastParams.FilterDescendantsInstances = { player.Character, previewPart }
@@ -290,6 +294,10 @@ local function updatePreview()
 		previewPart.Transparency = 0.5
 		previewPart.Material = Enum.Material.SmoothPlastic
 		previewPart.Parent = workspace
+		local arrow = Instance.new("WedgePart")
+		arrow.Name, arrow.Size = "Facing", Vector3.new(1.8, .6, 2)
+		arrow.Anchored, arrow.CanCollide, arrow.CanQuery = true, false, false
+		arrow.Color, arrow.Material, arrow.Parent = COLORS.Amber, Enum.Material.Neon, previewPart
 		
 		-- Add selection box effect
 		local selection = Instance.new("SelectionBox")
@@ -299,7 +307,9 @@ local function updatePreview()
 		selection.Parent = previewPart
 	end
 	
-	previewPart.Position = position + Vector3.new(0, previewPart.Size.Y / 2, 0)
+	previewPart.CFrame = CFrame.new(position + Vector3.new(0, previewPart.Size.Y / 2, 0)) * CFrame.Angles(0, math.rad(rotation), 0)
+	local arrow = previewPart:FindFirstChild("Facing")
+	if arrow then arrow.CFrame = previewPart.CFrame * CFrame.new(0, previewPart.Size.Y / 2 + .1, -1.1) * CFrame.Angles(0, math.pi, 0) end
 	previewPart.Transparency = 0.5
 	
 	canPlace = isValidPlacement(position)
@@ -341,7 +351,7 @@ local function createItemButton(itemId, count)
 	nameLabel.BackgroundTransparency = 1
 	nameLabel.Text = name
 	nameLabel.TextColor3 = COLORS.Text
-	nameLabel.TextSize = 10
+	nameLabel.TextSize = Theme.IsMobile() and 14 or 10
 	nameLabel.Font = Enum.Font.GothamBold
 	nameLabel.TextWrapped = true
 	nameLabel.ZIndex = 93
@@ -358,7 +368,7 @@ local function createItemButton(itemId, count)
 	countLabel.ZIndex = 93
 	countLabel.Parent = btn
 	
-	btn.MouseButton1Click:Connect(function()
+	btn.Activated:Connect(function()
 		startPlacement(itemId)
 	end)
 	
@@ -396,7 +406,7 @@ function refreshItems()
 		emptyLabel.Name = "EmptyLabel"
 		emptyLabel.Size = UDim2.new(1, 0, 0, 50)
 		emptyLabel.BackgroundTransparency = 1
-		emptyLabel.Text = "No placeable items\nCraft a Workbench first! (Press C)"
+		emptyLabel.Text = "No placeable items\nCraft a Workbench first."
 		emptyLabel.TextColor3 = COLORS.TextMuted
 		emptyLabel.TextSize = 12
 		emptyLabel.Font = Enum.Font.Gotham
@@ -428,9 +438,12 @@ startPlacement = function(itemId)
 		return
 	end
 	selectedItem = itemId
+	isSalvageMode = false
+	rotation = 0
 	local itemData = ItemDatabase:Get(itemId)
 	indicatorLabel.Text = "PLACE / " .. (itemData and itemData.Name or itemId)
 	isPlacementMode = true
+	playerGui:SetAttribute("BuildPlacementActive", true)
 	modeIndicator.Visible = true
 	hintLabel.Visible = true
 	hintLabel.Text = DEFAULT_HINT_TEXT
@@ -442,6 +455,8 @@ end
 -- Cancel placement
 local function cancelPlacement()
 	isPlacementMode = false
+	isSalvageMode = false
+	playerGui:SetAttribute("BuildPlacementActive", false)
 	selectedItem = nil
 	modeIndicator.Visible = false
 	hintLabel.Visible = false
@@ -465,6 +480,7 @@ end
 
 -- Place item
 local function placeItem()
+	if playerGui:GetAttribute("MenuCursorOpen") then return end
 	if not isPlacementMode or not selectedItem or not canPlace then return end
 	if not rBuild then return end
 	
@@ -475,6 +491,7 @@ local function placeItem()
 	rBuild:FireServer("Place", {
 		Type = selectedItem,
 		Position = position,
+		Rotation = rotation,
 	})
 end
 
@@ -491,7 +508,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 		end
 	elseif Settings.Matches(input, "Salvage") then
 		removeHoveredStructure()
-	elseif input.KeyCode == Enum.KeyCode.Escape and isPlacementMode then
+	elseif input.KeyCode == Enum.KeyCode.Escape and (isPlacementMode or isSalvageMode) then
 		cancelPlacement()
 	elseif input.UserInputType == Enum.UserInputType.MouseButton1 and isPlacementMode then
 		placeItem()
@@ -574,13 +591,75 @@ print("[BuildingUI] Craft workbenches (Press C) then place them!")
 
 Theme.Panel(modeIndicator)
 Theme.Panel(selectionPanel)
-Theme.Fit(selectionPanel, 730, 610)
+Theme.FitMenu(selectionPanel, 320, 240, {MobileWidth=360,MobileHeight=330,OnResize=function(width, _, mobile)
+	itemContainer.Size = UDim2.new(1, -20, 1, -104)
+	itemLayout.CellSize = UDim2.fromOffset(mobile and 96 or 70, mobile and 84 or 70)
+	if inventorySnapshot then refreshItems() end
+end})
 Theme.CaptureCursor(selectionPanel); Theme.AnimatePanel(selectionPanel)
-Theme.Fit(modeIndicator, 900, 610)
-Theme.Fit(hintLabel, 900, 610)
+
 hintLabel.TextWrapped = true
 hintLabel.TextColor3 = COLORS.TextMuted
 hintLabel.BackgroundColor3 = COLORS.Panel
 hintLabel.BackgroundTransparency = 0.12
 Theme.Corner(hintLabel, 6)
 player:GetAttributeChangedSignal("FieldKitBuild"):Connect(togglePanel)
+
+-- Touch building uses center aim plus explicit actions; camera gestures never place.
+local toolbar = Instance.new("Frame")
+toolbar.Name, toolbar.Size = "TouchPlacement", UDim2.fromOffset(220, 48)
+toolbar.AnchorPoint, toolbar.Position = Vector2.new(.5, 1), UDim2.new(.5, 0, 1, -156)
+toolbar.BackgroundTransparency, toolbar.Parent, toolbar.Visible = 1, gui, false
+local function actionButton(parent, name, text, x, width)
+	local b=Instance.new("TextButton")
+	b.Name,b.Text,b.TextSize,b.Font=name,text,14,Enum.Font.GothamBold
+	b.Size,b.Position=UDim2.fromOffset(width,48),UDim2.fromOffset(x,0)
+	b.Parent=parent; Theme.Button(b,name=="Place")
+	return b
+end
+local place=actionButton(toolbar,"Place","PLACE",0,84)
+local rotate=actionButton(toolbar,"Rotate","↻ 90°",88,64)
+local cancel=actionButton(toolbar,"Cancel","CANCEL",156,64)
+local salvage=actionButton(selectionPanel,"Salvage","SALVAGE AIMED BUILD",0,240)
+salvage.AnchorPoint,salvage.Position=Vector2.new(.5,1),UDim2.new(.5,0,1,-12)
+salvage.Activated:Connect(function()
+	cancelPlacement(); isSalvageMode=true
+	selectionPanel.Visible=false; modeIndicator.Visible=true
+	indicatorLabel.Text="SALVAGE / aim at your structure"
+	playerGui:SetAttribute("BuildPlacementActive",true)
+end)
+place.Activated:Connect(function() if isSalvageMode then removeHoveredStructure() else placeItem() end end)
+rotate.Activated:Connect(function() rotation=(rotation+90)%360 end)
+cancel.Activated:Connect(cancelPlacement)
+local closeSelection=actionButton(selectionPanel,"Close","×",0,44)
+closeSelection.AnchorPoint,closeSelection.Position=Vector2.new(1,0),UDim2.new(1,-4,0,2)
+closeSelection.Activated:Connect(function() selectionPanel.Visible=false end)
+local reticle=Theme.Label(gui,"+",UDim2.fromOffset(24,24),UDim2.fromScale(.5,.5),24,COLORS.Amber,true)
+reticle.Name,reticle.AnchorPoint,reticle.TextXAlignment="PlacementReticle",Vector2.new(.5,.5),Enum.TextXAlignment.Center
+local function updateTouchControls()
+	local mobile=Theme.IsMobile()
+	local active=isPlacementMode or isSalvageMode
+	local blocked=playerGui:GetAttribute("MenuCursorOpen")==true
+	toolbar.Visible=mobile and active and not blocked
+	reticle.Visible=toolbar.Visible
+	local camera=workspace.CurrentCamera
+	if camera then reticle.Position=UDim2.fromOffset(camera.ViewportSize.X*.5-gui.AbsolutePosition.X,camera.ViewportSize.Y*.5-gui.AbsolutePosition.Y) end
+	place.Text=isSalvageMode and "SALVAGE" or "PLACE"
+	rotate.Visible=not isSalvageMode
+	if mobile then
+		modeIndicator.AnchorPoint,modeIndicator.Position=Vector2.new(.5,1),UDim2.new(.5,0,1,-212)
+		hintLabel.AnchorPoint,hintLabel.Position=Vector2.new(.5,1),UDim2.new(.5,0,1,-254)
+		hintLabel.Size=UDim2.new(1,-32,0,44)
+		DEFAULT_HINT_TEXT="Aim at the ground, then tap PLACE · Camp radius: 100 studs"
+	else
+		modeIndicator.AnchorPoint,modeIndicator.Position=Vector2.new(.5,0),UDim2.new(.5,0,0,66)
+		hintLabel.AnchorPoint,hintLabel.Position=Vector2.new(.5,0),UDim2.new(.5,0,0,110)
+		hintLabel.Size=UDim2.fromOffset(390,48)
+		DEFAULT_HINT_TEXT=defaultHint()
+	end
+end
+Theme.BindResponsive(toolbar,updateTouchControls)
+playerGui:GetAttributeChangedSignal("BuildPlacementActive"):Connect(updateTouchControls)
+playerGui:GetAttributeChangedSignal("MenuCursorOpen"):Connect(updateTouchControls)
+player:GetAttributeChangedSignal("IsDead"):Connect(function() if player:GetAttribute("IsDead") then cancelPlacement(); selectionPanel.Visible=false end end)
+player.CharacterRemoving:Connect(cancelPlacement)

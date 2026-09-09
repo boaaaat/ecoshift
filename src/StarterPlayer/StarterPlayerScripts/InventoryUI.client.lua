@@ -358,7 +358,8 @@ local function createSlot(parent, x, y, slotType, index, slotSize)
 	itemText.TextColor3 = COLORS.Text
 	itemText.TextSize = 10
 	itemText.Font = Enum.Font.GothamBold
-	itemText.TextWrapped = true
+	itemText.TextWrapped = false
+	itemText.TextTruncate = Enum.TextTruncate.AtEnd
 	itemText.Text = ""
 	itemText.Visible = false
 	itemText.ZIndex = 3
@@ -756,7 +757,9 @@ local function renderSlot(slot)
 		-- No icon - show text label instead
 		slot.Icon.Image = ""
 		slot.Icon.Visible = false
-		slot.ItemText.Text = name
+		-- Break at a word boundary; long single words truncate instead of wrapping
+		-- their last letters into an unreadable second line on phone hotbars.
+		slot.ItemText.Text = name:gsub(" ", "\n", 1)
 		slot.ItemText.TextColor3 = COLORS.Text
 		slot.ItemText.Visible = true
 	end
@@ -943,11 +946,11 @@ end
 
 local swapLocalSlots
 
-local function shiftMove(slot)
+local function shiftMove(slot, chestOnly)
 	local data = getSlotData(slot.Type, slot.Index)
 	if not data then return end
 	local item = ItemDatabase:Get(data.Id)
-	if slot.Type ~= "Armor" and item and item:HasTag("Armor") then
+	if not chestOnly and slot.Type ~= "Armor" and item and item:HasTag("Armor") then
 		if not rInventoryAction then return end
 		-- Move atomically returns the old armor to this same slot, even with a
 		-- full inventory. Armor equip takes priority over open-chest transfers.
@@ -978,6 +981,10 @@ local function shiftMove(slot)
 				return
 			end
 		end
+	end
+	if chestOnly then
+		showTransferStatus("Chest has no room for this item", COLORS.Warning, 1.5)
+		return
 	end
 	if not rInventoryAction then return end
 	local targetType, targetIndex = findBestInventoryTarget(slot, data.Id)
@@ -1043,9 +1050,13 @@ local contextSplit = makeMenuButton("Split", 3)
 local contextPlace = makeMenuButton("Place", 4)
 local contextSlot = nil
 
-local function showContextMenu(slot, position)
+local function showContextMenu(slot, position, touch)
 	contextSlot = slot
-	contextMenu.Position = UDim2.fromOffset(position.X + 6, position.Y + 6)
+	local inset = GuiService:GetGuiInset()
+	if touch then inset = Vector2.zero end
+	local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(800, 600)
+	local menuSize = contextMenu.AbsoluteSize
+	contextMenu.Position = UDim2.fromOffset(math.clamp(position.X - inset.X + 6, 4, math.max(4, viewport.X - menuSize.X - 8)), math.clamp(position.Y - inset.Y + 6, 4, math.max(4, viewport.Y - inset.Y - menuSize.Y - 8)))
 	local data = getSlotData(slot.Type, slot.Index)
 	local item = data and ItemDatabase:Get(data.Id) or nil
 	local canUse = item and (item:HasTag("Food") or item:HasTag("Consumable")) or false
@@ -1163,7 +1174,7 @@ end
 
 -- Drag and drop
 local DRAG_THRESHOLD = 6
-local dragging = { Active = false, Pending = false, From = nil, Ghost = nil, StartPos = nil }
+local dragging = { Active = false, Pending = false, From = nil, Ghost = nil, StartPos = nil, Input = nil }
 
 local function createDragGhost(slot, data)
 	local size = slot.Frame.AbsoluteSize
@@ -1243,6 +1254,7 @@ cancelDrag = function()
 	dragging.From = nil
 	dragging.Ghost = nil
 	dragging.StartPos = nil
+	dragging.Input = nil
 end
 
 local function beginDrag(slot)
@@ -1279,11 +1291,12 @@ local function endDrag(targetSlot)
 	end
 end
 
-local function chestSlotFrameAtPoint(point)
+local function chestSlotFrameAtPoint(point, touch)
 	local _, chestSlots = getOpenChestSlotsContainer()
 	if not chestSlots then return nil end
 
 	local inset = GuiService:GetGuiInset()
+	if touch then inset = Vector2.zero end
 	local adjustedPoint = Vector2.new(point.X - inset.X, point.Y - inset.Y)
 	for _, frame in ipairs(chestSlots:GetChildren()) do
 		if frame:IsA("Frame") and tonumber(frame:GetAttribute("ChestIndex")) then
@@ -1321,10 +1334,11 @@ local function endDragToChest(chestFrame)
 	showTransferStatus("Moved to chest", COLORS.Accent, 0.9)
 end
 
-local function slotAtPoint(point)
-	-- GetMouseLocation includes GUI inset, AbsolutePosition doesn't
-	-- Subtract the inset to align coordinate systems
+local function slotAtPoint(point, touch)
+	-- Mouse location includes the top inset; touch InputObject positions already
+	-- share the slot AbsolutePosition coordinate space.
 	local inset = GuiService:GetGuiInset()
+	if touch then inset = Vector2.zero end
 	local adjustedPoint = Vector2.new(point.X - inset.X, point.Y - inset.Y)
 	
 	for _, slot in ipairs(slots) do
@@ -1341,7 +1355,8 @@ end
 
 -- Input handling
 UserInputService.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement then
+	if (input.UserInputType == Enum.UserInputType.MouseMovement and not (dragging.Input and dragging.Input.UserInputType == Enum.UserInputType.Touch))
+		or input == dragging.Input then
 		if tooltip.Visible then
 			tooltip.Position = UDim2.fromOffset(input.Position.X + 15, input.Position.Y + 15)
 		end
@@ -1364,14 +1379,15 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 and (dragging.Active or dragging.Pending) then
-		local mouseLocation = UserInputService:GetMouseLocation()
-		local target = slotAtPoint(mouseLocation)
+	local touch = input.UserInputType == Enum.UserInputType.Touch
+	if ((touch and input == dragging.Input) or (input.UserInputType == Enum.UserInputType.MouseButton1 and dragging.Input and dragging.Input.UserInputType == Enum.UserInputType.MouseButton1)) and (dragging.Active or dragging.Pending) then
+		local mouseLocation = touch and Vector2.new(input.Position.X, input.Position.Y) or UserInputService:GetMouseLocation()
+		local target = slotAtPoint(mouseLocation, touch)
 		if dragging.Active then
 			if target then
 				endDrag(target)
 			else
-				local chestTarget = chestSlotFrameAtPoint(mouseLocation)
+				local chestTarget = chestSlotFrameAtPoint(mouseLocation, touch)
 				if chestTarget then
 					endDragToChest(chestTarget)
 				else
@@ -1380,6 +1396,17 @@ UserInputService.InputEnded:Connect(function(input)
 			end
 		elseif dragging.Pending and dragging.From then
 			local fromSlot = dragging.From
+			if touch and target ~= fromSlot then cancelDrag(); return end
+			if touch and isChestTransferLockActive() then
+				shiftMove(fromSlot, true)
+				cancelDrag()
+				return
+			end
+			if touch and fromSlot.Type ~= "Hotbar" and getSlotData(fromSlot.Type, fromSlot.Index) then
+				showContextMenu(fromSlot, mouseLocation, true)
+				cancelDrag()
+				return
+			end
 			-- Only send Equip for Hotbar slots (empty or filled)
 			if rInventoryAction and fromSlot.Type == "Hotbar" then
 				selectedSlot = nil
@@ -1423,7 +1450,8 @@ for _, slot in ipairs(slots) do
 			end
 			return
 		end
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			if dragging.Pending or dragging.Active then return end
 			hideContextMenu()
 			if isShiftDown() then
 				shiftMove(slot)
@@ -1433,6 +1461,7 @@ for _, slot in ipairs(slots) do
 			dragging.Active = false
 			dragging.From = slot
 			dragging.StartPos = input.Position
+			dragging.Input = input
 		end
 	end)
 	
@@ -1552,12 +1581,14 @@ player.CharacterAdded:Connect(bindCharacter)
 
 -- Paper pack and shared field-kit navigation.
 Theme.Panel(mainContainer)
-Theme.Fit(mainContainer, 900, 590)
+local packScale = Instance.new("UIScale")
+packScale.Name, packScale.Parent = "ViewportScale", mainContainer
 Theme.CaptureCursor(mainContainer); Theme.AnimatePanel(mainContainer)
 Theme.Panel(hotbarPanel)
-Theme.Fit(hotbarRoot, 900, 610, nil, true)
+local hotbarScale = Instance.new("UIScale")
+hotbarScale.Name, hotbarScale.Parent = "ViewportScale", hotbarRoot
 shadow.Visible = false
-Theme.Label(armorSection, "Weather protection goes here.\nDrag armor into the equipment slot.", UDim2.fromOffset(280, 42), UDim2.fromOffset(80, 27), 11, COLORS.TextMuted)
+local armorHelp = Theme.Label(armorSection, "Weather protection goes here.\nDrag armor into the equipment slot.", UDim2.fromOffset(280, 42), UDim2.fromOffset(80, 27), 14, COLORS.TextMuted)
 local closePack = Instance.new("TextButton")
 closePack.Name = "ClosePack"
 closePack.Size = UDim2.fromOffset(28, 28)
@@ -1570,13 +1601,99 @@ Theme.Button(closePack, false)
 closePack.Activated:Connect(function() setInventoryOpen(false) end)
 player:GetAttributeChangedSignal("FieldKitPack"):Connect(function() setInventoryOpen(not inventoryOpen) end)
 local function arrangePack()
+ local camera = workspace.CurrentCamera
+ if not camera then return end
+ local mobile = Theme.IsMobile()
+ local viewport = camera.ViewportSize
+ local topInset, bottomInset = GuiService:GetGuiInset()
+ local width, height = viewport.X - topInset.X - bottomInset.X, viewport.Y - topInset.Y - bottomInset.Y
  local chestOpen = gui:GetAttribute("ChestOpen") == true
- mainContainer.AnchorPoint = Vector2.new(chestOpen and 0 or 0.5, 0.5)
- mainContainer.Position = UDim2.new(0.5, chestOpen and 12 or 0, 0.5, 0)
+ hotbarRoot.Visible = not mobile or (playerGui:GetAttribute("BuildPlacementActive") ~= true
+  and (playerGui:GetAttribute("MenuCursorOpen") ~= true or mainContainer.Visible or chestOpen))
+ local portrait = mobile and width < height
+ local widePack = mobile and not portrait and not chestOpen
+ local columns = widePack and 9 or STORAGE_COLS
+ local packWidth = columns * SLOT_SIZE + (columns - 1) * SLOT_GAP + MARGIN * 2
+ local packHeight = mobile and (widePack and 224 or 292) or MAIN_HEIGHT
+ local chestHeight = tonumber(gui:GetAttribute("ChestLayoutHeight")) or 200
+ local availableHeight = math.max(120, height - (mobile and (portrait and 192 or 96) or 40))
+ local maxScale = mobile and 1.65 or 2.5
+ hotbarScale.Scale = math.min(mobile and 1 or 1.5, (width - 64) / 290)
+ hotbarRoot.Position = UDim2.new(0.5, 0, 1, mobile and (portrait and -104 or -8) or -18)
+ local totalWidth = chestOpen and not portrait and (packWidth + 382 + 24) or packWidth
+ local totalHeight = chestOpen and (portrait and (packHeight + chestHeight + 12) or math.max(packHeight, chestHeight)) or packHeight
+ local scale = math.min(maxScale, (width - 24) / totalWidth, availableHeight / totalHeight)
+ packScale.Scale = scale
+ packScale:SetAttribute("TargetScale", scale)
+ mainContainer.Size = UDim2.fromOffset(packWidth, packHeight)
+ mainContainer.AnchorPoint = Vector2.new(0.5, 0.5)
+ local centerY = availableHeight * 0.5 + 8
+ local x = width * 0.5 + (chestOpen and not portrait and (382 + 24) * scale * 0.5 or 0)
+ local y = centerY + (chestOpen and portrait and (chestHeight + 12) * scale * 0.5 or 0)
+ mainContainer.Position = UDim2.fromOffset(x, y)
  closePack.Visible = not chestOpen
+ local closeSize = mobile and 44 / scale or 40
+ closePack.Size = UDim2.fromOffset(closeSize, closeSize)
+ closePack.Position = UDim2.new(1, -closeSize - 8, 0, 5)
+ titleLabel.TextSize = mobile and 22 or 20
+ titleLabel.Size = UDim2.fromOffset(mobile and 200 or 230, 44)
+ capacityLabel.Visible = not mobile
+ armorLabel.Visible = not mobile
+ armorHelp.Visible = not mobile
+ armorSection.Position = mobile and UDim2.fromOffset(258, 4) or UDim2.fromOffset(MARGIN, HEADER_HEIGHT)
+ armorSection.Size = mobile and UDim2.fromOffset(130, 64) or UDim2.new(1, -MARGIN * 2, 0, ARMOR_SECTION_HEIGHT)
+ armorContainer.Position = UDim2.fromOffset(0, mobile and 0 or 16)
+ armorSlot.Frame.Size = UDim2.fromOffset(mobile and 56 or SLOT_SIZE, mobile and 56 or SLOT_SIZE)
+ storageSection.Position = UDim2.fromOffset(MARGIN, mobile and 68 or HEADER_HEIGHT + ARMOR_SECTION_HEIGHT + 8)
+ storageLabel.Text = mobile and (chestOpen and "TAP TO STORE · DRAG TO ARRANGE" or "TAP FOR ACTIONS · DRAG TO ARRANGE") or "STORAGE"
+ storageLabel.TextSize = mobile and 13 or 12
+ transferStatusLabel.Size = UDim2.fromOffset(mobile and 236 or 240, 18)
+ transferStatusLabel.Position = mobile and UDim2.new(0, MARGIN, 0, 63) or UDim2.new(1, -MARGIN, 1, -4)
+ transferStatusLabel.AnchorPoint = mobile and Vector2.new(0, 1) or Vector2.new(1, 1)
+ transferStatusLabel.TextSize = mobile and 14 or 12
+ transferStatusLabel.TextXAlignment = mobile and Enum.TextXAlignment.Left or Enum.TextXAlignment.Right
+ for _, slot in ipairs(slots) do
+  local slotScale = slot.Type == "Hotbar" and hotbarScale.Scale or scale
+  slot.ItemText.TextSize = mobile and 12 / slotScale or 12
+  slot.QtyLabel.TextSize = mobile and 12 / slotScale or 12
+  if mobile then
+   slot.QtyBadge.Size = UDim2.fromOffset(30 / slotScale, 16 / slotScale)
+   slot.QtyBadge.Position = UDim2.new(1, -32 / slotScale, 1, -18 / slotScale)
+  else
+   slot.QtyBadge.Size = UDim2.fromOffset(26, 14)
+   slot.QtyBadge.Position = UDim2.new(1, -28, 1, -16)
+  end
+  slot.ItemText.Size = UDim2.new(1, -8, 0, mobile and 26 / slotScale or 32)
+  slot.ItemText.Position = mobile and UDim2.new(0.5, 0, 0, 2 / slotScale) or UDim2.new(0.5, 0, 0.5, -2)
+  slot.ItemText.AnchorPoint = mobile and Vector2.new(0.5, 0) or Vector2.new(0.5, 0.5)
+  local keybind = slot.Frame:FindFirstChild("Keybind")
+  if keybind then keybind.Visible = not mobile end
+  if slot.Type == "Storage" then
+   local index = slot.Index - 1
+   slot.Frame.Position = UDim2.fromOffset((index % columns) * (SLOT_SIZE + SLOT_GAP), math.floor(index / columns) * (SLOT_SIZE + SLOT_GAP))
+  end
+ end
+ contextMenu.Size = UDim2.fromOffset(mobile and 180 or 140, mobile and 196 or 136)
+ for index, button in ipairs({contextUse, contextDrop, contextSplit, contextPlace}) do
+  button.Size = UDim2.new(1, -8, 0, mobile and 44 or 28)
+  button.Position = UDim2.fromOffset(4, 4 + (index - 1) * (mobile and 48 or 32))
+  button.TextSize = mobile and 17 or 14
+ end
 end
 gui:GetAttributeChangedSignal("ChestOpen"):Connect(arrangePack)
-arrangePack()
+gui:GetAttributeChangedSignal("ChestLayoutHeight"):Connect(arrangePack)
+playerGui:GetAttributeChangedSignal("MenuCursorOpen"):Connect(arrangePack)
+playerGui:GetAttributeChangedSignal("BuildPlacementActive"):Connect(arrangePack)
+mainContainer:GetPropertyChangedSignal("Visible"):Connect(arrangePack)
+UserInputService:GetPropertyChangedSignal("PreferredInput"):Connect(arrangePack)
+local packViewportConnection
+local function bindPackViewport()
+ if packViewportConnection then packViewportConnection:Disconnect() end
+ if workspace.CurrentCamera then packViewportConnection = workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(arrangePack) end
+ arrangePack()
+end
+workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(bindPackViewport)
+bindPackViewport()
 for _, button in ipairs({ contextUse, contextDrop, contextSplit, contextPlace }) do Theme.Button(button) end
 
 Settings.Changed:Connect(bindInventoryToggleAction)

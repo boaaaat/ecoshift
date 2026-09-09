@@ -10,6 +10,7 @@ local GuiService = game:GetService("GuiService")
 local Remotes = ReplicatedStorage:WaitForChild("Remotes", 5)
 local CombatRE = Remotes and Remotes:WaitForChild("CombatAction", 3)
 local WeaponFactory = require(ReplicatedStorage.Shared.Weapons.WeaponFactory)
+local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 
 local player = Players.LocalPlayer
 local activeTool = nil
@@ -25,6 +26,7 @@ local function inputBlocked()
 	local gui = player:FindFirstChildOfClass("PlayerGui")
 	return player:GetAttribute("IsDead") == true
 		or (gui and gui:GetAttribute("MenuCursorOpen") == true)
+		or (gui and gui:GetAttribute("BuildPlacementActive") == true)
 		or UserInputService:GetFocusedTextBox() ~= nil
 end
 
@@ -42,7 +44,8 @@ local function raycastFromMouse(maxRange)
 	if not camera then return nil, nil end
 	local mousePos = UserInputService:GetMouseLocation()
 	local inset = GuiService:GetGuiInset()
-	local ray = camera:ViewportPointToRay(mousePos.X - inset.X, mousePos.Y - inset.Y)
+	local aim = Theme.IsMobile() and camera.ViewportSize * 0.5 or Vector2.new(mousePos.X - inset.X, mousePos.Y - inset.Y)
+	local ray = camera:ViewportPointToRay(aim.X, aim.Y)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { player.Character }
@@ -163,13 +166,22 @@ local function bindTool(tool)
 	end)
 	tool.Activated:Connect(function()
 		if activeTool ~= tool or inputBlocked() then return end
+		tool:SetAttribute("CancelMobileRelease", nil)
 		holdingPrimary = true
+		local kind = activeWeapon and activeWeapon:GetType():lower()
+		if Theme.IsMobile() and (kind == "shield" or kind == "shields") then holdingSecondary = true; startBlock() end
 		startBowCharge()
 		tryAttack()
 	end)
 	tool.Deactivated:Connect(function()
 		if activeTool ~= tool then return end
 		holdingPrimary = false
+		if holdingSecondary then holdingSecondary = false; endBlock() end
+		if tool:GetAttribute("CancelMobileRelease") then
+			if bowCharging and CombatRE then CombatRE:FireServer("ChargeCancel") end
+			bowCharging = false
+			return
+		end
 		releaseBowCharge()
 	end)
 end
@@ -209,7 +221,7 @@ local function onCharacter(char)
 end
 
 UserInputService.InputBegan:Connect(function(input, processed)
-	if processed or inputBlocked() then return end
+	if processed or inputBlocked() or Theme.IsMobile() then return end
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
 		holdingPrimary = true
 		if activeWeapon and (activeWeapon:GetType():lower() == "bow" or activeWeapon:GetType():lower() == "bows") then
@@ -224,6 +236,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 end)
 
 UserInputService.InputEnded:Connect(function(input, processed)
+	if Theme.IsMobile() then return end
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
 		holdingPrimary = false
 		releaseBowCharge()

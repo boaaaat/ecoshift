@@ -2,8 +2,40 @@
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
 
 local Theme = {}
+function Theme.IsMobile()
+	return UserInputService.PreferredInput == Enum.PreferredInput.Touch
+end
+
+-- Observe the usable ScreenGui area, including device notches and Roblox insets.
+function Theme.BindResponsive(root, callback)
+	local connections, cameraConnection = {}, nil
+	local function update()
+		local camera = Workspace.CurrentCamera
+		if not camera then return end
+		local gui = root:IsA("ScreenGui") and root or root:FindFirstAncestorOfClass("ScreenGui")
+		local size = gui and gui.AbsoluteSize or camera.ViewportSize
+		if size.X <= 1 or size.Y <= 1 then return end
+		callback(Theme.IsMobile(), size)
+	end
+	local function bindCamera()
+		if cameraConnection then cameraConnection:Disconnect() end
+		if Workspace.CurrentCamera then cameraConnection = Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(update) end
+		update()
+	end
+	table.insert(connections, Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(bindCamera))
+	table.insert(connections, UserInputService:GetPropertyChangedSignal("PreferredInput"):Connect(update))
+	local gui = root:IsA("ScreenGui") and root or root:FindFirstAncestorOfClass("ScreenGui")
+	if gui then table.insert(connections, gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(update)) end
+	root.Destroying:Connect(function()
+		for _, connection in ipairs(connections) do connection:Disconnect() end
+		if cameraConnection then cameraConnection:Disconnect() end
+	end)
+	bindCamera()
+	return update
+end
 local common = {
 	Accent = Color3.fromRGB(65, 97, 59),
 	Paper = Color3.fromRGB(245, 239, 218), Moss = Color3.fromRGB(67, 88, 55),
@@ -171,7 +203,7 @@ function Theme.Label(parent, text, size, position, textSize, color, bold)
 	label.TextColor3 = color or Theme.Colors.Text
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.TextTruncate = Enum.TextTruncate.AtEnd
-	label.ZIndex = parent.ZIndex + 1
+	label.ZIndex = parent:IsA("GuiObject") and parent.ZIndex + 1 or 1
 	label.Parent = parent
 	return label
 end
@@ -233,12 +265,89 @@ function Theme.Fit(frame, width, height, maximum, scaleEdgeOffsets)
 	return scale
 end
 
+-- Mobile menus keep readable native text and scroll instead of shrinking to
+-- fit a short landscape screen. Desktop keeps its original centered layout.
+function Theme.FitMenu(frame, width, height, options)
+	options = options or {}
+	local parent, position, anchor, size = frame.Parent, frame.Position, frame.AnchorPoint, frame.Size
+	local scale = frame:FindFirstChild("ViewportScale") or frame:FindFirstChild("PanelMotion") or Instance.new("UIScale")
+	scale.Name, scale.Parent = "ViewportScale", frame
+	local host = Instance.new("ScrollingFrame")
+	host.Name = frame.Name .. "MobileViewport"
+	host.Position, host.Size = UDim2.fromOffset(8, 8), UDim2.new(1, -16, 1, -16)
+	host.BackgroundTransparency, host.BorderSizePixel = 1, 0
+	host.ScrollBarThickness = 6
+	host.ScrollingDirection, host.ElasticBehavior = Enum.ScrollingDirection.Y, Enum.ElasticBehavior.WhenScrollable
+	host.ZIndex, host.Visible, host.Parent = frame.ZIndex, false, parent
+	local close = Instance.new("TextButton")
+	close.Name, close.Text = frame.Name .. "MobileClose", "×"
+	close.Size, close.AnchorPoint = UDim2.fromOffset(44, 44), Vector2.new(1, 0)
+	close.Position, close.TextSize, close.Font = UDim2.new(1, -16, 0, 12), 26, Enum.Font.GothamBold
+	close.ZIndex, close.Visible, close.Parent = frame.ZIndex + 50, false, parent
+	Theme.Button(close, false)
+	close.Activated:Connect(function()
+		if options.OnClose then options.OnClose() else frame.Visible = false end
+	end)
+	local mobile = false
+	local geometry = setmetatable({}, {__mode="k"})
+	local lastLayout
+	local function rememberGeometry()
+		for _, object in ipairs(frame:GetDescendants()) do
+			if object:IsA("GuiObject") then
+				local record={Position=object.Position,Size=object.Size,AnchorPoint=object.AnchorPoint}
+				if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
+					record.TextSize,record.TextWrapped,record.TextTruncate=object.TextSize,object.TextWrapped,object.TextTruncate
+					record.TextXAlignment,record.TextYAlignment=object.TextXAlignment,object.TextYAlignment
+				end
+				geometry[object]=record
+			end
+		end
+	end
+	local function restoreGeometry()
+		for object, record in pairs(geometry) do
+			if object.Parent then for property, value in pairs(record) do object[property]=value end end
+		end
+		table.clear(geometry)
+	end
+	local function visibility()
+		host.Visible, close.Visible = mobile and frame.Visible, mobile and frame.Visible and not options.HideClose
+	end
+	frame:GetPropertyChangedSignal("Visible"):Connect(visibility)
+	Theme.BindResponsive(frame, function(touch, available)
+		if touch and not mobile then rememberGeometry() elseif mobile and not touch then restoreGeometry() end
+		mobile = touch
+		if touch then
+			local availableWidth = math.max(1, available.X - 16)
+			local contentWidth = math.max(options.MobileWidth or math.min(width, 360), availableWidth)
+			local factor = math.min(1, availableWidth / contentWidth)
+			local contentHeight = math.max(options.MobileHeight or height, (available.Y - 16) / factor)
+			frame.Parent, frame.AnchorPoint, frame.Position = host, Vector2.zero, UDim2.fromOffset(0, 0)
+			frame.Size = UDim2.fromOffset(contentWidth, contentHeight)
+			scale.Scale = factor
+			host.CanvasSize = UDim2.fromOffset(0, contentHeight * factor)
+			local layout="touch:" .. contentWidth .. ":" .. contentHeight
+			if options.OnResize and layout~=lastLayout then options.OnResize(contentWidth, contentHeight, true) end
+			lastLayout=layout
+		else
+			frame.Parent, frame.AnchorPoint, frame.Position, frame.Size = parent, anchor, position, size
+			local factor = math.clamp(math.min(available.X / 1280, available.Y / 800), 1.1, 2.5)
+			scale.Scale = math.min(factor, math.max(.1, (available.X - 32) / width), math.max(.1, (available.Y - 24) / height))
+			if options.OnResize and lastLayout~="desktop" then options.OnResize(width, height, false) end
+			lastLayout="desktop"
+		end
+		scale:SetAttribute("TargetScale", scale.Scale)
+		visibility()
+	end)
+	frame.Destroying:Connect(function() close:Destroy(); task.defer(function() host:Destroy() end) end)
+	return scale
+end
+
 function Theme.CaptureCursor(frame)
 	require(script.Parent.MenuCursor).Bind(frame)
 end
 
 function Theme.AnimatePanel(frame)
-	local scale = frame:FindFirstChild("ViewportScale") or Instance.new("UIScale")
+	local scale = frame:FindFirstChild("ViewportScale") or frame:FindFirstChild("PanelMotion") or Instance.new("UIScale")
 	if not scale.Parent then scale.Name = "PanelMotion"; scale.Parent = frame end
 	frame:GetPropertyChangedSignal("Visible"):Connect(function()
 		if frame.Visible and not (player and player:GetAttribute("ReducedMotion")) then

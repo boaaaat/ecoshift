@@ -56,7 +56,7 @@ local panel=create("Frame",gui,{
 	Name="MainPanel",Size=UDim2.fromOffset(620,670),Position=UDim2.fromScale(.5,.5),
 	AnchorPoint=Vector2.new(.5,.5),BackgroundColor3=colors.Panel,ZIndex=2,Active=true,
 })
-Theme.CaptureCursor(panel); Theme.Panel(panel); Theme.Fit(panel,620,670)
+Theme.CaptureCursor(panel); Theme.Panel(panel); -- Mobile layout is attached after all controls exist.
 local back=button(panel,"Back","‹ Back",34)
 back.Position=UDim2.fromOffset(16,12); back.Size=UDim2.fromOffset(76,34)
 local title=label(panel,"Recipe field guide",34,20)
@@ -438,4 +438,17 @@ RunService.Heartbeat:Connect(function(delta)
 	if accumulator>=.5 then accumulator=0; refresh() end
 end)
 player:GetAttributeChangedSignal("Role_Craft"):Connect(function() if gui.Enabled then refresh() end end)
+Theme.FitMenu(panel,620,670,{OnClose=function() gui.Enabled=false end,MobileWidth=360,OnResize=function(width, _, mobile)
+	close.Visible = not mobile
+	if not mobile then return end
+	back.Size=UDim2.fromOffset(76,44); close.Size=UDim2.fromOffset(44,44)
+	close.Position=UDim2.new(1,-56,0,8)
+	title.TextSize=17
+	batchCaption.Size=UDim2.fromOffset(54,44); batchCaption.TextSize=14
+	minus.Position=UDim2.fromOffset(56,0); minus.Size=UDim2.fromOffset(44,44)
+	quantity.Position=UDim2.fromOffset(106,0); quantity.Size=UDim2.fromOffset(54,44)
+	plus.Position=UDim2.fromOffset(166,0); plus.Size=UDim2.fromOffset(44,44)
+	maximum.Position=UDim2.fromOffset(216,0); maximum.Size=UDim2.new(1,-216,0,44)
+	content.ScrollBarThickness=6
+end})
 return Guide

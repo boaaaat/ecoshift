@@ -3,6 +3,7 @@ if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForCh
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
@@ -21,7 +22,8 @@ card.Size = UDim2.fromOffset(272, 188)
 card.Position = UDim2.fromOffset(18, 14)
 card.Parent = gui
 Theme.Panel(card, true)
-Theme.Fit(card, 730, 610, nil, true)
+local cardScale = Instance.new("UIScale")
+cardScale.Parent = card
 Theme.Label(card, "ECO / SHIFT", UDim2.fromOffset(165, 26), UDim2.fromOffset(16, 12), 21, C.Paper, true)
 Theme.Label(card, "EXPEDITION RECORD", UDim2.fromOffset(230, 14), UDim2.fromOffset(16, 40), 9, C.Sage, true)
 local runLabel = Theme.Label(card, "00:00", UDim2.fromOffset(72, 18), UDim2.fromOffset(182, 16), 12, C.Amber, true)
@@ -92,7 +94,9 @@ kit.AnchorPoint = Vector2.new(0.5, 1)
 kit.Position = UDim2.new(0.5, 0, 1, -94)
 kit.BackgroundTransparency = 1
 kit.Parent = gui
-Theme.Fit(kit, 730, 610, nil, true)
+local kitScale = Instance.new("UIScale")
+kitScale.Parent = kit
+local navigationButtons = {}
 for index, entry in ipairs({ { "Pack", "G" }, { "Craft", "C" }, { "Build", "B" }, { "Map", "M" }, { "Survey", "V" } }) do
 	local button = Instance.new("TextButton")
 	button.Name = entry[1]
@@ -100,23 +104,107 @@ for index, entry in ipairs({ { "Pack", "G" }, { "Craft", "C" }, { "Build", "B" }
 	button.Position = UDim2.fromOffset((index - 1) * 76, 0)
 	button.Font = Enum.Font.GothamBold
 	button.TextSize = 10
-	local function updateHint() button.Text = Settings.Key(entry[1]).Name .. "  " .. string.upper(entry[1]) end
+	local function updateHint() button.Text = (Theme.IsMobile() and "" or Settings.Key(entry[1]).Name .. "  ") .. string.upper(entry[1]) end
 	Settings.Changed:Connect(updateHint)
+	UserInputService:GetPropertyChangedSignal("PreferredInput"):Connect(updateHint)
 	updateHint()
 	button.Parent = kit
 	Theme.Button(button, true)
+	table.insert(navigationButtons, button)
 	button.Activated:Connect(function()
 		local attribute = "FieldKit" .. entry[1]
 		player:SetAttribute(attribute, (player:GetAttribute(attribute) or 0) + 1)
 	end)
 end
 
-local function updateHUDPreferences()
-	notes.Visible = Settings.Get("ShowFieldNotes")
-	roleButton.Position = UDim2.fromOffset(0, notes.Visible and 308 or 200)
-	kit.Visible = Settings.Get("ShowNavigation")
+local mobileDetails = false
+local detailsButton = Instance.new("TextButton")
+detailsButton.Name = "MobileFieldDetails"
+detailsButton.Size = UDim2.fromOffset(84, 36)
+detailsButton.Position = UDim2.new(1, -84, 1, 6)
+detailsButton.Font = Enum.Font.GothamBold
+detailsButton.TextSize = 12
+detailsButton.Text = "DETAILS"
+detailsButton.Parent = card
+Theme.Button(detailsButton, true)
+local cardDefaults = {}
+for _, child in ipairs(card:GetChildren()) do
+	if child:IsA("GuiObject") then
+		cardDefaults[child] = {Position = child.Position, Size = child.Size, Visible = child.Visible,
+			TextSize = child:IsA("TextLabel") and child.TextSize or nil}
+	end
 end
+local function updateHUDPreferences()
+	local mobile = Theme.IsMobile()
+	local placing = mobile and gui.Parent:GetAttribute("BuildPlacementActive") == true
+	card.Visible = not placing
+	notes.Visible = Settings.Get("ShowFieldNotes") and (not mobile or mobileDetails)
+	roleButton.Visible = not mobile or mobileDetails
+	roleButton.Position = UDim2.fromOffset(0, mobile and (notes.Visible and 222 or 112) or (notes.Visible and 308 or 200))
+	kit.Visible = Settings.Get("ShowNavigation") and not (mobile and mobileDetails) and not placing
+end
+detailsButton.Activated:Connect(function()
+	mobileDetails = not mobileDetails
+	detailsButton.Text = mobileDetails and "LESS" or "DETAILS"
+	updateHUDPreferences()
+end)
+local function layout(_, available)
+	local mobile = Theme.IsMobile()
+	local compactPortrait = mobile and available.X < available.Y and available.Y < 680
+	local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(900, 610)
+	local desktopScale = math.min(math.clamp(math.min(viewport.X / 1440, viewport.Y / 900), 1, 2.5), (viewport.X - 40) / 730, (viewport.Y - 90) / 610)
+	cardScale.Scale = mobile and (available.X > available.Y and math.min(1, (available.X - 348) / 272) or 1) or desktopScale
+	kitScale.Scale = mobile and 1 or desktopScale
+	card.AnchorPoint = Vector2.new(mobile and .5 or 0, 0)
+	card.Position = mobile and UDim2.new(.5, 0, 0, available.X < available.Y and (compactPortrait and 186 or 224) or 44) or UDim2.fromOffset(18 * desktopScale, 14 * desktopScale)
+	card.Size = UDim2.fromOffset(272, mobile and 106 or 188)
+	for child, defaults in pairs(cardDefaults) do
+		child.Position, child.Size, child.Visible = defaults.Position, defaults.Size, defaults.Visible
+		if defaults.TextSize then child.TextSize = defaults.TextSize end
+	end
+	detailsButton.Visible = mobile
+	if mobile then
+		for _, child in ipairs(card:GetChildren()) do
+			if child:IsA("TextLabel") then child.Visible = false end
+		end
+		for _, entry in ipairs({{biomeLabel, 8, 20}, {weatherLabel, 34, 13}, {shiftLabel, 61, 11}, {countdown, 58, 18}, {cycleLabel, 84, 11}}) do
+			entry[1].Visible = true
+			entry[1].Position = UDim2.fromOffset(entry[1].Position.X.Offset, entry[2])
+			entry[1].TextSize = entry[3]
+		end
+		card.InspectBiome.Position = UDim2.fromOffset(14, 6)
+		card.InspectConditions.Position = UDim2.fromOffset(14, 33)
+		cycleLabel.Size = UDim2.fromOffset(174, 14)
+		detailsButton.Size = UDim2.fromOffset(70, 32)
+		detailsButton.Position = UDim2.fromOffset(198, 74)
+		track.Visible = false
+		notes.Position = UDim2.fromOffset(0, 112)
+		roleButton.Size = UDim2.fromOffset(272, 44)
+	end
+	local count = 0
+	local landscape = mobile and available.X > available.Y
+	local narrowLandscape = landscape and available.X <= 710
+	local buttonWidth = landscape and 56 or 64
+	for _, button in ipairs(navigationButtons) do
+		button.Visible = not (mobile and button.Name == "Map")
+		if button.Visible then
+			button.Size = UDim2.fromOffset(mobile and buttonWidth or 70, mobile and 44 or 28)
+			button.Position = narrowLandscape and UDim2.fromOffset((count % 2) * 62, math.floor(count / 2) * 48)
+				or UDim2.fromOffset(count * (mobile and (buttonWidth + 6) or 76), 0)
+			button.TextSize = mobile and 13 or 10
+			count += 1
+		end
+	end
+	kit.Size = narrowLandscape and UDim2.fromOffset(118, 92) or UDim2.fromOffset(mobile and (buttonWidth * 4 + 18) or 376, mobile and 44 or 32)
+	local portrait = mobile and available.X < available.Y
+	kit.AnchorPoint = Vector2.new(.5, portrait and 0 or 1)
+	kit.Position = portrait and UDim2.new(.5, 0, 0, compactPortrait and 300 or 338)
+		or UDim2.new(.5, landscape and (narrowLandscape and -58 or -52) or 0, 1, mobile and (narrowLandscape and -72 or -84) or -94 * desktopScale)
+	updateHUDPreferences()
+end
+Theme.BindResponsive(card, layout)
 Settings.Changed:Connect(updateHUDPreferences)
+gui.Parent:GetAttributeChangedSignal("BuildPlacementActive"):Connect(updateHUDPreferences)
 updateHUDPreferences()
 
 local remotes = Util.GetDescendant(Config.Paths.Remotes) or Util.WaitForDescendant(Config.Paths.Remotes, 15)

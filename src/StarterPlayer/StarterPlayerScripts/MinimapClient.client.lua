@@ -575,6 +575,7 @@ local function createUI()
 	gui.ResetOnSpawn = false
 	gui.IgnoreGuiInset = true
 	gui.DisplayOrder = 8
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = playerGui
 
 	UI.gui = gui
@@ -586,7 +587,8 @@ local function createUI()
 	miniContainer.Name = "MinimapContainer"
 	miniContainer.AnchorPoint = Vector2.new(1, 1)
 	miniContainer.Position = UDim2.new(1, -18, 1, -18)
-	Theme.Fit(miniContainer, 900, 610, nil, true)
+	local miniScale = Instance.new("UIScale")
+	miniScale.Parent = miniContainer
 	Theme.Panel(miniContainer)
 	styleCard(miniContainer)
 
@@ -624,6 +626,14 @@ local function createUI()
 	coords.Name = "Coords"
 	local zoom = buildLabel(miniContainer, "Range: " .. tostring(STATE.minimapRange), UDim2.new(1, -12, 0, 14), UDim2.fromOffset(8, miniH - 22), Enum.Font.Gotham, 10, MapConfig.Colors.TextMuted)
 	zoom.Name = "Zoom"
+	local miniHit = Instance.new("TextButton")
+	miniHit.Name = "OpenAtlas"
+	miniHit.Text = ""
+	miniHit.BackgroundTransparency = 1
+	miniHit.Size = UDim2.fromScale(1, 1)
+	miniHit.ZIndex = 30
+	miniHit.Parent = miniContainer
+	miniHit.Activated:Connect(function() setFullMapOpen(true) end)
 
 	UI.minimapContainer = miniContainer
 	UI.minimapFrame = mapFrame
@@ -635,10 +645,14 @@ local function createUI()
 	UI.minimapMarkerLayer = markerLayer
 	UI.minimapCoords = coords
 	UI.minimapZoom = zoom
+	playerGui:GetAttributeChangedSignal("BuildPlacementActive"):Connect(function()
+		miniContainer.Visible = STATE.minimapVisible and not (Theme.IsMobile() and playerGui:GetAttribute("BuildPlacementActive"))
+	end)
 
 	-- Fullscreen map
 	local fullRoot = buildCoreFrame(gui, UDim2.fromScale(1, 1), UDim2.fromOffset(0, 0), Theme.Colors.Night, 0.28)
 	fullRoot.Name = "WorldMapRoot"
+	fullRoot.ZIndex = 50
 	fullRoot.Visible = false
 
 	local panel = buildCoreFrame(fullRoot, UDim2.fromScale(0.92, 0.9), UDim2.fromScale(0.04, 0.05), MapConfig.Colors.UIPanel, 0.05)
@@ -647,8 +661,8 @@ local function createUI()
 
 	local header = buildCoreFrame(panel, UDim2.new(1, -16, 0, 40), UDim2.fromOffset(8, 8), Color3.new(), 1)
 	header.Name = "Header"
-	buildLabel(header, "EXPEDITION ATLAS", UDim2.new(1, -54, 0, 22), UDim2.fromOffset(0, 0), Enum.Font.GothamBlack, 18, MapConfig.Colors.TextPrimary)
-	buildLabel(header, "ESC CLOSE  /  SCROLL ZOOM  /  DRAG PAN", UDim2.new(1, -54, 0, 16), UDim2.fromOffset(0, 24), Enum.Font.Gotham, 11, MapConfig.Colors.TextMuted)
+	local mapTitle = buildLabel(header, "EXPEDITION ATLAS", UDim2.new(1, -54, 0, 22), UDim2.fromOffset(0, 0), Enum.Font.GothamBlack, 18, MapConfig.Colors.TextPrimary)
+	local mapHint = buildLabel(header, "ESC CLOSE  /  SCROLL ZOOM  /  DRAG PAN", UDim2.new(1, -54, 0, 16), UDim2.fromOffset(0, 24), Enum.Font.Gotham, 11, MapConfig.Colors.TextMuted)
 	local closeButton = Instance.new("TextButton")
 	closeButton.Name = "CloseMapButton"
 	closeButton.Size = UDim2.fromOffset(40, 40)
@@ -678,8 +692,29 @@ local function createUI()
 	local markerLayer = buildCoreFrame(canvas, UDim2.fromScale(1, 1), UDim2.fromOffset(0, 0), Color3.new(), 1)
 	markerLayer.Name = "MarkerLayer"
 
-	local sidebar = buildCoreFrame(body, UDim2.new(0, sidebarW, 1, 0), UDim2.new(1, -sidebarW, 0, 0), Theme.Colors.Background, 0)
+	local sidebar = Instance.new("ScrollingFrame")
+	sidebar.Name = "MapLegend"
+	sidebar.Size = UDim2.new(0, sidebarW, 1, 0)
+	sidebar.Position = UDim2.new(1, -sidebarW, 0, 0)
+	sidebar.BackgroundColor3 = Theme.Colors.Background
+	sidebar.BorderSizePixel = 0
+	sidebar.ScrollBarThickness = 5
+	sidebar.CanvasSize = UDim2.fromOffset(0, 0)
+	sidebar.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	sidebar.ScrollingDirection = Enum.ScrollingDirection.Y
+	sidebar.ZIndex = 40
+	sidebar.Parent = body
 	styleCard(sidebar)
+	local legendButton = Instance.new("TextButton")
+	legendButton.Name = "ToggleLegend"
+	legendButton.Text = "LEGEND"
+	legendButton.TextSize = 12
+	legendButton.Font = Enum.Font.GothamBold
+	legendButton.Size = UDim2.fromOffset(78, 44)
+	legendButton.Position = UDim2.new(1, -130, 0, 0)
+	legendButton.Parent = header
+	Theme.Button(legendButton, true)
+	legendButton.Activated:Connect(function() sidebar.Visible = not sidebar.Visible end)
 
 	local y = 8
 	buildLabel(sidebar, "Legend", UDim2.new(1, -10, 0, 20), UDim2.fromOffset(10, y), Enum.Font.GothamBold, 14, MapConfig.Colors.TextPrimary)
@@ -744,25 +779,52 @@ local function createUI()
 	UI.zoomLabel = zoomLabel
 	UI.cursorLabel = cursorLabel
 
-	-- Touch map toggle button
-	if UserInputService.TouchEnabled then
-		local mapButton = Instance.new("TextButton")
-		mapButton.Name = "MapToggleButton"
-		mapButton.Size = UDim2.fromOffset(60, 44)
-		mapButton.Position = UDim2.new(1, -72, 1, -56)
-		mapButton.BackgroundColor3 = Theme.Colors.Panel
-		mapButton.BackgroundTransparency = 0.1
-		mapButton.BorderSizePixel = 0
-		mapButton.Font = Enum.Font.GothamBold
-		mapButton.TextSize = 16
-		mapButton.TextColor3 = MapConfig.Colors.TextPrimary
-		mapButton.Text = "MAP"
-		mapButton.Parent = gui
-		local bc = Instance.new("UICorner")
-		bc.CornerRadius = UDim.new(0, 8)
-		bc.Parent = mapButton
-		UI.mapToggleButton = mapButton
-	end
+	-- The minimap itself is the touch target; no duplicate bottom-screen MAP button.
+	Theme.BindResponsive(gui, function(mobile, safeSize)
+		local compactPortrait = mobile and safeSize.X < safeSize.Y and safeSize.Y < 680
+		local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or safeSize
+		gui.IgnoreGuiInset = not mobile
+		local width = math.min(152, (safeSize.X - 24) * .43)
+		if compactPortrait then width = math.min(width, 128) end
+		if safeSize.X > safeSize.Y and safeSize.X < 700 then width = math.min(width, 128) end
+		miniScale.Scale = mobile and 1 or math.min(math.clamp(math.min(viewport.X / 1440, viewport.Y / 900), 1, 2.5), (viewport.X - 40) / 900, (viewport.Y - 90) / 610)
+		miniContainer.AnchorPoint = Vector2.new(1, mobile and 0 or 1)
+		miniContainer.Position = mobile and UDim2.new(1, -8, 0, safeSize.X < safeSize.Y and 46 or 6) or UDim2.new(1, -18 * miniScale.Scale, 1, -18 * miniScale.Scale)
+		miniContainer.Size = UDim2.fromOffset(mobile and width or miniW, mobile and (compactPortrait and 132 or width + 20) or miniH)
+		local mapSize = mobile and (compactPortrait and math.min(96, width - 16) or width - 16) or MapConfig.Minimap.Size
+		mapFrame.Size = UDim2.fromOffset(mapSize, mapSize)
+		mapFrame.Position = UDim2.fromOffset(mobile and (width - mapSize) / 2 or 10, mobile and 8 or 10)
+		coords.Visible = not mobile
+		zoom.Position = mobile and UDim2.new(0, 6, 1, -23) or UDim2.fromOffset(8, miniH - 22)
+		zoom.TextSize = mobile and 13 or 10
+		panel.Size = mobile and UDim2.new(1, -12, 1, -12) or UDim2.fromScale(.92, .9)
+		panel.Position = mobile and UDim2.fromOffset(6, 6) or UDim2.fromScale(.04, .05)
+		mapHint.Text = mobile and "PINCH ZOOM / DRAG PAN" or "ESC CLOSE  /  SCROLL ZOOM  /  DRAG PAN"
+		mapTitle.Text = mobile and safeSize.X < 480 and "ATLAS" or "EXPEDITION ATLAS"
+		mapTitle.Size = UDim2.new(1, mobile and -140 or -54, 0, 22)
+		mapHint.Size = UDim2.new(1, mobile and -140 or -54, 0, 16)
+		legendButton.Visible = mobile
+		sidebar.Visible = not mobile
+		mapArea.Size = UDim2.new(1, mobile and 0 or -sidebarW - 10, 1, 0)
+		closeButton.Size = UDim2.fromOffset(mobile and 44 or 40, mobile and 44 or 40)
+		closeButton.Position = UDim2.new(1, mobile and -44 or -40, 0, 0)
+		local rowY = 32
+		for _, name in ipairs({"Players", "Structures", "Objectives", "Spawn", "Regions", "Resources", "Enemies"}) do
+			local button = UI.toggleButtons[name]
+			button.Position = UDim2.fromOffset(10, rowY)
+			button.Size = UDim2.new(1, -20, 0, mobile and 44 or 24)
+			button.TextSize = mobile and 14 or 12
+			rowY += mobile and 48 or 28
+		end
+		for _, button in ipairs({centerBtn, resetZoomBtn}) do
+			button.Position = UDim2.fromOffset(10, rowY + 8)
+			button.Size = UDim2.new(1, -20, 0, mobile and 44 or 26)
+			button.TextSize = mobile and 14 or 12
+			rowY += mobile and 48 or 32
+		end
+		zoomLabel.Position = UDim2.fromOffset(10, rowY + 12)
+		cursorLabel.Position = UDim2.fromOffset(10, rowY + 34)
+	end)
 
 	for name, btn in pairs(UI.toggleButtons) do
 		btn.MouseButton1Click:Connect(function()
@@ -779,11 +841,6 @@ local function createUI()
 		STATE.panWorld = Vector2.new(0, 0)
 	end)
 
-	if UI.mapToggleButton then
-		UI.mapToggleButton.MouseButton1Click:Connect(function()
-			setFullMapOpen(not STATE.fullMapOpen)
-		end)
-	end
 end
 
 local function updateLegendButtons()
@@ -1511,7 +1568,7 @@ local function bindInput()
 
 	pcall(function()
 		UserInputService.TouchPinch:Connect(function(_, scale, _, state, gameProcessed)
-			if gameProcessed or not STATE.fullMapOpen then return end
+			if not STATE.fullMapOpen then return end
 			if state == Enum.UserInputState.Change then
 				if scale > 1.01 then
 					applyFullZoom(1, UserInputService:GetMouseLocation())
@@ -1851,7 +1908,7 @@ end
 
 local function renderMinimap(playerPos, playerLook)
 	if not UI.minimapContainer then return end
-	UI.minimapContainer.Visible = STATE.minimapVisible and playerPos ~= nil
+	UI.minimapContainer.Visible = STATE.minimapVisible and playerPos ~= nil and not (Theme.IsMobile() and playerGui:GetAttribute("BuildPlacementActive"))
 	if not STATE.minimapVisible then return end
 	if not playerPos then return end
 	local playerMapX, playerMapZ = mapOrientedXZ(playerPos.X, playerPos.Z)
@@ -2133,7 +2190,7 @@ end
 function MinimapClient:SetVisible(visible)
 	STATE.minimapVisible = visible == true
 	if UI.minimapContainer then
-		UI.minimapContainer.Visible = STATE.minimapVisible
+		UI.minimapContainer.Visible = STATE.minimapVisible and not (Theme.IsMobile() and playerGui:GetAttribute("BuildPlacementActive"))
 	end
 end
 

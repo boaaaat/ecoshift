@@ -18,7 +18,7 @@ local panel = Instance.new("Frame")
 panel.Name = "Assembly"; panel.AnchorPoint = Vector2.new(.5, .5)
 panel.Position = UDim2.fromScale(.5, .5); panel.Size = UDim2.fromOffset(1120, 740)
 panel.Visible = Mode == "Lobby"; panel.Parent = gui
-Theme.Panel(panel); Theme.Fit(panel, 1120, 740); Theme.CaptureCursor(panel); Theme.AnimatePanel(panel)
+Theme.Panel(panel); Theme.CaptureCursor(panel); Theme.AnimatePanel(panel)
 
 local function label(parent, text, x, y, w, h, size, token, bold)
 	local l = Theme.Label(parent, text, UDim2.fromOffset(w, h), UDim2.fromOffset(x, y), size or 16, nil, bold)
@@ -455,7 +455,7 @@ local function visualKey()
 		party.Queue ~= nil and party.Queue ~= false, party.QueueStartedAt, crew, liveInvitations(), snapshot.Rejoin, page == "Saves" and snapshot.Worlds or false,
 		page == "Saves" and snapshot.ArchiveAvailable, page == "Invite" and snapshot.InviteDirectory or false})
 end
-render = function()
+local function renderContents()
 	if memberOverlay then memberOverlay:Destroy(); memberOverlay = nil end
 	memberNote = nil
 	scrollByPage[lastPage] = content.CanvasPosition
@@ -571,6 +571,108 @@ render = function()
 	end
 	renderMemberMenu(); applyControls()
 end
+
+
+-- Touch layouts use one readable column instead of shrinking the entire desk.
+local function flowChildren(parent, width, padding)
+	local children = {}
+	for _, child in ipairs(parent:GetChildren()) do
+		if child:IsA("GuiObject") then table.insert(children, child) end
+	end
+	table.sort(children, function(a,b)
+		return a.Position.Y.Offset == b.Position.Y.Offset and a.Position.X.Offset < b.Position.X.Offset or a.Position.Y.Offset < b.Position.Y.Offset
+	end)
+	local y = padding
+	for _, child in ipairs(children) do
+		local h = child.Size.Y.Offset
+		if child:IsA("TextLabel") then
+			child.TextWrapped = true; child.TextTruncate = Enum.TextTruncate.None
+			child.TextSize = math.max(15, child.TextSize)
+			h = math.max(h, child.TextSize >= 22 and 58 or 48)
+		elseif child:IsA("GuiButton") or child:IsA("TextBox") then h = math.max(46,h) end
+		child.Position = UDim2.fromOffset(padding,y); child.Size = UDim2.fromOffset(width-padding*2,h)
+		y += h + 10
+	end
+	return y + padding
+end
+local function fitCardChildren(card, width)
+	local oldWidth = card.Size.X.Offset
+	if oldWidth <= 0 then return end
+	local factor = width / oldWidth
+	for _, child in ipairs(card:GetChildren()) do
+		if child:IsA("GuiObject") then
+			child.Position = UDim2.new(child.Position.X.Scale, child.Position.X.Offset*factor, child.Position.Y.Scale, child.Position.Y.Offset)
+			child.Size = UDim2.new(child.Size.X.Scale, child.Size.X.Offset*factor, child.Size.Y.Scale, child.Size.Y.Offset)
+			if child:IsA("TextLabel") or child:IsA("TextButton") then child.TextSize=math.max(15,child.TextSize); child.TextWrapped=true end
+		end
+	end
+end
+local function mobileContent()
+	if not Theme.IsMobile() then return end
+	local width = math.max(300,panel.Size.X.Offset-40)
+	local children = {}
+	for _,child in ipairs(content:GetChildren()) do if child:IsA("GuiObject") then table.insert(children,child) end end
+	table.sort(children,function(a,b)
+		return a.Position.Y.Offset == b.Position.Y.Offset and a.Position.X.Offset < b.Position.X.Offset or a.Position.Y.Offset < b.Position.Y.Offset
+	end)
+	local y=0
+	for _,child in ipairs(children) do
+		local height=child.Size.Y.Offset
+		if child.Name:match("^Save%d") or child.Name:match("^Invitation_") then
+			height=flowChildren(child,width,14)
+		elseif child.Name:match("^Invite_") then
+			local avatar=child:FindFirstChild("AvatarPortrait")
+			if avatar then avatar.AnchorPoint=Vector2.new(.5,0); avatar.Position=UDim2.new(.5,0,0,6) end
+			local plate=child:FindFirstChild("Nameplate")
+			if plate then for _,text in ipairs(plate:GetChildren()) do if text:IsA("TextLabel") then text.Size=UDim2.new(1,-18,0,text.Size.Y.Offset) end end end
+		elseif child:IsA("TextLabel") then
+			child.TextWrapped=true; child.TextTruncate=Enum.TextTruncate.None; child.TextSize=math.max(15,child.TextSize)
+			height=math.max(height,child.TextSize>=22 and 58 or 48)
+		elseif child:IsA("TextButton") and child.Text ~= "" then
+			height=math.max(48,height); child.TextWrapped=true
+		else fitCardChildren(child,width) end
+		child.Position=UDim2.fromOffset(0,y); child.Size=UDim2.fromOffset(width,height)
+		y+=height+12
+	end
+	if memberOverlay then
+		local menu=memberOverlay:FindFirstChild("MemberDetails")
+		if menu then
+			local widthNow=math.min(448,width); fitCardChildren(menu,widthNow)
+			menu.Size=UDim2.fromOffset(widthNow,454)
+			local records=menu:FindFirstChild("FieldRecords")
+			if records then for _,l in ipairs(records:GetChildren()) do if l:IsA("TextLabel") then l.Size=UDim2.new(1,-24,0,l.Size.Y.Offset); l.TextWrapped=true end end end
+		end
+	end
+end
+render=function() renderContents(); mobileContent() end
+Theme.FitMenu(panel,1120,740,{MobileWidth=360,MobileHeight=740,OnResize=function(width,_,mobile)
+	for _,child in ipairs(panel:GetChildren()) do if child:IsA("TextButton") and child.Text=="×" then child.Visible=not mobile end end
+	if not mobile then
+		for _,child in ipairs(side:GetChildren()) do if child:IsA("GuiObject") then child.Visible=true end end
+		for index,entry in ipairs({{"Party","01  EXPEDITION CREW"},{"Classes","02  CLASS OUTFITTER"},{"Saves","03  WORLD ARCHIVE"}}) do
+			nav[entry[1]].Text=entry[2]; nav[entry[1]].Visible=Mode=="Lobby" or entry[1]=="Party"
+		end
+		if render then render() end
+		return
+	end
+	for _,child in ipairs(panel:GetChildren()) do
+		if child:IsA("TextLabel") and child ~= feedback and child ~= funds then
+			child.Position=UDim2.fromOffset(20,child.Position.Y.Offset); child.Size=UDim2.new(1,-90,0,child.Size.Y.Offset)
+			if child.Text=="ECO / SHIFT" then child.TextSize=27 end
+		elseif child:IsA("TextButton") and child.Text=="×" then child.Position=UDim2.new(1,-62,0,18); child.Size=UDim2.fromOffset(44,44) end
+	end
+	funds.Position=UDim2.fromOffset(20,86); funds.Size=UDim2.new(1,-40,0,28); funds.TextXAlignment=Enum.TextXAlignment.Left
+	side.Position=UDim2.fromOffset(20,122); side.Size=UDim2.new(1,-40,0,48)
+	for _,child in ipairs(side:GetChildren()) do child.Visible=false end
+	for index,id in ipairs({"Party","Classes","Saves"}) do
+		local b=nav[id]; b.Visible=Mode=="Lobby" or id=="Party"
+		b.Text=({"Crew","Classes","Worlds"})[index]; b.TextSize=15
+		b.Position=UDim2.new((index-1)/3,0,0,0); b.Size=UDim2.new(1/3,-6,0,46)
+	end
+	content.Position=UDim2.fromOffset(20,182); content.Size=UDim2.new(1,-40,0,482)
+	feedback.Position=UDim2.fromOffset(20,676); feedback.Size=UDim2.new(1,-40,0,52)
+	if render then render() end
+end})
 
 local function reconcile(request, result)
 	local party = snapshot.Party or {}

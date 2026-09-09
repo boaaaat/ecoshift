@@ -215,7 +215,11 @@ local function setupChestInteraction(inst)
 	CollectionService:AddTag(inst, resolveChestTag(inst))
 end
 
-function BuildService:Place(plr, buildType, worldPos)
+function BuildService:Place(plr, buildType, worldPos, rotation)
+	rotation = rotation == nil and 0 or rotation
+	if type(rotation) ~= "number" or rotation ~= rotation or rotation < 0 or rotation >= 360 or rotation % 90 ~= 0 then
+		return false, "InvalidRequest"
+	end
 	local count = 0
 	for _, inst in ipairs(CollectionService:GetTagged("Structure")) do if inst:GetAttribute("BuildType") then count += 1 end end
 	if count >= SnapshotCodec.MaxStructures then return false, "StructureLimit" end
@@ -273,7 +277,7 @@ function BuildService:Place(plr, buildType, worldPos)
 		else
 			inst = createFallbackPart(buildType, pos)
 		end
-		BuildPlacement.PutOnSurface(inst, CFrame.new(pos))
+		BuildPlacement.PutOnSurface(inst, CFrame.new(pos) * CFrame.Angles(0, math.rad(rotation), 0))
 
 		inst.Parent = workspace
 		inst:SetAttribute("PlacementVersion", 1)
@@ -462,7 +466,7 @@ function BuildService:Bind()
 				return
 			end
 			local ok, placed, reason = pcall(function()
-				return BuildService:Place(plr, buildType, pos)
+				return BuildService:Place(plr, buildType, pos, payload.Rotation)
 			end)
 			local success = ok and placed == true
 			self._remoteBuild:FireClient(plr, "Result", {

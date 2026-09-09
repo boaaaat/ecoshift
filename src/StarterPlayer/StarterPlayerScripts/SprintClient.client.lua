@@ -8,6 +8,7 @@ local player = Players.LocalPlayer
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local Settings = require(ReplicatedStorage.Shared.ClientSettings)
+local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 
 local remotesFolder = Util.GetDescendant(Config.Paths.Remotes) or Util.WaitForDescendant(Config.Paths.Remotes, 5)
 local rSprint = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.SprintToggle)
@@ -16,16 +17,56 @@ if not rSprint then
 end
 
 local held, requested = {}, false
+local sprintButton, touchInput
 local function isSprintKey(keyCode)
 	return keyCode == Settings.Key("Sprint")
 end
 local function request(enabled)
 	if requested == enabled then return end
 	requested = enabled; rSprint:FireServer(enabled)
+	if sprintButton then sprintButton.Text = enabled and "RUNNING" or "SPRINT" end
 end
 local function release()
+	touchInput = nil
 	table.clear(held); request(false)
 end
+
+local touchGui = Instance.new("ScreenGui")
+touchGui.Name = "SprintTouchUI"
+touchGui.ResetOnSpawn = false
+touchGui.DisplayOrder = 9
+touchGui.Parent = player:WaitForChild("PlayerGui")
+sprintButton = Instance.new("TextButton")
+sprintButton.Name = "HoldSprint"
+sprintButton.AnchorPoint = Vector2.new(1, 1)
+sprintButton.Position = UDim2.new(1, -100, 1, -94)
+sprintButton.Size = UDim2.fromOffset(90, 48)
+sprintButton.Text = "SPRINT"
+sprintButton.TextSize = 15
+sprintButton.Font = Enum.Font.GothamBold
+sprintButton.Parent = touchGui
+Theme.Button(sprintButton, true)
+local function updateTouchVisibility()
+	sprintButton.Visible = Theme.IsMobile() and not player:GetAttribute("IsDead") and not touchGui.Parent:GetAttribute("MenuCursorOpen") and not touchGui.Parent:GetAttribute("BuildPlacementActive")
+	if not sprintButton.Visible then release() end
+end
+sprintButton.InputBegan:Connect(function(input)
+	if input.UserInputType ~= Enum.UserInputType.Touch or touchInput then return end
+	if not Settings.CanInput() or player:GetAttribute("IsDead") then return end
+	touchInput = input
+	request(true)
+end)
+UserInputService.InputEnded:Connect(function(input)
+	if input == touchInput then touchInput = nil; request(next(held) ~= nil) end
+end)
+UserInputService:GetPropertyChangedSignal("PreferredInput"):Connect(updateTouchVisibility)
+player:GetAttributeChangedSignal("IsDead"):Connect(updateTouchVisibility)
+touchGui.Parent:GetAttributeChangedSignal("MenuCursorOpen"):Connect(updateTouchVisibility)
+touchGui.Parent:GetAttributeChangedSignal("BuildPlacementActive"):Connect(updateTouchVisibility)
+Theme.BindResponsive(sprintButton, function(_, available)
+	sprintButton.Position = UDim2.new(1, -100, 1, available.X < available.Y and -192 or -94)
+end)
+updateTouchVisibility()
 
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed or not Settings.CanInput() then return end

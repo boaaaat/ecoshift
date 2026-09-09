@@ -467,7 +467,7 @@ local function createIngredientDisplay(ingredient, parent, recipeId)
 	itemLabel.BackgroundTransparency = 1
 	itemLabel.Text = name .. " ›"
 	itemLabel.TextColor3 = canAfford and COLORS.Text or COLORS.Danger
-	itemLabel.TextSize = 10
+	itemLabel.TextSize = Theme.IsMobile() and 14 or 10
 	itemLabel.Font = Enum.Font.GothamBold
 	itemLabel.TextWrapped = true
 	itemLabel.ZIndex = 14
@@ -481,7 +481,7 @@ local function createIngredientDisplay(ingredient, parent, recipeId)
 	countLabel.BackgroundTransparency = 1
 	countLabel.Text = string.format("%d/%d", have, needed)
 	countLabel.TextColor3 = canAfford and COLORS.Success or COLORS.Warning
-	countLabel.TextSize = 11
+	countLabel.TextSize = Theme.IsMobile() and 14 or 11
 	countLabel.Font = Enum.Font.Gotham
 	countLabel.ZIndex = 14
 	countLabel.Parent = frame
@@ -502,7 +502,7 @@ local function createRecipeCard(recipeId, recipeData)
 	
 	local card = Instance.new("TextButton")
 	card.Name = recipeId
-	card.Size = UDim2.new(1, -12, 0, 38 + math.max(1, math.ceil(#ingredients / 3)) * 54)
+	card.Size = UDim2.new(1, -12, 0, 38 + math.max(1, math.ceil(#ingredients / (Theme.IsMobile() and 2 or 3))) * (Theme.IsMobile() and 60 or 54))
 	card.BackgroundColor3 = COLORS.SlotFilled
 	card.BorderSizePixel = 0
 	card.Text = ""
@@ -555,7 +555,7 @@ local function createRecipeCard(recipeId, recipeData)
 	-- Ingredients container
 	local ingredientsFrame = Instance.new("Frame")
 	ingredientsFrame.Name = "Ingredients"
-	ingredientsFrame.Size = UDim2.new(1, -20, 0, math.max(1, math.ceil(#ingredients / 3)) * 54)
+	ingredientsFrame.Size = UDim2.new(1, -20, 0, math.max(1, math.ceil(#ingredients / (Theme.IsMobile() and 2 or 3))) * (Theme.IsMobile() and 60 or 54))
 	ingredientsFrame.Position = UDim2.new(0, 10, 0, 32)
 	ingredientsFrame.BackgroundTransparency = 1
 	ingredientsFrame.ZIndex = 13
@@ -564,8 +564,8 @@ local function createRecipeCard(recipeId, recipeData)
 	
 	local ingredientLayout = Instance.new("UIGridLayout")
 	ingredientLayout.FillDirection = Enum.FillDirection.Horizontal
-	ingredientLayout.FillDirectionMaxCells = 3
-	ingredientLayout.CellSize = UDim2.new(1 / 3, -4, 0, 50)
+	ingredientLayout.FillDirectionMaxCells = Theme.IsMobile() and 2 or 3
+	ingredientLayout.CellSize = UDim2.new(1 / (Theme.IsMobile() and 2 or 3), -4, 0, Theme.IsMobile() and 56 or 50)
 	ingredientLayout.CellPadding = UDim2.fromOffset(4, 4)
 	ingredientLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	ingredientLayout.Parent = ingredientsFrame
@@ -794,12 +794,12 @@ local function openCrafting()
 	
 	-- Animate in
 	backdrop.BackgroundTransparency = 1
-	mainPanel.Position = UDim2.new(0.5, 0, 0.5, 30)
+	mainPanel.Position = Theme.IsMobile() and UDim2.new() or UDim2.new(0.5, 0, 0.5, 30)
 	mainPanel.GroupTransparency = 1
 	
 	TweenService:Create(backdrop, TweenInfo.new(0.2), {BackgroundTransparency = 0.5}):Play()
 	TweenService:Create(mainPanel, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-		Position = UDim2.new(0.5, 0, 0.5, 0),
+		Position = Theme.IsMobile() and UDim2.new() or UDim2.new(0.5, 0, 0.5, 0),
 		GroupTransparency = 0
 	}):Play()
 	
@@ -819,7 +819,7 @@ local function closeCrafting()
 	-- Animate out
 	TweenService:Create(backdrop, TweenInfo.new(0.15), {BackgroundTransparency = 1}):Play()
 	local closeTween = TweenService:Create(mainPanel, TweenInfo.new(0.15), {
-		Position = UDim2.new(0.5, 0, 0.5, 20),
+		Position = Theme.IsMobile() and UDim2.new() or UDim2.new(0.5, 0, 0.5, 20),
 		GroupTransparency = 1
 	})
 	closeTween:Play()
@@ -965,7 +965,22 @@ print("[CraftingUI] Ready - Press C for hand crafting (basic items)")
 print("[CraftingUI] Place workbenches for advanced recipes!")
 
 Theme.CaptureCursor(mainPanel); Theme.Panel(mainPanel)
-Theme.Fit(mainPanel, 452, 610)
+Theme.FitMenu(mainPanel, 452, 610, {OnClose = closeCrafting, MobileWidth = 360, MobileHeight = 610, OnResize = function(width, _, mobile)
+	closeBtn.Visible = not mobile
+	if not mobile then return end
+	closeBtn.Size = UDim2.fromOffset(44, 44)
+	recipeBookBtn.Size = UDim2.fromOffset(104, 44)
+	recipeBookBtn.Position = UDim2.new(1, -172, 0, 4)
+	titleLabel.TextSize = 17; titleLabel.Size = UDim2.new(1, -204, 1, 0)
+	quantityLabel.Size = UDim2.fromOffset(58, 44)
+	quantityLabel.TextSize = 14
+	decreaseBtn.Position = UDim2.fromOffset(58, 0); decreaseBtn.Size = UDim2.fromOffset(44, 44)
+	quantityBox.Position = UDim2.fromOffset(108, 0); quantityBox.Size = UDim2.fromOffset(54, 44)
+	increaseBtn.Position = UDim2.fromOffset(168, 0); increaseBtn.Size = UDim2.fromOffset(44, 44)
+	maxBtn.Position = UDim2.fromOffset(218, 0); maxBtn.Size = UDim2.new(1, -218, 0, 44)
+	batchSummary.TextSize = 14; batchTime.TextSize = 14
+	recipeContainer.ScrollBarThickness = 6
+end})
 Theme.Button(closeBtn)
 Theme.Button(craftBtn)
 updateCraftButton()

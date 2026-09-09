@@ -15,7 +15,7 @@ local function button(parent, name, text, x, y, width, height)
 	local b = Instance.new("TextButton")
 	b.Name, b.Text = name, text
 	b.Size, b.Position = UDim2.fromOffset(width, height), UDim2.fromOffset(x, y)
-	b.Font, b.TextSize, b.Parent = Enum.Font.GothamBold, 12, parent
+	b.Font, b.TextSize, b.Parent = Enum.Font.GothamBold, Theme.IsMobile() and 15 or 12, parent
 	Theme.Button(b, false)
 	return b
 end
@@ -24,7 +24,7 @@ local function panel(name, width, height)
 	f.Name, f.Size = name, UDim2.fromOffset(width, height)
 	f.AnchorPoint, f.Position = Vector2.new(.5, .5), UDim2.fromScale(.5, .5)
 	f.Visible, f.Parent = false, gui
-	Theme.Panel(f); Theme.Fit(f, width, height); Theme.CaptureCursor(f); Theme.AnimatePanel(f)
+	Theme.Panel(f); Theme.CaptureCursor(f); Theme.AnimatePanel(f)
 	return f
 end
 local function label(parent, text, y, height, size, bold)
@@ -48,7 +48,7 @@ layout.Padding, layout.SortOrder, layout.Parent = UDim.new(0, 10), Enum.SortOrde
 label(field, "Gear reduces exposure; it does not guarantee safety. Regions and events can add hazards.", 549, 32, 11)
 local state, tab, signature, order = {}, "Biome", nil, 0
 local function row(text, heading)
-	local l = Theme.Label(scroll, text, UDim2.new(1, -14, 0, 0), UDim2.new(), heading and 14 or 12, nil, heading)
+	local l = Theme.Label(scroll, text, UDim2.new(1, -14, 0, 0), UDim2.new(), heading and 16 or (Theme.IsMobile() and 15 or 12), nil, heading)
 	l.AutomaticSize, l.TextWrapped, l.TextTruncate = Enum.AutomaticSize.Y, true, Enum.TextTruncate.None
 	l.TextYAlignment = Enum.TextYAlignment.Top
 	order += 1; l.LayoutOrder = order
@@ -88,6 +88,7 @@ local function render()
 		row(heading, true)
 		for _, id in ipairs(ids) do
 			local b = button(scroll, id, Guide.Name(id) .. (equipped == id and "  /  EQUIPPED" or "  /  RECIPE >"), 0, 0, 554, 36)
+			b.Size = UDim2.new(1, -14, 0, Theme.IsMobile() and 48 or 36)
 			order += 1; b.LayoutOrder = order
 			b.Activated:Connect(function() openRecipe(id) end)
 			row(heading == "ARMOR OPTIONS" and Guide.ArmorText(id) or "Optional support. Open for materials and crafting stations.")
@@ -113,7 +114,7 @@ local step = 1
 local function renderTutorial()
 	local entries = {
 		{ "1. Gather while the Forest is mild", "Walk up to resources and hold the on-screen gather prompt. Collect Reed Fiber, Moss Bloom and Sap Resin for your first heat armor. Keep food and Bandages ready." },
-		{ "2. Make a Reed Sunwrap", Guide.RecipeText("ReedSunwrap") .. ".\nOpen Craft (" .. Settings.Key("Craft").Name .. "), craft by hand, then open Pack (" .. Settings.Key("Pack").Name .. ") and equip it in the armor slot. It reduces heat exposure by 70%. Desert is an early possible shift; prepare before it arrives." },
+		{ "2. Make a Reed Sunwrap", Guide.RecipeText("ReedSunwrap") .. ".\n" .. (Theme.IsMobile() and "Tap Craft, craft by hand, then tap Pack and equip it in the armor slot." or "Open Craft (" .. Settings.Key("Craft").Name .. "), craft by hand, then open Pack (" .. Settings.Key("Pack").Name .. ") and equip it in the armor slot.") .. " It reduces heat exposure by 70%. Desert is an early possible shift; prepare before it arrives." },
 		{ "3. Watch food and exposure", "Eat before Hunger reaches zero. Extreme hot or cold exposure damages health. Sprint uses energy; stop to recover. Click the biome or conditions on your HUD for protection advice. A Field Clock reveals shift timing; stronger weather may need better gear." },
 	}
 	stepTitle.Text, stepBody.Text = entries[step][1], entries[step][2]
@@ -169,3 +170,30 @@ remote.OnClientEvent:Connect(function(payload)
 	tryStart()
 end)
 remote:FireServer("RequestState")
+
+Theme.FitMenu(field,620,590,{MobileWidth=360,OnResize=function(width,_,mobile)
+	close.Visible = not mobile
+	if not mobile then return end
+	close.Position=UDim2.new(1,-62,0,12); close.Size=UDim2.fromOffset(44,44)
+	biomeTab.Size=UDim2.new(.5,-27,0,44)
+	conditionTab.Position=UDim2.new(.5,5,0,86); conditionTab.Size=UDim2.new(.5,-27,0,44)
+	scroll.Position=UDim2.fromOffset(22,142); scroll.Size=UDim2.new(1,-44,0,390)
+	for _,child in ipairs(field:GetChildren()) do
+		if child:IsA("TextLabel") and child.Position.Y.Offset==549 then child.TextSize=14; child.Size=UDim2.new(1,-44,0,40) end
+	end
+end})
+Theme.FitMenu(tutorial,540,380,{MobileWidth=360,MobileHeight=590,OnResize=function(width,_,mobile)
+	dismiss.Visible = not mobile
+	if not mobile then return end
+	dismiss.Position=UDim2.new(1,-98,0,12); dismiss.Size=UDim2.fromOffset(76,44)
+	stepTitle.Position=UDim2.fromOffset(22,70); stepTitle.Size=UDim2.new(1,-44,0,66)
+	stepBody.Position=UDim2.fromOffset(22,144); stepBody.Size=UDim2.new(1,-44,0,250); stepBody.TextSize=16
+	stepCount.Position=UDim2.fromOffset(22,400); stepCount.Size=UDim2.new(1,-44,0,42); stepCount.TextSize=14
+	back.Position=UDim2.fromOffset(22,448); back.Size=UDim2.new(.3,-27,0,46)
+	recipe.Position=UDim2.new(.3,0,0,448); recipe.Size=UDim2.new(.7,-22,0,46)
+	nextStep.Position=UDim2.fromOffset(22,502); nextStep.Size=UDim2.new(1,-44,0,46)
+	disable.Position=UDim2.fromOffset(22,550); disable.Size=UDim2.new(1,-44,0,36)
+	for _,child in ipairs(tutorial:GetChildren()) do
+		if child:IsA("TextLabel") and child.Position.Y.Offset==18 then child.Size=UDim2.new(1,-130,0,38); child.TextSize=14 end
+	end
+end})

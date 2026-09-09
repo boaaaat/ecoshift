@@ -88,14 +88,14 @@ panel.Name = "FieldSettings"
 panel.Size = UDim2.fromOffset(580, 560)
 panel.Position, panel.AnchorPoint = UDim2.fromScale(.5, .5), Vector2.new(.5, .5)
 panel.ZIndex, panel.Visible, panel.Parent = 6, false, gui
-Theme.Panel(panel); Theme.Fit(panel, 580, 560)
+Theme.Panel(panel)
 Theme.CaptureCursor(panel); Theme.AnimatePanel(panel)
 Theme.Label(panel, "PERSONAL FIELD KIT", UDim2.fromOffset(440, 18), UDim2.fromOffset(22, 16), 10, Theme.Colors.TextMuted, true)
 Theme.Label(panel, "Settings", UDim2.fromOffset(420, 32), UDim2.fromOffset(22, 36), 25, nil, true)
 local function button(parent, name, text, x, y, w, h)
 	local b = Instance.new("TextButton")
 	b.Name, b.Text, b.Size, b.Position = name, text, UDim2.fromOffset(w, h), UDim2.fromOffset(x, y)
-	b.Font, b.TextSize, b.ZIndex, b.Parent = Enum.Font.GothamBold, 12, 8, parent
+	b.Font, b.TextSize, b.ZIndex, b.Parent = Enum.Font.GothamBold, Theme.IsMobile() and 15 or 12, 8, parent
 	Theme.Button(b, false)
 	return b
 end
@@ -185,3 +185,28 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	elseif input.KeyCode == Enum.KeyCode.Escape and panel.Visible then setOpen(false) end
 end)
 render()
+
+Theme.FitMenu(panel, 580, 560, {OnClose = function() setOpen(false) end, MobileWidth = 360, MobileHeight = 630, OnResize = function(width, _, mobile)
+	close.Visible = not mobile
+	if not mobile then return end
+	close.Position = UDim2.new(1, -58, 0, 16); close.Size = UDim2.fromOffset(44, 44)
+	for _, child in ipairs(panel:GetChildren()) do
+		if child:IsA("TextLabel") and child ~= status then child.Size = UDim2.new(1, -92, 0, child.Size.Y.Offset) end
+	end
+	for index, name in ipairs({"Gameplay", "Graphics", "Keybinds"}) do
+		local tab = tabs[name]
+		tab.Position = UDim2.new((index-1)/3, 16, 0, 78)
+		tab.Size = UDim2.new(1/3, -24, 0, 44)
+	end
+	scroll.Position = UDim2.fromOffset(16, 134); scroll.Size = UDim2.new(1, -32, 0, 290)
+	for _, row in pairs(rows) do
+		row.Frame.Size = UDim2.new(1, -10, 0, 68)
+		local caption = row.Frame:FindFirstChildWhichIsA("TextLabel")
+		if caption then caption.Size = UDim2.new(.55, -8, 1, -8); caption.TextSize = 15; caption.TextWrapped = true end
+		row.Button.Position = UDim2.new(.55, 0, 0, 8); row.Button.Size = UDim2.new(.45, -4, 0, 48)
+	end
+	status.Position = UDim2.fromOffset(16, 434); status.Size = UDim2.new(1, -32, 0, 56); status.TextSize = 14
+	reset.Position = UDim2.fromOffset(16, 502); reset.Size = UDim2.new(.5, -24, 0, 44)
+	replay.Position = UDim2.new(.5, 8, 0, 502); replay.Size = UDim2.new(.5, -24, 0, 44)
+	save.Position = UDim2.fromOffset(16, 560); save.Size = UDim2.new(1, -32, 0, 48)
+end})

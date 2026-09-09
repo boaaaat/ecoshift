@@ -5,7 +5,7 @@ local GuiService = game:GetService("GuiService")
 local Workspace = game:GetService("Workspace")
 local Theme = require(script.Parent.UITheme)
 local Topbar = {}
-local WIDTH, HEIGHT, GAP = 110, 36, 8
+local WIDTH, HEIGHT, GAP = 126, 44, 8
 local gui = Instance.new("ScreenGui")
 gui.Name = "ExpeditionTopbar"
 gui.ResetOnSpawn = false
@@ -22,7 +22,7 @@ row.Size = UDim2.fromOffset(WIDTH, HEIGHT)
 row.Parent = gui
 
 local slots = {}
-for _, entry in ipairs({ { "Crew", 0, 68 }, { "Settings", 74, 36 } }) do
+for _, entry in ipairs({ { "Crew", 0, 74 }, { "Settings", 82, 44 } }) do
 	local slot = Instance.new("Frame")
 	slot.Name = entry[1] .. "Slot"
 	slot.BackgroundTransparency = 1
@@ -37,8 +37,8 @@ local function layout()
 	local fits = available.Width >= WIDTH + GAP * 2 and available.Height >= HEIGHT
 	-- ScreenInsets applies the native safe rectangle; do not add its offset again.
 	gui.ScreenInsets = fits and Enum.ScreenInsets.TopbarSafeInsets or Enum.ScreenInsets.CoreUISafeInsets
-	row.AnchorPoint = Vector2.new(1, fits and .5 or 0)
-	row.Position = UDim2.new(1, -GAP, fits and .5 or 0, fits and 0 or GAP)
+	row.AnchorPoint = Vector2.new(0, fits and .5 or 0)
+	row.Position = UDim2.new(0, GAP, fits and .5 or 0, fits and 0 or GAP)
 end
 GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(layout)
 local viewportConnection

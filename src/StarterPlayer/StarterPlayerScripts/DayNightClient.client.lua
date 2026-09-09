@@ -64,10 +64,11 @@ local function createTimeUI()
 	frame.Name = "TimeDisplay"
 	frame.Size = UDim2.fromOffset(170, 36)
 	frame.AnchorPoint = Vector2.new(0.5, 0)
-	frame.Position = UDim2.new(0.5, 0, 0, 14)
+	frame.Position = UDim2.new(0.5, 0, 0, 2)
 	frame.Parent = screenGui
 	Theme.Panel(frame, true)
-	Theme.Fit(frame, 900, 610, nil, true)
+	local scale = Instance.new("UIScale")
+	scale.Parent = frame
 	local dot = Instance.new("Frame")
 	dot.Name = "PhaseIndicator"
 	dot.Size = UDim2.fromOffset(8, 8)
@@ -79,6 +80,20 @@ local function createTimeUI()
 	local timeLabel = Theme.Label(frame, "6:00 AM", UDim2.fromOffset(80, 24), UDim2.fromOffset(29, 6), 12, Theme.Colors.Paper, true)
 	local phaseLabel = Theme.Label(frame, "DAY", UDim2.fromOffset(45, 24), UDim2.fromOffset(114, 6), 9, Theme.Colors.Sage, true)
 	phaseLabel.TextXAlignment = Enum.TextXAlignment.Right
+	local function updatePlacementVisibility()
+		frame.Visible = not (Theme.IsMobile() and playerGui:GetAttribute("BuildPlacementActive"))
+	end
+	playerGui:GetAttributeChangedSignal("BuildPlacementActive"):Connect(updatePlacementVisibility)
+	local function layout(_, available)
+		local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(900, 610)
+		local mobile = Theme.IsMobile()
+		updatePlacementVisibility()
+		scale.Scale = mobile and 1 or math.min(math.clamp(math.min(viewport.X / 1440, viewport.Y / 900), 1, 2.5), (viewport.X - 40) / 900, (viewport.Y - 90) / 610)
+		frame.Position = UDim2.new(.5, 0, 0, 2)
+		timeLabel.TextSize = mobile and 15 or 12
+		phaseLabel.TextSize = mobile and 12 or 9
+	end
+	Theme.BindResponsive(frame, layout)
 	return { Frame = frame, Icon = dot, TimeLabel = timeLabel, PhaseLabel = phaseLabel }
 end
 
