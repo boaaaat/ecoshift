@@ -1622,9 +1622,11 @@ local function arrangePack()
  local packWidth = columns * SLOT_SIZE + (columns - 1) * SLOT_GAP + MARGIN * 2
  local packHeight = mobile and (widePack and 224 or 292) or MAIN_HEIGHT
  local chestHeight = tonumber(gui:GetAttribute("ChestLayoutHeight")) or 200
- local availableHeight = math.max(120, height - (mobile and (portrait and 192 or 96) or 40))
  local maxScale = mobile and 1.65 or 2.5
  hotbarScale.Scale = math.min(mobile and 0.8 or 1.5, (width - 64) / 290)
+ -- Keep the last storage row above the hotbar, including short PC windows.
+ local bottomReserve = mobile and (portrait and 192 or 96) or (18 + (HOTBAR_SLOT_SIZE + 12) * hotbarScale.Scale + 24)
+ local availableHeight = math.max(120, height - bottomReserve)
  hotbarRoot.BackgroundTransparency = mobile and .48 or .04
  hotbarRoot.Position = UDim2.new(0.5, 0, 1, mobile and (portrait and -104 or -8) or -18)
  local totalWidth = chestOpen and not portrait and (packWidth + 382 + 24) or packWidth

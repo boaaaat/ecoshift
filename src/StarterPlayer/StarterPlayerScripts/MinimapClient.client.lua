@@ -1402,9 +1402,8 @@ local function pointerPosition(input)
 	return UserInputService:GetMouseLocation() - game:GetService("GuiService"):GetGuiInset()
 end
 
-local function applyFullZoom(deltaSign, focusAbs)
+local function setFullZoom(target, focusAbs)
 	local oldZoom = STATE.fullZoom
-	local target = oldZoom + (MapConfig.Fullscreen.ZoomStep * deltaSign)
 	STATE.fullZoom = math.clamp(target, MapConfig.Fullscreen.MinZoom, MapConfig.Fullscreen.MaxZoom)
 	if oldZoom == STATE.fullZoom then
 		return
@@ -1423,6 +1422,10 @@ local function applyFullZoom(deltaSign, focusAbs)
 	end
 	clampPan()
 	markFullMapInteraction()
+end
+
+local function applyFullZoom(deltaSign, focusAbs)
+	setFullZoom(STATE.fullZoom * (1 + MapConfig.Fullscreen.ZoomStep) ^ deltaSign, focusAbs)
 end
 
 local function applyMinimapZoom(deltaSign)
@@ -1586,17 +1589,20 @@ local function bindInput()
 		end
 	end)
 
+	local pinchZoom
 	pcall(function()
 		UserInputService.TouchPinch:Connect(function(positions, scale, _, state, gameProcessed)
-			if not STATE.fullMapOpen or #positions < 2 then return end
-			for _, position in ipairs(positions) do if not canGestureMap(position) then return end end
-			if state == Enum.UserInputState.Change then
-				if scale > 1.01 then
-					applyFullZoom(1, UserInputService:GetMouseLocation())
-				elseif scale < 0.99 then
-					applyFullZoom(-1, UserInputService:GetMouseLocation())
-				end
+			if state == Enum.UserInputState.End or state == Enum.UserInputState.Cancel then
+				pinchZoom = nil
+				return
 			end
+			if not STATE.fullMapOpen or #positions < 2 then return end
+			for _, position in ipairs(positions) do if not canGestureMap(position) then pinchZoom = nil; return end end
+			if state == Enum.UserInputState.Begin then pinchZoom = STATE.fullZoom end
+			if not pinchZoom then return end
+			-- Scale is relative to gesture start; zoom around the fingers, not a stale mouse position.
+			INPUT.dragging, INPUT.dragInput, INPUT.lastTouchPan = false, nil, nil
+			setFullZoom(pinchZoom * scale, (positions[1] + positions[2]) * 0.5)
 		end)
 	end)
 end
@@ -1766,6 +1772,22 @@ local function renderFullscreen(playerPos)
 				frame.Size = UDim2.fromOffset(math.ceil(sizePx), math.ceil(sizePx))
 				frame.BackgroundColor3 = getBiomeColor(chunk.biome)
 				frame.BackgroundTransparency = 0.16
+				local label = frame:FindFirstChild("BiomeLabel")
+				if not label then
+					label = buildLabel(frame, "", UDim2.new(1, -8, 0, 22), UDim2.fromOffset(4, 4), Enum.Font.GothamBold, 14, MapConfig.Colors.TextPrimary, Enum.TextXAlignment.Center)
+					label.Name = "BiomeLabel"
+					label.TextStrokeTransparency = 0.35
+				end
+				local metadata = BiomeConfig.biome_metadata[chunk.biome]
+				label.Text = metadata and metadata.DisplayName or chunk.biome
+				-- Keep the name in the visible part of a tile when zoom crops its edges.
+				local left = math.max(4, -frame.Position.X.Offset + 4)
+				local right = math.min(sizePx - 4, canvasSize.X - frame.Position.X.Offset - 4)
+				local top = math.max(4, -frame.Position.Y.Offset + 4)
+				local bottom = math.min(sizePx - 4, canvasSize.Y - frame.Position.Y.Offset - 4)
+				label.Position = UDim2.fromOffset(left, top)
+				label.Size = UDim2.fromOffset(math.max(0, right - left), 22)
+				label.Visible = STATE.markerVisibility.Regions and right - left >= 124 and bottom - top >= 22
 				RENDER_CACHE.usedChunkKeys[key] = true
 			end
 		end
@@ -1797,14 +1819,21 @@ local function renderFullscreen(playerPos)
 
 					local label = frame:FindFirstChild("Label")
 					if not label then
-						label = buildLabel(frame, "", UDim2.new(1, -4, 0, 12), UDim2.fromOffset(2, 2), Enum.Font.Gotham, 10, MapConfig.Colors.TextMuted, Enum.TextXAlignment.Center)
+						label = buildLabel(frame, "", UDim2.new(1, -8, 1, -8), UDim2.fromOffset(4, 4), Enum.Font.GothamMedium, 14, MapConfig.Colors.TextPrimary, Enum.TextXAlignment.Center)
 						label.Name = "Label"
+						label.TextWrapped = true
+						label.TextStrokeTransparency = 0.35
 					end
-					label.Text = region.name
-					label.TextColor3 = style.StrokeColor
-					label.Visible = style.ShowLabel and rw > 42 and rh > 18
+					label.Text = region.name:gsub("(%l)(%u)", "%1 %2")
+					local left = math.max(4, -frame.Position.X.Offset + 4)
+					local right = math.min(rw - 4, canvasSize.X - frame.Position.X.Offset - 4)
+					local top = math.max(4, -frame.Position.Y.Offset + 4)
+					local bottom = math.min(rh - 4, canvasSize.Y - frame.Position.Y.Offset - 4)
+					label.Position = UDim2.fromOffset(left, top)
+					label.Size = UDim2.fromOffset(math.max(0, right - left), math.max(0, bottom - top))
+					label.Visible = style.ShowLabel and right - left >= 68 and bottom - top >= 40
 
-					local canShowGlyph = rw > 16 and rh > 16
+					local canShowGlyph = not label.Visible and rw > 16 and rh > 16
 					if canShowGlyph and style.Glyph then
 						applyGlyphToFrame(frame, style.Glyph, style.StrokeColor, math.max(10, math.floor(math.min(rw, rh) * 0.33)))
 					else

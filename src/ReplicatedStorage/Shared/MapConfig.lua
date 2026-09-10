@@ -23,7 +23,7 @@ MapConfig.Fullscreen = {
 	InteractionBoostDuration = 0.2,
 	DefaultZoom = 1.0,
 	MinZoom = 0.35,
-	MaxZoom = 3.5,
+	MaxZoom = 18, -- Phone canvases need closer zoom to read individual regions.
 	ZoomStep = 0.12,
 	GamepadPanPixelsPerSecond = 900,
 }
