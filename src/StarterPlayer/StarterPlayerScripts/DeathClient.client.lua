@@ -480,23 +480,25 @@ updateDeathUI = function(canSpectate)
 	end
 
 	if lobbyBtn then
+		local studio = RunService:IsStudio()
+		local enabled = isGameOver and not studio and LobbyRemote ~= nil and returnRequest == nil
+			or studio and (not isGameOver or canReturnToLobby)
+		-- The pre-wipe live state disables this button. Restore Active as well as
+		-- Interactable: Activated does not fire while Active remains false.
+		lobbyBtn.Active = enabled
+		lobbyBtn.Interactable = enabled
+		lobbyBtn.Selectable = enabled
+		lobbyBtn.AutoButtonColor = enabled
 		if isGameOver and not RunService:IsStudio() then
 			lobbyBtn.Visible = true
-			lobbyBtn.Interactable = LobbyRemote ~= nil and returnRequest == nil
 			lobbyBtn.Text = returnRequest and "RETURNING…" or "RETURN TO OBSERVATORY"
 		elseif isGameOver then
 			lobbyBtn.Visible = canReturnToLobby
-			lobbyBtn.Active = canReturnToLobby
-			lobbyBtn.Selectable = canReturnToLobby
-			lobbyBtn.AutoButtonColor = canReturnToLobby
 			lobbyBtn.BackgroundColor3 = Theme.Colors.SlotEmpty
 			lobbyBtn.TextColor3 = Theme.Colors.Text
 			lobbyBtn.Text = "RESPAWN (STUDIO)"
 		else
 			lobbyBtn.Visible = RunService:IsStudio()
-			lobbyBtn.Active = RunService:IsStudio()
-			lobbyBtn.Selectable = RunService:IsStudio()
-			lobbyBtn.AutoButtonColor = RunService:IsStudio()
 			lobbyBtn.BackgroundColor3 = Theme.Colors.SlotEmpty
 			lobbyBtn.TextColor3 = Theme.Colors.Text
 			lobbyBtn.Text = "RESPAWN (STUDIO)"

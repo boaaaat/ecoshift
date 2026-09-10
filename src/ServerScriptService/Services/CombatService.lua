@@ -390,41 +390,71 @@ local function raycastFromPlayer(plr, origin, dir, maxRange)
 	return res
 end
 
-function CombatService:_canUseTool(tool, cooldown)
+function CombatService:_canUseTool(tool, cooldown, tolerateJitter)
 	if not tool then return false end
 	local now = os.clock()
 	local last = self._lastUse[tool] or 0
-	if now - last < cooldown then return false end
-	self._lastUse[tool] = now
+	local tolerance = tolerateJitter and math.min(0.05, cooldown * 0.1) or 0
+	if now - last < cooldown - tolerance then return false end
+	-- Keep the scheduled cooldown when accepting an early packet, so tolerance
+	-- cannot increase sustained attack speed by sending requests faster.
+	self._lastUse[tool] = math.max(now, last + cooldown)
 	return true
 end
 
 function CombatService:_handleSword(plr, tool, weapon, data)
-	local range = weapon:GetRange()
-	local dmg = weapon:GetDamage()
-	local cooldown = weapon:GetCooldown()
-	if not self:_canUseTool(tool, cooldown) then return end
-	local target = data and data.Target
-	if typeof(target) ~= "Instance" or not target:IsA("Model") or not target:IsDescendantOf(Workspace) then return end
-	if not distanceOK(plr, target, range + 2) then return end
-	local origin = getToolOrigin(plr, tool)
-	local targetPos = getTargetPosition(target)
-	if not origin or not targetPos then return end
-	-- A held handle can clip into a wall; a ray starting inside it can miss it.
-	-- Require a clear path from the character as well as from the weapon.
+	if not self:_canUseTool(tool, weapon:GetCooldown(), true) then return end
 	local body = getRoot(plr.Character)
 	if not body then return end
-	local bodyDelta = targetPos - body.Position
-	if bodyDelta.Magnitude > 0 then
-		local obstruction = raycastFromPlayer(plr, body.Position, bodyDelta.Unit, bodyDelta.Magnitude)
-		if obstruction and not obstruction.Instance:IsDescendantOf(target) then return end
+	-- Touch is an untrusted aim-assist hint, never a client-selected radius.
+	-- Even a spoofed hint is restricted to these same small server bounds.
+	local touch = data and data.Touch == true
+	local reach = math.clamp(weapon:GetRange() + 3.5 + (touch and 0.75 or 0), 4, 14)
+	local halfWidth = touch and 3.25 or 2.5
+	local aim = getValidatedAimDirection(data) or body.CFrame.LookVector
+	local flatAim = Vector3.new(aim.X, 0, aim.Z)
+	if flatAim.Magnitude < 0.1 then
+		local facing = body.CFrame.LookVector
+		flatAim = Vector3.new(facing.X, 0, facing.Z)
 	end
-	local delta = targetPos - origin
-	if delta.Magnitude > 0 then
-		local hit = raycastFromPlayer(plr, origin, delta.Unit, delta.Magnitude)
-		if hit and not hit.Instance:IsDescendantOf(target) then return end
+	if flatAim.Magnitude < 0.001 then return end
+	local swing = CFrame.lookAt(body.Position, body.Position + flatAim.Unit)
+	local params = OverlapParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { plr.Character }
+	local parts = Workspace:GetPartBoundsInBox(swing * CFrame.new(0, 0, -reach * 0.5), Vector3.new(halfWidth * 2, 9, reach), params)
+	local seen, bestTarget, bestScore = {}, nil, math.huge
+	local obstructionParams = RaycastParams.new()
+	obstructionParams.FilterType = Enum.RaycastFilterType.Exclude
+	obstructionParams.FilterDescendantsInstances = { plr.Character }
+	-- Decorative leaves and noncolliding weapon art are not physical cover.
+	obstructionParams.RespectCanCollide = true
+	for _, part in ipairs(parts) do
+		local target = part
+		while target and target ~= Workspace do
+			if target:IsA("Model") and isTaggedCombatTarget(target) then break end
+			target = target.Parent
+		end
+		if not target or target == Workspace or seen[target] then continue end
+		seen[target] = true
+		local health = getHumanoidOrHealth(target, false)
+		local targetRoot = getRoot(target)
+		if not health or not targetRoot then continue end
+		local hp = health:IsA("Humanoid") and health.Health or health.Value
+		if hp <= 0 then continue end
+		local relative = swing:PointToObjectSpace(targetRoot.Position)
+		local forward = -relative.Z
+		local flatDistance = Vector2.new(relative.X, relative.Z).Magnitude
+		if forward < 0 or flatDistance > reach or math.abs(relative.X) > halfWidth or math.abs(relative.Y) > 4.5 then continue end
+		local delta = targetRoot.Position - body.Position
+		local obstruction = delta.Magnitude > 0 and Workspace:Raycast(body.Position, delta, obstructionParams)
+		if obstruction and not obstruction.Instance:IsDescendantOf(target) then continue end
+		-- Prefer a directly aimed target, otherwise the nearest target in the swing.
+		local score = flatDistance + math.abs(relative.X) * 0.5
+		if data and data.Target == target then score -= 2 end
+		if score < bestScore then bestTarget, bestScore = target, score end
 	end
-	self:ApplyDamage(plr, target, dmg, "Melee")
+	if bestTarget then self:ApplyDamage(plr, bestTarget, weapon:GetDamage(), "Melee") end
 end
 
 function CombatService:_handleGun(plr, tool, weapon, data)
@@ -527,8 +557,6 @@ function CombatService:Bind()
 				-- an explicit server-authored combat profile can use this melee path.
 				local damage = WeaponUtil.GetNumber(tool, "CombatDamage", 0)
 				if action ~= "Attack" or damage <= 0 then return end
-				local target = data and data.Target
-				if typeof(target) ~= "Instance" or not target:IsA("Model") or not isTaggedCombatTarget(target) then return end
 				if ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring")
 					or plr:GetAttribute("WorldPlayerLoading") then return end
 				local harvestWeapon = {

@@ -453,4 +453,11 @@ EntityConfig.Entities.Wolf.AI.Damage=9
 EntityConfig.Entities.Wolf.AI.AttackCooldown=1.3
 EntityConfig.Entities.Wolf.AI.DetectionDistance=95
 EntityConfig.Entities.Wolf.Spawn.GroupSize={min=1,max=3}
+-- The first encounters must be survivable with expedition starter gear. Apply
+-- these after prefab overrides in EntityAIService so authored prefabs agree.
+for _, id in ipairs({ "Wolf", "Scorpion", "GiantLeech" }) do
+	local def = EntityConfig.Entities[id]
+	def.StarterBalance = { Damage = 0.5, Health = 0.8, AttackRange = 0.8 }
+	def.Spawn.GroupSize = { min = 1, max = 2 }
+end
 return EntityConfig

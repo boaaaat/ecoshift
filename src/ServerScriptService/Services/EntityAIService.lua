@@ -200,6 +200,14 @@ function EntityAIService:BindEntity(model, forcedType)
 	model:SetAttribute("EntityType", entityType)
 	local cfg = self:_buildConfig(model, entityType)
 	if entityType == "Monster" then
+		-- Prefab JumpPower values used to launch creatures far above the terrain.
+		hum.UseJumpPower = false
+		hum.JumpHeight = 7
+		local balance = def and def.StarterBalance
+		if balance then
+			cfg.Damage = (cfg.Damage or 8) * balance.Damage
+			cfg.AttackRange = (cfg.AttackRange or 4) * balance.AttackRange
+		end
 		local level = tonumber(model:GetAttribute("Level"))
 		if not level or level ~= level then
 			level = 1 + math.floor(RoundService:GetElapsed() / Progression.SecondsPerMonsterLevel)
@@ -210,6 +218,7 @@ function EntityAIService:BindEntity(model, forcedType)
 		if not model:GetAttribute("LevelHealthApplied") then
 			local fraction = hum.MaxHealth > 0 and hum.Health / hum.MaxHealth or 1
 			hum.MaxHealth *= 1 + Progression.HealthPerLevel * (level - 1)
+			if balance then hum.MaxHealth *= balance.Health end
 			hum.Health = hum.MaxHealth * fraction
 			model:SetAttribute("LevelHealthApplied", true)
 		end

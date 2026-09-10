@@ -80,11 +80,14 @@ local function toolValue(tool, name)
 	local child = tool:FindFirstChild(name)
 	return child and child:IsA("ValueBase") and tostring(child.Value) or ""
 end
+local function isHarvester(tool)
+	return tool and (tool.Name == "Harvester" or toolValue(tool, "ItemId") == "Harvester")
+end
 local function update()
 	local tool = equippedTool()
 	local available = tool ~= nil and not blocked()
 	if heldInput and (not available or tool ~= heldTool) then release(true) end
-	action.Visible, reticle.Visible = available, available
+	action.Visible, reticle.Visible = available and not isHarvester(tool), available
 	if available and not heldInput then
 		local kind = string.lower(toolValue(tool, "WeaponType"))
 		local icon = (kind == "shield" or kind == "shields") and "Shield"
@@ -107,6 +110,16 @@ action.InputBegan:Connect(function(input)
 	tool:SetAttribute("CancelMobileRelease", nil)
 	heldGlow.Enabled = true
 	tool:Activate()
+end)
+-- Tap gestures exclude camera drags, and UI-owned taps must not swing the tool.
+-- https://create.roblox.com/docs/reference/engine/classes/UserInputService#TouchTapInWorld
+UserInputService.TouchTapInWorld:Connect(function(_, processedByUI)
+	if processedByUI or heldInput or blocked() then return end
+	local tool = equippedTool()
+	if not isHarvester(tool) or not tool.Enabled then return end
+	tool:SetAttribute("CancelMobileRelease", nil)
+	tool:Activate()
+	tool:Deactivate()
 end)
 UserInputService.InputEnded:Connect(function(input)
 	if input == heldInput then release(input.UserInputState == Enum.UserInputState.Cancel); update() end

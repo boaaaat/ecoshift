@@ -133,9 +133,9 @@ local function layout(_, available)
 			local x=i==1 and 8 or (i%2==0 and 8 or 96)
 			local y=i==1 and 5 or (i<=3 and 29 or 52)
 			bar.Icon.Position=UDim2.fromOffset(x+8,y+8)
-			bar.Value.Position=UDim2.fromOffset(i==1 and 138 or x+39,y-1)
-			bar.Value.Size=UDim2.fromOffset(i==1 and 36 or 40,18);bar.Value.TextSize=12
-			bar.Track.Position=UDim2.fromOffset(x+24,y+7);bar.Track.Size=UDim2.fromOffset(i==1 and 98 or 13,4)
+			bar.Value.Position=UDim2.fromOffset(i==1 and 138 or x+24,y-1)
+			bar.Value.Size=UDim2.fromOffset(i==1 and 36 or 55,i==1 and 18 or 14);bar.Value.TextSize=i==1 and 12 or 11
+			bar.Track.Position=UDim2.fromOffset(x+24,y+(i==1 and 7 or 16));bar.Track.Size=UDim2.fromOffset(i==1 and 98 or 55,4)
 		end
 	end
 end

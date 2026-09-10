@@ -109,6 +109,10 @@ scroll.AutomaticCanvasSize, scroll.CanvasSize = Enum.AutomaticSize.Y, UDim2.new(
 scroll.ZIndex, scroll.Parent = 7, panel
 local layout = Instance.new("UIListLayout")
 layout.Padding, layout.SortOrder, layout.Parent = UDim.new(0, 8), Enum.SortOrder.LayoutOrder, scroll
+local mobilePreferences = Instance.new("Frame")
+mobilePreferences.Name, mobilePreferences.BackgroundTransparency = "MobilePreferences", 1
+mobilePreferences.Position, mobilePreferences.ZIndex = UDim2.fromOffset(16, 134), 7
+mobilePreferences.Visible, mobilePreferences.Parent = false, panel
 local status = Theme.Label(panel, "", UDim2.fromOffset(536, 46), UDim2.fromOffset(22, 446), 11, Theme.Colors.TextMuted)
 status.TextWrapped, status.TextTruncate = true, Enum.TextTruncate.None
 local save = button(panel, "SavePreferences", "Save preferences", 354, 506, 204, 34)
@@ -116,6 +120,7 @@ local reset = button(panel, "ResetPreferences", "Reset defaults", 22, 506, 150, 
 local replay = button(panel, "ReplayTutorial", "Replay tutorial", 182, 506, 162, 34)
 replay.Visible = isExpedition
 local rows, capture = {}, nil
+local updateMobileContent
 local function cancelCapture()
 	capture = nil; Settings.Capturing = false
 end
@@ -128,6 +133,7 @@ local function render()
 		row.Button.Text = capture == key and "Press a key..." or (type(value) == "boolean" and (value and "On" or "Off") or tostring(value))
 	end
 	for name, tab in pairs(tabs) do Theme.Bind(tab, "BackgroundColor3", currentTab == name and "SlotSelected" or "SlotEmpty") end
+	if updateMobileContent then updateMobileContent() end
 end
 for index, section in ipairs({ "Gameplay", "Graphics", "Keybinds" }) do
 	local tab = button(panel, section .. "Tab", section, 22 + (index - 1) * 182, 78, 172, 30)
@@ -186,8 +192,31 @@ UserInputService.InputBegan:Connect(function(input, processed)
 end)
 render()
 
+updateMobileContent = function()
+	if not Theme.IsMobile() or not panel.Parent:IsA("ScrollingFrame") then return end
+	local count = 0
+	for key in pairs(rows) do if Schema.Definitions[key].Section == currentTab then count += 1 end end
+	local contentHeight = math.max(1, count * 76 - 8)
+	scroll.CanvasPosition = Vector2.zero
+	mobilePreferences.Size = UDim2.new(1, -32, 0, contentHeight)
+	local footerY = 134 + contentHeight + 12
+	status.Position = UDim2.fromOffset(16, footerY)
+	reset.Position = UDim2.fromOffset(16, footerY + 68)
+	replay.Position = UDim2.new(.5, 8, 0, footerY + 68)
+	save.Position = UDim2.fromOffset(16, footerY + 126)
+	local height = footerY + 190
+	panel.Size = UDim2.fromOffset(panel.Size.X.Offset, height)
+	local scale = panel:FindFirstChild("ViewportScale")
+	local factor = scale and (scale:GetAttribute("TargetScale") or scale.Scale) or 1
+	panel.Parent.CanvasSize = UDim2.fromOffset(0, height * factor)
+end
+
 Theme.FitMenu(panel, 580, 560, {OnClose = function() setOpen(false) end, MobileWidth = 360, MobileHeight = 630, OnResize = function(width, _, mobile)
 	close.Visible = not mobile
+	scroll.Visible, mobilePreferences.Visible = not mobile, mobile
+	local rowsParent = mobile and mobilePreferences or scroll
+	layout.Parent = rowsParent
+	for _, row in pairs(rows) do row.Frame.Parent = rowsParent end
 	if not mobile then return end
 	close.Position = UDim2.new(1, -58, 0, 16); close.Size = UDim2.fromOffset(44, 44)
 	for _, child in ipairs(panel:GetChildren()) do
@@ -209,4 +238,6 @@ Theme.FitMenu(panel, 580, 560, {OnClose = function() setOpen(false) end, MobileW
 	reset.Position = UDim2.fromOffset(16, 502); reset.Size = UDim2.new(.5, -24, 0, 44)
 	replay.Position = UDim2.new(.5, 8, 0, 502); replay.Size = UDim2.new(.5, -24, 0, 44)
 	save.Position = UDim2.fromOffset(16, 560); save.Size = UDim2.new(1, -32, 0, 48)
+	updateMobileContent()
 end})
+Theme.BindResponsive(panel, updateMobileContent)

@@ -708,6 +708,8 @@ local function createUI()
 	sidebar.ScrollingDirection = Enum.ScrollingDirection.Y
 	sidebar.ZIndex = 40
 	sidebar.Parent = body
+	UI.legend = sidebar
+	sidebar.Active = true
 	styleCard(sidebar)
 	local legendButton = Instance.new("TextButton")
 	legendButton.Name = "ToggleLegend"
@@ -1387,6 +1389,19 @@ local function getMouseOver(guiObject)
 	return pos.X >= absPos.X and pos.X <= (absPos.X + absSize.X) and pos.Y >= absPos.Y and pos.Y <= (absPos.Y + absSize.Y)
 end
 
+local function containsPoint(object, point)
+	if not object or not object.Visible then return false end
+	local p, s = object.AbsolutePosition, object.AbsoluteSize
+	return point.X >= p.X and point.Y >= p.Y and point.X <= p.X+s.X and point.Y <= p.Y+s.Y
+end
+local function canGestureMap(point)
+	return STATE.fullMapOpen and containsPoint(UI.fullCanvas, point) and not containsPoint(UI.legend, point)
+end
+local function pointerPosition(input)
+	if input.UserInputType == Enum.UserInputType.Touch then return input.Position end
+	return UserInputService:GetMouseLocation() - game:GetService("GuiService"):GetGuiInset()
+end
+
 local function applyFullZoom(deltaSign, focusAbs)
 	local oldZoom = STATE.fullZoom
 	local target = oldZoom + (MapConfig.Fullscreen.ZoomStep * deltaSign)
@@ -1419,7 +1434,7 @@ local function applyMinimapZoom(deltaSign)
 end
 
 local function startDrag(input)
-	if not STATE.fullMapOpen then return end
+	if not canGestureMap(pointerPosition(input)) then return end
 	INPUT.dragInput = input
 	INPUT.dragging = true
 	markFullMapInteraction()
@@ -1518,8 +1533,8 @@ local function bindInput()
 
 	UserInputService.InputChanged:Connect(function(input, gameProcessed)
 		if input.UserInputType == Enum.UserInputType.MouseWheel then
-			if STATE.fullMapOpen and UI.fullCanvas and getMouseOver(UI.fullCanvas) then
-				applyFullZoom(input.Position.Z > 0 and 1 or -1, UserInputService:GetMouseLocation())
+			if canGestureMap(pointerPosition(input)) then
+				applyFullZoom(input.Position.Z > 0 and 1 or -1, pointerPosition(input))
 			elseif UI.minimapFrame and getMouseOver(UI.minimapFrame) then
 				applyMinimapZoom(input.Position.Z > 0 and 1 or -1)
 			end
@@ -1545,7 +1560,7 @@ local function bindInput()
 		if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch)
 			and STATE.fullMapOpen
 			and UI.fullCanvas
-			and getMouseOver(UI.fullCanvas) then
+			and canGestureMap(pointerPosition(input)) then
 			startDrag(input)
 		end
 
@@ -1572,8 +1587,9 @@ local function bindInput()
 	end)
 
 	pcall(function()
-		UserInputService.TouchPinch:Connect(function(_, scale, _, state, gameProcessed)
-			if not STATE.fullMapOpen then return end
+		UserInputService.TouchPinch:Connect(function(positions, scale, _, state, gameProcessed)
+			if not STATE.fullMapOpen or #positions < 2 then return end
+			for _, position in ipairs(positions) do if not canGestureMap(position) then return end end
 			if state == Enum.UserInputState.Change then
 				if scale > 1.01 then
 					applyFullZoom(1, UserInputService:GetMouseLocation())

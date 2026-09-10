@@ -203,20 +203,32 @@ local function harvestOnce(tool)
 	missingInteractWarned = false
 	local range = getRange(tool)
 	local hit = acquireHarvestHit(range)
+	local function swingAt(target)
+		if not CombatRE or (tonumber(tool:GetAttribute("CombatDamage")) or 0) <= 0 then return end
+		local _, direction = getMouseRay()
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		local targetRoot = target and (target.PrimaryPart or target:FindFirstChild("HumanoidRootPart"))
+		if root and targetRoot then
+			local delta = targetRoot.Position - root.Position
+			if delta.Magnitude > 0.001 then direction = delta.Unit end
+		end
+		CombatRE:FireServer("Attack", { Target = target, Dir = direction, Touch = Theme.IsMobile() })
+		local swing = Instance.new("StringValue")
+		swing.Name, swing.Value, swing.Parent = "toolanim", "Slash", tool
+		Debris:AddItem(swing, 1)
+	end
 	local target = hit
 	while target and target ~= Workspace do
 		if target:IsA("Model") and (CollectionService:HasTag(target, "Monster") or CollectionService:HasTag(target, "Animal")) then
-			if CombatRE and (tonumber(tool:GetAttribute("CombatDamage")) or 0) > 0 then
-				CombatRE:FireServer("Attack", { Target = target })
-				local swing = Instance.new("StringValue")
-				swing.Name, swing.Value, swing.Parent = "toolanim", "Slash", tool
-				Debris:AddItem(swing, 1)
-			end
+			swingAt(target)
 			return
 		end
 		target = target.Parent
 	end
 	local node = findNode(hit)
+	-- A near miss still swings: the server resolves a bounded melee hitbox.
+	-- Direct resource hits retain harvesting priority.
+	if not node then swingAt(nil) end
 	InteractRE:FireServer("Harvest", node or hit)
 end
 

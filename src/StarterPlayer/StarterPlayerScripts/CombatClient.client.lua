@@ -78,6 +78,7 @@ local function buildAimData(maxRange)
 	return {
 		Origin = origin,
 		Dir = dir,
+		Touch = Theme.IsMobile(),
 		Target = target,
 		HitPos = hit and hit.Position or nil,
 	}
