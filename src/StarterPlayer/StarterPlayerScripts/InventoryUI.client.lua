@@ -1627,7 +1627,9 @@ local function arrangePack()
  -- Keep the last storage row above the hotbar, including short PC windows.
  local bottomReserve = mobile and (portrait and 192 or 96) or (18 + (HOTBAR_SLOT_SIZE + 12) * hotbarScale.Scale + 24)
  local availableHeight = math.max(120, height - bottomReserve)
- hotbarRoot.BackgroundTransparency = mobile and .48 or .04
+ hotbarRoot.BackgroundTransparency = 1
+ hotbarRoot.BorderSizePixel = 0
+ hotbarPanel.BackgroundTransparency = mobile and .48 or .04
  hotbarRoot.Position = UDim2.new(0.5, 0, 1, mobile and (portrait and -104 or -8) or -18)
  local totalWidth = chestOpen and not portrait and (packWidth + 382 + 24) or packWidth
  local totalHeight = chestOpen and (portrait and (packHeight + chestHeight + 12) or math.max(packHeight, chestHeight)) or packHeight

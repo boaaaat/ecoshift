@@ -102,10 +102,32 @@ end
 function Service:_publishAssignments(record)
 	if not launching(record) and not active(record) then return nil, "LaunchNoLongerAvailable" end
 	if not Store:RegisterReservation(record) then return nil, "ReservationRegistrationPending" end
+	-- Each owner has a separate key. Prepare the crew together instead of adding
+	-- every player's storage latency to the launch time.
+	local remaining, complete = #record.Roster, true
+	local finished = Instance.new("BindableEvent")
 	for _, userId in ipairs(record.Roster) do
-		if not Store:Assign(userId, record) then return nil, "CrewAssignmentsPending" end
+		task.spawn(function()
+			local ok, assigned = pcall(Store.Assign, Store, userId, record)
+			if not ok or not assigned then complete = false end
+			remaining -= 1
+			if remaining == 0 then finished:Fire() end
+		end)
 	end
-	Saves:UpdateManifest(record)
+	if remaining > 0 then finished.Event:Wait() end
+	finished:Destroy()
+	if not complete then return nil, "CrewAssignmentsPending" end
+	-- The durable assignments are ready: don't wait for the recovery poll to
+	-- discover them. Other lobbies retain that fallback, as do failed teleports.
+	if launching(record) or (active(record) and not record.AdmissionComplete) then
+		for _, userId in ipairs(record.Roster) do
+			local player = Players:GetPlayerByUserId(userId)
+			if player and record.MatchmakingType == nativeType() then self:_queueTravel(player, record) end
+		end
+	end
+	-- Save ownership was already committed; archive display metadata can refresh
+	-- alongside travel rather than holding up the departure.
+	task.spawn(function() Saves:UpdateManifest(record) end)
 	return true
 end
 
