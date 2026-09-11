@@ -29,7 +29,8 @@ local RESIST_EFFECTS = {
 local function canConsume(item)
 	if not item then return false end
 	return (item:HasTag("Food") or item:HasTag("Consumable"))
-		and (FOOD_RESTORE[item.Id] ~= nil or RESIST_EFFECTS[item.Id] ~= nil or item.Id == "Bandage" or item.Id == "ThermalPatch")
+		and (FOOD_RESTORE[item.Id] ~= nil or RESIST_EFFECTS[item.Id] ~= nil or item.Id == "Bandage"
+			or item.Id == "ThermalPatch" or item.Id == "SpringWater")
 end
 
 local function canAct(plr)
@@ -47,6 +48,9 @@ local function hasUsefulEffect(plr, char, hum, itemId)
 		return (StatsService:GetBase(plr, "Hunger") or StatsService:GetStat(plr, "Hunger") or 0) < maximum, "Hunger is already full."
 	end
 	if itemId == "Bandage" then return hum.Health < hum.MaxHealth, "Health is already full." end
+	if itemId == "SpringWater" then
+		return (StatsService:GetBase(plr, "Temperature") or 0) > 0, "You have no heat exposure to cool."
+	end
 	local effect = RESIST_EFFECTS[itemId]
 	if effect then return (tonumber(char:GetAttribute(effect.Key)) or 0) < 0.9, "This resistance is already at its limit." end
 	return itemId == "ThermalPatch"
@@ -96,6 +100,11 @@ local function applyConsumableEffects(plr, char, hum, itemId)
 		end
 		return
 	end
+	if itemId == "SpringWater" then
+		local current = StatsService:GetBase(plr, "Temperature") or 0
+		StatsService:SetBase(plr, "Temperature", math.max(0, current - 30))
+		return
+	end
 	local effect = RESIST_EFFECTS[itemId]
 	if effect then
 		applyTimedCharacterResist(char, effect.Key, effect.Amount, effect.Duration)
@@ -120,6 +129,7 @@ function InventoryActionService:_consumeFromSlot(plr, slotType, slotIndex)
 	local removed = InventoryService:TakeFromSlot(plr, slotType, slotIndex, 1, {ExpectedId = slot.Id, DeferSync = true})
 	if not removed then return false, "That inventory slot changed. Try again." end
 	local oldHunger = StatsService:GetBase(plr, "Hunger") or 0
+	local oldTemperature = StatsService:GetBase(plr, "Temperature") or 0
 	local oldHealth = hum.Health
 	applyFood(plr, removed)
 	applyConsumableEffects(plr, char, hum, removed)
@@ -128,6 +138,8 @@ function InventoryActionService:_consumeFromSlot(plr, slotType, slotIndex)
 		return true, string.format("%s: +%d hunger", item.Name, math.floor((StatsService:GetBase(plr, "Hunger") or oldHunger) - oldHunger + 0.5))
 	elseif removed == "Bandage" then
 		return true, string.format("Bandage: +%d health", math.floor(hum.Health - oldHealth + 0.5))
+	elseif removed == "SpringWater" then
+		return true, string.format("Spring Water: -%d heat exposure", math.floor(oldTemperature - (StatsService:GetBase(plr, "Temperature") or 0) + 0.5))
 	end
 	local effect = RESIST_EFFECTS[removed]
 	return true, effect and string.format("%s active for %ds", item.Name, effect.Duration) or "Thermal Patch active for 90s"
@@ -146,6 +158,12 @@ function InventoryActionService:Init()
 	remote.OnServerEvent:Connect(function(plr, action, payload)
 		local _, hum = canAct(plr)
 		if not hum then return end
+		if action == "MoveAmount" and type(payload) == "table" then
+			if type(payload.RequestId) ~= "string" or #payload.RequestId > 80 then return end
+			local moved = InventoryService:MoveAmount(plr, payload.FromType, payload.FromIndex, payload.ToType, payload.ToIndex, payload.Amount, payload.ExpectedId)
+			remote:FireClient(plr, "MoveAmountResult", {RequestId=payload.RequestId, Moved=moved})
+			return
+		end
 		if action == "Move" and type(payload) == "table" then
 			print(string.format("[InventoryAction] Move %s: %s[%s] -> %s[%s]", plr.Name, tostring(payload.FromType), tostring(payload.FromIndex), tostring(payload.ToType), tostring(payload.ToIndex)))
 			InventoryService:Move(plr, payload.FromType, payload.FromIndex, payload.ToType, payload.ToIndex)
@@ -164,7 +182,7 @@ function InventoryActionService:Init()
 			local slotType = payload.SlotType
 			local slotIndex = payload.SlotIndex
 			print(string.format("[InventoryAction] Equip request %s slot %s[%s]", plr.Name, tostring(slotType), tostring(slotIndex)))
-			if slotType ~= "Hotbar" or typeof(slotIndex) ~= "number" or slotIndex % 1 ~= 0 or slotIndex < 1 or slotIndex > 4 then return end
+			if slotType ~= "Hotbar" or typeof(slotIndex) ~= "number" or slotIndex % 1 ~= 0 or slotIndex < 1 or slotIndex > 6 then return end
 			
 			local char = plr.Character
 			local hum = char and char:FindFirstChildOfClass("Humanoid")

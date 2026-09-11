@@ -173,7 +173,7 @@ local function setupWorkbenchInteraction(inst, stationType)
 	end
 	prompt.ObjectText = station.Name or stationType
 	prompt.ActionText = "Open"
-	prompt.KeyboardKeyCode = Enum.KeyCode.E
+	prompt.KeyboardKeyCode = Enum.KeyCode.F
 	prompt.HoldDuration = 0
 	prompt.MaxActivationDistance = station.InteractRadius or 8
 	prompt.RequiresLineOfSight = false

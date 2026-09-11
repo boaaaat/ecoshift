@@ -3,6 +3,7 @@ local Workbench = require(script.Parent.Parent.WorkbenchConfig)
 local Survival = require(script.Parent.Parent.SurvivalConfig)
 local Descriptions = {}
 local direct = {
+	SpringWater = "Drink to remove 30 heat exposure. Gather it in Verdant Reach before entering hot biomes.",
 	Harvester = "Break resource nodes to gather materials; also provides weak emergency melee defense.",
 	Torch = "Place at camp to light the surrounding area.",
 	Campfire = "Place a campfire at camp. It currently provides no warmth or cooking.",

@@ -48,50 +48,44 @@ local function entries(list, callback)
 		if name then callback(name) end
 	end
 end
+local function configureResource(model, name)
+	local id = ResourceMap.Normalize(name)
+	local item = Items:Get(id)
+	if not item then return false end
+	local profile = LootConfig.ResourceProfile(item, name)
+	-- Preserve geometry, but replace legacy child values and hold prompts so they
+	-- cannot override the current balance or leave a second harvest route active.
+	local markers = { Health = true, MaxHealth = true, CurrentHealth = true, Duration = true, HarvestDuration = true }
+	for _, child in ipairs(model:GetDescendants()) do
+		for marker in pairs(markers) do child:SetAttribute(marker, nil) end
+		if child:IsA("ProximityPrompt") or child.Name == "HarvestPromptAttachment"
+			or (child:IsA("ValueBase") and markers[child.Name]) then
+			child:Destroy()
+		end
+	end
+	model:SetAttribute("DropItemId", id)
+	model:SetAttribute("DropMin", profile.Min)
+	model:SetAttribute("DropMax", profile.Max)
+	model:SetAttribute("Health", profile.Health)
+	model:SetAttribute("MaxHealth", profile.Health)
+	model:SetAttribute("CurrentHealth", nil)
+	model:SetAttribute("Duration", profile.Duration)
+	model:SetAttribute("HarvestDuration", nil)
+	model:SetAttribute("HarvestProfileVersion", 2)
+	model:SetAttribute("ContactDamage", id == "CactusStem" and 4 or nil)
+	return true
+end
 local function makeResource(parent, name, biome, resource)
 	if keepExisting(parent, name) then
 		local existing = parent:FindFirstChild(name)
-		-- Generated cactus templates from earlier builds used a hold prompt. Update
-		-- their gameplay binding without replacing art or touching authored overrides.
-		if resource and ResourceMap.Normalize(name) == "CactusStem" and existing
-			and existing:GetAttribute("GeneratedBy") == GENERATOR
-			and existing:GetAttribute("PrefabOverride") ~= true then
-			local profile = LootConfig.ResourceProfile(Items:Get("CactusStem"))
-			existing:SetAttribute("DropItemId", "CactusStem")
-			existing:SetAttribute("DropMin", profile.Min)
-			existing:SetAttribute("DropMax", profile.Max)
-			existing:SetAttribute("Health", profile.Health)
-			existing:SetAttribute("MaxHealth", profile.Health)
-			existing:SetAttribute("CurrentHealth", nil)
-			existing:SetAttribute("Duration", nil)
-			existing:SetAttribute("HarvestDuration", nil)
-			for _, child in ipairs(existing:GetDescendants()) do
-				child:SetAttribute("Duration", nil)
-				child:SetAttribute("HarvestDuration", nil)
-				if child:IsA("ProximityPrompt") or child.Name == "HarvestPromptAttachment"
-					or (child:IsA("ValueBase") and (child.Name == "Duration" or child.Name == "HarvestDuration")) then
-					child:Destroy()
-				end
-			end
+		if resource and existing and existing:GetAttribute("PrefabOverride") ~= true then
+			configureResource(existing, name)
 		end
 		return
 	end
 	local model = resource and ExpeditionModels.CreateResource(name, biome) or ExpeditionModels.CreateProp(name, biome)
 	if not model then warn("[Art] No authored resource model:", name); return end
-	if resource then
-		local id = ResourceMap.Normalize(name)
-		if not Items:Get(id) then model:Destroy(); return end
-		model:SetAttribute("DropItemId", id)
-		local profile = LootConfig.ResourceProfile(Items:Get(id))
-		model:SetAttribute("DropMin", profile.Min)
-		model:SetAttribute("DropMax", profile.Max)
-		if profile.Health then
-			model:SetAttribute("Health", profile.Health)
-			model:SetAttribute("MaxHealth", profile.Health)
-		else
-			model:SetAttribute("Duration", profile.Duration)
-		end
-	end
+	if resource and not configureResource(model, name) then model:Destroy(); return end
 	publish(model, parent)
 end
 local toolPower = { Harvester = 20, StoneHatchet = 30, StonePickaxe = 30, SanditePickaxe = 45,

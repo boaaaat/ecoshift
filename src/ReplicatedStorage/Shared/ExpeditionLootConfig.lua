@@ -24,16 +24,36 @@ function Config.CacheTable(biome)
 		Rare={Rolls=4,Unique=true,AllowDuplicates=false,Items=rare,Guaranteed={{Id="StaminaRation",Min=1,Max=2},{Id="Bandage",Min=1,Max=2}}},
 	} }
 end
-function Config.ResourceProfile(item)
-	local id=item.Id
-	-- Cacti use the equipped harvesting tool, like other substantial plants.
-	if id=="CactusStem" then return {Health=60,Min=2,Max=4} end
-	if id:find("Wood") then return {Health=60,Min=5,Max=8} end
-	if item:HasTag("Ore") then return {Health=80,Min=2,Max=4} end
-	if item:HasTag("Crystal") or id=="PhaseQuartz" or id=="MeteorIron" then return {Health=90,Min=2,Max=3} end
-	if item:HasTag("Fiber") or id:find("Bark") then return {Duration=.85,Min=3,Max=5} end
-	if id:find("Stone") or id:find("Rock") or id:find("Basalt") or id:find("Obsidian") then return {Health=60,Min=3,Max=5} end
-	if item:HasTag("Liquid") then return {Duration=1.2,Min=2,Max=3} end
-	return {Duration=1,Min=2,Max=4}
+-- Only loose, soft supplies can be gathered by hand. Everything else needs a
+-- tool, so missing tags or differently capitalized names cannot make ore instant.
+local gatherDuration = {
+	BrownMushroom = 0.6, MossBloom = 0.7, Glowcap = 0.8,
+	SnowLichen = 1, ChillBloom = 0.9, EmberBloom = 1.1, EchoBloom = 1.1, DawnBloom = 0.9,
+	ReedFiber = 1, BogReed = 1.2, FrozenReed = 1.4, AshFiber = 1.1,
+	LatticeFiber = 1.5, AuroraFiber = 1.3,
+	SpringWater = 1.4, MarshWater = 1.7, ClayMud = 1.6, Sand = 1.3,
+	PrismSand = 1.6, AlloyDust = 1.6, CosmicDust = 1.8, DriedBone = 0.7,
+}
+local resourceHealth = {
+	CactusStem = 120, ForestStone = 160, SandstoneChunk = 180, Coal = 160,
+	SulfiteOre = 200, SaltCrystal = 180, SunShard = 240,
+	PeatClump = 120, MireStone = 220, WillowBark = 160, RootFiber = 120, SapResin = 100,
+	IceCrystal = 260, PermafrostOre = 300, GlacialStone = 260,
+	BasaltChunk = 280, SulfurOre = 300, ObsidianShard = 320, ScoriaRock = 260, LavaSalt = 220,
+	CrystalShard = 320, PhaseQuartz = 360, VoidResidue = 240, PolarQuartz = 320,
+	MeteorIron = 400, ImpactGlass = 340,
+}
+function Config.ResourceProfile(item, prefabName)
+	local id = item.Id
+	local duration = gatherDuration[id]
+	if duration then
+		return { Duration = duration, Min = item:HasTag("Fiber") and 3 or 2, Max = item:HasTag("Fiber") and 5 or 4 }
+	end
+	if id:lower():find("wood", 1, true) then
+		local health = id == "Frostwood" and 300 or id == "MangroveWood" and 260 or 240
+		if prefabName == "SmallTree" then health = 180 elseif prefabName == "BigTree" then health = 320 end
+		return { Health = health, Min = 5, Max = 8 }
+	end
+	return { Health = resourceHealth[id] or 200, Min = 2, Max = 4 }
 end
 return Config

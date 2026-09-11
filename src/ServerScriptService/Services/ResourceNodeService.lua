@@ -13,6 +13,61 @@ ResourceNodeService._bound = setmetatable({}, { __mode = "k" }) -- [Instance] = 
 ResourceNodeService._promptOwners = setmetatable({}, { __mode = "k" })
 ResourceNodeService._attachedCount = 0
 ResourceNodeService._lastReport = 0
+local lastContactDamage = setmetatable({}, { __mode = "k" })
+
+local function attachContactDamage(instance)
+	local damage = tonumber(instance:GetAttribute("ContactDamage"))
+	local itemId = ResourceItemMap.Normalize(instance:GetAttribute("DropItemId") or instance.Name)
+	if itemId == "CactusStem" and (not damage or damage <= 0) then damage = 4 end
+	if not damage or damage <= 0 then return end
+	local parts = {}
+	if instance:IsA("BasePart") then
+		parts[1] = instance
+	else
+		for _, part in ipairs(instance:GetDescendants()) do
+			if part:IsA("BasePart") and part.CanCollide and part.Transparency < 1 then
+				parts[#parts + 1] = part
+			end
+		end
+	end
+	local active = setmetatable({}, { __mode = "k" })
+	local function touchingCharacter(character)
+		for _, part in ipairs(parts) do
+			if part.Parent then
+				for _, touching in ipairs(part:GetTouchingParts()) do
+					if touching:IsDescendantOf(character) then return true end
+				end
+			end
+		end
+		return false
+	end
+	for _, part in ipairs(parts) do
+		part.CanTouch = true
+		part.Touched:Connect(function(hit)
+			local character = hit:FindFirstAncestorOfClass("Model")
+			local player = character and Players:GetPlayerFromCharacter(character)
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+			if not player or not humanoid or active[player] then return end
+			active[player] = true
+			task.spawn(function()
+				repeat
+					if not instance:IsDescendantOf(Workspace) or player.Character ~= character
+						or humanoid.Health <= 0 or player:GetAttribute("IsDead") then break end
+					local now = os.clock()
+					-- One damage tick per second across every cactus and every body part.
+					if not ReplicatedStorage:GetAttribute("WorldRestoring")
+						and not player:GetAttribute("WorldPlayerRestoring") and not player:GetAttribute("WorldPlayerLoading")
+						and now - (lastContactDamage[player] or -math.huge) >= 1 then
+						lastContactDamage[player] = now
+						humanoid:TakeDamage(damage)
+					end
+					task.wait(1)
+				until not touchingCharacter(character)
+				active[player] = nil
+			end)
+		end)
+	end
+end
 
 local function getPromptAnchor(instance)
 	if instance:IsA("BasePart") then
@@ -112,6 +167,7 @@ end
 
 local function attachDurationPrompt(instance)
 	if not instance or not instance.Parent then return end
+	attachContactDamage(instance)
 	local part, anchorPoint = getPromptAnchor(instance)
 	if not part then return end
 	if instance:IsA("Model") and not instance.PrimaryPart then
@@ -139,6 +195,7 @@ local function attachDurationPrompt(instance)
 	-- Normalize authored prompts too; resource geometry must not hide access.
 	prompt.RequiresLineOfSight = false
 	prompt.MaxActivationDistance = 8
+	prompt.KeyboardKeyCode = Enum.KeyCode.F
 	-- Nested prefab models can discover the same prompt during folder binding.
 	if ResourceNodeService._promptOwners[prompt] then return end
 	ResourceNodeService._promptOwners[prompt] = instance

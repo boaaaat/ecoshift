@@ -113,8 +113,8 @@ local disable = button(tutorial, "DisableStartingTutorial", "Don't show at start
 local step = 1
 local function renderTutorial()
 	local entries = {
-		{ "1. Gather while the Forest is mild", "Walk up to resources and hold the on-screen gather prompt. Collect Reed Fiber, Moss Bloom and Sap Resin for your first heat armor. Keep food and Bandages ready." },
-		{ "2. Make a Reed Sunwrap", Guide.RecipeText("ReedSunwrap") .. ".\n" .. (Theme.IsMobile() and "Tap Craft, craft by hand, then tap Pack and equip it in the armor slot." or "Open Craft (" .. Settings.Key("Craft").Name .. "), craft by hand, then open Pack (" .. Settings.Key("Pack").Name .. ") and equip it in the armor slot.") .. " It reduces heat exposure by 70%. Desert is an early possible shift; prepare before it arrives." },
+		{ "1. Gather while the Forest is mild", "Hold F to pluck loose plants. Use the Harvester to break trees, stone and Sap Resin nodes. Collect Reed Fiber, Moss Bloom and Sap Resin for your first heat armor. Keep food and Bandages ready." },
+		{ "2. Make a Reed Sunwrap", Guide.RecipeText("ReedSunwrap") .. ".\n" .. (Theme.IsMobile() and "Tap Craft, craft by hand, then tap Pack and equip it in the armor slot." or "Open Craft (" .. Settings.Key("Craft").Name .. "), craft by hand, then open Pack (" .. Settings.Key("Pack").Name .. ") and equip it in the armor slot.") .. " It reduces heat exposure by 75%. Carry Spring Water to cool built-up heat. Desert is an early possible shift; prepare before it arrives." },
 		{ "3. Watch food and exposure", "Eat before Hunger reaches zero. Extreme hot or cold exposure damages health. Sprint uses energy; stop to recover. Click the biome or conditions on your HUD for protection advice. A Field Clock reveals shift timing; stronger weather may need better gear." },
 	}
 	stepTitle.Text, stepBody.Text = entries[step][1], entries[step][2]

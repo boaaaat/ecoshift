@@ -14,7 +14,8 @@ InventoryService._remote = nil
 InventoryService._callbacks = {}
 InventoryService._requestConn = nil
 
-local HOTBAR_SLOTS = 4
+local HOTBAR_SLOTS = 6
+local LEGACY_HOTBAR_SLOTS = 4
 local STORAGE_SLOTS = 18
 
 local function emptySlots(n)
@@ -192,7 +193,8 @@ local function readSnapshot(state)
 		assert(not armor or (slot.N == 1 and isArmor(slot.Id)), "Invalid saved armor")
 		return cloneSlot(slot)
 	end
-	assert(type(state.Hotbar) == "table" and #state.Hotbar == HOTBAR_SLOTS and type(state.Storage) == "table" and #state.Storage == STORAGE_SLOTS, "Saved inventory shape changed")
+	assert(type(state.Hotbar) == "table" and (#state.Hotbar == LEGACY_HOTBAR_SLOTS or #state.Hotbar == HOTBAR_SLOTS)
+		and type(state.Storage) == "table" and #state.Storage == STORAGE_SLOTS, "Saved inventory shape changed")
 	local inv = { Hotbar = {}, Storage = {}, Armor = read(state.Armor, true) }
 	for i = 1, HOTBAR_SLOTS do inv.Hotbar[i] = read(state.Hotbar[i]) end
 	for i = 1, STORAGE_SLOTS do inv.Storage[i] = read(state.Storage[i]) end
@@ -528,6 +530,24 @@ function InventoryService:Move(plr, fromType, fromIndex, toType, toIndex)
 	
 	self:Sync(plr)
 	return true
+end
+
+-- Cursor transfers debit only when placed; closing the UI cannot lose held items.
+function InventoryService:MoveAmount(plr, fromType, fromIndex, toType, toIndex, amount, expectedId)
+	if not validSlot(fromType, fromIndex) or not validSlot(toType, toIndex) then return 0 end
+	if fromType == toType and (fromType == "Armor" or fromIndex == toIndex) then return 0 end
+	if type(amount) ~= "number" or amount ~= amount or amount == math.huge or amount < 1 or amount % 1 ~= 0 then return 0 end
+	local inv = getInv(plr)
+	local source, target = getSlot(inv, fromType, fromIndex), getSlot(inv, toType, toIndex)
+	if not source or source.Id ~= expectedId or (target and target.Id ~= source.Id) then return 0 end
+	if toType == "Armor" and not isArmor(source.Id) then return 0 end
+	local count = math.min(amount, source.N, (toType == "Armor" and 1 or maxStack(source.Id)) - (target and target.N or 0))
+	if count <= 0 then return 0 end
+	setSlot(inv, toType, toIndex, {Id=source.Id, N=(target and target.N or 0)+count})
+	source.N -= count
+	if source.N <= 0 then setSlot(inv, fromType, fromIndex, nil) end
+	self:Sync(plr)
+	return count
 end
 
 local function findEmptySlot(inv, slotType)

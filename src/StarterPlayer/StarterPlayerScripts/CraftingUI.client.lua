@@ -754,7 +754,8 @@ game:GetService("RunService").Heartbeat:Connect(function(delta)
 	if isOpen and isCraftPending then updateCraftProgress() end
 end)
 
-local function refreshRecipes()
+local function refreshRecipes(preserveScroll)
+	local previousScroll = preserveScroll == false and 0 or recipeContainer.CanvasPosition.Y
 	-- Clear existing cards
 	for _, card in pairs(recipeCards) do
 		card:Destroy()
@@ -778,6 +779,11 @@ local function refreshRecipes()
 	
 	-- Update craft button
 	updateCraftButton()
+	task.defer(function()
+		if not recipeContainer.Parent then return end
+		local maxY = math.max(0, recipeContainer.AbsoluteCanvasSize.Y - recipeContainer.AbsoluteWindowSize.Y)
+		recipeContainer.CanvasPosition = Vector2.new(0, math.min(previousScroll, maxY))
+	end)
 end
 
 local function openCrafting()
@@ -803,7 +809,7 @@ local function openCrafting()
 		GroupTransparency = 0
 	}):Play()
 	
-	refreshRecipes()
+	refreshRecipes(false)
 	if isCraftPending then
 		showInlineStatus("Crafting...", COLORS.Accent)
 	else
@@ -914,7 +920,7 @@ if rCraft then
 		end
 		showInlineStatus(resultMessage, success and COLORS.Success or COLORS.Danger, success and 1.2 or 1.8)
 		if isOpen then
-			refreshRecipes()
+			updateCraftButton()
 		end
 	end)
 end
@@ -950,7 +956,7 @@ if rInventory then
 		print("[CraftingUI] Inventory snapshot received")
 		
 		if isOpen then
-			refreshRecipes()
+			updateCraftButton()
 		end
 	end)
 	print("[CraftingUI] Listening for inventory updates")

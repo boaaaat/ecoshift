@@ -481,7 +481,7 @@ updateDeathUI = function(canSpectate)
 
 	if lobbyBtn then
 		local studio = RunService:IsStudio()
-		local enabled = isGameOver and not studio and LobbyRemote ~= nil and returnRequest == nil
+		local enabled = isGameOver and not studio and ReviveRemote ~= nil and returnRequest == nil
 			or studio and (not isGameOver or canReturnToLobby)
 		-- The pre-wipe live state disables this button. Restore Active as well as
 		-- Interactable: Activated does not fire while Active remains false.
@@ -792,6 +792,12 @@ local function onDeathRemote(action, data)
 			originalCameraType = Enum.CameraType.Custom
 			originalCameraSubject = humanoid or char
 		end)
+	elseif action == "ReturnStatus" and type(data) == "table" then
+		if not returnRequest or data.RequestId ~= returnRequest then return end
+		returnAccepted = data.Success == true
+		returnMessage = data.Message or (returnAccepted and "Returning to the observatory…" or "Could not return. Please try again.")
+		if not returnAccepted then returnRequest = nil end
+		updateDeathUI(lastCanSpectate)
 	elseif action == "LobbyDisabled" then
 		local ui = playerGui:FindFirstChild("DeathUI")
 		local subtitle = ui and ui:FindFirstChild("Container", true)
@@ -860,14 +866,14 @@ local function setupButtonHandlers()
 	if lobbyBtn then
 		lobbyBtn.Activated:Connect(function()
 			if isGameOver and not RunService:IsStudio() then
-				if not LobbyRemote or returnRequest then return end
+				if not ReviveRemote or returnRequest then return end
 				local requestId = "DeathReturn:" .. HttpService:GenerateGUID(false)
 				returnRequest, returnAccepted, returnMessage = requestId, false, "Arranging your return to the observatory…"
 				updateDeathUI(lastCanSpectate)
-				LobbyRemote:FireServer("ReturnLobby", {RequestId = requestId})
-				task.delay(15, function()
-					if returnRequest ~= requestId or returnAccepted then return end
-					returnRequest, returnMessage = nil, "No reply yet. You can try returning again."
+				ReviveRemote:FireServer("ReturnToLobby", requestId)
+				task.delay(45, function()
+					if returnRequest ~= requestId then return end
+					returnRequest, returnAccepted, returnMessage = nil, false, "Travel is taking longer than expected. Try returning again."
 					updateDeathUI(lastCanSpectate)
 				end)
 			elseif ReviveRemote then

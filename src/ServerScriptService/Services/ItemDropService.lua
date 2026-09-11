@@ -135,6 +135,7 @@ local function attachPrompt(model)
 		prompt.Parent = part
 	end
 	prompt.ActionText = "Pick Up"
+	prompt.KeyboardKeyCode = Enum.KeyCode.F
 	prompt.ObjectText = getPromptObjectText(itemId, count)
 	prompt.RequiresLineOfSight = false
 	prompt.HoldDuration = 0

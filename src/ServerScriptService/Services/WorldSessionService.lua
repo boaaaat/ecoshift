@@ -284,6 +284,18 @@ end
 function Service:_travelFailure(player, state)
 	if self._travel[player] ~= state then return end
 	state.InFlight = false
+	if state.Kind == "Lobby" and (state.Attempts or 0) >= 5 then
+		self._travel[player] = nil
+		local remotes = RS:FindFirstChild("Remotes")
+		local death = remotes and remotes:FindFirstChild("Death")
+		if death and state.ReturnRequestId and player.Parent == Players then
+			death:FireClient(player, "ReturnStatus", { RequestId = state.ReturnRequestId, Success = false,
+				Message = "Roblox could not start your return. Please try again." })
+		end
+		safeMessage(player, false, "Roblox could not start your return. Please try again.")
+		Parties:CancelTransfer(player)
+		return
+	end
 	state.RetryAt = os.clock() + math.min(30, 2 ^ math.min(state.Attempts or 1, 5))
 	Parties:CancelTransfer(player)
 	if state.Attempts == 3 then safeMessage(player, false, "Travel is retrying. Your expedition and crew are preserved.") end
@@ -370,12 +382,19 @@ function Service:Rejoin(player)
 	return self:_queueTravel(player, record)
 end
 
-function Service:ReturnToLobby(player)
+function Service:ReturnToLobby(player, requestId)
 	if RunService:IsStudio() then return false, "Travel is disabled in Studio preview." end
 	if Config.GetMode() == "Lobby" then return true, "You are already in the lobby." end
-	if self._travel[player] then return true, "Travel is already being arranged." end
+	local existing = self._travel[player]
+	if existing then
+		if existing.Kind == "Lobby" then
+			existing.ReturnRequestId = requestId or existing.ReturnRequestId
+			return true, "Travel is already being arranged."
+		end
+		return false, "Another trip is still being arranged. Please try again shortly."
+	end
 	self:_initTravel()
-	local state = { Kind = "Lobby", Attempts = 0 }
+	local state = { Kind = "Lobby", Attempts = 0, ReturnRequestId = requestId }
 	self._travel[player] = state
 	task.spawn(function() self:_teleport(player, state) end)
 	if self._ending or (self._record and self._record.Ended) then

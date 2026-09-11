@@ -2,7 +2,7 @@ local Settings = require(game:GetService("ReplicatedStorage"):WaitForChild("Shar
 if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 -- BuildingUI.client.lua
 -- Allows players to place items from their inventory (workbenches, campfires, etc.)
--- Press B to open building mode, or right-click placeable items in inventory
+-- Press B to open building mode, or select placeable items from the building menu
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -35,7 +35,7 @@ local COLORS = Theme.Colors
 local GRID_SIZE = Config.GRID.Size or 6
 local BUILD_MESSAGES = ResultMessages.Build or {}
 local function defaultHint()
-	return "Build within 100 studs of spawn\nLeft-click to place • Right-click to cancel • " .. Settings.Key("Salvage").Name .. " to salvage hovered"
+	return "Build within 100 studs of spawn\nLeft-click to place • Right-click to cancel • " .. Settings.Key("Salvage").Name .. " to toggle salvage"
 end
 local DEFAULT_HINT_TEXT = defaultHint()
 local PLACE_REQUEST_ITEM_ATTR = "BuildPlaceItemRequestItem"
@@ -51,6 +51,19 @@ local previewPart = nil
 local canPlace = false
 local hintMessageToken = 0
 local startPlacement
+local salvageButton
+local salvageHighlight = Instance.new("Highlight")
+salvageHighlight.Name = "SalvageTarget"
+salvageHighlight.FillColor, salvageHighlight.OutlineColor = COLORS.Amber, COLORS.Amber
+salvageHighlight.FillTransparency = .8
+salvageHighlight.DepthMode = Enum.HighlightDepthMode.Occluded
+salvageHighlight.Enabled = false
+salvageHighlight.Parent = workspace
+
+local function salvageHint()
+	return Theme.IsMobile() and "Aim at your structure, then tap salvage · × cancels"
+		or "Click a highlighted structure to salvage · Right-click or " .. Settings.Key("Salvage").Name .. " cancels"
+end
 
 -- Create GUI
 local gui = Instance.new("ScreenGui")
@@ -117,8 +130,8 @@ local function showHintStatus(text, color, duration)
 	hintLabel.Visible = true
 	task.delay(duration or 1, function()
 		if token ~= hintMessageToken then return end
-		if isPlacementMode then
-			hintLabel.Text = DEFAULT_HINT_TEXT
+		if isPlacementMode or isSalvageMode then
+			hintLabel.Text = isSalvageMode and salvageHint() or DEFAULT_HINT_TEXT
 			hintLabel.TextColor3 = COLORS.TextMuted
 			hintLabel.Visible = true
 		else
@@ -238,12 +251,12 @@ local function getHoveredBuildTarget()
 		return nil
 	end
 
-	local structure = hit:FindFirstAncestorOfClass("Model")
-	if structure and structure:GetAttribute("BuildType") then
-		return structure
-	end
-	if hit:IsA("BasePart") and hit:GetAttribute("BuildType") then
-		return hit
+	local structure = hit
+	while structure and structure ~= workspace do
+		if (structure:IsA("Model") or structure:IsA("BasePart")) and structure:GetAttribute("BuildType") then
+			return structure
+		end
+		structure = structure.Parent
 	end
 	return nil
 end
@@ -439,6 +452,8 @@ startPlacement = function(itemId)
 	end
 	selectedItem = itemId
 	isSalvageMode = false
+	salvageHighlight.Enabled = false
+	if salvageButton then salvageButton.Text = "SALVAGE STRUCTURES" end
 	rotation = 0
 	local itemData = ItemDatabase:Get(itemId)
 	indicatorLabel.Text = "PLACE / " .. (itemData and itemData.Name or itemId)
@@ -456,6 +471,8 @@ end
 local function cancelPlacement()
 	isPlacementMode = false
 	isSalvageMode = false
+	salvageHighlight.Enabled, salvageHighlight.Adornee = false, nil
+	if salvageButton then salvageButton.Text = "SALVAGE STRUCTURES" end
 	playerGui:SetAttribute("BuildPlacementActive", false)
 	selectedItem = nil
 	modeIndicator.Visible = false
@@ -466,8 +483,21 @@ local function cancelPlacement()
 	end
 end
 
+local function toggleSalvage()
+	local enable = not isSalvageMode
+	cancelPlacement()
+	selectionPanel.Visible = false
+	if not enable then return end
+	isSalvageMode = true
+	if salvageButton then salvageButton.Text = "STOP SALVAGING" end
+	modeIndicator.Visible, hintLabel.Visible = true, true
+	indicatorLabel.Text = "SALVAGE / select a structure"
+	hintLabel.Text, hintLabel.TextColor3 = salvageHint(), COLORS.TextMuted
+	playerGui:SetAttribute("BuildPlacementActive", true)
+end
+
 local function removeHoveredStructure()
-	if not rBuild then return end
+	if playerGui:GetAttribute("MenuCursorOpen") or not isSalvageMode or not rBuild then return end
 	local target = getHoveredBuildTarget()
 	if not target then
 		showHintStatus("No player-built structure under cursor", COLORS.Warning, 1.0)
@@ -507,12 +537,12 @@ UserInputService.InputBegan:Connect(function(input, processed)
 			togglePanel()
 		end
 	elseif Settings.Matches(input, "Salvage") then
-		removeHoveredStructure()
+		toggleSalvage()
 	elseif input.KeyCode == Enum.KeyCode.Escape and (isPlacementMode or isSalvageMode) then
 		cancelPlacement()
-	elseif input.UserInputType == Enum.UserInputType.MouseButton1 and isPlacementMode then
-		placeItem()
-	elseif input.UserInputType == Enum.UserInputType.MouseButton2 and isPlacementMode then
+	elseif input.UserInputType == Enum.UserInputType.MouseButton1 and (isPlacementMode or isSalvageMode) then
+		if isSalvageMode then removeHoveredStructure() else placeItem() end
+	elseif input.UserInputType == Enum.UserInputType.MouseButton2 and (isPlacementMode or isSalvageMode) then
 		cancelPlacement()
 	end
 end)
@@ -520,6 +550,11 @@ end)
 -- Update preview every frame
 RunService.RenderStepped:Connect(function()
 	updatePreview()
+	local target = isSalvageMode and not playerGui:GetAttribute("MenuCursorOpen") and getHoveredBuildTarget() or nil
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if target and (tonumber(target:GetAttribute("OwnerUserId")) ~= player.UserId or not root
+		or (target:GetPivot().Position - root.Position).Magnitude > (Config.GRID.BuildMaxDistance or 45)) then target = nil end
+	salvageHighlight.Adornee, salvageHighlight.Enabled = target, target ~= nil
 end)
 
 -- Inventory sync
@@ -623,14 +658,10 @@ local cancel=actionButton(toolbar,"Cancel","",104,48)
 Theme.TouchIcon(place,"Place",26)
 Theme.TouchIcon(rotate,"Rotate",26)
 Theme.TouchIcon(cancel,"Close",26)
-local salvage=actionButton(selectionPanel,"Salvage","SALVAGE AIMED BUILD",0,240)
+local salvage=actionButton(selectionPanel,"Salvage","SALVAGE STRUCTURES",0,240)
+salvageButton = salvage
 salvage.AnchorPoint,salvage.Position=Vector2.new(.5,1),UDim2.new(.5,0,1,-12)
-salvage.Activated:Connect(function()
-	cancelPlacement(); isSalvageMode=true
-	selectionPanel.Visible=false; modeIndicator.Visible=true
-	indicatorLabel.Text="SALVAGE / aim at your structure"
-	playerGui:SetAttribute("BuildPlacementActive",true)
-end)
+salvage.Activated:Connect(toggleSalvage)
 place.Activated:Connect(function() if isSalvageMode then removeHoveredStructure() else placeItem() end end)
 rotate.Activated:Connect(function() rotation=(rotation+90)%360 end)
 cancel.Activated:Connect(cancelPlacement)

@@ -22,6 +22,7 @@ DeathService._deadPlayers = {} -- [player] = { ragdoll: Model, deathTime: number
 DeathService._spectating = {} -- [player] = targetPlayer
 DeathService._reviveHolds = {}
 DeathService._runStats = {}
+DeathService._returnAt = {}
 local REVIVE_ITEM = "ReviveKit"
 
 -- Remotes (created on init)
@@ -30,7 +31,7 @@ local DeathRemote = nil -- Server -> Client death events
 local ReviveRemote = nil -- Client -> Server revival requests
 local SpectateRemote = nil -- Client -> Server spectate requests
 
-local REVIVAL_TIME = 3 -- seconds to hold E to revive
+local REVIVAL_TIME = 3 -- seconds to hold F to revive
 local REVIVAL_RANGE = 10 -- studs from body
 local REVIVAL_STATS = { Health = 30, Temperature = 0, Hunger = 50, Stamina = 50 }
 local DROP_RADIUS = 3
@@ -73,7 +74,7 @@ function DeathService:Init()
 		elseif action == "CancelRevive" then
 			self:_cancelRevive(player)
 		elseif action == "ReturnToLobby" then
-			self:_returnToLobby(player)
+			self:_returnToLobby(player, targetPlayer)
 		end
 	end)
 	
@@ -481,6 +482,7 @@ function DeathService:_createRagdoll(character)
 	if hrp then
 		ragdoll.PrimaryPart = hrp
 		local prompt = Instance.new("ProximityPrompt")
+		prompt.KeyboardKeyCode = Enum.KeyCode.F
 		prompt.Name = "RevivePrompt"
 		prompt.ActionText = "Revive · 1 Revival Kit"
 		prompt.ObjectText = character.Name
@@ -744,9 +746,24 @@ end
 function DeathService:_cancelRevive(player)
 	self._reviveHolds[player] = nil
 end
-function DeathService:_returnToLobby(player)
+function DeathService:_returnToLobby(player, requestId)
 	if not RunService:IsStudio() then
-		DeathRemote:FireClient(player, "LobbyDisabled")
+		if type(requestId) ~= "string" or #requestId < 1 or #requestId > 80 then return end
+		local function reply(success, message)
+			if player.Parent == Players then
+				DeathRemote:FireClient(player, "ReturnStatus", { RequestId = requestId, Success = success, Message = message })
+			end
+		end
+		if not GameStateService:IsGameOver() then reply(false, "Your expedition has not ended yet."); return end
+		local now = os.clock()
+		if now - (self._returnAt[player] or -math.huge) < 1 then reply(false, "Please wait a moment before trying again."); return end
+		self._returnAt[player] = now
+		-- Leaving an ended expedition must not depend on the lobby menu's profile
+		-- mutation lock or its remote having finished initializing on the client.
+		local ok, success, message = pcall(function()
+			return require(script.Parent.WorldSessionService):ReturnToLobby(player, requestId)
+		end)
+		reply(ok and success == true, ok and message or "Could not arrange travel. Please try again.")
 		return
 	end
 
@@ -784,6 +801,7 @@ function DeathService:_returnToLobby(player)
 end
 
 function DeathService:_cleanupPlayer(player)
+	self._returnAt[player] = nil
 	self._reviveHolds[player] = nil
 	player.ReplicationFocus = nil
 	local data = self._deadPlayers[player]

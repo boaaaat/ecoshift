@@ -719,7 +719,8 @@ local function createCategoryButton(category, layoutOrder)
 		btn.BackgroundColor3 = COLORS.Accent
 		btn.TextColor3 = COLORS.Paper
 		
-		refreshRecipes()
+		recipeContainer.CanvasPosition = Vector2.zero
+		refreshRecipes(false)
 	end)
 	
 	categoryButtons[category] = btn
@@ -866,7 +867,8 @@ game:GetService("RunService").Heartbeat:Connect(function(delta)
 	if isOpen and isCraftPending then updateCraftProgress() end
 end)
 
-function refreshRecipes()
+function refreshRecipes(preserveScroll)
+	local previousScroll = preserveScroll == false and 0 or recipeContainer.CanvasPosition.Y
 	-- Clear existing cards
 	for _, card in pairs(recipeCards) do
 		card:Destroy()
@@ -887,6 +889,11 @@ function refreshRecipes()
 	end
 	
 	updateCraftButton()
+	task.defer(function()
+		if not recipeContainer.Parent then return end
+		local maxY = math.max(0, recipeContainer.AbsoluteCanvasSize.Y - recipeContainer.AbsoluteWindowSize.Y)
+		recipeContainer.CanvasPosition = Vector2.new(0, math.min(previousScroll, maxY))
+	end)
 end
 
 local function setupCategories()
@@ -896,12 +903,16 @@ local function setupCategories()
 	end
 	categoryButtons = {}
 	
-	-- Add "All" category
+	local availableCategories = {}
+	for _, recipe in pairs(WorkbenchConfig:GetRecipesForStation(currentStationType)) do
+		if type(recipe.Category) == "string" then availableCategories[recipe.Category] = true end
+	end
+
+	-- Add "All" plus only categories that contain a recipe at this station.
 	createCategoryButton("All", 0)
-	
-	-- Add other categories
+
 	for i, category in ipairs(WorkbenchConfig.CATEGORIES) do
-		createCategoryButton(category, i)
+		if availableCategories[category] then createCategoryButton(category, i) end
 	end
 end
 
@@ -940,7 +951,7 @@ local function openWorkbench(station, stationType)
 	}):Play()
 	
 	setupCategories()
-	refreshRecipes()
+	refreshRecipes(false)
 	if isCraftPending then
 		showInlineStatus("Crafting...", COLORS.Accent)
 	else
@@ -1063,7 +1074,7 @@ if rCraft then
 		if currentStationType and payload.StationType and payload.StationType ~= currentStationType then return end
 		if isOpen then
 			showInlineStatus(resultMessage, success and COLORS.Success or COLORS.Danger, success and 1.2 or 1.8)
-			refreshRecipes()
+			updateCraftButton()
 		end
 	end)
 end
@@ -1097,7 +1108,7 @@ if rInventory then
 		inventorySnapshot = payload
 		
 		if isOpen then
-			refreshRecipes()
+			updateCraftButton()
 		end
 	end)
 	task.defer(function()

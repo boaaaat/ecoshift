@@ -43,7 +43,7 @@ function Service:Init()
 		part(root,"Desk",Vector3.new(18,1.2,8),CFrame.new(position.X,3,position.Z+3),C.Wood,Enum.Material.Wood)
 		for _,x in ipairs({-7,7}) do part(root,"DeskLeg",Vector3.new(1,3,5),CFrame.new(position.X+x,1.5,position.Z+3),C.Edge) end
 		local board=sign(root,entry[1],position)
-		local prompt=Instance.new("ProximityPrompt"); prompt.ActionText="Open"; prompt.ObjectText=entry[1]; prompt.HoldDuration=0; prompt.MaxActivationDistance=16; prompt.RequiresLineOfSight=false; prompt.Parent=board
+		local prompt=Instance.new("ProximityPrompt"); prompt.ActionText="Open"; prompt.ObjectText=entry[1]; prompt.KeyboardKeyCode=Enum.KeyCode.F; prompt.HoldDuration=0; prompt.MaxActivationDistance=16; prompt.RequiresLineOfSight=false; prompt.Parent=board
 		prompt.Triggered:Connect(function(player) player:SetAttribute("LobbyPanel",entry[3]); player:SetAttribute("LobbyPanelVersion",(player:GetAttribute("LobbyPanelVersion") or 0)+1) end)
 	end
 	for _,v in ipairs(workspace:GetDescendants()) do if v:IsA("SpawnLocation") then v.Enabled=false end end

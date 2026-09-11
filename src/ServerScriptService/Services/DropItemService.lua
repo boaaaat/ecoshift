@@ -52,6 +52,7 @@ function DropItemService:Init()
 			if dropAmount ~= dropAmount or dropAmount == math.huge or dropAmount <= 0 then return end
 			local slot = InventoryService:PeekSlot(plr, slotType, slotIndex)
 			if not slot or slot.N < dropAmount then return end
+			if payload.ExpectedId ~= nil and payload.ExpectedId ~= slot.Id then return end
 			createThenTake(plr, root, slot.Id, dropAmount, function()
 				return InventoryService:TakeFromSlot(plr, slotType, slotIndex, dropAmount, {ExpectedId = slot.Id, DeferSync = true}) ~= nil
 			end)

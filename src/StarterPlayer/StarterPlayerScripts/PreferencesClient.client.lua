@@ -4,6 +4,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Settings = require(ReplicatedStorage.Shared.ClientSettings)
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 local original = setmetatable({}, { __mode = "k" })
+-- Apply to authored and streamed prompts too, including old saved structures.
+local function interactionKey(instance)
+	if instance:IsA("ProximityPrompt") then instance.KeyboardKeyCode = Enum.KeyCode.F end
+end
+workspace.DescendantAdded:Connect(interactionKey)
+game:GetService("ProximityPromptService").PromptShown:Connect(interactionKey)
+for _, instance in ipairs(workspace:GetDescendants()) do interactionKey(instance) end
 local function effect(instance)
 	if not instance:IsA("PostEffect") then return end
 	if original[instance] == nil then original[instance] = instance.Enabled end

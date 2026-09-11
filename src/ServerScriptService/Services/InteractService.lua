@@ -398,7 +398,7 @@ end
 
 local function handleHarvest(plr, payload)
 	if GameStateService:IsGameOver() or ReplicatedStorage:GetAttribute("WorldRestoring")
-		or plr:GetAttribute("WorldPlayerRestoring") or plr:GetAttribute("WorldPlayerLoading") then
+		or plr:GetAttribute("IsDead") or plr:GetAttribute("WorldPlayerRestoring") or plr:GetAttribute("WorldPlayerLoading") then
 		return
 	end
 	local node = resolveHarvestNode(payload)
@@ -425,7 +425,8 @@ local function handleHarvest(plr, payload)
 	end
 
 	local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-	if not root then
+	local humanoid = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+	if not root or not humanoid or humanoid.Health <= 0 then
 		return
 	end
 	local rootPos = root.Position

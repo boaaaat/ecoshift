@@ -65,6 +65,8 @@ local function attachPrompt(part, objectiveId)
 		prompt.Parent = part
 	end
 	prompt.ActionText = "Contribute"
+	prompt.KeyboardKeyCode = Enum.KeyCode.F
+	prompt.RequiresLineOfSight = false
 	prompt.ObjectText = objectiveId
 	prompt.HoldDuration = 0.5
 	prompt.MaxActivationDistance = 10

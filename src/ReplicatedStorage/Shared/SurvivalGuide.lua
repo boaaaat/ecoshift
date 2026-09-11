@@ -7,7 +7,7 @@ local Recipes = require(Shared.WorkbenchConfig)
 local Guide = {}
 Guide.Biomes = {
 	Forest = { Summary = "Verdant Reach is your gathering window. Collect supplies and prepare heat protection before an early Desert shift.", Armor = { "ReedSunwrap" }, Tools = { "StoneHatchet", "StonePickaxe", "FieldClock" } },
-	Desert = { Summary = "Sunscar Dunes steadily raises body temperature. Equip heat protection; heatwaves can overwhelm a starter Sunwrap.", Armor = { "ReedSunwrap", "DesertCloak" }, Tools = { "HeatTonic", "Bandage" } },
+	Desert = { Summary = "Sunscar Dunes steadily raises body temperature. A Reed Sunwrap blocks 75% of heat; drink Spring Water to lower built-up heat exposure.", Armor = { "ReedSunwrap", "DesertCloak" }, Tools = { "SpringWater", "HeatTonic", "Bandage" } },
 	Swamp = { Summary = "Mirefen is toxic and wet even under overcast skies. Toxins deal ongoing damage; resistance reduces it but does not make you immune.", Armor = { "SwampWaders" }, Tools = { "AntitoxinTonic", "Bandage" } },
 	FrozenTundra = { Summary = "Frostfall rapidly lowers body temperature. Wetness makes cold worse; snowfall and whiteouts add both cold and wetness.", Armor = { "FrostParka" }, Tools = { "ColdTonic", "Bandage" } },
 	Volcanic = { Summary = "Cinder Rift has severe baseline heat. Ashfall and emberstorms add toxins as well as heat; bring protection and healing.", Armor = { "VolcanicPlate" }, Tools = { "HeatTonic", "AntitoxinTonic", "Bandage" } },

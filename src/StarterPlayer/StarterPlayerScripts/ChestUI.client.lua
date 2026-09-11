@@ -351,14 +351,14 @@ local function renderAll()
 	end
 end
 
-local function takeFromChestSlot(index, targetFrame)
+local function takeFromChestSlot(index, targetFrame, amount)
 	if not currentChestId or not chestRemote then return end
 	local data = slotData[index]
 	if not data then return end
 	local payload = {
 		ChestId = currentChestId,
 		FromIndex = index,
-		Amount = data.N,
+		Amount = math.clamp(math.floor(tonumber(amount) or data.N), 1, data.N),
 	}
 	if targetFrame then
 		payload.ToType = targetFrame:GetAttribute("SlotType")
@@ -547,6 +547,18 @@ local function quickTakeFromChest(index, preferStorage)
 	end
 end
 
+local function splitTakeFromChest(index)
+	local data = chestSlotData(index)
+	if not data then return end
+	local target = findInventoryTargetForItem(data.Id, true)
+	if not target then
+		showTransferStatus("No inventory room for split stack", COLORS.Warning, 1.1)
+		return
+	end
+	takeFromChestSlot(index, target, math.ceil(data.N / 2))
+	showTransferStatus("Moved half to inventory", COLORS.Accent, 0.9)
+end
+
 contextTake.MouseButton1Click:Connect(function()
 	if not contextChestIndex then return end
 	takeFromChestSlot(contextChestIndex, nil)
@@ -642,7 +654,8 @@ local function createSlot(index, x, y)
 	button.InputBegan:Connect(function(input)
 		if not currentChestId or dragging.Active or dragging.Input then return end
 		if input.UserInputType == Enum.UserInputType.MouseButton2 then
-			showContextMenu(index, input.Position)
+			hideContextMenu()
+			splitTakeFromChest(index)
 		elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
 			hideContextMenu()
 			if isShiftDown() then quickTakeFromChest(index, true); return end
@@ -809,7 +822,7 @@ arrangeChest = function()
 	local portrait = mobile and width < height
 	local packWidth, packHeight = 446, mobile and 292 or 380
 	local chestHeight = (mobile and 78 or 60) + math.max(1, math.ceil(slotCount / COLS)) * (SLOT_SIZE + SLOT_GAP)
-	local hotbarScale = math.min(1.5, (width - 64) / 290)
+	local hotbarScale = math.min(1.5, (width - 64) / 422)
 	local bottomReserve = mobile and (portrait and 192 or 96) or (18 + 72 * hotbarScale + 24)
 	local availableHeight = math.max(120, height - bottomReserve)
 	local totalWidth = portrait and math.max(packWidth, 382) or packWidth + 382 + 24
@@ -842,6 +855,7 @@ arrangeChest = function()
 	local invGui = playerGui:FindFirstChild("InventoryUI")
 	if invGui then invGui:SetAttribute("ChestLayoutHeight", chestHeight) end
 end
+
 UserInputService:GetPropertyChangedSignal("PreferredInput"):Connect(arrangeChest)
 local chestViewportConnection
 local function bindChestViewport()

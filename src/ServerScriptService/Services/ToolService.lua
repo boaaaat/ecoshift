@@ -7,7 +7,7 @@ local InventoryService = require(script.Parent.InventoryService)
 local ItemDatabase = require(game:GetService("ReplicatedStorage").Shared.Items.ItemDatabase)
 
 local ToolService = {}
-local HOTBAR_SLOTS = 4
+local HOTBAR_SLOTS = 6
 
 local function isHoldable(itemId)
 	local item = ItemDatabase:Get(itemId)

@@ -1233,6 +1233,8 @@ function WorkbenchConfig:CanCraftAt(recipeId, stationType)
 	local recipe = self.RECIPES[recipeId]
 	if not recipe then return false end
 	if not self.STATIONS[stationType] then return false end
+	-- Anything craftable by hand remains available while using a placed station.
+	if stationType ~= "Hand" and self:CanCraftAt(recipeId, "Hand") then return true end
 
 	if type(recipe.AllowedStations) == "table" and #recipe.AllowedStations > 0 then
 		return listContains(recipe.AllowedStations, stationType)

@@ -156,12 +156,19 @@ function EventService:SelectEvent(biomeName, poolType)
 
 	-- Combined: biome entries first, then Global entries not overridden
 	local combined = {}
+	local elapsed = BiomeService:GetElapsed()
+	local function addIfEligible(entry)
+		local definition = EventsConfig.Definitions[entry.Id] or {}
+		if elapsed >= (entry.MinElapsed or definition.MinElapsed or 0) then
+			table.insert(combined, entry)
+		end
+	end
 	for _, entry in ipairs(biomePool) do
-		table.insert(combined, entry)
+		addIfEligible(entry)
 	end
 	for _, entry in ipairs(globalPool) do
 		if not biomeIds[entry.Id] then
-			table.insert(combined, entry)
+			addIfEligible(entry)
 		end
 	end
 

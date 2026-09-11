@@ -98,7 +98,7 @@ kit.Parent = gui
 local kitScale = Instance.new("UIScale")
 kitScale.Parent = kit
 local navigationButtons = {}
-for index, entry in ipairs({ { "Pack", "G" }, { "Craft", "C" }, { "Build", "B" }, { "Map", "M" }, { "Survey", "V" } }) do
+for index, entry in ipairs({ { "Pack", "E" }, { "Craft", "C" }, { "Build", "B" }, { "Map", "M" }, { "Survey", "V" } }) do
 	local button = Instance.new("TextButton")
 	button.Name = entry[1]
 	button.Size = UDim2.fromOffset(70, 28)

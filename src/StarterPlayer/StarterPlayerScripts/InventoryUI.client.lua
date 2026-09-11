@@ -38,7 +38,7 @@ local COLORS = Theme.Colors
 local SLOT_SIZE = 64
 local HOTBAR_SLOT_SIZE = 60
 local SLOT_GAP = 6
-local HOTBAR_SLOTS = 4
+local HOTBAR_SLOTS = 6
 local STORAGE_COLS = 6
 local STORAGE_ROWS = 3
 local MARGIN = 16
@@ -302,7 +302,7 @@ tooltipHint.TextColor3 = COLORS.TextMuted
 tooltipHint.TextSize = 10
 tooltipHint.Font = Enum.Font.Gotham
 tooltipHint.TextXAlignment = Enum.TextXAlignment.Left
-tooltipHint.Text = "Click to select • Drag to move"
+tooltipHint.Text = "Drag to move • Right-click to split • Q drops one"
 tooltipHint.ZIndex = 101
 tooltipHint.Parent = tooltip
 
@@ -495,6 +495,7 @@ local INVENTORY_TOGGLE_ACTION = "EcoshiftToggleInventory"
 local inventoryToggleActionBound = false
 local transferStatusToken = 0
 local cancelDrag = nil
+local clearSplitCursor = nil
 
 local function showTransferStatus(text, color, duration)
 	transferStatusToken += 1
@@ -554,6 +555,7 @@ local function setInventoryOpen(open, force)
 		if cancelDrag then
 			cancelDrag()
 		end
+		if clearSplitCursor then clearSplitCursor() end
 	end
 end
 
@@ -562,6 +564,7 @@ local function bindInventoryToggleAction()
 	local priority = Enum.ContextActionPriority.High.Value + 200
 	local ok = pcall(function()
 		ContextActionService:BindActionAtPriority(INVENTORY_TOGGLE_ACTION, function(_, inputState)
+			if player:GetAttribute("IsDead") then return Enum.ContextActionResult.Pass end
 			if inputState ~= Enum.UserInputState.Begin then
 				return Enum.ContextActionResult.Sink
 			end
@@ -674,9 +677,10 @@ local function hideTooltip()
 	tooltip.Visible = false
 end
 
-local function isPointInsideGui(guiObject, point)
-	if not guiObject then return false end
+local function isPointInsideGui(guiObject, point, touch)
+	if not guiObject or not guiObject.Visible then return false end
 	local inset = GuiService:GetGuiInset()
+	if touch then inset = Vector2.zero end
 	local adjustedPoint = Vector2.new(point.X - inset.X, point.Y - inset.Y)
 	local pos = guiObject.AbsolutePosition
 	local size = guiObject.AbsoluteSize
@@ -1232,6 +1236,7 @@ local function createDragGhost(slot, data)
 
 	if data.N > 1 then
 		local qty = Instance.new("TextLabel")
+		qty.Name = "Quantity"
 		qty.Size = UDim2.new(0, 28, 0, 16)
 		qty.AnchorPoint = Vector2.new(1, 1)
 		qty.Position = UDim2.new(1, -4, 1, -4)
@@ -1246,6 +1251,83 @@ local function createDragGhost(slot, data)
 	end
 	
 	return ghost
+end
+
+-- Desktop stack splitting behaves like a cursor-held half stack. The server
+-- keeps ownership until each placement succeeds, so closing the pack cannot
+-- delete or duplicate items.
+local splitCursor = { From = nil, Id = nil, Remaining = 0, Ghost = nil, Pending = false, RequestId = nil }
+local splitSerial = 0
+
+clearSplitCursor = function()
+	if splitCursor.Ghost then splitCursor.Ghost:Destroy() end
+	splitCursor.From, splitCursor.Id, splitCursor.Remaining = nil, nil, 0
+	splitCursor.Ghost, splitCursor.Pending, splitCursor.RequestId = nil, false, nil
+end
+
+local function positionSplitGhost(position)
+	if not splitCursor.Ghost then return end
+	local size = splitCursor.Ghost.AbsoluteSize
+	splitCursor.Ghost.Position = UDim2.fromOffset(position.X - size.X / 2, position.Y - size.Y / 2)
+end
+
+local function updateSplitGhost()
+	local label = splitCursor.Ghost and splitCursor.Ghost:FindFirstChild("Quantity")
+	if label then label.Text = tostring(splitCursor.Remaining) end
+end
+
+local function beginSplitCursor(slot)
+	if not mainContainer.Visible and not isChestTransferLockActive() then return end
+	local data = getSlotData(slot.Type, slot.Index)
+	if not data or data.N < 2 or splitCursor.From then return end
+	splitCursor.From = slot
+	splitCursor.Id = data.Id
+	splitCursor.Remaining = math.ceil(data.N / 2)
+	splitCursor.Ghost = createDragGhost(slot, {Id=data.Id, N=splitCursor.Remaining})
+	positionSplitGhost(UserInputService:GetMouseLocation())
+	showTransferStatus(string.format("Holding %d · right-click places one", splitCursor.Remaining), COLORS.Accent, 1.2)
+end
+
+local function placeSplitCursor(target, amount)
+	if not splitCursor.From or splitCursor.Pending or not rInventoryAction then return end
+	if target == splitCursor.From then clearSplitCursor(); return end
+	local targetData = getSlotData(target.Type, target.Index)
+	if targetData and targetData.Id ~= splitCursor.Id then
+		showTransferStatus("That slot contains a different item", COLORS.Warning, 1.0)
+		return
+	end
+	splitSerial += 1
+	local requestId = string.format("split:%d:%d", splitSerial, math.floor(os.clock() * 1000))
+	splitCursor.Pending, splitCursor.RequestId = true, requestId
+	rInventoryAction:FireServer("MoveAmount", {
+		RequestId = requestId,
+		FromType = splitCursor.From.Type,
+		FromIndex = splitCursor.From.Index,
+		ToType = target.Type,
+		ToIndex = target.Index,
+		Amount = math.min(amount, splitCursor.Remaining),
+		ExpectedId = splitCursor.Id,
+	})
+end
+
+if rInventoryAction then
+	rInventoryAction.OnClientEvent:Connect(function(action, payload)
+		if action ~= "MoveAmountResult" or type(payload) ~= "table" or payload.RequestId ~= splitCursor.RequestId then return end
+		splitCursor.Pending, splitCursor.RequestId = false, nil
+		local moved = math.max(0, math.floor(tonumber(payload.Moved) or 0))
+		if moved <= 0 then
+			showTransferStatus("Stack changed or target is full", COLORS.Warning, 1.2)
+			clearSplitCursor()
+			return
+		end
+		splitCursor.Remaining -= moved
+		if splitCursor.Remaining <= 0 then
+			clearSplitCursor()
+		else
+			updateSplitGhost()
+			showTransferStatus(string.format("Holding %d", splitCursor.Remaining), COLORS.Accent, 0.7)
+		end
+	end)
 end
 
 cancelDrag = function()
@@ -1277,11 +1359,16 @@ local function beginDrag(slot)
 	slot.Frame.BackgroundTransparency = 0.5
 end
 
-local function endDrag(targetSlot)
+local function endDrag(targetSlot, dropOutside)
 	if not dragging.Active then return end
 
 	local from = dragging.From
 	cancelDrag()
+	if dropOutside and from and rDrop then
+		local data = getSlotData(from.Type, from.Index)
+		if data then rDrop:FireServer({SlotType=from.Type, SlotIndex=from.Index, Amount=data.N, ExpectedId=data.Id}) end
+		return
+	end
 	if not targetSlot or targetSlot == from then return end
 	if not rInventoryAction then return end
 	
@@ -1381,6 +1468,7 @@ UserInputService.InputChanged:Connect(function(input)
 				input.Position.Y - gSize.Y / 2
 			)
 		end
+		positionSplitGhost(Vector2.new(input.Position.X, input.Position.Y))
 	end
 end)
 
@@ -1397,7 +1485,13 @@ UserInputService.InputEnded:Connect(function(input)
 				if chestTarget then
 					endDragToChest(chestTarget)
 				else
-					endDrag(nil)
+					local chestGui = playerGui:FindFirstChild("ChestUI")
+					local chestPanel = chestGui and chestGui:FindFirstChild("ChestPanel")
+					local outside = mainContainer.Visible
+						and not isPointInsideGui(mainContainer, mouseLocation, touch)
+						and not isPointInsideGui(hotbarRoot, mouseLocation, touch)
+						and not isPointInsideGui(chestPanel, mouseLocation, touch)
+					endDrag(nil, outside)
 				end
 			end
 		elseif dragging.Pending and dragging.From then
@@ -1431,6 +1525,19 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 UserInputService.InputBegan:Connect(function(input, processed)
+	if input.KeyCode == Enum.KeyCode.Escape and splitCursor.From then
+		clearSplitCursor()
+		return
+	end
+	if input.KeyCode == Enum.KeyCode.Q and mainContainer.Visible and hoveredSlot and Settings.CanInput() and not player:GetAttribute("IsDead") then
+		if splitCursor.From then clearSplitCursor(); return end
+		local data = getSlotData(hoveredSlot.Type, hoveredSlot.Index)
+		if data and rDrop then
+			local whole = UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
+			rDrop:FireServer({SlotType=hoveredSlot.Type, SlotIndex=hoveredSlot.Index, Amount=whole and data.N or 1, ExpectedId=data.Id})
+		end
+		return
+	end
 	if Settings.Matches(input, "Pack") and not inventoryToggleActionBound then
 		if not Settings.CanInput() then return end
 		if isChestTransferLockActive() then return end
@@ -1450,13 +1557,15 @@ end)
 for _, slot in ipairs(slots) do
 	slot.Button.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton2 then
-			local data = getSlotData(slot.Type, slot.Index)
-			if data then
-				showContextMenu(slot, input.Position)
-			end
+			if splitCursor.From then placeSplitCursor(slot, 1)
+			else beginSplitCursor(slot) end
 			return
 		end
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			if input.UserInputType == Enum.UserInputType.MouseButton1 and splitCursor.From then
+				placeSplitCursor(slot, splitCursor.Remaining)
+				return
+			end
 			if dragging.Pending or dragging.Active then return end
 			hideContextMenu()
 			if isShiftDown() then
@@ -1489,7 +1598,7 @@ for _, slot in ipairs(slots) do
 	end)
 end
 
--- Hotbar keybinds (1-4)
+-- Hotbar keybinds (1-6)
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 	local keyNum = nil
@@ -1497,6 +1606,8 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	elseif input.KeyCode == Enum.KeyCode.Two then keyNum = 2
 	elseif input.KeyCode == Enum.KeyCode.Three then keyNum = 3
 	elseif input.KeyCode == Enum.KeyCode.Four then keyNum = 4
+	elseif input.KeyCode == Enum.KeyCode.Five then keyNum = 5
+	elseif input.KeyCode == Enum.KeyCode.Six then keyNum = 6
 	end
 	if keyNum and rInventoryAction then
 		selectedSlot = nil
@@ -1530,7 +1641,7 @@ if rInventory then
 		end
 		if payload.Hotbar then
 			local normalized = {}
-			for i = 1, 4 do -- HOTBAR_SLOTS
+			for i = 1, HOTBAR_SLOTS do
 				local slot = payload.Hotbar[i]
 				-- Treat false as nil (empty slot)
 				if slot and slot ~= false and type(slot) == "table" then
@@ -1559,7 +1670,7 @@ if rInventory then
 			end
 		end
 		if payload.Hotbar then
-			for i = 1, 4 do
+			for i = 1, HOTBAR_SLOTS do
 				local slot = payload.Hotbar[i]
 				if slot then
 					dprint(string.format("  Hotbar[%d]: %s x%d", i, slot.Id, slot.N))
@@ -1623,7 +1734,7 @@ local function arrangePack()
  local packHeight = mobile and (widePack and 224 or 292) or MAIN_HEIGHT
  local chestHeight = tonumber(gui:GetAttribute("ChestLayoutHeight")) or 200
  local maxScale = mobile and 1.65 or 2.5
- hotbarScale.Scale = math.min(mobile and 0.8 or 1.5, (width - 64) / 290)
+	hotbarScale.Scale = math.min(mobile and 0.8 or 1.5, (width - 64) / 422)
  -- Keep the last storage row above the hotbar, including short PC windows.
  local bottomReserve = mobile and (portrait and 192 or 96) or (18 + (HOTBAR_SLOT_SIZE + 12) * hotbarScale.Scale + 24)
  local availableHeight = math.max(120, height - bottomReserve)

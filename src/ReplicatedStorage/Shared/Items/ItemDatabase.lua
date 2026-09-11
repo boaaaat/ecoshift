@@ -20,7 +20,7 @@ local raw = {
 	{ Id = "BrownMushroom", Name = "Brown Mushroom", StackSize = 99, Tags = { "Resource", "Raw", "Forest", "Food" } },
 	{ Id = "MossBloom", Name = "Moss Bloom", StackSize = 99, Tags = { "Resource", "Raw", "Forest" } },
 	{ Id = "SapResin", Name = "Sap Resin", StackSize = 99, Tags = { "Resource", "Raw", "Forest" } },
-	{ Id = "SpringWater", Name = "Spring Water", StackSize = 50, Tags = { "Resource", "Raw", "Forest", "Liquid" } },
+	{ Id = "SpringWater", Name = "Spring Water", StackSize = 50, Tags = { "Resource", "Raw", "Forest", "Liquid", "Consumable" } },
 	{ Id = "WolfPelt", Name = "Wolf Pelt", StackSize = 50, Tags = { "Resource", "MonsterDrop", "Forest" } },
 	{ Id = "WolfFang", Name = "Wolf Fang", StackSize = 99, Tags = { "Resource", "MonsterDrop", "Forest" } },
 

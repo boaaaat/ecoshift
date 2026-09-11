@@ -6,8 +6,12 @@ local SurvivalConfig = require(ReplicatedStorage.Shared.SurvivalConfig)
 local Util = require(ReplicatedStorage.Shared.Util)
 local BiomeService = { _started = false, _shiftCount = 0, _version = 0 }
 
-local function weatherFor(biome)
-	local pick = Util.ChooseWeighted(SurvivalConfig.WEATHER_BY_BIOME[biome] or {}, "Weight")
+local function weatherFor(biome, elapsed)
+	local eligible = {}
+	for _, weather in ipairs(SurvivalConfig.WEATHER_BY_BIOME[biome] or {}) do
+		if (elapsed or 0) >= (weather.MinElapsed or 0) then table.insert(eligible, weather) end
+	end
+	local pick = Util.ChooseWeighted(eligible, "Weight")
 	return pick or { Id = "Clear", Name = "Clear skies", Temp = 0, Toxin = 0, Wet = 0 }
 end
 function BiomeService:GetElapsed()
@@ -76,7 +80,7 @@ function BiomeService:_scheduleNext()
 	self._duration = math.random(min, max)
 	self._nextShift = os.clock() + self._duration
 	self._upcomingBiome = self:_pickNext(self:GetElapsed() + self._duration)
-	self._upcomingWeather = weatherFor(self._upcomingBiome)
+	self._upcomingWeather = weatherFor(self._upcomingBiome, self:GetElapsed() + self._duration)
 	self._delayed, self._selected = false, false
 	self._version += 1
 end
@@ -85,7 +89,7 @@ function BiomeService:SetCurrent(name, reason)
 	local wasStarted = self._current ~= nil
 	local forecast = name == self._upcomingBiome and self._upcomingWeather or nil
 	self._current, self._data = name, BiomeConfig.BIOMES[name]
-	self._weather = forecast or weatherFor(name)
+	self._weather = forecast or weatherFor(name, self:GetElapsed())
 	self._lastChangedAt = os.clock()
 	self._nextWeatherChange = self._data.WeatherCycle and (os.clock() + (self._data.WeatherCycleSeconds or 60)) or nil
 	if wasStarted then self._shiftCount += 1 end
@@ -128,7 +132,7 @@ function BiomeService:ApplyControl(action, biome, version)
 		self._nextShift = os.clock() + 15
 	elseif action == "Select" then
 		self._upcomingBiome, self._selected = biome, true
-		self._upcomingWeather = weatherFor(biome)
+		self._upcomingWeather = weatherFor(biome, self:GetElapsed() + remaining)
 	end
 	self._version += 1
 	return true
@@ -181,7 +185,7 @@ function BiomeService:Init()
 				local index = table.find(cycle, self._weather.Id) or 0
 				local nextId = cycle[index % #cycle + 1]
 				for _, weather in ipairs(SurvivalConfig.WEATHER_BY_BIOME[self._current] or {}) do
-					if weather.Id == nextId then self._weather = weather; break end
+					if weather.Id == nextId and self:GetElapsed() >= (weather.MinElapsed or 0) then self._weather = weather; break end
 				end
 				self._nextWeatherChange = os.clock() + (self._data.WeatherCycleSeconds or 60)
 			end

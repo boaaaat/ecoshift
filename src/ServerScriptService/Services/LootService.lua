@@ -383,6 +383,7 @@ local function attachChestPrompt(chest)
 	end
 	prompt.Parent = part
 	prompt.ActionText = "Open"
+	prompt.KeyboardKeyCode = Enum.KeyCode.F
 	prompt.ObjectText = chest.Name
 	prompt.HoldDuration = 0.2
 	prompt.MaxActivationDistance = 8

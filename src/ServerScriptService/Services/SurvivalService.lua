@@ -47,7 +47,7 @@ end
 local function applySprintModifier(plr, enabled)
 	if enabled then
 		if not SurvivalService._sprintApplied[plr] then
-			StatsService:AddModifier(plr, "Speed", 0.5, "Mult", nil, "Sprint")
+			StatsService:AddModifier(plr, "Speed", 0.25, "Mult", nil, "Sprint")
 			SurvivalService._sprintApplied[plr] = true
 		end
 	else
@@ -75,6 +75,9 @@ function SurvivalService:_tickSprint(plr, dt)
 	if hum.Sit or hum.PlatformStand then self:_stopSprint(plr) end
 	local maxStamina = math.max(0, StatsService:GetStat(plr, "MaxStamina") or 100)
 	local stamina = clamp(StatsService:GetBase(plr, "Stamina") or maxStamina, 0, maxStamina)
+	if self._sprintExhausted[plr] and stamina >= maxStamina * 0.2 then
+		self._sprintExhausted[plr] = nil
+	end
 	-- MoveDirection is not replicated reliably to the server for client-owned
 	-- characters. Horizontal assembly velocity also detects actual movement.
 	local velocity = hrp.AssemblyLinearVelocity
@@ -83,7 +86,6 @@ function SurvivalService:_tickSprint(plr, dt)
 	local nextStamina = clamp(stamina + (sprinting and -STAMINA_DRAIN or STAMINA_REGEN) * dt, 0, maxStamina)
 	if nextStamina <= 0 and self._sprintWanted[plr] then
 		self._sprintExhausted[plr] = true
-		self._sprintWanted[plr] = nil
 		sprinting = false
 	end
 	applySprintModifier(plr, sprinting)

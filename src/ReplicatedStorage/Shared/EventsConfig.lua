@@ -18,6 +18,7 @@ EventsConfig.Definitions = {
 
 	MeteorShower = {
 		Type = "Minor",
+		MinElapsed = 15 * 60,
 		Duration = { min = 45, max = 75 },
 		Effects = { EnemyMultiplier = 0.25 },
 		Modifiers = {},
@@ -29,6 +30,7 @@ EventsConfig.Definitions = {
 
 	ToxicFog = {
 		Type = "Minor",
+		MinElapsed = 15 * 60,
 		Duration = { min = 50, max = 80 },
 		Effects = {},
 		Modifiers = { Toxin = 1 },
@@ -40,6 +42,7 @@ EventsConfig.Definitions = {
 
 	ResourceBoom = {
 		Type = "Minor",
+		MinElapsed = 0,
 		Duration = { min = 40, max = 70 },
 		Effects = { ResourceMultiplier = 0.75 },
 		Modifiers = {},
@@ -51,6 +54,7 @@ EventsConfig.Definitions = {
 
 	MonsoonFlood = {
 		Type = "Minor",
+		MinElapsed = 10 * 60,
 		Duration = { min = 45, max = 75 },
 		Effects = {},
 		Modifiers = { Wet = 1 },
@@ -63,6 +67,7 @@ EventsConfig.Definitions = {
 	-- Desert-specific
 	Sandstorm = {
 		Type = "Minor",
+		MinElapsed = 20 * 60,
 		Duration = { min = 50, max = 80 },
 		Effects = { ResourceMultiplier = -0.3 },
 		Modifiers = { Temp = 1 },
@@ -74,6 +79,7 @@ EventsConfig.Definitions = {
 
 	SolarFlare = {
 		Type = "Minor",
+		MinElapsed = 40 * 60,
 		Duration = { min = 30, max = 55 },
 		Effects = {},
 		Modifiers = { Temp = 2 },
@@ -85,6 +91,7 @@ EventsConfig.Definitions = {
 
 	BuriedTreasure = {
 		Type = "Minor",
+		MinElapsed = 0,
 		Duration = { min = 60, max = 90 },
 		Effects = {},
 		Modifiers = {},
@@ -100,6 +107,7 @@ EventsConfig.Definitions = {
 
 	ScorpionSwarm = {
 		Type = "Minor",
+		MinElapsed = 20 * 60,
 		Duration = { min = 40, max = 65 },
 		Effects = { EnemyMultiplier = 0.5 },
 		Modifiers = {},
@@ -114,6 +122,7 @@ EventsConfig.Definitions = {
 
 	OasisMirage = {
 		Type = "Minor",
+		MinElapsed = 0,
 		Duration = { min = 50, max = 75 },
 		Effects = { ResourceMultiplier = 0.5 },
 		Modifiers = { Temp = -1 },
@@ -128,6 +137,7 @@ EventsConfig.Definitions = {
 
 	SulfurVent = {
 		Type = "Minor",
+		MinElapsed = 30 * 60,
 		Duration = { min = 35, max = 60 },
 		Effects = {},
 		Modifiers = { Toxin = 1, Temp = 1 },
@@ -142,6 +152,7 @@ EventsConfig.Definitions = {
 
 	DustDevil = {
 		Type = "Minor",
+		MinElapsed = 15 * 60,
 		Duration = { min = 25, max = 45 },
 		Effects = { ResourceMultiplier = -0.2 },
 		Modifiers = {},
@@ -157,6 +168,7 @@ EventsConfig.Definitions = {
 	-- Desert major
 	SandWurmRise = {
 		Type = "Major",
+		MinElapsed = 40 * 60,
 		Duration = { min = 80, max = 120 },
 		Effects = { EnemyMultiplier = 0.7 },
 		Modifiers = { Temp = 1 },
@@ -173,6 +185,7 @@ EventsConfig.Definitions = {
 	-- Swamp-specific
 	MiasmaBurst = {
 		Type = "Minor",
+		MinElapsed = 30 * 60,
 		Duration = { min = 40, max = 65 },
 		Effects = {},
 		Modifiers = { Toxin = 2, Wet = 1 },
@@ -185,6 +198,7 @@ EventsConfig.Definitions = {
 	-- Tundra-specific
 	Blizzard = {
 		Type = "Minor",
+		MinElapsed = 30 * 60,
 		Duration = { min = 50, max = 80 },
 		Effects = { ResourceMultiplier = -0.2 },
 		Modifiers = { Temp = -2 },
@@ -197,6 +211,7 @@ EventsConfig.Definitions = {
 	-- Volcanic-specific
 	LavaFlow = {
 		Type = "Minor",
+		MinElapsed = 35 * 60,
 		Duration = { min = 35, max = 60 },
 		Effects = {},
 		Modifiers = { Temp = 2 },
@@ -209,6 +224,7 @@ EventsConfig.Definitions = {
 	-- Crystal-specific
 	VoidSurge = {
 		Type = "Minor",
+		MinElapsed = 45 * 60,
 		Duration = { min = 40, max = 70 },
 		Effects = { EnemyMultiplier = 0.4 },
 		Modifiers = {},
@@ -224,6 +240,7 @@ EventsConfig.Definitions = {
 
 	MonsterSiege = {
 		Type = "Major",
+		MinElapsed = 30 * 60,
 		Duration = { min = 90, max = 140 },
 		Effects = { EnemyMultiplier = 0.6 },
 		Modifiers = {},
@@ -235,6 +252,7 @@ EventsConfig.Definitions = {
 
 	WormholeRift = {
 		Type = "Major",
+		MinElapsed = 45 * 60,
 		Duration = { min = 90, max = 130 },
 		Effects = { ResourceMultiplier = 0.5 },
 		Modifiers = {},
@@ -246,6 +264,7 @@ EventsConfig.Definitions = {
 
 	BiomeQuake = {
 		Type = "Major",
+		MinElapsed = 30 * 60,
 		Duration = { min = 90, max = 140 },
 		Effects = {},
 		Modifiers = {},

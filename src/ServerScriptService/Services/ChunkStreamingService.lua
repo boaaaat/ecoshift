@@ -885,11 +885,20 @@ function ChunkStreamingService:_trackPersistent(inst, prefabName, parent, catego
 		assert(state.Prefab == prefabName, "Saved generated prefab changed")
 		if state.Destroyed then inst:Destroy(); return false end
 		if state.Actor then SnapshotCodec.ApplyActor(inst, state.Actor) end
+		-- Keep saved damage as a fraction when resource balance changes. Restoring
+		-- the old maximum would otherwise leave pre-update trees at three hits.
+		local resourceMax = category == "Resources" and inst:GetAttribute("HarvestProfileVersion") == 2
+			and tonumber(inst:GetAttribute("MaxHealth")) or nil
+		local savedMax = tonumber(state.MaxHealth)
 		for _, name in ipairs({ "CurrentHealth", "Health", "MaxHealth" }) do
 			if state[name] ~= nil then
-				inst:SetAttribute(name, SnapshotCodec.Number(state[name], 0, 1e8))
+				local health = SnapshotCodec.Number(state[name], 0, 1e8)
+				if resourceMax and savedMax and savedMax > 0 then
+					health = name == "MaxHealth" and resourceMax or math.ceil(math.clamp(health / savedMax, 0, 1) * resourceMax)
+				end
+				inst:SetAttribute(name, health)
 				local value = inst:FindFirstChild(name)
-				if value and (value:IsA("NumberValue") or value:IsA("IntValue")) then value.Value = state[name] end
+				if value and (value:IsA("NumberValue") or value:IsA("IntValue")) then value.Value = health end
 			end
 		end
 		if state.Chest then getLootService():RestoreChestState(inst, state.Chest) end

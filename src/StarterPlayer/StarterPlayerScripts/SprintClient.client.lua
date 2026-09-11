@@ -2,7 +2,6 @@ if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForCh
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
-local GuiService = game:GetService("GuiService")
 local player = Players.LocalPlayer
 
 local Config = require(ReplicatedStorage.Shared.Config)
@@ -53,11 +52,14 @@ heldGlow.Name, heldGlow.Color, heldGlow.Thickness = "HeldGlow", Theme.Colors.Amb
 heldGlow.Enabled, heldGlow.Parent = false, sprintButton
 local function updateTouchVisibility()
 	sprintButton.Visible = Theme.IsMobile() and not player:GetAttribute("IsDead") and not touchGui.Parent:GetAttribute("MenuCursorOpen") and not touchGui.Parent:GetAttribute("BuildPlacementActive")
-	if not sprintButton.Visible then release() end
 end
 sprintButton.InputBegan:Connect(function(input)
 	if input.UserInputType ~= Enum.UserInputType.Touch or touchInput then return end
 	if not Settings.CanInput() or player:GetAttribute("IsDead") then return end
+	if Settings.Get("SprintMode") == "Toggle" then
+		request(not requested)
+		return
+	end
 	touchInput = input
 	request(true)
 end)
@@ -90,9 +92,12 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 UserInputService.WindowFocusReleased:Connect(release)
-Settings.Changed:Connect(release)
-UserInputService.TextBoxFocused:Connect(release)
-GuiService.MenuOpened:Connect(release)
+local lastSprintKey, lastSprintMode = Settings.Key("Sprint"), Settings.Get("SprintMode")
+Settings.Changed:Connect(function()
+	local nextKey, nextMode = Settings.Key("Sprint"), Settings.Get("SprintMode")
+	if nextKey ~= lastSprintKey or nextMode ~= lastSprintMode then release() end
+	lastSprintKey, lastSprintMode = nextKey, nextMode
+end)
 player:GetAttributeChangedSignal("IsDead"):Connect(function() if player:GetAttribute("IsDead") then release() end end)
 player.CharacterRemoving:Connect(release)
 local function bindCharacter(character)
