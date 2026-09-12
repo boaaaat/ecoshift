@@ -2390,8 +2390,6 @@ init()
 
 player:GetAttributeChangedSignal("FieldKitMap"):Connect(toggleFullMap)
 
-return MinimapClient
-
 -- Ability discoveries have server-bounded lifetimes and never activate world chunks.
 task.spawn(function()
 	local ability = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("ClassAbility")
@@ -2413,3 +2411,5 @@ task.spawn(function()
 		STATE.fullRenderBoostUntil=os.clock()+1
 	end)
 end)
+
+return MinimapClient
