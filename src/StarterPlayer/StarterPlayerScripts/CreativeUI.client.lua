@@ -2,6 +2,8 @@
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local UIS = game:GetService("UserInputService")
+local GuiService = game:GetService("GuiService")
+local Config = require(RS:WaitForChild("Shared").Config)
 local Theme = require(RS:WaitForChild("Shared").UI.UITheme)
 local Items = require(RS.Shared.Items.ItemDatabase)
 if require(RS.Shared.SessionConfig).GetMode() ~= "Expedition" then return end
@@ -166,8 +168,138 @@ local empty=Theme.Label(itemsPage,"No matching items",UDim2.new(1,0,0,40),UDim2.
 empty.TextXAlignment,empty.Visible=Enum.TextXAlignment.Center,false
 local quantityLabel=Theme.Label(itemsPage,"QUANTITY",UDim2.fromOffset(92,40),UDim2.new(0,0,1,-42),13,nil,true)
 local quantity=box(itemsPage,"1–999","1",UDim2.fromOffset(80,40),UDim2.new(0,92,1,-42))
-local giveHint=Theme.Label(itemsPage,"Tap an item to add it to your pack.",UDim2.new(1,-190,0,40),UDim2.new(0,184,1,-42),14)
+local giveHint=Theme.Label(itemsPage,"Drag owned items here to delete. Shift-click trash clears everything.",UDim2.new(1,-244,0,40),UDim2.new(0,184,1,-42),14)
 giveHint.TextWrapped=true
+local trash=button(itemsPage,"",UDim2.fromOffset(44,40),UDim2.new(1,-44,1,-42))
+trash.Name="CreativeTrash"
+Theme.TouchIcon(trash,"Trash",27)
+local owned=Instance.new("ScrollingFrame")
+owned.Name="OwnedInventory"
+owned.BackgroundTransparency,owned.BorderSizePixel,owned.ScrollBarThickness=1,0,5
+owned.CanvasSize,owned.AutomaticCanvasSize=UDim2.new(),Enum.AutomaticSize.Y
+owned.Parent=itemsPage
+local ownedTitle=Theme.Label(itemsPage,"YOUR INVENTORY",UDim2.fromOffset(200,20),UDim2.new(),13,nil,true)
+local ownedGrid=Instance.new("UIGridLayout")
+ownedGrid.CellPadding,ownedGrid.SortOrder=UDim2.fromOffset(6,6),Enum.SortOrder.LayoutOrder
+ownedGrid.Parent=owned
+local inventorySnapshot,drag={Hotbar={},Storage={}},nil
+local trashTouch
+local draggedUntil=0
+local function canDelete()
+ return workspace:GetAttribute("WorldType")=="Creative" and player:GetAttribute("CreativeMode")==true
+end
+local function pointFor(input)
+ if input and input.UserInputType==Enum.UserInputType.Touch then return Vector2.new(input.Position.X,input.Position.Y) end
+ return UIS:GetMouseLocation()-GuiService:GetGuiInset()
+end
+local function inside(frame,point)
+ local p,size=frame.AbsolutePosition,frame.AbsoluteSize
+ return point.X>=p.X and point.Y>=p.Y and point.X<=p.X+size.X and point.Y<=p.Y+size.Y
+end
+local function deleteZone(point)
+ local selector=content:FindFirstChild("Selector")
+ return gui.Enabled and panel.Visible and itemsPage.Visible and not categoryPicker.Visible and not(selector and selector.Visible)
+  and (inside(catalog,point) or inside(trash,point))
+end
+local function destroyStack(slotType,index,data)
+ if not canDelete() then message("Switch to Creative mode to delete items.",false);return end
+ request("DestroyItem",{SlotType=slotType,SlotIndex=index,ExpectedId=data.Id,Amount=data.N})
+end
+local function stopDrag()
+ trashTouch=nil
+ if drag and drag.Ghost then drag.Ghost:Destroy() end
+ if drag and drag.Active then draggedUntil=os.clock()+.15 end
+ drag=nil
+ owned.ScrollingEnabled=true
+ Theme.Bind(trash,"BackgroundColor3","SlotEmpty")
+end
+local function beginDrag(slotType,index,data,input)
+ if pending or not canDelete() then return end
+ if input.UserInputType~=Enum.UserInputType.MouseButton1 and input.UserInputType~=Enum.UserInputType.Touch then return end
+ drag={Type=slotType,Index=index,Data={Id=data.Id,N=data.N},Input=input,Start=pointFor(input)}
+end
+local function renderOwned()
+ for _,child in ipairs(owned:GetChildren()) do if child:IsA("GuiObject") then child:Destroy() end end
+ local order=0
+ for _,kind in ipairs({"Hotbar","Storage","Armor"}) do
+  for index=1,(kind=="Hotbar" and 6 or kind=="Storage" and 18 or 1) do
+   order+=1
+   local data=kind=="Armor" and inventorySnapshot.Armor or (inventorySnapshot[kind] or {})[index]
+   local name=data and (Items:Get(data.Id) and Items:Get(data.Id).Name or data.Id)
+   local slot=button(owned,name and (name.." ×"..tostring(data.N)) or "—",UDim2.new())
+   slot.Name=kind..index;slot.LayoutOrder=order;slot.TextSize=12;slot.TextWrapped=true
+   local caption=Theme.Label(slot,kind=="Hotbar" and tostring(index) or kind=="Armor" and "ARMOR" or "",UDim2.new(1,-8,0,14),UDim2.fromOffset(4,2),10)
+   if data then slot.InputBegan:Connect(function(input) beginDrag(kind,index,data,input) end) end
+  end
+ end
+end
+trash.Activated:Connect(function()
+ if drag or os.clock()<draggedUntil then return end
+ if not canDelete() then message("Switch to Creative mode to delete items.",false);return end
+ if UIS:IsKeyDown(Enum.KeyCode.LeftShift) or UIS:IsKeyDown(Enum.KeyCode.RightShift) then
+  request("ClearInventory",{},trash)
+ else message(Theme.IsMobile() and "Drop a stack here, or hold trash for 2 seconds to clear everything." or "Drop a stack here to delete it. Shift-click clears your hotbar, storage and armor.") end
+end)
+trash.InputBegan:Connect(function(input)
+ if input.UserInputType~=Enum.UserInputType.Touch or drag or pending or not canDelete() then return end
+ trashTouch=input
+ message("Keep holding trash for 2 seconds to clear everything. Release to cancel.")
+ task.delay(2,function()
+  if trashTouch~=input or not panel.Visible or not itemsPage.Visible or not canDelete() then return end
+  trashTouch=nil;draggedUntil=os.clock()+.15
+  request("ClearInventory",{},trash)
+ end)
+end)
+UIS.InputChanged:Connect(function(input)
+ if input==trashTouch and not inside(trash,pointFor(input)) then trashTouch=nil end
+ if not drag then return end
+ if input~=drag.Input and input.UserInputType~=Enum.UserInputType.MouseMovement then return end
+ local point=pointFor(drag.Input.UserInputType==Enum.UserInputType.Touch and drag.Input or nil)
+ if not drag.Active and (point-drag.Start).Magnitude>=10 then
+  local delta=point-drag.Start
+  -- On touch, horizontal movement scrolls the inventory strip; drag upward to delete.
+  if drag.Input.UserInputType==Enum.UserInputType.Touch then
+   local scrollingX=owned.ScrollingDirection==Enum.ScrollingDirection.X
+   if (scrollingX and math.abs(delta.X)>math.abs(delta.Y)*1.2) or (not scrollingX and math.abs(delta.Y)>math.abs(delta.X)*1.2) then stopDrag();return end
+  end
+  drag.Active=true;owned.ScrollingEnabled=false
+  drag.Ghost=Theme.Label(gui,(Items:Get(drag.Data.Id).Name).." ×"..drag.Data.N,UDim2.fromOffset(140,48),UDim2.new(),14,nil,true)
+  drag.Ghost.ZIndex=100;drag.Ghost.BackgroundTransparency=.1;Theme.Bind(drag.Ghost,"BackgroundColor3","Panel");Theme.Corner(drag.Ghost,8)
+ end
+ if drag and drag.Ghost then
+  drag.Ghost.Position=UDim2.fromOffset(point.X+12,point.Y+12)
+  Theme.Bind(trash,"BackgroundColor3",deleteZone(point) and "DangerFill" or "SlotEmpty")
+ end
+end)
+UIS.InputEnded:Connect(function(input)
+ if input==trashTouch then trashTouch=nil end
+ if not drag or (input~=drag.Input and input.UserInputType~=Enum.UserInputType.MouseButton1) then return end
+ local current=drag
+ local remove=current.Active and deleteZone(pointFor(input))
+ stopDrag()
+ if remove then destroyStack(current.Type,current.Index,current.Data) end
+end)
+UIS.WindowFocusReleased:Connect(stopDrag)
+panel:GetPropertyChangedSignal("Visible"):Connect(function() if not panel.Visible then stopDrag() end end)
+itemsPage:GetPropertyChangedSignal("Visible"):Connect(stopDrag)
+player:GetAttributeChangedSignal("CreativeMode"):Connect(stopDrag)
+-- InventoryUI can hand a drag to this panel without dropping the item in the world.
+local dropBridge=Instance.new("BindableFunction")
+dropBridge.Name,dropBridge.Parent="TryDestroyDrop",gui
+dropBridge.OnInvoke=function(point,slotType,index,data)
+ if typeof(point)~="Vector2" or not deleteZone(point) then return false end
+ draggedUntil=os.clock()+.15
+ destroyStack(slotType,index,data)
+ return true
+end
+task.spawn(function()
+ local remote=RS:WaitForChild("Remotes"):WaitForChild(Config.RemoteNames.InventoryUpdate)
+ remote.OnClientEvent:Connect(function(kind,data)
+  if kind=="Snapshot" and type(data)=="table" then inventorySnapshot=data;renderOwned() end
+ end)
+ remote:FireServer("RequestSnapshot")
+end)
+renderOwned()
 local allItems=Items:All()
 table.sort(allItems,function(a,b) return a.Name<b.Name end)
 renderItems=function()
@@ -179,6 +311,7 @@ renderItems=function()
 			count+=1
 			local card
 			card=button(catalog,"",UDim2.new(),nil,function()
+				if drag or os.clock()<draggedUntil or gui.Parent:GetAttribute("InventoryDragActive") then return end
 				local amount=tonumber(quantity.Text)
 				if not amount or amount%1~=0 or amount<1 or amount>999 then message("Choose a whole quantity from 1 to 999.",false);return end
 				request("GiveItem",{Id=item.Id,Quantity=amount},nil,function(result)
@@ -317,11 +450,24 @@ Theme.BindResponsive(gui,function(mobile,viewport)
 	panel.Size=UDim2.fromOffset(width,height)
 	title.TextSize=width<560 and 16 or 21
 	title.Text=width<500 and "CREATIVE KIT" or "CREATIVE FIELD KIT"
-	local columns=math.max(2,math.floor((width-40)/132))
+	local compact=width<650 and height>=450
+ local catalogWidth=compact and width-32 or math.floor((width-32)*.65)-8
+ catalog.Size=compact and UDim2.new(1,0,1,-208) or UDim2.new(.65,-8,1,-98)
+ owned.Position=compact and UDim2.new(0,0,1,-136) or UDim2.new(.65,8,0,72)
+ owned.Size=compact and UDim2.new(1,0,0,80) or UDim2.new(.35,-8,1,-124)
+ ownedTitle.Position=compact and UDim2.new(0,0,1,-158) or UDim2.new(.65,8,0,48)
+ owned.ScrollingDirection=compact and Enum.ScrollingDirection.X or Enum.ScrollingDirection.Y
+ owned.AutomaticCanvasSize=compact and Enum.AutomaticSize.X or Enum.AutomaticSize.Y
+ ownedGrid.FillDirection=compact and Enum.FillDirection.Vertical or Enum.FillDirection.Horizontal
+ ownedGrid.FillDirectionMaxCells=compact and 1 or 0
+ local inventoryColumns=math.max(2,math.floor((width-32)*.35/80))
+ ownedGrid.CellSize=compact and UDim2.fromOffset(76,68) or UDim2.new(1/inventoryColumns,-6,0,70)
+ local columns=math.max(2,math.floor(catalogWidth/132))
 	grid.CellSize=UDim2.new(1/columns,-(8+(5/columns)),0,mobile and 100 or 112)
 	trigger.AnchorPoint=Vector2.new(1,0)
 	trigger.Position=UDim2.new(1,-12,0,mobile and 122 or 10)
 	giveHint.TextSize=width<500 and 12 or 14
+ giveHint.Text=mobile and "Drag to delete · Hold trash 2s to clear all" or "Drag to delete · Shift-click trash to clear all"
 end)
 eligibility()
 renderItems()

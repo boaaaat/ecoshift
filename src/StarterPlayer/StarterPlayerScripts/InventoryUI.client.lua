@@ -1252,6 +1252,7 @@ if rInventoryAction then
 end
 
 cancelDrag = function()
+	playerGui:SetAttribute("InventoryDragActive", false)
 	if dragging.From then
 		dragging.From.Frame.BackgroundTransparency = 0
 	end
@@ -1273,6 +1274,7 @@ local function beginDrag(slot)
 	showTransferStatus(nil)
 	selectedSlot = slot
 	dragging.Active = true
+	playerGui:SetAttribute("InventoryDragActive", true)
 	dragging.Pending = false
 	dragging.From = slot
 	dragging.Ghost = createDragGhost(slot, data)
@@ -1399,6 +1401,14 @@ UserInputService.InputEnded:Connect(function(input)
 		local mouseLocation = touch and Vector2.new(input.Position.X, input.Position.Y) or UserInputService:GetMouseLocation()
 		local target = slotAtPoint(mouseLocation, touch)
 		if dragging.Active then
+			local creativeGui = playerGui:FindFirstChild("CreativeUI")
+			local destroyDrop = creativeGui and creativeGui:FindFirstChild("TryDestroyDrop")
+			if destroyDrop and dragging.From then
+				local from = dragging.From
+				local data = getSlotData(from.Type, from.Index)
+				local point = touch and mouseLocation or mouseLocation - GuiService:GetGuiInset()
+				if data and destroyDrop:Invoke(point, from.Type, from.Index, {Id=data.Id, N=data.N}) then cancelDrag(); return end
+			end
 			if target then
 				endDrag(target)
 			else

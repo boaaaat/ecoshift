@@ -10,7 +10,7 @@ local EntityConfig = require(script.Parent.Parent.AI.EntityConfig)
 local CreativeService = { _requests = {}, _busy = {}, _worldRequests = {} }
 local ACTIONS = { State = true, SetMode = true, GiveItem = true, SetInvincible = true, RestoreVitals = true,
 	SetTime = true, SetShiftTimer = true, SetWeather = true, SetBiome = true, SpawnMonster = true,
-	ClearMonsters = true, TeleportSpawn = true }
+	ClearMonsters = true, TeleportSpawn = true, DestroyItem = true, ClearInventory = true }
 
 local function available()
 	return workspace:GetAttribute("WorldType") == "Creative"
@@ -103,7 +103,26 @@ function CreativeService:_act(player, action, payload)
 	if action == "State" then return true, "Creative world controls." end
 	if action == "SetMode" then return self:_setMode(player, payload.Mode) end
 	if not alive(player) then return false, "Switch to Creative mode to respawn first." end
-	if action == "GiveItem" then
+	if action == "DestroyItem" or action == "ClearInventory" then
+		if player:GetAttribute("CreativeMode") ~= true then return false, "Switch to Creative mode to delete items." end
+		local inventory = require(script.Parent.InventoryService)
+		if action == "ClearInventory" then
+			inventory:Clear(player)
+			return true, "Inventory cleared, including hotbar and equipped armor."
+		end
+		if (payload.SlotType ~= "Hotbar" and payload.SlotType ~= "Storage" and payload.SlotType ~= "Armor")
+			or not number(payload.SlotIndex, 1, payload.SlotType == "Hotbar" and 6 or payload.SlotType == "Storage" and 18 or 1, true)
+			or type(payload.ExpectedId) ~= "string" or not number(payload.Amount, 1, 999, true) then
+			return false, "Choose an inventory stack to delete."
+		end
+		local inv = inventory:GetAll(player)
+		local slot = payload.SlotType == "Armor" and inv.Armor or (inv[payload.SlotType] or {})[payload.SlotIndex]
+		if not slot or slot.Id ~= payload.ExpectedId or slot.N ~= payload.Amount then return false, "That stack changed. Drag it again." end
+		if not inventory:TakeFromSlot(player, payload.SlotType, payload.SlotIndex, payload.Amount, {ExpectedId=payload.ExpectedId}) then
+			return false, "That stack could not be deleted."
+		end
+		return true, "Deleted " .. payload.Amount .. " × " .. (ItemDatabase:Get(payload.ExpectedId).Name) .. "."
+	elseif action == "GiveItem" then
 		if type(payload.Id) ~= "string" or not ItemDatabase:Get(payload.Id) or not number(payload.Quantity, 1, 999, true) then
 			return false, "Choose an item and a quantity from 1 to 999."
 		end
