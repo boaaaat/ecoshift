@@ -197,6 +197,16 @@ local raw = {
 	{ Id = "HazardAnalyzer", Name = "Hazard Analyzer", StackSize = 1, Tags = { "Utility", "Intel" } },
 }
 
+-- Structural parts now travel through the same inventory placement flow as stations.
+for _, id in ipairs({ "Wall", "Floor", "Ramp", "Gate", "Tower", "Trap", "Machine" }) do
+	table.insert(raw, {Id=id, Name=id, StackSize=99, Tags={"Placeable", "Structure", "Holdable"}})
+end
+local buildConfig = require(script.Parent.Parent.Config).BUILD
+for _, def in ipairs(raw) do
+	if buildConfig.PlaceableItems[def.Id] and not table.find(def.Tags, "Holdable") then
+		table.insert(def.Tags, "Holdable")
+	end
+end
 require(script.Parent.ItemDescriptions).Apply(raw)
 
 -- OPTIMIZED: Pre-build lookup table for O(1) access

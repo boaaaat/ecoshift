@@ -296,7 +296,7 @@ function Service:List(player)
 			table.insert(result, {
 				Id = slot.Id, WorldId = slot.WorldId, Name = slot.Name, CreatedAt = slot.CreatedAt,
 				UpdatedAt = math.max(slot.UpdatedAt, manifest.SavedAt or 0), SnapshotRevision = manifest.SnapshotRevision,
-				OwnerCount = #manifest.OwnerIds, Status = manifest.WorldStatus or (manifest.SnapshotRevision > 0 and "Saved" or "AwaitingSnapshot"),
+				OwnerCount = #manifest.OwnerIds, WorldType = manifest.WorldType or "Survival", Status = manifest.WorldStatus or (manifest.SnapshotRevision > 0 and "Saved" or "AwaitingSnapshot"),
 			})
 		elseif slot.State == "Pending" and (manifest.State == "Aborting" or manifest.State == "Aborted") then
 			-- Recover compensation interrupted by a crash or a late in-flight reservation.
@@ -539,6 +539,7 @@ function Service:UpdateManifest(record)
 		if (data.WorldGeneration or 0) > generation or data.SnapshotRevision > revision then return true end
 		if data.WorldStatus == "Ended" and record.Phase ~= "Ended" and not record.Ended then return false, "ExpeditionEnded" end
 		data.SnapshotRevision, data.WorldGeneration = revision, generation
+		data.WorldType = record.WorldType == "Creative" and "Creative" or "Survival"
 		data.WorldStatus, data.SavedAt = record.Ended and "Ended" or record.Phase, record.SavedAt or data.SavedAt or data.CommittedAt
 		return true
 	end)

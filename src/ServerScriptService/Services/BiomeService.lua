@@ -141,6 +141,31 @@ function BiomeService:Pause()
 	self._pausedAt = self._pausedAt or os.clock()
 end
 
+function BiomeService:SetCreativeWeather(id)
+	if workspace:GetAttribute("WorldType") ~= "Creative" or self._pausedAt then return false, "Creative weather is unavailable." end
+	for _, weather in ipairs(SurvivalConfig.WEATHER_BY_BIOME[self:GetCurrent()] or {}) do
+		if weather.Id == id then
+			self._weather = Util.DeepCopy(weather)
+			self._nextWeatherChange = self._data.WeatherCycle and os.clock() + (self._data.WeatherCycleSeconds or 60) or nil
+			self:_broadcast()
+			require(script.Parent.GameStateService):Broadcast()
+			return true, "Weather changed to " .. weather.Name .. "."
+		end
+	end
+	return false, "Choose weather available in the current biome."
+end
+
+function BiomeService:SetCreativeShiftTimer(seconds)
+	if workspace:GetAttribute("WorldType") ~= "Creative" or self._pausedAt then return false, "Creative timing is unavailable." end
+	if type(seconds) ~= "number" or seconds ~= seconds or seconds < 5 or seconds > 3600 or seconds % 1 ~= 0 then return false, "Choose 5 to 3600 seconds." end
+	self:GetCurrent()
+	self._nextShift = os.clock() + seconds
+	self._duration = math.max(self._duration, seconds)
+	self._version += 1
+	require(script.Parent.GameStateService):Broadcast()
+	return true, "Next biome shift in " .. seconds .. " seconds."
+end
+
 function BiomeService:CaptureWorldState()
 	local timing, now = self:GetTiming(), self._pausedAt or os.clock()
 	return { Biome = self._current, Weather = Util.DeepCopy(self._weather), Elapsed = self:GetElapsed(), Remaining = timing.Remaining,

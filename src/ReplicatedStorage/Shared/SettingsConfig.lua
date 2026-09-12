@@ -15,7 +15,7 @@ Settings.Definitions = {
 	ReducedMotion = { Label = "Reduce menu motion", Default = false, Section = "Graphics" },
 	FieldOfView = { Label = "Camera field of view", Default = 70, Values = { 60, 70, 80, 90 }, Section = "Graphics" },
 }
-Settings.Actions = { "Pack", "Craft", "Build", "Map", "Survey", "Settings", "Sprint", "Salvage", "Ability" }
+Settings.Actions = { "Pack", "Craft", "Map", "Survey", "Settings", "Sprint", "Ability" }
 local defaults = { Pack = "E", Craft = "C", Build = "B", Map = "M", Survey = "V", Settings = "F4", Sprint = "LeftShift", Salvage = "R", Ability = "G" }
 -- Movement, interaction, hotbar, chat, camera lock and spectating keys stay reserved.
 Settings.AllowedKeys = { "B", "C", "E", "G", "H", "J", "K", "L", "M", "N", "O", "P", "R", "U", "V", "Y", "Z", "F4", "F6", "F7", "LeftShift", "RightShift" }

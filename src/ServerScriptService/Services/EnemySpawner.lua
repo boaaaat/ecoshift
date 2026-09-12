@@ -254,7 +254,7 @@ getAnchorPosition = function(anchor)
 	return nil
 end
 
-spawnEnemyById = function(id, anchor, playerCount)
+spawnEnemyById = function(id, anchor, playerCount, creativeLevel)
 	local limit = math.min(Progression.MaxActiveMonsters, math.max(1, #Players:GetPlayers()) * Progression.MaxActiveMonstersPerPlayer)
 	local active = 0
 	for _, entity in ipairs(ensureEnemiesFolder():GetChildren()) do
@@ -289,6 +289,7 @@ spawnEnemyById = function(id, anchor, playerCount)
 
 	newEnemy.Name = id .. "_" .. math.random(1000, 9999)
 	newEnemy:SetAttribute("EntityId", id)
+	if creativeLevel then newEnemy:SetAttribute("Level", creativeLevel) end
 	local entityType = newEnemy:GetAttribute("EntityType") or prefab:GetAttribute("EntityType") or "Monster"
 	newEnemy:SetAttribute("EntityType", entityType)
 
@@ -312,7 +313,7 @@ spawnEnemyById = function(id, anchor, playerCount)
 	newEnemy:PivotTo(safeCFrame)
 	-- Group offsets can cross the camp boundary even when their anchor is outside.
 	-- Only fresh placement is constrained; living enemies can still move normally.
-	if CenterClearance.Overlaps(newEnemy, BiomeConfig.center_exclusion_radius or 100) then
+	if not creativeLevel and CenterClearance.Overlaps(newEnemy, BiomeConfig.center_exclusion_radius or 100) then
 		newEnemy:Destroy()
 		return
 	end
@@ -324,10 +325,19 @@ spawnEnemyById = function(id, anchor, playerCount)
 	if rootPart then
 		rootPart:SetNetworkOwner(nil)
 	end
+	return newEnemy
 end
 
 local EnemySpawner = {}
 EnemySpawner._started = false
+
+function EnemySpawner:SpawnCreative(id, position, level)
+	if workspace:GetAttribute("WorldType") ~= "Creative" then return nil end
+	local def = EntityConfig.Entities[id]
+	if not def or def.Type ~= "Monster" or typeof(position) ~= "Vector3" then return nil end
+	if type(level) ~= "number" or level ~= level or level < 1 or level > 25 or level % 1 ~= 0 then return nil end
+	return spawnEnemyById(id, position, math.max(1, #Players:GetPlayers()), level)
+end
 
 local function bindSpawnerCallback()
 	while not (_G.Ecoshift and _G.Ecoshift.SetEnemySpawnCallback) do

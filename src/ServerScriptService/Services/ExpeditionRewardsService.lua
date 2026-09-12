@@ -64,6 +64,7 @@ local function alive(player)
 	return participant(player) and not player:GetAttribute("IsDead") and hum ~= nil and hum.Health > 0
 end
 local function count(map) local n = 0 for _ in pairs(map) do n += 1 end return n end
+local function rewardsEnabled() return workspace:GetAttribute("WorldType") ~= "Creative" end
 
 function Service:_world()
 	local id = RS:GetAttribute("WorldId")
@@ -102,7 +103,7 @@ function Service:GetSummary(playerOrId)
 		TotalsComplete = data.TotalsComplete, Preview = RunService:IsStudio() }
 end
 function Service:GetTeamSummary()
-	local result = { CurrencyName = Economy.CurrencyName, Preview = RunService:IsStudio(), Players = {} }
+	local result = { CurrencyName = Economy.CurrencyName, Preview = RunService:IsStudio(), RewardsEnabled = rewardsEnabled(), Players = {} }
 	for key in pairs(self._players) do table.insert(result.Players, self:GetSummary(tonumber(key))) end
 	table.sort(result.Players, function(a, b) return a.UserId < b.UserId end)
 	return result
@@ -134,6 +135,7 @@ function Service:_status(player)
 	self:_scheduleSummary()
 end
 function Service:_queue(player, kind, occurrenceId, reward)
+	if not rewardsEnabled() then return false, "CreativeRewardsDisabled" end
 	if not ownsLease() then return false, "WorldLeaseLost" end
 	local worldId = self:_world()
 	if not worldId then return false, "MissingWorldId" end
@@ -150,6 +152,7 @@ function Service:_queue(player, kind, occurrenceId, reward)
 end
 
 function Service:_flush(player, forceClass)
+	if not rewardsEnabled() then return end
 	-- Pending claims were authorized when queued (or in a fenced saved world).
 	-- They may settle after lease loss, but not while a replacement ledger is staged.
 	if self._flushing[player] or self._pendingRestore then return end
@@ -232,7 +235,7 @@ function Service:_sample(player)
 		activity.Position = root.Position
 	end
 	self._activity[player] = activity
-	local classEligible = eligible and stamp - (activity.LastAction or stamp) <= 120
+	local classEligible = rewardsEnabled() and eligible and stamp - (activity.LastAction or stamp) <= 120
 	if sample and sample.Eligible and eligible then
 		local data = self:_player(player.UserId)
 		data.SurvivedSeconds += math.max(0, stamp - sample.At)

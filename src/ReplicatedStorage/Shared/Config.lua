@@ -102,6 +102,7 @@ Config.OBJECTIVES = {
 -- NOTE: Biome configuration moved to ReplicatedStorage/Shared/BiomeConfig.lua
 
 Config.BUILD = {
+	SalvageSeconds = 3,
 	CampRadius = 100, -- 200-stud diameter around the expedition spawn at X/Z zero.
 	AllowedTypes = {
 		Wall = true,
@@ -140,6 +141,7 @@ Config.BUILD = {
 	},
 	-- Items that can be placed as structures (consume the item when placed)
 	PlaceableItems = {
+		Wall = true, Floor = true, Ramp = true, Gate = true, Tower = true, Trap = true, Machine = true,
 		Workbench = true,
 		AdvancedWorkbench = true,
 		MasterWorkbench = true,

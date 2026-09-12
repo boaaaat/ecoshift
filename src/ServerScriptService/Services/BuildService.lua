@@ -4,6 +4,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 local CollectionService = game:GetService("CollectionService")
 local ProximityPromptService = game:GetService("ProximityPromptService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
@@ -15,7 +17,7 @@ local LootService = require(script.Parent.LootService)
 local GameStateService = require(script.Parent.GameStateService)
 local ItemDropService = require(script.Parent.ItemDropService)
 
-local BuildService = {}
+local BuildService = { _salvageHolds = {}, _requests = {} }
 local SnapshotCodec = require(script.Parent.WorldSnapshotCodec)
 BuildService._remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
 BuildService._remoteBuild = Util.GetRemote(BuildService._remotesFolder, Config.RemoteNames.Build)
@@ -48,6 +50,7 @@ local function isChestStructure(inst, buildType)
 end
 
 local function withinRange(plr, worldPos)
+	if ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerLoading") or plr:GetAttribute("WorldPlayerRestoring") then return false end
 	local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
 	if not hum or hum.Health <= 0 or plr:GetAttribute("IsDead") then return false end
 	local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
@@ -233,6 +236,8 @@ function BuildService:Place(plr, buildType, worldPos, rotation)
 	end
 	if not isAllowedType(buildType) then return false, "InvalidType" end
 	if not withinRange(plr, worldPos) then return false, "OutOfRange" end
+	local held = plr.Character and plr.Character:FindFirstChildOfClass("Tool")
+	if not held or held.Name ~= buildType then return false, "EquipBuildItem" end
 	if not BuildPlacement.WithinCamp(worldPos) then return false, "OutsideCamp" end
 
 	local gx, gz = GridService:WorldToGrid(worldPos)
@@ -250,12 +255,13 @@ function BuildService:Place(plr, buildType, worldPos, rotation)
 			print(string.format("[BuildService] Player %s doesn't have %s to place", plr.Name, buildType))
 			return false, "MissingPlaceableItem"
 		end
-		-- Consume the item
-		if not InventoryService:Take(plr, buildType, 1) then
+		local creative = workspace:GetAttribute("WorldType") == "Creative" and plr:GetAttribute("CreativeMode") == true
+		-- Sandbox placement still requires the held item but keeps it in the pack.
+		if not creative and not InventoryService:Take(plr, buildType, 1) then
 			print(string.format("[BuildService] Failed to consume %s from %s", buildType, plr.Name))
 			return false, "MissingPlaceableItem"
 		end
-		refundEntries = { { Id = buildType, N = 1 } }
+		refundEntries = creative and {} or { { Id = buildType, N = 1 } }
 	else
 		-- Traditional building with resource costs
 		local cost = Config.BUILD.Costs[buildType] or {}
@@ -325,27 +331,65 @@ function BuildService:Place(plr, buildType, worldPos, rotation)
 	return true, "Success"
 end
 
-function BuildService:Remove(plr, target)
+local function salvageTarget(plr, target)
 	if typeof(target) ~= "Instance" or not target:IsDescendantOf(workspace)
 		or (not target:IsA("Model") and not target:IsA("BasePart")) then return false, "InvalidPayload" end
 	if GameStateService:IsGameOver() then
 		return false, "GameOver"
 	end
 	local placed = target
-	if placed:IsA("BasePart") then
-		local maybeModel = placed:FindFirstAncestorOfClass("Model")
-		if maybeModel and maybeModel:GetAttribute("BuildType") then
-			placed = maybeModel
-		end
+	while placed and placed ~= workspace do
+		if placed:GetAttribute("BuildType") and CollectionService:HasTag(placed, "Structure") then break end
+		placed = placed.Parent
 	end
-	if not placed:GetAttribute("BuildType") then return false, "NotStructure" end
-	if not CollectionService:HasTag(placed, "Structure") then return false, "NotStructure" end
+	if not placed or placed == workspace or (not placed:IsA("Model") and not placed:IsA("BasePart")) then return false, "NotStructure" end
 
 	local owner = tonumber(placed:GetAttribute("OwnerUserId"))
 	if owner ~= plr.UserId then return false, "NotOwner" end
 
 	local pos = placed:IsA("Model") and placed:GetPivot().Position or placed.Position
 	if not withinRange(plr, pos) then return false, "RemoveOutOfRange" end
+	local origin = plr.Character:FindFirstChild("Head") or plr.Character:FindFirstChild("HumanoidRootPart")
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { plr.Character }
+	params.RespectCanCollide = true
+	-- Ground-level model pivots can hit terrain before the visible build.
+	local aimPosition = placed:IsA("Model") and placed:GetBoundingBox().Position or pos
+	local obstruction = workspace:Raycast(origin.Position, aimPosition - origin.Position, params)
+	if obstruction and obstruction.Instance ~= placed and not obstruction.Instance:IsDescendantOf(placed) then return false, "SalvageBlocked" end
+	return placed, pos
+end
+
+function BuildService:_beginSalvage(plr, target)
+	self._salvageHolds[plr] = nil
+	local placed, reason = salvageTarget(plr, target)
+	if not placed then return false, reason end
+	local now = os.clock()
+	self._salvageHolds[plr] = { Target = placed, Character = plr.Character, Started = now, LastPulse = now }
+	return true
+end
+
+function BuildService:_continueSalvage(plr, target)
+	local hold = self._salvageHolds[plr]
+	local placed = hold and salvageTarget(plr, target)
+	if not hold or placed ~= hold.Target or hold.Character ~= plr.Character or os.clock() - hold.LastPulse > 0.6 then
+		self._salvageHolds[plr] = nil
+		return false
+	end
+	hold.LastPulse = os.clock()
+	return true
+end
+
+function BuildService:Remove(plr, target)
+	local hold = self._salvageHolds[plr]
+	self._salvageHolds[plr] = nil
+	local placed, pos = salvageTarget(plr, target)
+	if not placed then return false, pos end
+	if not hold or hold.Target ~= placed or hold.Character ~= plr.Character
+		or os.clock() - hold.LastPulse > 0.6 or os.clock() - hold.Started < (Config.BUILD.SalvageSeconds or 3) then
+		return false, "HoldToSalvage"
+	end
 	
 	local buildType = placed:GetAttribute("BuildType")
 	if buildType and isPlaceableItem(buildType) then
@@ -372,6 +416,7 @@ function BuildService:Remove(plr, target)
 		GridService:ReleaseByInstance(placed)
 	end
 	placed:Destroy()
+	require(script.Parent.ExpeditionRewardsService):RecordActivity(plr)
 	return true, "Success"
 end
 
@@ -417,7 +462,6 @@ function BuildService:RestoreWorldState(states)
 				inst:PivotTo(cf + Vector3.new(0, ground.Position.Y - bottom, 0))
 			end
 		end
-		require(script.Parent.ExpeditionRewardsService):RecordActivity(plr)
 		inst:SetAttribute("PlacementVersion", 1)
 		inst:SetAttribute("OwnerUserId", SnapshotCodec.Number(state.Owner))
 		inst:SetAttribute("GridX", gx); inst:SetAttribute("GridZ", gz)
@@ -450,13 +494,36 @@ function BuildService:Bind()
 		return
 	end
 	self._bound = true
+	Players.PlayerRemoving:Connect(function(plr) self._salvageHolds[plr], self._requests[plr] = nil, nil end)
+	local elapsed = 0
+	RunService.Heartbeat:Connect(function(dt)
+		elapsed += dt
+		if elapsed < 0.1 then return end
+		elapsed = 0
+		for plr, hold in pairs(self._salvageHolds) do
+			if plr.Parent ~= Players or plr.Character ~= hold.Character or os.clock() - hold.LastPulse > 0.6
+				or not salvageTarget(plr, hold.Target) then self._salvageHolds[plr] = nil end
+		end
+	end)
 	self._remoteBuild.OnServerEvent:Connect(function(plr, action, payload)
-		if type(action) ~= "string" then return end
+		if action ~= "Place" and action ~= "Remove" and action ~= "BeginSalvage" and action ~= "ContinueSalvage" and action ~= "CancelSalvage" then return end
+		if action == "CancelSalvage" then self._salvageHolds[plr] = nil; return end
+		local requests, now = self._requests[plr] or {}, os.clock()
+		self._requests[plr] = requests
+		if now - (requests[action] or -math.huge) < 0.1 then return end
+		requests[action] = now
 		if type(payload) ~= "table" then
+			self._salvageHolds[plr] = nil
 			self._remoteBuild:FireClient(plr, "Result", { Action = action, Success = false, Reason = "InvalidPayload" })
 			return
 		end
-		if action == "Place" then
+		if action == "BeginSalvage" then
+			local started, reason = self:_beginSalvage(plr, payload.Target)
+			if not started then self._remoteBuild:FireClient(plr, "Result", { Action = "Remove", Success = false, Reason = reason }) end
+		elseif action == "ContinueSalvage" then
+			self:_continueSalvage(plr, payload.Target)
+		elseif action == "Place" then
+			self._salvageHolds[plr] = nil
 			local buildType = payload and payload.Type
 			local pos = payload and payload.Position
 			if typeof(pos) ~= "Vector3" or type(buildType) ~= "string" then

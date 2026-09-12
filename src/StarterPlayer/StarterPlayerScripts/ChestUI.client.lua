@@ -46,6 +46,9 @@ gui.DisplayOrder = 25
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = playerGui
 
+local itemTooltip = require(ReplicatedStorage.Shared.UI.ItemTooltip).new(gui)
+local hoveredChestIndex = nil
+
 local panel = Instance.new("Frame")
 panel.Name = "ChestPanel"
 panel.Size = UDim2.new(0, (SLOT_SIZE + SLOT_GAP) * COLS + MARGIN * 2, 0, 220)
@@ -308,6 +311,9 @@ end
 
 local function renderSlot(slot)
 	local data = slotData[slot.Index]
+	if hoveredChestIndex == slot.Index then
+		itemTooltip:Show(data, "Drag to transfer • Shift-click takes stack • Right-click takes half")
+	end
 	if not data then
 		slot.Icon.Image = ""
 		slot.Icon.Visible = false
@@ -421,6 +427,8 @@ local function createGhost(itemId, count)
 end
 
 local function beginChestDrag(index)
+	hoveredChestIndex = nil
+	itemTooltip:Hide()
 	local data = slotData[index]
 	if not data then return end
 	dragging.Active = true
@@ -651,6 +659,14 @@ local function createSlot(index, x, y)
 	button.Text = ""
 	button.Parent = slot
 
+	button.MouseEnter:Connect(function()
+		if not currentChestId or dragging.Active then return end
+		hoveredChestIndex = index
+		itemTooltip:Show(slotData[index], "Drag to transfer • Shift-click takes stack • Right-click takes half")
+	end)
+	button.MouseLeave:Connect(function()
+		if hoveredChestIndex == index then hoveredChestIndex = nil; itemTooltip:Hide() end
+	end)
 	button.InputBegan:Connect(function(input)
 		if not currentChestId or dragging.Active or dragging.Input then return end
 		if input.UserInputType == Enum.UserInputType.MouseButton2 then
@@ -695,6 +711,8 @@ local function ensureSlotCount(count)
 end
 
 local function closeChest(sendCloseEvent)
+	hoveredChestIndex = nil
+	itemTooltip:Hide()
 	if dragging.Ghost then
 		dragging.Ghost:Destroy()
 	end

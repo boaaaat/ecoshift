@@ -74,7 +74,10 @@ function SurvivalService:_tickSprint(plr, dt)
 	end
 	if hum.Sit or hum.PlatformStand then self:_stopSprint(plr) end
 	local maxStamina = math.max(0, StatsService:GetStat(plr, "MaxStamina") or 100)
+	local protected = workspace:GetAttribute("WorldType") == "Creative" and plr:GetAttribute("CreativeMode") and plr:GetAttribute("CreativeInvincible")
 	local stamina = clamp(StatsService:GetBase(plr, "Stamina") or maxStamina, 0, maxStamina)
+	local previousStamina = stamina
+	if protected then stamina = maxStamina; self._sprintExhausted[plr] = nil end
 	if self._sprintExhausted[plr] and stamina >= maxStamina * 0.2 then
 		self._sprintExhausted[plr] = nil
 	end
@@ -84,12 +87,13 @@ function SurvivalService:_tickSprint(plr, dt)
 	local moving = hum.MoveDirection.Magnitude > 0.1 or Vector3.new(velocity.X, 0, velocity.Z).Magnitude > 0.75
 	local sprinting = self._sprintWanted[plr] == true and not self._sprintExhausted[plr] and moving and stamina > 0
 	local nextStamina = clamp(stamina + (sprinting and -STAMINA_DRAIN or STAMINA_REGEN) * dt, 0, maxStamina)
+	if protected then nextStamina = maxStamina end
 	if nextStamina <= 0 and self._sprintWanted[plr] then
 		self._sprintExhausted[plr] = true
 		sprinting = false
 	end
 	applySprintModifier(plr, sprinting)
-	if nextStamina ~= stamina then StatsService:SetBaseStats(plr, {Stamina = nextStamina}) end
+	if nextStamina ~= previousStamina then StatsService:SetBaseStats(plr, {Stamina = nextStamina}) end
 end
 
 function SurvivalService:_setSprint(plr, enabled)
@@ -111,6 +115,7 @@ end
 
 function SurvivalService:_tickPlayer(plr, dt)
 	if ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring") or plr:GetAttribute("WorldPlayerLoading") or plr:GetAttribute("IsDead") then return end
+	if workspace:GetAttribute("WorldType") == "Creative" and plr:GetAttribute("CreativeMode") and plr:GetAttribute("CreativeInvincible") then return end
 	local char = plr.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")

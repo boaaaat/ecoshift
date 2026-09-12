@@ -1207,7 +1207,26 @@ WorkbenchConfig.RECIPES = {
 	},
 }
 
+-- Structural costs move to crafting; stations retain their own recipes and costs.
+for id, costs in pairs(require(script.Parent.Config).BUILD.Costs) do
+	local ingredients = {}
+	for _, entry in ipairs(costs) do
+		table.insert(ingredients, {Id=entry.Id, N=entry.N, StructuralMaterial=true})
+	end
+	WorkbenchConfig.RECIPES[id] = {Ingredients=ingredients, Output={Id=id,N=1}, AllowedStations={"Hand"}, Category="Structures", BaseCraftTime=3}
+end
+
+function WorkbenchConfig:IngredientCost(ingredient, player)
+	local count = math.max(1, math.floor(ingredient.N or 1))
+	if ingredient.StructuralMaterial then
+		local discount = math.clamp(tonumber(player and player:GetAttribute("Class_BuildDiscount")) or 0, 0, .18)
+		count = math.max(1, math.ceil(count * (1 - discount)))
+	end
+	return count
+end
+
 WorkbenchConfig.CATEGORIES = {
+	"Structures",
 	"Materials",
 	"Tools",
 	"Weapons",

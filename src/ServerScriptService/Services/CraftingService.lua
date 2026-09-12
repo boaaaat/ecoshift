@@ -24,10 +24,10 @@ local function resolveRecipe(recipeId)
 end
 
 local function adjustedIngredientsForPlayer(plr, ingredients)
-	-- Class crafting bonuses change work rate, never material cost.
+	-- Builder discounts apply only to structural construction components.
 	local adjusted = {}
 	for _, entry in ipairs(ingredients or {}) do
-		local n = math.max(1, math.floor(entry.N or 1))
+		local n = WorkbenchConfig:IngredientCost(entry, plr)
 		adjusted[#adjusted + 1] = { Id = entry.Id, N = n }
 	end
 	return adjusted

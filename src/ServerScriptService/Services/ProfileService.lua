@@ -322,6 +322,7 @@ function ProfileService:_submit(plr, op)
 end
 
 function ProfileService:GrantReward(plr, rewardId, reward)
+	if workspace:GetAttribute("WorldType") == "Creative" then return false, "CreativeRewardsDisabled" end
 	if not validId(rewardId) or type(reward) ~= "table" then return false, "InvalidReward" end
 	local currency, xp = reward.Currency or 0, reward.XP or 0
 	if not validAmount(currency) or not validAmount(xp) or currency + xp == 0 then return false, "InvalidReward" end
@@ -353,6 +354,7 @@ function ProfileService:PurchaseRole(plr, roleId)
 end
 -- Cumulative, world-scoped watermarks safely settle retries and older saved snapshots.
 function ProfileService:GrantClassTime(plr, worldId, roleId, totalSeconds)
+	if workspace:GetAttribute("WorldType") == "Creative" then return false, "CreativeRewardsDisabled" end
 	if not validId(worldId) or #worldId > 64 or not Classes.Definitions[roleId]
 		or type(totalSeconds) ~= "number" or totalSeconds ~= totalSeconds or totalSeconds <= 0 or totalSeconds > 1e9 then return false, "InvalidClassTime" end
 	return self:_submit(plr, newOperation("ClassTime", { WorldClassId = worldId .. ":" .. roleId, Role = roleId, TotalSeconds = totalSeconds }))

@@ -178,6 +178,8 @@ function Service:CreateMatchedExpedition(match)
 	if RunService:IsStudio() then return false, "PublishedPlayRequired" end
 	if type(match) ~= "table" or not validRoster(match.Roster) or not Policy.IsMatchmakingType(match.MatchmakingType) then return false, "InvalidMatchedRoster" end
 	local launchMode = match.LaunchMode or "Matchmaking"
+	local worldType = match.WorldType or "Survival"
+	if worldType ~= "Creative" and worldType ~= "Survival" then return false, "InvalidWorldType" end
 	if launchMode ~= "Matchmaking" and launchMode ~= "Party" then return false, "InvalidLaunchMode" end
 	if launchMode == "Matchmaking" and #match.Roster ~= Config.MaxPartySize then return false, "InvalidMatchedRoster" end
 	if launchMode == "Party" and (type(match.Sources) ~= "table" or #match.Sources ~= 1) then return false, "InvalidPartyLaunch" end
@@ -197,6 +199,7 @@ function Service:CreateMatchedExpedition(match)
 			if err then return nil, err end
 			if not party or not party.Queue or party.Queue.MatchId ~= match.Id or party.Queue.Token ~= source.Token then return sourceChanged("SourceCrewChanged") end
 			if (party.Queue.Mode or "Matchmaking") ~= launchMode then return sourceChanged("LaunchModeChanged") end
+			if (party.Queue.WorldType or "Survival") ~= worldType then return sourceChanged("WorldTypeChanged") end
 			table.insert(sourceIds, source.Id); table.insert(sources, { Id = source.Id, Token = source.Token })
 			if party.CreatedAt < oldest then oldest, leader = party.CreatedAt, party.LeaderId end
 			for userId, member in pairs(party.Members) do
@@ -210,13 +213,13 @@ function Service:CreateMatchedExpedition(match)
 		table.sort(roster)
 		record, reason = Store:Mutate(match.WorldId, function(current)
 			if current then return current.MatchId == match.Id and current or nil, "WorldCommitChanged" end
-			return { SchemaVersion = 1, Id = match.WorldId, MatchId = match.Id, LaunchMode = launchMode, Sources = sources, SourceIds = sourceIds,
+			return { SchemaVersion = 1, Id = match.WorldId, MatchId = match.Id, WorldType = worldType, LaunchMode = launchMode, Sources = sources, SourceIds = sourceIds,
 				Roster = roster, Members = members, LeaderId = leader, PartyId = "world:" .. match.WorldId,
 				MatchmakingType = match.MatchmakingType, CreatedAt = os.time(), Generation = 0, Phase = "Preparing", CrewCommitted = false }
 		end)
 		if not record then return nil, reason end
 	end
-	if record.MatchId ~= match.Id or (record.LaunchMode or "Matchmaking") ~= launchMode or not sameRoster(record.Roster, match.Roster) then return nil, "WorldCommitChanged" end
+	if record.MatchId ~= match.Id or (record.WorldType or "Survival") ~= worldType or (record.LaunchMode or "Matchmaking") ~= launchMode or not sameRoster(record.Roster, match.Roster) then return nil, "WorldCommitChanged" end
 	if record.CrewCommitted then
 		if Parties.RestoreExpeditionParty and (record.Phase == "CrewCommitted" or record.Phase == "Reserving") then
 			local party = Parties:RestoreExpeditionParty(record)
@@ -509,7 +512,12 @@ end
 
 function Service:PrepareExpedition()
 	RS:SetAttribute("WorldLeaseOwned", false); RS:SetAttribute("WorldLeaseUntil", 0)
-	if RunService:IsStudio() then self._studio = true; return true, nil end
+	if RunService:IsStudio() then
+		self._studio = true
+		local worldType = workspace:GetAttribute("WorldType") == "Creative" and "Creative" or "Survival"
+		workspace:SetAttribute("WorldType", worldType); RS:SetAttribute("WorldType", worldType)
+		return true, nil
+	end
 	if game.PlaceId ~= Config.ExpeditionPlaceId or game.PrivateServerId == "" or game.PrivateServerOwnerId ~= 0 then return false, "ReservedExpeditionRequired" end
 	local record, reason = Store:ResolveReservation(game.PrivateServerId)
 	if not record then return false, reason end
@@ -519,6 +527,8 @@ function Service:PrepareExpedition()
 	local acquired, acquireError = Store:AcquireServer(record, game.JobId, nativeType())
 	if not acquired then return false, acquireError end
 	self:_adopt(acquired)
+	local worldType = acquired.WorldType == "Creative" and "Creative" or "Survival"
+	workspace:SetAttribute("WorldType", worldType); RS:SetAttribute("WorldType", worldType)
 	RS:SetAttribute("WorldId", acquired.Id)
 	RS:SetAttribute("WorldGeneration", acquired.Generation)
 	RS:SetAttribute("WorldSessionState", "AwaitingOriginalCrew")

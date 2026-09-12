@@ -120,7 +120,7 @@ local function count(id)
 	return n
 end
 local function perBatch(ingredient)
-	return math.max(1,math.floor(ingredient.N or 1))
+	return Recipes:IngredientCost(ingredient, player)
 end
 local function costMap(recipe)
 	local costs={}

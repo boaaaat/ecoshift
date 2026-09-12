@@ -99,7 +99,7 @@ function Service:StartParty(player)
 		if room~=true then return false,reason or "Every crew member needs a free save slot." end
 	end
 	local id,token=HttpService:GenerateGUID(false),HttpService:GenerateGUID(false)
-	local record={Id=id,WorldId=HttpService:GenerateGUID(false),LaunchMode="Party",Sources={{Id=party.Id,Token=token}},Roster={},
+	local record={Id=id,WorldId=HttpService:GenerateGUID(false),WorldType=party.WorldType=="Creative" and "Creative" or "Survival",LaunchMode="Party",Sources={{Id=party.Id,Token=token}},Roster={},
 		CreatedAt=os.time(),MatchmakingType=nativeType,Stage="Preparing",Owner=workerId,
 		LeaseToken=HttpService:GenerateGUID(false),LeaseUntil=os.time()+90}
 	for _,member in pairs(party.Members) do table.insert(record.Roster,member.UserId) end
@@ -110,7 +110,7 @@ function Service:StartParty(player)
 	local claimed,reason=Parties:Mutate(party.Id,function(current)
 		if record.LeaseUntil<=os.time() or current.Revision~=party.Revision or current.Queue or current.RunId then return false,"Your crew changed. Ready up and try again." end
 		current.Queue={Token=token,QueuedAt=record.CreatedAt,Generation=DateTime.now().UnixTimestampMillis,
-			MatchmakingType=nativeType,State="Starting",Mode="Party",MatchId=id}
+			MatchmakingType=nativeType,State="Starting",Mode="Party",MatchId=id,WorldType=record.WorldType}
 		return true
 	end)
 	if not claimed then

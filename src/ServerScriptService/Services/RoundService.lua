@@ -48,7 +48,7 @@ function RoundService:Bind()
 	task.spawn(function()
 		while true do
 			local alive, participants = playerCounts()
-			if not ReplicatedStorage:GetAttribute("WorldRestoring") and not self._ended and participants > 0 and alive == 0 then
+			if workspace:GetAttribute("WorldType") ~= "Creative" and not ReplicatedStorage:GetAttribute("WorldRestoring") and not self._ended and participants > 0 and alive == 0 then
 				local elapsed = self:EndMatch()
 				local cb = _G.Ecoshift and _G.Ecoshift.OnRoundEnd
 				if type(cb) == "function" then pcall(cb, elapsed) end

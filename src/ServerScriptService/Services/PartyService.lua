@@ -548,6 +548,7 @@ function PartyService:Snapshot(player)
 		snapshot.Id,snapshot.LeaderId,snapshot.RunId,snapshot.Revision=party.Id,party.LeaderId,party.RunId,party.Revision
 		snapshot.ManagementLocked=(party.MergeLock~=nil or party.ResumeCommit~=nil or party.RecoveryPending==true)
 		snapshot.MergedCrew=party.LaunchMode=="LobbyMerge"
+		snapshot.WorldType=party.WorldType=="Creative" and "Creative" or "Survival"
 		if party.Queue then
 			snapshot.Queue={State=party.Queue.State,QueuedAt=party.Queue.QueuedAt,Mode=party.Queue.Mode,Purpose=party.Queue.Purpose}
 			snapshot.QueueStartedAt=party.Queue.QueuedAt

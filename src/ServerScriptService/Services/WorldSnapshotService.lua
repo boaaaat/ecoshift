@@ -17,6 +17,7 @@ function Snapshot:CapturePlayer(player)
 		Role = player:GetAttribute("Role"),
 		ClassLevel = player:GetAttribute("ClassLevel") or 1,
 		ClassAbility = service("ClassAbilityService"):CapturePlayer(player),
+		Creative = service("CreativeService"):CapturePlayer(player),
 		Inventory = service("InventoryService"):CaptureWorldState(player),
 		Stats = service("StatsService"):CaptureWorldState(player),
 		Death = service("DeathService"):CaptureWorldState(player),
@@ -59,6 +60,9 @@ function Snapshot:StageWorld(snapshot)
 		return true
 	end
 	assert(type(snapshot) == "table" and snapshot.Version == self.Version and snapshot.GeneratorVersion == self.GeneratorVersion, "Unsupported world snapshot/generator version")
+	local worldType = snapshot.WorldType or "Survival"
+	assert(worldType == "Survival" or worldType == "Creative", "Unsupported world type")
+	assert(worldType == (workspace:GetAttribute("WorldType") or "Survival"), "Saved world type does not match its reservation")
 	assert(#HttpService:JSONEncode(snapshot) <= self.MaxBytes, "World snapshot exceeds supported size")
 	Codec.BoundedCount(snapshot.Players, 100)
 	self._snapshot, self._players = Codec.Copy(snapshot), Codec.Copy(snapshot.Players)
@@ -160,6 +164,7 @@ function Snapshot:RestorePlayer(player)
 		service("DeathService"):RestoreWorldState(player, state.Death)
 		service("CraftingService"):RestoreRefund(player, state)
 		service("ClassAbilityService"):RestorePlayer(player, state.ClassAbility)
+		service("CreativeService"):RestorePlayer(player, state.Creative)
 	else
 		-- New expeditions start at their class-adjusted maximum; restores and revives never heal here.
 		local stats = service("StatsService")
@@ -168,6 +173,7 @@ function Snapshot:RestorePlayer(player)
 		stats:SetBase(player, "Health", stats:GetStat(player, "MaxHealth"))
 		char:SetAttribute("WorldStateRestored", true)
 		service("InventoryService"):Reset(player, true)
+		service("CreativeService"):RestorePlayer(player, nil)
 	end
 	player:SetAttribute("WorldPlayerRestoring", nil)
 	player:SetAttribute("WorldPlayerLoading", nil)
@@ -195,6 +201,7 @@ function Snapshot:Capture()
 	for _, name in ipairs(AUXILIARY) do auxiliary[name] = service(name):CaptureState() end
 	local state = {
 		Version = self.Version, GeneratorVersion = self.GeneratorVersion,
+		WorldType = workspace:GetAttribute("WorldType") == "Creative" and "Creative" or "Survival",
 		Biome = service("BiomeService"):CaptureWorldState(), Round = service("RoundService"):CaptureWorldState(),
 		DayNight = service("DayNightService"):CaptureWorldState(), Match = service("GameStateService"):CaptureWorldState(),
 		Generated = service("ChunkStreamingService"):CaptureWorldState(), Structures = service("BuildService"):CaptureWorldState(),

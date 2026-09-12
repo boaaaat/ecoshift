@@ -68,6 +68,7 @@ local sectionIds, scrollByPage, nameDrafts, nav = {}, {}, {}, {}
 local submittedNames = {}
 local pending, render, openPicker, queueLabel
 local selectedMemberId, memberOverlay
+local worldSetupOpen, worldSetup
 local controls, removalId, removalUntil = {}, nil, 0
 local friends, friendsLoading, friendsError, friendsLoadedAt = {}, false, nil, -math.huge
 local inviteStatus, inviteExpiry, nativeInvite = {}, {}, nil
@@ -106,11 +107,48 @@ local function send(action, data, waiting)
 	remote:FireServer(action, data)
 end
 local function actionButton(parent, text, waiting, action, data, x, y, w, h, primary, disabled)
-	local b = button(parent, text, x, y, w, h, function() send(action, data, waiting) end, primary)
+	local b = button(parent, text, x, y, w, h, function()
+		if action == "StartExpedition" and parent ~= worldSetup then
+			if not pending then worldSetupOpen = true; render() end
+		else send(action, data, waiting) end
+	end, primary)
 	table.insert(controls, {Button = b, Text = text, Waiting = waiting, Action = action,
 		Key = tostring(data and (data.Id or data.UserId) or ""), Primary = primary, Disabled = disabled})
 	return b
 end
+local function renderWorldSetup()
+	if worldSetup then worldSetup:Destroy(); worldSetup = nil end
+	local party = snapshot.Party or {}
+	if not worldSetupOpen then return end
+	if Mode ~= "Lobby" or party.LeaderId ~= player.UserId or party.Queue or party.RunId then worldSetupOpen = false; return end
+	worldSetup = Instance.new("Frame")
+	local mobile = Theme.IsMobile()
+	local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(800, 600)
+	local width = mobile and math.min(620, viewport.X - 32) or 520
+	local height = mobile and 270 or 410
+	worldSetup.Name = "WorldSetup"; worldSetup.AnchorPoint = Vector2.new(.5, .5)
+	worldSetup.Position = UDim2.fromScale(.5, .5); worldSetup.Size = UDim2.fromOffset(width, height)
+	worldSetup.ZIndex = 70; worldSetup.Parent = gui
+	Theme.Panel(worldSetup); Theme.Fit(worldSetup, width, height, mobile and 1 or nil); Theme.CaptureCursor(worldSetup); Theme.AnimatePanel(worldSetup)
+	label(worldSetup, "CHOOSE YOUR WORLD", 22, mobile and 8 or 18, width - 98, 32, mobile and 19 or 23, "Text", true)
+	button(worldSetup, "×", width - 66, mobile and 4 or 14, 44, 44, function() worldSetupOpen = false; render() end).TextSize = 26
+	local creative = party.WorldType == "Creative"
+	label(worldSetup, "World type stays with this save.", 22, mobile and 38 or 59, width - 44, mobile and 20 or 28, mobile and 13 or 15, "TextMuted")
+	local half = (width - 56) / 2
+	actionButton(worldSetup, (creative and "" or "✓  ") .. "SURVIVAL", "SAVING…", "SetWorldType", {WorldType = "Survival"}, 22, mobile and 64 or 100, half, 48, not creative)
+	actionButton(worldSetup, (creative and "✓  " or "") .. "CREATIVE", "SAVING…", "SetWorldType", {WorldType = "Creative"}, 34 + half, mobile and 64 or 100, half, 48, creative)
+	local description = creative and "Everyone gets the creative inventory and world controls. Switch between creative and survival play anytime. This world never earns class XP, account XP, or Field Marks."
+		or "Explore, gather and craft with your crew. Earn class XP, account XP and Field Marks. Creative controls are unavailable in this world."
+	local info = label(worldSetup, description, 22, mobile and 117 or 167, width - 44, mobile and 79 or 137, mobile and 14 or 18, "TextMuted")
+	info.TextWrapped = true; info.TextTruncate = Enum.TextTruncate.None
+	actionButton(worldSetup, creative and "START CREATIVE WORLD" or "START SURVIVAL WORLD", "STARTING…", "StartExpedition", nil, 22, mobile and 206 or 328, width - 44, mobile and 48 or 56, true)
+end
+panel:GetPropertyChangedSignal("Visible"):Connect(function()
+	if not panel.Visible then
+		worldSetupOpen = false
+		if worldSetup then worldSetup:Destroy(); worldSetup = nil end
+	end
+end)
 local function navigate(nextPage)
 	selectedMemberId = nil; page = nextPage; render()
 	if page == "Saves" then refresh("Archive") else refresh("Core") end
@@ -274,6 +312,7 @@ local function updateQueue()
 		Theme.Bind(queueLabel, "TextColor3", "Amber")
 	else
 		queueLabel.Text = party.Id and (#(party.Members or {}) .. " / 6  ·  " .. (party.RunId and "EXPEDITION ASSIGNED" or party.MergedCrew and (crewReady(party) and "CREW READY · LEADER CAN START" or "CREWS JOINED · READY UP AGAIN") or "PREPARING")) or "Start solo or invite friends. Matchmaking is optional."
+		if party.WorldType == "Creative" then queueLabel.Text ..= " · CREATIVE" end
 		Theme.Bind(queueLabel, "TextColor3", "TextMuted")
 	end
 end
@@ -579,7 +618,7 @@ local function renderContents()
 					else removalId, removalUntil = world.Id, os.clock() + 12; notify("Remove your named copy? Other crew copies stay. Crew resume can recreate yours in a free slot.", "Amber"); render() end
 				end)
 				table.insert(controls, {Button = remove, Text = remove.Text, Waiting = "REMOVING…", Action = "RemoveWorld", Key = tostring(world.Id)})
-				label(card, world.Summary or (tostring(world.OwnerCount or 6) .. " original crew · " .. (world.Status == "AwaitingSnapshot" and "Preparing first save" or "World saved")), 16, 74, 535, 34, 15, "TextMuted")
+				label(card, (world.WorldType == "Creative" and "CREATIVE · " or "") .. (world.Summary or (tostring(world.OwnerCount or 6) .. " original crew · " .. (world.Status == "AwaitingSnapshot" and "Preparing first save" or "World saved"))), 16, 74, 535, 34, 15, "TextMuted")
 				actionButton(card, "RESUME", "PREPARING…", "ResumeWorld", {Id = world.Id}, 586, 72, 194, 38, true)
 			else label(card, "EMPTY SLOT  /  " .. index, 16, 44, 764, 32, 16, "TextMuted", true) end
 		end
@@ -733,6 +772,7 @@ render=function()
 		content.ScrollingEnabled=true;content.AutomaticCanvasSize=Enum.AutomaticSize.Y
 		renderContents();if Theme.IsMobile() and page ~= "Classes" then mobileLists() end
 	end
+	renderWorldSetup(); applyControls()
 end
 local desktopGeometry={}
 for _,root in ipairs({panel,side}) do

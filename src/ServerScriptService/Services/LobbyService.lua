@@ -10,7 +10,7 @@ local Parties=require(script.Parent.PartyService)
 local HttpService=game:GetService("HttpService")
 local Service={_clients={}}
 local actions={Snapshot=true,CreateParty=true,Invite=true,AcceptInvite=true,LeaveParty=true,Ready=true,KickMember=true,TransferLeader=true,
-	SelectClass=true,BuyClass=true,UpgradeClass=true,StartExpedition=true,Queue=true,CancelQueue=true,ResumeWorld=true,Rejoin=true,ReturnLobby=true,RenameWorld=true,RemoveWorld=true}
+	SelectClass=true,BuyClass=true,UpgradeClass=true,SetWorldType=true,StartExpedition=true,Queue=true,CancelQueue=true,ResumeWorld=true,Rejoin=true,ReturnLobby=true,RenameWorld=true,RemoveWorld=true}
 local sections={Core=true,Archive=true,Rejoin=true,InviteDirectory=true,Invites=true}
 local messages={
 	InsufficientCurrency="You need more "..Economy.CurrencyName.." to unlock this class. Earn them on expeditions.",
@@ -95,6 +95,17 @@ function Service:_handle(player,action,data)
 	elseif action=="SelectClass" then return Roles:SetRole(player,data.Id)
 	elseif action=="BuyClass" then return Roles:PurchaseRole(player,data.Id)
 	elseif action=="UpgradeClass" then return Roles:UpgradeClass(player,data.Id,data.TargetLevel)
+	elseif action=="SetWorldType" then
+		if Config.GetMode()~="Lobby" or (data.WorldType~="Creative" and data.WorldType~="Survival") then return false,"Choose a world type in the lobby." end
+		local party,err=Parties:GetParty(player)
+		if not party then return false,err or "Create a crew first." end
+		local changed,reason=Parties:Mutate(party.Id,function(current)
+			if current.LeaderId~=player.UserId then return false,"Only the crew leader chooses the world type." end
+			if current.Queue or current.RunId or current.MergeLock then return false,"Cancel the current launch or matchmaking before changing world type." end
+			current.WorldType=data.WorldType
+			return true
+		end)
+		return changed~=nil,reason or (data.WorldType=="Creative" and "Creative world selected. Everyone gets creative controls; progression rewards stay disabled." or "Survival world selected.")
 	elseif action=="StartExpedition" or action=="Queue" or action=="CancelQueue" then
 		if Config.GetMode()~="Lobby" then return false,"Return to the lobby to find a new expedition." end
 		local queue=optional("MatchmakingService")

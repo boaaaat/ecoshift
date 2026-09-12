@@ -435,7 +435,7 @@ local function getItemCount(itemId)
 end
 
 local function ingredientCost(ingredient)
-	return math.max(1, math.floor(ingredient.N or 1))
+	return WorkbenchConfig:IngredientCost(ingredient, player)
 end
 
 local function maxAffordable(recipeId)

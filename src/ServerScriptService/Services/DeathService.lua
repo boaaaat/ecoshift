@@ -218,6 +218,43 @@ function DeathService:IsDead(player)
 	return self._deadPlayers[player] ~= nil
 end
 
+-- Sandbox recovery is separate from kit revival: no consumables, rewards or kit
+-- regrant, and the creative world's no-progression rule remains permanent.
+function DeathService:CreativeRespawn(player)
+	if workspace:GetAttribute("WorldType") ~= "Creative" or player:GetAttribute("CreativeMode") ~= true then return false end
+	local data = self._deadPlayers[player]
+	if not data then return not player:GetAttribute("IsDead") end
+	if data.Reviving then return false end
+	data.Reviving = true
+	local position = data.deathPosition
+	player:SetAttribute("IsDead", false)
+	local vitals = { Health = StatsService:GetStat(player, "MaxHealth") or 100,
+		Hunger = StatsService:GetStat(player, "MaxHunger") or 100,
+		Stamina = StatsService:GetStat(player, "MaxStamina") or 100, Temperature = 0 }
+	StatsService:SetBaseStats(player, vitals)
+	local ok, err = pcall(function()
+		player:LoadCharacterAsync()
+		local char = player.Character
+		assert(char and char:WaitForChild("Humanoid", 5), "Creative character did not load")
+		StatsService:SetBaseStats(player, vitals)
+		char:PivotTo(CFrame.new(position + Vector3.new(0, 5, 0)))
+	end)
+	if not ok then
+		data.Reviving = nil
+		player:SetAttribute("IsDead", true)
+		if player.Character then player.Character:Destroy() end
+		warn("[DeathService] Creative respawn failed:", err)
+		return false
+	end
+	player.ReplicationFocus = nil
+	if data.ragdoll then data.ragdoll:Destroy() end
+	self._deadPlayers[player], self._spectating[player] = nil, nil
+	DeathRemote:FireClient(player, "Revived", { reviver = "Creative mode" })
+	DeathRemote:FireAllClients("PlayerRevived", { player = player })
+	self:_refreshSpectators()
+	return true
+end
+
 function DeathService:GetRagdoll(player)
 	local data = self._deadPlayers[player]
 	return data and data.ragdoll or nil

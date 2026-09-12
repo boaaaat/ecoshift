@@ -1,700 +1,205 @@
-local Settings = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("ClientSettings"))
-if require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
--- BuildingUI.client.lua
--- Allows players to place items from their inventory (workbenches, campfires, etc.)
--- Press B to open building mode, or select placeable items from the building menu
+-- Equipped building items place directly; deliberate holds salvage existing builds.
+local RS = game:GetService("ReplicatedStorage")
+if require(RS.Shared.SessionConfig).GetMode() ~= "Expedition" then return end
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local UserInputService = game:GetService("UserInputService")
+local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-
-local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
-local Config = require(ReplicatedStorage.Shared.Config)
-local Util = require(ReplicatedStorage.Shared.Util)
-local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
-local ResultMessages = require(ReplicatedStorage.Shared.ResultMessages)
-local BuildPlacement = require(ReplicatedStorage.Shared:WaitForChild("BuildPlacement"))
-
+local CollectionService = game:GetService("CollectionService")
+local Theme = require(RS.Shared.UI.UITheme)
+local Config = require(RS.Shared.Config)
+local Placement = require(RS.Shared.BuildPlacement)
+local Items = require(RS.Shared.Items.ItemDatabase)
+local Settings = require(RS.Shared.ClientSettings)
+local SettingsSchema = require(RS.Shared.SettingsConfig)
+local Messages = require(RS.Shared.ResultMessages).Build
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
+local remote = RS:WaitForChild("Remotes"):WaitForChild(Config.RemoteNames.Build)
 local mouse = player:GetMouse()
-
-local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 5)
-local rBuild = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.Build)
-local rInventory = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.InventoryUpdate)
-if not remotesFolder then
-	warn("[BuildingUI] Missing remotes folder:", Config.Paths.Remotes)
-elseif not rBuild then
-	warn("[BuildingUI] Missing build remote:", Config.RemoteNames.Build)
-end
-
--- UI Constants
-local COLORS = Theme.Colors
-
-local GRID_SIZE = Config.GRID.Size or 6
-local BUILD_MESSAGES = ResultMessages.Build or {}
-local function defaultHint()
-	return "Build within 100 studs of spawn\nLeft-click to place • Right-click to cancel • " .. Settings.Key("Salvage").Name .. " to toggle salvage"
-end
-local DEFAULT_HINT_TEXT = defaultHint()
-local PLACE_REQUEST_ITEM_ATTR = "BuildPlaceItemRequestItem"
-local PLACE_REQUEST_NONCE_ATTR = "BuildPlaceItemRequestNonce"
-
--- State
-local isPlacementMode = false
-local isSalvageMode = false
-local rotation = 0
-local selectedItem = nil
-local inventorySnapshot = nil
-local previewPart = nil
-local canPlace = false
-local hintMessageToken = 0
-local startPlacement
-local salvageButton
-local salvageHighlight = Instance.new("Highlight")
-salvageHighlight.Name = "SalvageTarget"
-salvageHighlight.FillColor, salvageHighlight.OutlineColor = COLORS.Amber, COLORS.Amber
-salvageHighlight.FillTransparency = .8
-salvageHighlight.DepthMode = Enum.HighlightDepthMode.Occluded
-salvageHighlight.Enabled = false
-salvageHighlight.Parent = workspace
-
-local function salvageHint()
-	return Theme.IsMobile() and "Aim at your structure, then tap salvage · × cancels"
-		or "Click a highlighted structure to salvage · Right-click or " .. Settings.Key("Salvage").Name .. " cancels"
-end
-
--- Create GUI
+local selected, preview, position, target, heldTarget
+local rotation, lastPulse, startedAt, statusUntil = 0, 0, 0, 0
+local holding, latched = false, false
+local holdInput
+local duration = Config.BUILD.SalvageSeconds or 3
 local gui = Instance.new("ScreenGui")
-gui.Name = "BuildingUI"
-gui.ResetOnSpawn = false
-gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-gui.DisplayOrder = 20
-gui.Parent = playerGui
-
--- Placement mode indicator
-local modeIndicator = Instance.new("Frame")
-modeIndicator.Name = "ModeIndicator"
-modeIndicator.Size = UDim2.new(0, 300, 0, 38)
-modeIndicator.Position = UDim2.new(0.5, 0, 0, 66)
-modeIndicator.AnchorPoint = Vector2.new(0.5, 0)
-modeIndicator.BackgroundColor3 = COLORS.Panel
-modeIndicator.BackgroundTransparency = 0.1
-modeIndicator.BorderSizePixel = 0
-modeIndicator.Visible = false
-modeIndicator.ZIndex = 100
-modeIndicator.Parent = gui
-
-local indicatorCorner = Instance.new("UICorner")
-indicatorCorner.CornerRadius = UDim.new(0, 10)
-indicatorCorner.Parent = modeIndicator
-
-local indicatorStroke = Instance.new("UIStroke")
-indicatorStroke.Color = COLORS.Accent
-indicatorStroke.Thickness = 2
-indicatorStroke.Parent = modeIndicator
-
-local indicatorLabel = Instance.new("TextLabel")
-indicatorLabel.Name = "Label"
-indicatorLabel.Size = UDim2.new(1, -20, 1, 0)
-indicatorLabel.Position = UDim2.new(0, 10, 0, 0)
-indicatorLabel.BackgroundTransparency = 1
-indicatorLabel.Text = "PLACE / Workbench"
-indicatorLabel.TextColor3 = COLORS.Text
-indicatorLabel.TextSize = 16
-indicatorLabel.Font = Enum.Font.GothamBold
-indicatorLabel.ZIndex = 101
-indicatorLabel.Parent = modeIndicator
-
-local hintLabel = Instance.new("TextLabel")
-hintLabel.Name = "Hint"
-hintLabel.Size = UDim2.new(0, 390, 0, 48)
-hintLabel.Position = UDim2.new(0.5, 0, 0, 110)
-hintLabel.AnchorPoint = Vector2.new(0.5, 0)
-hintLabel.BackgroundTransparency = 1
-hintLabel.Text = DEFAULT_HINT_TEXT
-hintLabel.TextColor3 = COLORS.TextMuted
-hintLabel.TextSize = 12
-hintLabel.Font = Enum.Font.Gotham
-hintLabel.Visible = false
-hintLabel.ZIndex = 100
-hintLabel.Parent = gui
-Settings.Changed:Connect(function() DEFAULT_HINT_TEXT = defaultHint(); hintLabel.Text = DEFAULT_HINT_TEXT end)
-
-local function showHintStatus(text, color, duration)
-	hintMessageToken += 1
-	local token = hintMessageToken
-	hintLabel.Text = text
-	hintLabel.TextColor3 = color
-	hintLabel.Visible = true
-	task.delay(duration or 1, function()
-		if token ~= hintMessageToken then return end
-		if isPlacementMode or isSalvageMode then
-			hintLabel.Text = isSalvageMode and salvageHint() or DEFAULT_HINT_TEXT
-			hintLabel.TextColor3 = COLORS.TextMuted
-			hintLabel.Visible = true
-		else
-			hintLabel.Visible = false
-		end
-	end)
-end
-
--- Item selection panel (shows placeable items)
-local selectionPanel = Instance.new("Frame")
-selectionPanel.Name = "SelectionPanel"
-selectionPanel.Size = UDim2.new(0, 320, 0, 180)
-selectionPanel.Position = UDim2.new(0.5, 0, 1, -140)
-selectionPanel.AnchorPoint = Vector2.new(0.5, 1)
-selectionPanel.BackgroundColor3 = COLORS.Panel
-selectionPanel.BackgroundTransparency = 0.05
-selectionPanel.BorderSizePixel = 0
-selectionPanel.Visible = false
-selectionPanel.ZIndex = 90
-selectionPanel.Parent = gui
-
-local panelCorner = Instance.new("UICorner")
-panelCorner.CornerRadius = UDim.new(0, 12)
-panelCorner.Parent = selectionPanel
-
-local panelStroke = Instance.new("UIStroke")
-panelStroke.Color = COLORS.Border
-panelStroke.Thickness = 1
-panelStroke.Parent = selectionPanel
-
-local panelTitle = Instance.new("TextLabel")
-panelTitle.Name = "Title"
-panelTitle.Size = UDim2.new(1, 0, 0, 30)
-panelTitle.BackgroundTransparency = 1
-panelTitle.Text = "CAMP EQUIPMENT"
-panelTitle.TextColor3 = COLORS.Text
-panelTitle.TextSize = 14
-panelTitle.Font = Enum.Font.GothamBold
-panelTitle.ZIndex = 91
-panelTitle.Parent = selectionPanel
-
-local itemContainer = Instance.new("ScrollingFrame")
-itemContainer.Name = "Items"
-itemContainer.Size = UDim2.new(1, -20, 1, -40)
-itemContainer.Position = UDim2.new(0, 10, 0, 35)
-itemContainer.BackgroundTransparency = 1
-itemContainer.BorderSizePixel = 0
-itemContainer.ScrollBarThickness = 4
-itemContainer.ScrollBarImageColor3 = COLORS.Border
-itemContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
-itemContainer.ZIndex = 91
-itemContainer.Parent = selectionPanel
-
-local itemLayout = Instance.new("UIGridLayout")
-itemLayout.CellSize = UDim2.new(0, 70, 0, 70)
-itemLayout.CellPadding = UDim2.new(0, 8, 0, 8)
-itemLayout.SortOrder = Enum.SortOrder.Name
-itemLayout.Parent = itemContainer
-
--- Helper: Get placeable items from inventory
-local function getPlaceableItems()
-	local items = {}
-	if not inventorySnapshot then return items end
-	
-	local placeableTypes = Config.BUILD.PlaceableItems or {}
-	
-	local function checkSlots(slots)
-		for _, slot in pairs(slots) do
-			if slot and slot.Id and placeableTypes[slot.Id] then
-				items[slot.Id] = (items[slot.Id] or 0) + slot.N
-			end
-		end
-	end
-	
-	if inventorySnapshot.Hotbar then checkSlots(inventorySnapshot.Hotbar) end
-	if inventorySnapshot.Storage then checkSlots(inventorySnapshot.Storage) end
-	
-	return items
-end
-
-local function isPlaceableItem(itemId)
-	local placeableTypes = Config.BUILD.PlaceableItems or {}
-	return itemId ~= nil and placeableTypes[itemId] == true
-end
-
--- Helper: Raycast for placement
-local function getPlacementPosition()
-	local camera = workspace.CurrentCamera
-	if not camera then return nil end
-	
-	local aim = Theme.IsMobile() and camera.ViewportSize * 0.5 or Vector2.new(mouse.X, mouse.Y)
-	local unitRay = camera:ViewportPointToRay(aim.X, aim.Y)
-	local raycastParams = RaycastParams.new()
-	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-	raycastParams.FilterDescendantsInstances = {player.Character, previewPart}
-	
-	local result = workspace:Raycast(unitRay.Origin, unitRay.Direction * 100, raycastParams)
-	if result then
-		return BuildPlacement.Surface(result.Position, previewPart and { previewPart } or {})
-	end
-	return nil
-end
-
-local function getHoveredBuildTarget()
-	local camera = workspace.CurrentCamera
-	if not camera then return nil end
-
-	local aim = Theme.IsMobile() and camera.ViewportSize * 0.5 or Vector2.new(mouse.X, mouse.Y)
-	local unitRay = camera:ViewportPointToRay(aim.X, aim.Y)
-	local raycastParams = RaycastParams.new()
-	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-	raycastParams.FilterDescendantsInstances = { player.Character, previewPart }
-
-	local result = workspace:Raycast(unitRay.Origin, unitRay.Direction * 120, raycastParams)
-	local hit = result and result.Instance or mouse.Target
-	if not hit then
-		return nil
-	end
-
-	local structure = hit
-	while structure and structure ~= workspace do
-		if (structure:IsA("Model") or structure:IsA("BasePart")) and structure:GetAttribute("BuildType") then
-			return structure
-		end
-		structure = structure.Parent
-	end
-	return nil
-end
-
--- Helper: Check if placement is valid
-local function isValidPlacement(position)
-	if not position then return false end
-	
-	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	if not root then return false end
-	
-	-- Distance check
-	local distance = (root.Position - position).Magnitude
-	if distance > (Config.GRID.BuildMaxDistance or 45) then
-		return false
-	end
-	
-	if not BuildPlacement.WithinCamp(position) then return false end
-	
-	return true
-end
-
--- Create/update preview part
-local function updatePreview()
-	if not isPlacementMode or not selectedItem then
-		if previewPart then
-			previewPart:Destroy()
-			previewPart = nil
-		end
-		return
-	end
-	
-	local position = getPlacementPosition()
-	if not position then
-		canPlace = false
-		if previewPart then
-			previewPart.Transparency = 1
-		end
-		return
-	end
-	
-	if not previewPart then
-		previewPart = Instance.new("Part")
-		previewPart.Name = "PlacementPreview"
-		previewPart.Size = Vector3.new(GRID_SIZE - 0.5, GRID_SIZE - 0.5, GRID_SIZE - 0.5)
-		previewPart.Anchored = true
-		previewPart.CanCollide = false
-		previewPart.Transparency = 0.5
-		previewPart.Material = Enum.Material.SmoothPlastic
-		previewPart.Parent = workspace
-		local arrow = Instance.new("WedgePart")
-		arrow.Name, arrow.Size = "Facing", Vector3.new(1.8, .6, 2)
-		arrow.Anchored, arrow.CanCollide, arrow.CanQuery = true, false, false
-		arrow.Color, arrow.Material, arrow.Parent = COLORS.Amber, Enum.Material.Neon, previewPart
-		
-		-- Add selection box effect
-		local selection = Instance.new("SelectionBox")
-		selection.Adornee = previewPart
-		selection.Color3 = COLORS.ValidPlacement
-		selection.LineThickness = 0.05
-		selection.Parent = previewPart
-	end
-	
-	previewPart.CFrame = CFrame.new(position + Vector3.new(0, previewPart.Size.Y / 2, 0)) * CFrame.Angles(0, math.rad(rotation), 0)
-	local arrow = previewPart:FindFirstChild("Facing")
-	if arrow then arrow.CFrame = previewPart.CFrame * CFrame.new(0, previewPart.Size.Y / 2 + .1, -1.1) * CFrame.Angles(0, math.pi, 0) end
-	previewPart.Transparency = 0.5
-	
-	canPlace = isValidPlacement(position)
-	previewPart.Color = canPlace and COLORS.ValidPlacement or COLORS.InvalidPlacement
-	
-	local selection = previewPart:FindFirstChildOfClass("SelectionBox")
-	if selection then
-		selection.Color3 = canPlace and COLORS.ValidPlacement or COLORS.InvalidPlacement
-	end
-end
-
--- Create item button
-local function createItemButton(itemId, count)
-	local item = ItemDatabase:Get(itemId)
-	local name = item and item.Name or itemId
-	
-	local btn = Instance.new("TextButton")
-	btn.Name = itemId
-	btn.Size = UDim2.new(0, 70, 0, 70)
-	btn.BackgroundColor3 = selectedItem == itemId and COLORS.SlotSelected or COLORS.SlotFilled
-	btn.BorderSizePixel = 0
-	btn.Text = ""
-	btn.AutoButtonColor = false
-	btn.ZIndex = 92
-	btn.Parent = itemContainer
-	
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent = btn
-	
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = selectedItem == itemId and COLORS.Accent or COLORS.Border
-	stroke.Thickness = selectedItem == itemId and 2 or 1
-	stroke.Parent = btn
-	
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Size = UDim2.new(1, -4, 0, 32)
-	nameLabel.Position = UDim2.new(0, 2, 0, 4)
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Text = name
-	nameLabel.TextColor3 = COLORS.Text
-	nameLabel.TextSize = Theme.IsMobile() and 14 or 10
-	nameLabel.Font = Enum.Font.GothamBold
-	nameLabel.TextWrapped = true
-	nameLabel.ZIndex = 93
-	nameLabel.Parent = btn
-	
-	local countLabel = Instance.new("TextLabel")
-	countLabel.Size = UDim2.new(1, -4, 0, 20)
-	countLabel.Position = UDim2.new(0, 2, 1, -24)
-	countLabel.BackgroundTransparency = 1
-	countLabel.Text = "x" .. count
-	countLabel.TextColor3 = COLORS.TextMuted
-	countLabel.TextSize = 12
-	countLabel.Font = Enum.Font.Gotham
-	countLabel.ZIndex = 93
-	countLabel.Parent = btn
-	
-	btn.Activated:Connect(function()
-		startPlacement(itemId)
-	end)
-	
-	btn.MouseEnter:Connect(function()
-		TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = COLORS.SlotHover}):Play()
-	end)
-	
-	btn.MouseLeave:Connect(function()
-		local color = selectedItem == itemId and COLORS.SlotSelected or COLORS.SlotFilled
-		TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundColor3 = color}):Play()
-	end)
-	
-	return btn
-end
-
--- Refresh item list
-function refreshItems()
-	-- Clear ALL gui children except the layout
-	for _, child in ipairs(itemContainer:GetChildren()) do
-		if child:IsA("TextButton") or child:IsA("TextLabel") then
-			child:Destroy()
-		end
-	end
-	
-	local placeableItems = getPlaceableItems()
-	local hasItems = false
-	
-	for itemId, count in pairs(placeableItems) do
-		createItemButton(itemId, count)
-		hasItems = true
-	end
-	
-	if not hasItems then
-		local emptyLabel = Instance.new("TextLabel")
-		emptyLabel.Name = "EmptyLabel"
-		emptyLabel.Size = UDim2.new(1, 0, 0, 50)
-		emptyLabel.BackgroundTransparency = 1
-		emptyLabel.Text = "No placeable items\nCraft a Workbench first."
-		emptyLabel.TextColor3 = COLORS.TextMuted
-		emptyLabel.TextSize = 12
-		emptyLabel.Font = Enum.Font.Gotham
-		emptyLabel.ZIndex = 92
-		emptyLabel.Parent = itemContainer
-	end
-	
-	task.defer(function()
-		itemContainer.CanvasSize = UDim2.new(0, 0, 0, itemLayout.AbsoluteContentSize.Y)
-	end)
-end
-
--- Toggle selection panel
-local function togglePanel()
-	selectionPanel.Visible = not selectionPanel.Visible
-	if selectionPanel.Visible then
-		refreshItems()
-	end
-end
-
-startPlacement = function(itemId)
-	if not isPlaceableItem(itemId) then
-		showHintStatus(BUILD_MESSAGES.InvalidType or BUILD_MESSAGES.Unknown or "That item cannot be placed.", COLORS.Danger, 1.2)
-		return
-	end
-	local placeableItems = getPlaceableItems()
-	if (placeableItems[itemId] or 0) <= 0 then
-		showHintStatus(BUILD_MESSAGES.MissingPlaceableItem or BUILD_MESSAGES.Unknown or "You do not have that placeable item.", COLORS.Danger, 1.2)
-		return
-	end
-	selectedItem = itemId
-	isSalvageMode = false
-	salvageHighlight.Enabled = false
-	if salvageButton then salvageButton.Text = "SALVAGE STRUCTURES" end
-	rotation = 0
-	local itemData = ItemDatabase:Get(itemId)
-	indicatorLabel.Text = "PLACE / " .. (itemData and itemData.Name or itemId)
-	isPlacementMode = true
-	playerGui:SetAttribute("BuildPlacementActive", true)
-	modeIndicator.Visible = true
-	hintLabel.Visible = true
-	hintLabel.Text = DEFAULT_HINT_TEXT
-	hintLabel.TextColor3 = COLORS.TextMuted
-	selectionPanel.Visible = false
-	refreshItems()
-end
-
--- Cancel placement
-local function cancelPlacement()
-	isPlacementMode = false
-	isSalvageMode = false
-	salvageHighlight.Enabled, salvageHighlight.Adornee = false, nil
-	if salvageButton then salvageButton.Text = "SALVAGE STRUCTURES" end
-	playerGui:SetAttribute("BuildPlacementActive", false)
-	selectedItem = nil
-	modeIndicator.Visible = false
-	hintLabel.Visible = false
-	if previewPart then
-		previewPart:Destroy()
-		previewPart = nil
-	end
-end
-
-local function toggleSalvage()
-	local enable = not isSalvageMode
-	cancelPlacement()
-	selectionPanel.Visible = false
-	if not enable then return end
-	isSalvageMode = true
-	if salvageButton then salvageButton.Text = "STOP SALVAGING" end
-	modeIndicator.Visible, hintLabel.Visible = true, true
-	indicatorLabel.Text = "SALVAGE / select a structure"
-	hintLabel.Text, hintLabel.TextColor3 = salvageHint(), COLORS.TextMuted
-	playerGui:SetAttribute("BuildPlacementActive", true)
-end
-
-local function removeHoveredStructure()
-	if playerGui:GetAttribute("MenuCursorOpen") or not isSalvageMode or not rBuild then return end
-	local target = getHoveredBuildTarget()
-	if not target then
-		showHintStatus("No player-built structure under cursor", COLORS.Warning, 1.0)
-		return
-	end
-	rBuild:FireServer("Remove", {
-		Target = target,
-	})
-end
-
--- Place item
-local function placeItem()
-	if playerGui:GetAttribute("MenuCursorOpen") then return end
-	if not isPlacementMode or not selectedItem or not canPlace then return end
-	if not rBuild then return end
-	
-	local position = getPlacementPosition()
-	if not position then return end
-	
-	-- Send build request to server
-	rBuild:FireServer("Place", {
-		Type = selectedItem,
-		Position = position,
-		Rotation = rotation,
-	})
-end
-
--- Input handling
-UserInputService.InputBegan:Connect(function(input, processed)
-	if processed then return end
-	
-	if Settings.Matches(input, "Build") then
-		if isPlacementMode then
-			cancelPlacement()
-			selectionPanel.Visible = false
-		else
-			togglePanel()
-		end
-	elseif Settings.Matches(input, "Salvage") then
-		toggleSalvage()
-	elseif input.KeyCode == Enum.KeyCode.Escape and (isPlacementMode or isSalvageMode) then
-		cancelPlacement()
-	elseif input.UserInputType == Enum.UserInputType.MouseButton1 and (isPlacementMode or isSalvageMode) then
-		if isSalvageMode then removeHoveredStructure() else placeItem() end
-	elseif input.UserInputType == Enum.UserInputType.MouseButton2 and (isPlacementMode or isSalvageMode) then
-		cancelPlacement()
-	end
-end)
-
--- Update preview every frame
-RunService.RenderStepped:Connect(function()
-	updatePreview()
-	local target = isSalvageMode and not playerGui:GetAttribute("MenuCursorOpen") and getHoveredBuildTarget() or nil
-	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	if target and (tonumber(target:GetAttribute("OwnerUserId")) ~= player.UserId or not root
-		or (target:GetPivot().Position - root.Position).Magnitude > (Config.GRID.BuildMaxDistance or 45)) then target = nil end
-	salvageHighlight.Adornee, salvageHighlight.Enabled = target, target ~= nil
-end)
-
--- Inventory sync
-if rInventory then
-	rInventory.OnClientEvent:Connect(function(kind, payload)
-		if kind ~= "Snapshot" or type(payload) ~= "table" then return end
-		
-		if payload.Storage then
-			local normalized = {}
-			for k, v in pairs(payload.Storage) do
-				local numKey = tonumber(k)
-				if numKey and v then
-					normalized[numKey] = v
-				end
-			end
-			payload.Storage = normalized
-		end
-		if payload.Hotbar then
-			local normalized = {}
-			for k, v in pairs(payload.Hotbar) do
-				local numKey = tonumber(k)
-				if numKey and v then
-					normalized[numKey] = v
-				end
-			end
-			payload.Hotbar = normalized
-		end
-		
-		inventorySnapshot = payload
-		
-		if selectionPanel.Visible then
-			refreshItems()
-		end
-	end)
-	task.defer(function()
-		pcall(function()
-			rInventory:FireServer("RequestSnapshot")
-		end)
-	end)
-end
-
-if rBuild then
-	rBuild.OnClientEvent:Connect(function(kind, payload)
-		if kind ~= "Result" or type(payload) ~= "table" then return end
-		if payload.Action ~= "Place" and payload.Action ~= "Remove" then return end
-		local success = payload.Success == true
-		local reason = tostring(payload.Reason or (success and "Success" or "Unknown"))
-		if success then
-			local successText = payload.Action == "Remove"
-				and "Structure salvaged."
-				or (BUILD_MESSAGES.Success or "Build action complete.")
-			showHintStatus(successText, COLORS.Success, 0.8)
-		else
-			showHintStatus(BUILD_MESSAGES[reason] or BUILD_MESSAGES.Unknown or "Build action failed.", COLORS.Danger, 1.2)
-		end
-		task.delay(0.2, refreshItems)
-	end)
-end
-
-player:GetAttributeChangedSignal(PLACE_REQUEST_NONCE_ATTR):Connect(function()
-	local itemId = player:GetAttribute(PLACE_REQUEST_ITEM_ATTR)
-	if type(itemId) == "string" and itemId ~= "" then
-		startPlacement(itemId)
-	end
-end)
-
-print("[BuildingUI] Ready - Press B to open building menu")
-print("[BuildingUI] Craft workbenches (Press C) then place them!")
-
-Theme.Panel(modeIndicator)
-Theme.Panel(selectionPanel)
-Theme.FitMenu(selectionPanel, 320, 240, {MobileWidth=360,MobileHeight=330,OnResize=function(width, _, mobile)
-	itemContainer.Size = UDim2.new(1, -20, 1, -104)
-	itemLayout.CellSize = UDim2.fromOffset(mobile and 96 or 70, mobile and 84 or 70)
-	if inventorySnapshot then refreshItems() end
-end})
-Theme.CaptureCursor(selectionPanel); Theme.AnimatePanel(selectionPanel)
-
-hintLabel.TextWrapped = true
-hintLabel.TextColor3 = COLORS.TextMuted
-hintLabel.BackgroundColor3 = COLORS.Panel
-hintLabel.BackgroundTransparency = 0.12
-Theme.Corner(hintLabel, 6)
-player:GetAttributeChangedSignal("FieldKitBuild"):Connect(togglePanel)
-
--- Touch building uses center aim plus explicit actions; camera gestures never place.
+gui.Name, gui.ResetOnSpawn, gui.DisplayOrder, gui.Parent = "BuildingUI", false, 24, playerGui
+local status = Theme.Label(gui,"",UDim2.fromOffset(430,48),UDim2.new(.5,0,1,-220),16,Theme.Colors.Paper,true)
+status.AnchorPoint, status.TextXAlignment, status.TextWrapped = Vector2.new(.5,1), Enum.TextXAlignment.Center, true
+status.BackgroundColor3, status.BackgroundTransparency, status.Visible = Theme.Colors.Night, .15, false
+Theme.Corner(status,10)
+local progress = Instance.new("Frame")
+progress.Name, progress.Size, progress.Position = "SalvageProgress", UDim2.new(0,0,0,5), UDim2.new(0,0,1,-5)
+progress.BackgroundColor3, progress.BorderSizePixel, progress.Parent = Theme.Colors.Amber, 0, status
+Theme.Corner(progress,3)
+local highlight = Instance.new("Highlight")
+highlight.Name, highlight.FillTransparency, highlight.DepthMode = "SalvageTarget", .82, Enum.HighlightDepthMode.Occluded
+highlight.FillColor, highlight.OutlineColor = Theme.Colors.Amber, Theme.Colors.Amber
+highlight.Enabled, highlight.Parent = false, workspace
 local toolbar = Instance.new("Frame")
-toolbar.Name, toolbar.Size = "TouchPlacement", UDim2.fromOffset(152, 48)
-toolbar.AnchorPoint, toolbar.Position = Vector2.new(.5, 1), UDim2.new(.5, 0, 1, -156)
-toolbar.BackgroundTransparency, toolbar.Parent, toolbar.Visible = 1, gui, false
-local function actionButton(parent, name, text, x, width)
-	local b=Instance.new("TextButton")
-	b.Name,b.Text,b.TextSize,b.Font=name,text,14,Enum.Font.GothamBold
-	b.Size,b.Position=UDim2.fromOffset(width,48),UDim2.fromOffset(x,0)
-	b.Parent=parent; Theme.Button(b,name=="Place")
-	return b
+toolbar.Name, toolbar.Size, toolbar.Position = "TouchPlacement", UDim2.fromOffset(152,48), UDim2.new(1,-100,1,-168)
+toolbar.AnchorPoint, toolbar.BackgroundTransparency, toolbar.Parent = Vector2.new(1,1), 1, gui
+local function button(name, icon, x)
+ local b=Instance.new("TextButton")
+ b.Name,b.Text,b.Size,b.Position,b.Parent=name,"",UDim2.fromOffset(48,48),UDim2.fromOffset(x,0),toolbar
+ Theme.Button(b);Theme.TouchIcon(b,icon,26)
+ return b
 end
-local place=actionButton(toolbar,"Place","",0,48)
-local rotate=actionButton(toolbar,"Rotate","",52,48)
-local cancel=actionButton(toolbar,"Cancel","",104,48)
-Theme.TouchIcon(place,"Place",26)
-Theme.TouchIcon(rotate,"Rotate",26)
-Theme.TouchIcon(cancel,"Close",26)
-local salvage=actionButton(selectionPanel,"Salvage","SALVAGE STRUCTURES",0,240)
-salvageButton = salvage
-salvage.AnchorPoint,salvage.Position=Vector2.new(.5,1),UDim2.new(.5,0,1,-12)
-salvage.Activated:Connect(toggleSalvage)
-place.Activated:Connect(function() if isSalvageMode then removeHoveredStructure() else placeItem() end end)
-rotate.Activated:Connect(function() rotation=(rotation+90)%360 end)
-cancel.Activated:Connect(cancelPlacement)
-local closeSelection=actionButton(selectionPanel,"Close","×",0,44)
-closeSelection.AnchorPoint,closeSelection.Position=Vector2.new(1,0),UDim2.new(1,-4,0,2)
-closeSelection.Activated:Connect(function() selectionPanel.Visible=false end)
-local reticle=Theme.Label(gui,"+",UDim2.fromOffset(24,24),UDim2.fromScale(.5,.5),24,COLORS.Amber,true)
-reticle.Name,reticle.AnchorPoint,reticle.TextXAlignment="PlacementReticle",Vector2.new(.5,.5),Enum.TextXAlignment.Center
-local function updateTouchControls()
-	local mobile=Theme.IsMobile()
-	local active=isPlacementMode or isSalvageMode
-	local blocked=playerGui:GetAttribute("MenuCursorOpen")==true
-	toolbar.Visible=mobile and active and not blocked
-	reticle.Visible=toolbar.Visible
-	local camera=workspace.CurrentCamera
-	if camera then reticle.Position=UDim2.fromOffset(camera.ViewportSize.X*.5-gui.AbsolutePosition.X,camera.ViewportSize.Y*.5-gui.AbsolutePosition.Y) end
-	local kind=isSalvageMode and "Harvest" or "Place"
-	if place.Glyph:GetAttribute("IconKind")~=kind then Theme.Icon(place,kind,26) end
-	rotate.Visible=not isSalvageMode
-	if mobile then
-		modeIndicator.AnchorPoint,modeIndicator.Position=Vector2.new(.5,1),UDim2.new(.5,0,1,-212)
-		hintLabel.AnchorPoint,hintLabel.Position=Vector2.new(.5,1),UDim2.new(.5,0,1,-254)
-		hintLabel.Size=UDim2.new(1,-32,0,44)
-		DEFAULT_HINT_TEXT="Aim at the ground, then tap ✓ · Camp radius: 100 studs"
-	else
-		modeIndicator.AnchorPoint,modeIndicator.Position=Vector2.new(.5,0),UDim2.new(.5,0,0,66)
-		hintLabel.AnchorPoint,hintLabel.Position=Vector2.new(.5,0),UDim2.new(.5,0,0,110)
-		hintLabel.Size=UDim2.fromOffset(390,48)
-		DEFAULT_HINT_TEXT=defaultHint()
-	end
+local placeButton = button("Place","Place",0)
+local rotateButton = button("Rotate","Rotate",52)
+local salvageButton = button("HoldToSalvage","Harvest",104)
+local reticle=Theme.Label(gui,"+",UDim2.fromOffset(24,24),UDim2.fromScale(.5,.5),24,Theme.Colors.Amber,true)
+reticle.AnchorPoint,reticle.TextXAlignment=Vector2.new(.5,.5),Enum.TextXAlignment.Center
+local function blocked()
+ return player:GetAttribute("IsDead") or playerGui:GetAttribute("MenuCursorOpen") or playerGui:GetAttribute("ClassPlacementActive")
 end
-Theme.BindResponsive(toolbar,updateTouchControls)
-playerGui:GetAttributeChangedSignal("BuildPlacementActive"):Connect(updateTouchControls)
-playerGui:GetAttributeChangedSignal("MenuCursorOpen"):Connect(updateTouchControls)
-player:GetAttributeChangedSignal("IsDead"):Connect(function() if player:GetAttribute("IsDead") then cancelPlacement(); selectionPanel.Visible=false end end)
-player.CharacterRemoving:Connect(cancelPlacement)
+local function resetHold()
+ if heldTarget then remote:FireServer("CancelSalvage",{}) end
+ heldTarget=nil
+ playerGui:SetAttribute("BuildSalvageActive",false)
+ progress.Size=UDim2.new(0,0,0,5)
+end
+local function currentItem()
+ local char=player.Character
+ local tool=char and char:FindFirstChildOfClass("Tool")
+ return tool and Config.BUILD.PlaceableItems[tool.Name] and tool.Name or nil
+end
+local function aimRay()
+ local camera=workspace.CurrentCamera
+ if not camera then return nil end
+ local centered=Theme.IsMobile() or UIS.PreferredInput==Enum.PreferredInput.Gamepad or UIS.MouseBehavior==Enum.MouseBehavior.LockCenter
+ local aim=centered and camera.ViewportSize*.5 or Vector2.new(mouse.X,mouse.Y)
+ local ray=camera:ViewportPointToRay(aim.X,aim.Y)
+ local params=RaycastParams.new()
+ params.FilterType=Enum.RaycastFilterType.Exclude
+ local ignore={}
+ if player.Character then table.insert(ignore,player.Character) end
+ if preview then table.insert(ignore,preview) end
+ params.FilterDescendantsInstances=ignore
+ return workspace:Raycast(ray.Origin,ray.Direction*120,params)
+end
+local function salvageTarget(hit)
+ local node=hit and hit.Instance
+ while node and node~=workspace do
+  if CollectionService:HasTag(node,"Structure") and node:GetAttribute("BuildType") then
+   local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+   if node:GetAttribute("OwnerUserId")==player.UserId and root and (node:GetPivot().Position-root.Position).Magnitude<= (Config.GRID.BuildMaxDistance or 45) then return node end
+   return nil
+  end
+  node=node.Parent
+ end
+end
+local function showStatus(text)
+ status.Text=text;statusUntil=os.clock()+2;status.Visible=true
+end
+local function rotateKey()
+ for _, candidate in ipairs({Enum.KeyCode.R,Enum.KeyCode.T,Enum.KeyCode.X,Enum.KeyCode.Z}) do
+  local free=true
+  for _, action in ipairs(SettingsSchema.Actions) do if Settings.Key(action)==candidate then free=false;break end end
+  if free then return candidate end
+ end
+ return nil
+end
+local function place()
+ if blocked() or not selected or not position then return end
+ remote:FireServer("Place",{Type=selected,Position=position,Rotation=rotation})
+end
+local function beginHold(input)
+ if blocked() then return end
+ holding,latched,holdInput=true,false,input
+end
+local function endHold()
+ holding,latched,holdInput=false,false,nil
+ resetHold()
+end
+placeButton.Activated:Connect(place)
+rotateButton.Activated:Connect(function() rotation=(rotation+90)%360 end)
+salvageButton.InputBegan:Connect(function(input)
+ if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1 then beginHold(input) end
+end)
+UIS.InputBegan:Connect(function(input,processed)
+ if processed or blocked() then return end
+ if input.UserInputType==Enum.UserInputType.MouseButton2 or input.KeyCode==Enum.KeyCode.ButtonL2 then place()
+ elseif input.UserInputType==Enum.UserInputType.MouseButton1 or input.KeyCode==Enum.KeyCode.ButtonR2 then beginHold(input)
+ elseif input.KeyCode==rotateKey() and selected then rotation=(rotation+90)%360 end
+end)
+UIS.InputEnded:Connect(function(input)
+ if input==holdInput or input.UserInputType==Enum.UserInputType.MouseButton1 or input.KeyCode==Enum.KeyCode.ButtonR2 then endHold() end
+end)
+UIS.WindowFocusReleased:Connect(endHold)
+remote.OnClientEvent:Connect(function(kind,data)
+ if kind~="Result" or type(data)~="table" then return end
+ if data.Action=="Place" or data.Action=="Remove" or data.Action=="Salvage" then
+  if data.Action~="Place" then resetHold();latched=true end
+  showStatus(data.Success and (data.Action=="Place" and "Placed." or "Salvaged into your inventory.") or Messages[data.Reason] or "Unable to complete that build action.")
+ end
+end)
+RunService.RenderStepped:Connect(function()
+ local now=os.clock()
+ local nextItem=currentItem()
+ if nextItem~=selected then selected=nextItem;rotation=0;endHold() end
+ local isBlocked=blocked()
+ playerGui:SetAttribute("BuildPlacementActive",selected~=nil and not isBlocked)
+ local hit=not isBlocked and aimRay() or nil
+ target=salvageTarget(hit)
+ if isBlocked then endHold() end
+ highlight.Adornee,highlight.Enabled=target,target~=nil
+ if selected and hit and not isBlocked then
+  position=Placement.Surface(hit.Position,preview and {preview} or {})
+  if not preview then
+   preview=Instance.new("Part")
+   preview.Name,preview.Size="PlacementPreview",Vector3.new(Config.GRID.Size-.5,Config.GRID.Size-.5,Config.GRID.Size-.5)
+   preview.Anchored,preview.CanCollide,preview.CanTouch,preview.CanQuery=true,false,false,false
+   preview.Material,preview.Transparency,preview.Parent=Enum.Material.SmoothPlastic,.6,workspace
+   local facing=Instance.new("WedgePart")
+   facing.Name,facing.Size,facing.Anchored,facing.CanCollide,facing.CanQuery="Facing",Vector3.new(1.8,.6,2),true,false,false
+   facing.Color,facing.Parent=Theme.Colors.Amber,preview
+  end
+  preview.Transparency=position and .6 or 1
+  preview.Facing.Transparency=position and 0 or 1
+  if position then
+   preview.CFrame=CFrame.new(position+Vector3.new(0,preview.Size.Y/2,0))*CFrame.Angles(0,math.rad(rotation),0)
+   preview.Facing.CFrame=preview.CFrame*CFrame.new(0,preview.Size.Y/2+.1,-1.1)*CFrame.Angles(0,math.pi,0)
+   local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+   local valid=root and Placement.WithinCamp(position) and (position-root.Position).Magnitude<=(Config.GRID.BuildMaxDistance or 45)
+   preview.Color=valid and Theme.Colors.ValidPlacement or Theme.Colors.InvalidPlacement
+   if not valid then position=nil end
+  end
+ else
+  position=nil
+  if preview then preview:Destroy();preview=nil end
+ end
+ if holding and not latched then
+  if heldTarget and target~=heldTarget then resetHold();latched=true end
+  if target and not latched then
+   if not heldTarget then
+    heldTarget,startedAt,lastPulse=target,now,now
+    remote:FireServer("BeginSalvage",{Target=target})
+   end
+   playerGui:SetAttribute("BuildSalvageActive",true)
+   if now-lastPulse>=.2 then lastPulse=now;remote:FireServer("ContinueSalvage",{Target=target}) end
+   local fraction=math.clamp((now-startedAt)/duration,0,1)
+   progress.Size=UDim2.new(fraction,0,0,5)
+   status.Text=string.format("Salvaging %s · %.1fs",tostring(target:GetAttribute("BuildType")),math.max(0,duration-(now-startedAt)))
+   status.Visible=true
+   if now-startedAt>=duration+.1 then latched=true;remote:FireServer("Remove",{Target=target}) end
+  end
+ end
+ if not heldTarget and now>=statusUntil then
+  status.Visible=not isBlocked and (selected~=nil or target~=nil)
+  if selected then
+   status.Text=Theme.IsMobile() and "Tap place · Hold salvage to recover a build" or ((Items:Get(selected) and Items:Get(selected).Name or selected) .. " · Right-click place · " .. (rotateKey() and rotateKey().Name or "") .. " rotate · Hold left-click salvage")
+  elseif target then status.Text=Theme.IsMobile() and "Hold the salvage icon to recover this build" or "Hold left-click for 3 seconds to salvage" end
+ end
+ toolbar.Visible=Theme.IsMobile() and not isBlocked and (selected~=nil or target~=nil)
+ placeButton.Visible,rotateButton.Visible=selected~=nil,selected~=nil
+ salvageButton.Visible=target~=nil
+ reticle.Visible=Theme.IsMobile() and selected~=nil and not isBlocked
+end)
+Theme.BindResponsive(gui,function(mobile,size)
+ status.Size=UDim2.fromOffset(math.min(520,size.X-24),48)
+ status.Position=mobile and UDim2.new(.5,0,1,-226) or UDim2.new(.5,0,1,-220)
+ status.TextSize=mobile and 14 or 16
+end)
+player.CharacterRemoving:Connect(endHold)
+gui.Destroying:Connect(function() if preview then preview:Destroy() end;highlight:Destroy() end)
+Theme.TrackRoot(gui)

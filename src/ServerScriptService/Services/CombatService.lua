@@ -167,6 +167,8 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 	-- Team/FF logic hook (optional): prevent friendly fire
 	local atkTeam = attackerPlayer and attackerPlayer.Team or nil
 	local tgtPlr = Players:GetPlayerFromCharacter(target)
+	if tgtPlr and workspace:GetAttribute("WorldType") == "Creative" and tgtPlr:GetAttribute("CreativeMode")
+		and tgtPlr:GetAttribute("CreativeInvincible") then return end
 	if tgtPlr and atkTeam and tgtPlr.Team == atkTeam then
 		return
 	end

@@ -132,7 +132,7 @@ local existingHotbar = existingInventory and existingInventory:FindFirstChild("H
 if existingHotbar then bindNavigationHotbar(existingHotbar) end
 hudOrigin:GetPropertyChangedSignal("AbsolutePosition"):Connect(positionNavigation)
 local navigationButtons = {}
-for index, entry in ipairs({ { "Pack", "E" }, { "Craft", "C" }, { "Build", "B" }, { "Map", "M" }, { "Survey", "V" } }) do
+for index, entry in ipairs({ { "Pack", "E" }, { "Craft", "C" }, { "Map", "M" }, { "Survey", "V" } }) do
 	local button = Instance.new("TextButton")
 	button.Name = entry[1]
 	button.Size = UDim2.fromOffset(70, 28)
@@ -186,7 +186,7 @@ local function updateHUDPreferences()
 	notes.Visible = Settings.Get("ShowFieldNotes") and not mobile
 	roleButton.Visible = not mobile
 	roleButton.Position = UDim2.fromOffset(0, mobile and (notes.Visible and 222 or 112) or (notes.Visible and 308 or 200))
-	kit.Visible = Settings.Get("ShowNavigation") and not placing and not (mobile and gui.Parent:GetAttribute("MenuCursorOpen"))
+	kit.Visible = Settings.Get("ShowNavigation") and not (mobile and gui.Parent:GetAttribute("MenuCursorOpen"))
 end
 detailsButton.Activated:Connect(function()
 	mobileDetails = not mobileDetails
@@ -255,7 +255,7 @@ local function layout(_, available)
 			count+=1
 		end
 	end
-	kit.Size=portrait and UDim2.fromOffset(92,92) or UDim2.fromOffset(mobile and 188 or 376,mobile and 44 or 32)
+	kit.Size=portrait and UDim2.fromOffset(92,92) or UDim2.fromOffset(mobile and 140 or 300,mobile and 44 or 32)
 	kit.AnchorPoint=Vector2.new(portrait and 0 or .5,1)
 	kit.Position=portrait and UDim2.new(0,8,1,-176) or UDim2.new(.5,mobile and -36 or 0,1,mobile and -64 or -94*desktopScale)
 	positionNavigation()

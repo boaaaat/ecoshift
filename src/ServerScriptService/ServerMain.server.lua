@@ -67,6 +67,7 @@ local tier2Services = {
 	{ name = "RewardsObserver", method = "Init" },
 	{ name = "EntityAIService", method = "Init" },
 	{ name = "ClassAbilityService", method = "Init" },
+	{ name = "CreativeService", method = "Init" },
 }
 
 -- TIER 3: Deferred/heavy services (world gen, etc.)

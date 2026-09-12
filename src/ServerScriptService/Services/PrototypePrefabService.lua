@@ -94,6 +94,13 @@ local weaponPower = { StoneSpear = 18, BoneSpear = 18, SanditeBlade = 27, MireDa
 	MagmaHammer = 50, CrystalBow = 44, VoidEdge = 65, MeteorPike = 82 }
 local function configureTool(tool, item)
 	tool.Name, tool.ToolTip, tool.CanBeDropped = item.Id, item.Name, false
+	if item:HasTag("Placeable") then
+		tool:SetAttribute("PlaceableItem", true)
+		tool:SetAttribute("ToolType", "")
+		tool:SetAttribute("WeaponType", "")
+		tool:SetAttribute("Damage", 0)
+		return
+	end
 	if item:HasTag("Tool") then
 		tool:SetAttribute("ToolType", "Universal")
 		tool:SetAttribute("Damage", toolPower[item.Id] or 20)
@@ -130,7 +137,16 @@ local function makeTool(parent, item)
 		end
 		return
 	end
-	local tool = ExpeditionModels.CreateTool(item.Id, item:HasTag("Weapon"))
+	local tool
+	if item:HasTag("Placeable") then
+		tool = Instance.new("Tool")
+		local handle = Instance.new("Part")
+		handle.Name, handle.Size = "Handle", Vector3.new(1.2, .8, 1.2)
+		handle.Color, handle.Material = Color3.fromRGB(121, 104, 67), Enum.Material.Wood
+		handle.CanCollide, handle.Massless, handle.Parent = false, true, tool
+	else
+		tool = ExpeditionModels.CreateTool(item.Id, item:HasTag("Weapon"))
+	end
 	if not tool then warn("[Art] No authored tool model:", item.Id); return end
 	configureTool(tool, item)
 	publish(tool, parent)

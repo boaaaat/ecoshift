@@ -234,77 +234,9 @@ hotbarContainer.Position = UDim2.new(0.5, 0, 0.5, 0)
 hotbarContainer.BackgroundTransparency = 1
 hotbarContainer.Parent = hotbarPanel
 
--- Tooltip
-local tooltip = Instance.new("Frame")
-tooltip.Name = "Tooltip"
-tooltip.Size = UDim2.new(0, 180, 0, 90)
-tooltip.BackgroundColor3 = COLORS.Background
-tooltip.BackgroundTransparency = 0.05
-tooltip.BorderSizePixel = 0
-tooltip.Visible = false
-tooltip.ZIndex = 100
-tooltip.Parent = gui
-
-local tooltipCorner = Instance.new("UICorner")
-tooltipCorner.CornerRadius = UDim.new(0, 8)
-tooltipCorner.Parent = tooltip
-
-local tooltipStroke = Instance.new("UIStroke")
-tooltipStroke.Color = COLORS.Border
-tooltipStroke.Thickness = 1
-tooltipStroke.Parent = tooltip
-
-local tooltipName = Instance.new("TextLabel")
-tooltipName.Name = "ItemName"
-tooltipName.Size = UDim2.new(1, -16, 0, 22)
-tooltipName.Position = UDim2.new(0, 8, 0, 8)
-tooltipName.BackgroundTransparency = 1
-tooltipName.TextColor3 = COLORS.Text
-tooltipName.TextSize = 14
-tooltipName.Font = Enum.Font.GothamBold
-tooltipName.TextXAlignment = Enum.TextXAlignment.Left
-tooltipName.Text = "Item Name"
-tooltipName.ZIndex = 101
-tooltipName.Parent = tooltip
-
-local tooltipTags = Instance.new("TextLabel")
-tooltipTags.Name = "Tags"
-tooltipTags.Size = UDim2.new(1, -16, 0, 16)
-tooltipTags.Position = UDim2.new(0, 8, 0, 30)
-tooltipTags.BackgroundTransparency = 1
-tooltipTags.TextColor3 = COLORS.Accent
-tooltipTags.TextSize = 11
-tooltipTags.Font = Enum.Font.Gotham
-tooltipTags.TextXAlignment = Enum.TextXAlignment.Left
-tooltipTags.Text = "Resource • Organic"
-tooltipTags.ZIndex = 101
-tooltipTags.Parent = tooltip
-
-local tooltipQty = Instance.new("TextLabel")
-tooltipQty.Name = "Quantity"
-tooltipQty.Size = UDim2.new(1, -16, 0, 16)
-tooltipQty.Position = UDim2.new(0, 8, 0, 50)
-tooltipQty.BackgroundTransparency = 1
-tooltipQty.TextColor3 = COLORS.TextMuted
-tooltipQty.TextSize = 11
-tooltipQty.Font = Enum.Font.Gotham
-tooltipQty.TextXAlignment = Enum.TextXAlignment.Left
-tooltipQty.Text = "Quantity: 1"
-tooltipQty.ZIndex = 101
-tooltipQty.Parent = tooltip
-
-local tooltipHint = Instance.new("TextLabel")
-tooltipHint.Name = "Hint"
-tooltipHint.Size = UDim2.new(1, -16, 0, 14)
-tooltipHint.Position = UDim2.new(0, 8, 0, 68)
-tooltipHint.BackgroundTransparency = 1
-tooltipHint.TextColor3 = COLORS.TextMuted
-tooltipHint.TextSize = 10
-tooltipHint.Font = Enum.Font.Gotham
-tooltipHint.TextXAlignment = Enum.TextXAlignment.Left
-tooltipHint.Text = "Drag to move • Right-click to split • Q drops one"
-tooltipHint.ZIndex = 101
-tooltipHint.Parent = tooltip
+-- Inventory and chests share the same readable hover details.
+local itemTooltip = require(ReplicatedStorage.Shared.UI.ItemTooltip).new(gui)
+local tooltip = itemTooltip.Frame
 
 -- Slot creation helper
 local function createSlot(parent, x, y, slotType, index, slotSize)
@@ -619,12 +551,6 @@ local function isPlaceableItem(itemId)
 	return Config.BUILD.PlaceableItems and Config.BUILD.PlaceableItems[itemId] == true
 end
 
-local function requestBuildPlacement(itemId)
-	if type(itemId) ~= "string" or itemId == "" then return end
-	local nonce = (tonumber(player:GetAttribute("BuildPlaceItemRequestNonce")) or 0) + 1
-	player:SetAttribute("BuildPlaceItemRequestItem", itemId)
-	player:SetAttribute("BuildPlaceItemRequestNonce", nonce)
-end
 
 local function getSlotData(slotType, index)
 	if not inventorySnapshot then return nil end
@@ -659,18 +585,7 @@ local function updateCapacity()
 end
 
 local function showTooltip(slot, data)
-	if not data then return end
-	local item = ItemDatabase:Get(data.Id)
-	local name = item and item.Name or data.Id
-	local tags = item and item.Tags or {}
-	
-	tooltipName.Text = name
-	tooltipTags.Text = #tags > 0 and table.concat(tags, " • ") or "Unknown"
-	tooltipQty.Text = "Quantity: " .. tostring(data.N)
-	
-	local mousePos = UserInputService:GetMouseLocation()
-	tooltip.Position = UDim2.fromOffset(mousePos.X + 15, mousePos.Y + 15)
-	tooltip.Visible = true
+	itemTooltip:Show(data, "Drag to move • Right-click to split • Q drops one")
 end
 
 local function hideTooltip()
@@ -1057,7 +972,7 @@ end
 local contextUse = makeMenuButton("Use", 1)
 local contextDrop = makeMenuButton("Drop", 2)
 local contextSplit = makeMenuButton("Split", 3)
-local contextPlace = makeMenuButton("Place", 4)
+local contextPlace = makeMenuButton("Equip", 4)
 local contextSlot = nil
 
 local function showContextMenu(slot, position, touch)
@@ -1073,6 +988,7 @@ local function showContextMenu(slot, position, touch)
 	local canPlace = data and isPlaceableItem(data.Id) and not isChestTransferLockActive() or false
 	contextUse.Visible = canUse
 	contextPlace.Visible = canPlace
+	contextPlace.Text = slot.Type == "Hotbar" and "Equip" or "To hotbar"
 	contextMenu.Visible = true
 end
 
@@ -1120,7 +1036,12 @@ contextPlace.MouseButton1Click:Connect(function()
 	if not contextSlot then return end
 	local data = getSlotData(contextSlot.Type, contextSlot.Index)
 	if not data or not isPlaceableItem(data.Id) then return end
-	requestBuildPlacement(data.Id)
+	if contextSlot.Type == "Hotbar" then
+		rInventoryAction:FireServer("Equip", {SlotType="Hotbar", SlotIndex=contextSlot.Index})
+		setInventoryOpen(false)
+	else
+		shiftMove(contextSlot)
+	end
 	hideContextMenu()
 end)
 
@@ -1451,7 +1372,7 @@ UserInputService.InputChanged:Connect(function(input)
 	if (input.UserInputType == Enum.UserInputType.MouseMovement and not (dragging.Input and dragging.Input.UserInputType == Enum.UserInputType.Touch))
 		or input == dragging.Input then
 		if tooltip.Visible then
-			tooltip.Position = UDim2.fromOffset(input.Position.X + 15, input.Position.Y + 15)
+			itemTooltip:Move()
 		end
 		
 		if dragging.Pending and dragging.StartPos then
@@ -1725,8 +1646,7 @@ local function arrangePack()
  local topInset, bottomInset = GuiService:GetGuiInset()
  local width, height = viewport.X - topInset.X - bottomInset.X, viewport.Y - topInset.Y - bottomInset.Y
  local chestOpen = gui:GetAttribute("ChestOpen") == true
- hotbarRoot.Visible = not mobile or (playerGui:GetAttribute("BuildPlacementActive") ~= true
-  and (playerGui:GetAttribute("MenuCursorOpen") ~= true or mainContainer.Visible or chestOpen))
+ hotbarRoot.Visible = not mobile or (playerGui:GetAttribute("MenuCursorOpen") ~= true or mainContainer.Visible or chestOpen)
  local portrait = mobile and width < height
  local widePack = mobile and not portrait and not chestOpen
  local columns = widePack and 9 or STORAGE_COLS
