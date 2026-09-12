@@ -126,7 +126,7 @@ function PartyService:_member(player)
 	-- Creating a crew or accepting an invitation opts this new member in.
 	-- Merger and role-change flows retain their explicit ready resets.
 	return { UserId=player.UserId, Name=player.Name, DisplayName=player.DisplayName,
-		Role=player:GetAttribute("Role") or "Generalist", JoinedAt=os.time(), Ready=true, OnlineUntil=os.time()+Config.PresenceTTL,
+		Role=player:GetAttribute("Role") or "Generalist", ClassLevel=player:GetAttribute("ClassLevel") or 1, JoinedAt=os.time(), Ready=true, OnlineUntil=os.time()+Config.PresenceTTL,
 		Session=self._sessions[player] and self._sessions[player].Id,
 		SessionAt=self._sessions[player] and self._sessions[player].StartedAt }
 end
@@ -362,6 +362,7 @@ function PartyService:SetReady(player, ready)
 		local member=record.Members[key(player.UserId)]
 		if not member then return false,"Your party membership changed." end
 		member.Ready,member.Role=ready,player:GetAttribute("Role") or "Generalist"
+		member.ClassLevel=player:GetAttribute("ClassLevel") or 1
 		return true
 	end)
 	return result~=nil,reason or (ready and "Ready for expedition." or "No longer ready.")
@@ -392,6 +393,7 @@ function PartyService:Heartbeat(player, leaving)
 		if not member then return false,"Membership changed." end
 		if not sessionWins(session,member.SessionAt,member.Session) then return false,"Connection changed." end
 		member.Session,member.SessionAt=session.Id,session.StartedAt
+		if not record.RunId and not record.Queue then member.ClassLevel=player:GetAttribute("ClassLevel") or 1 end
 		member.OnlineUntil=leaving and (session.TransferUntil or 0) or now+Config.PresenceTTL
 		return true
 	end,party.MergeLock) end
@@ -563,6 +565,7 @@ function PartyService:Snapshot(player)
 					-- update may still be yielding. A changed class requires readiness.
 					if item.Role~=currentRole then item.Ready=false end
 					item.Role=currentRole
+					item.ClassLevel=localMember:GetAttribute("ClassLevel") or 1
 				end
 			end
 			table.insert(snapshot.Members,item)
@@ -889,7 +892,7 @@ function PartyService:RestoreExpeditionParty(worldRecord)
 		local member=world.Members[key(userId)]
 		if type(member)~="table" or member.UserId~=userId or type(member.Name)~="string" or type(member.DisplayName)~="string"
 			or type(member.Role)~="string" or type(member.JoinedAt)~="number" then return nil,"InvalidDurableCrew" end
-		members[key(userId)]={UserId=userId,Name=member.Name,DisplayName=member.DisplayName,Role=member.Role,JoinedAt=member.JoinedAt,Ready=false,OnlineUntil=0}
+		members[key(userId)]={UserId=userId,Name=member.Name,DisplayName=member.DisplayName,Role=member.Role,ClassLevel=member.ClassLevel or 1,JoinedAt=member.JoinedAt,Ready=false,OnlineUntil=0}
 	end
 	if not roster[key(world.LeaderId)] then return nil,"InvalidDurableCrew" end
 	for _,source in ipairs(world.Sources or {}) do
@@ -1065,6 +1068,17 @@ function PartyService:Init()
 		self:Heartbeat(player)
 		if session.RoleBound then return end
 		session.RoleBound=true
+		player:GetAttributeChangedSignal("ClassLevel"):Connect(function()
+			local party=self:GetParty(player)
+			if party and not party.RunId then
+				if party.Queue then self:CancelQueue(party.Id,party.Queue.Token) end
+				self:Mutate(party.Id,function(current)
+					local member=current.Members[key(player.UserId)]
+					if member and member.Session==session.Id then member.ClassLevel=player:GetAttribute("ClassLevel") or 1 end
+					return true
+				end)
+			end
+		end)
 		player:GetAttributeChangedSignal("Role"):Connect(function()
 			local party=self:GetParty(player)
 			local role=player:GetAttribute("Role") or "Generalist"
@@ -1073,7 +1087,7 @@ function PartyService:Init()
 				if party.Queue then self:CancelQueue(party.Id,party.Queue.Token) end
 				self:Mutate(party.Id,function(current)
 				local member=current.Members[key(player.UserId)]
-				if member and member.Session==session.Id and member.Role~=role and player:GetAttribute("Role")==role then member.Role=role; member.Ready=false end
+				if member and member.Session==session.Id and member.Role~=role and player:GetAttribute("Role")==role then member.Role=role; member.ClassLevel=player:GetAttribute("ClassLevel") or 1; member.Ready=false end
 				return true
 				end)
 			end

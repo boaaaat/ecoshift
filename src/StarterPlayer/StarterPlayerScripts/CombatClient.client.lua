@@ -26,7 +26,7 @@ local function inputBlocked()
 	local gui = player:FindFirstChildOfClass("PlayerGui")
 	return player:GetAttribute("IsDead") == true
 		or (gui and gui:GetAttribute("MenuCursorOpen") == true)
-		or (gui and gui:GetAttribute("BuildPlacementActive") == true)
+		or (gui and (gui:GetAttribute("BuildPlacementActive") == true or gui:GetAttribute("ClassPlacementActive") == true))
 		or UserInputService:GetFocusedTextBox() ~= nil
 end
 

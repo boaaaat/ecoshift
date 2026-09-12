@@ -120,7 +120,7 @@ local function count(id)
 	return n
 end
 local function perBatch(ingredient)
-	return math.max(1,math.floor((ingredient.N or 1)/math.max(.1,tonumber(player:GetAttribute("Role_Craft")) or 1)))
+	return math.max(1,math.floor(ingredient.N or 1))
 end
 local function costMap(recipe)
 	local costs={}
@@ -437,7 +437,7 @@ RunService.Heartbeat:Connect(function(delta)
 	if progressAccumulator>=.05 then progressAccumulator=0; updateProgress() end
 	if accumulator>=.5 then accumulator=0; refresh() end
 end)
-player:GetAttributeChangedSignal("Role_Craft"):Connect(function() if gui.Enabled then refresh() end end)
+player:GetAttributeChangedSignal("Class_CraftBonus"):Connect(function() if gui.Enabled then refresh() end end)
 Theme.FitMenu(panel,620,670,{OnClose=function() gui.Enabled=false end,MobileWidth=360,OnResize=function(width, _, mobile)
 	close.Visible = not mobile
 	if not mobile then return end

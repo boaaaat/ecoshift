@@ -9,6 +9,7 @@ local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
 local Theme = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UI"):WaitForChild("UITheme"))
 
+local ClassConfig = require(ReplicatedStorage.Shared.ClassConfig)
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
@@ -458,6 +459,20 @@ updateDeathUI = function(canSpectate)
 		results.Visible = isGameOver
 		for _, child in ipairs(results:GetChildren()) do
 			if child:IsA("TextLabel") then child:Destroy() end
+		end
+		if isGameOver then
+			local classId = player:GetAttribute("Role") or "Generalist"
+			local level = player:GetAttribute("ClassLevel") or 1
+			local gained = (player:GetAttribute("RunClassSecondsEarned") or 0) / 60
+			local total = (player:GetAttribute("ClassActiveSeconds") or 0) / 60
+			local purchasedLevel = player:GetAttribute("PermanentClassLevel") or level
+			local nextLevel = math.min(5, purchasedLevel + 1)
+			local needed = ClassConfig.RequiredSeconds[nextLevel] / 60
+			local affordable = (player:GetAttribute("FieldMarks") or 0) >= ClassConfig.UpgradePrices[nextLevel]
+			local progress = purchasedLevel == 5 and "CLASS MASTERED" or string.format("%d / %d class XP · %s", math.floor(total), needed,
+				total >= needed and affordable and "UPGRADE AVAILABLE IN LOBBY" or total < needed and "More class time needed" or "Save more Field Marks")
+			local row = Theme.Label(results, string.format("%s · LEVEL %d · +%.1f CLASS XP\n%s", classId, level, gained, progress), UDim2.new(1,-8,0,Theme.IsMobile() and 74 or 60), UDim2.new(), Theme.IsMobile() and 15 or 13, Theme.Colors.Amber, true)
+			row.Name="ClassProgress";row.LayoutOrder=-1;row.TextWrapped=true
 		end
 		if isGameOver and teamResults then
 			local header = Theme.Label(results, "EXPEDITION CREW  ·  " .. string.upper(currencyName), UDim2.new(1, -8, 0, Theme.IsMobile() and 38 or 24), UDim2.new(), Theme.IsMobile() and 15 or 11, Theme.Colors.Amber, true)

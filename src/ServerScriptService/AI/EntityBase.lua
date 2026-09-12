@@ -121,10 +121,13 @@ function EntityBase:DealDamageToCurrentTarget(amount, dmgType)
 	if not hum or hum.Health <= 0 then
 		return false
 	end
+	-- Recheck at damage time; attack subclasses must never strike through a
+	-- shelter door that closed after targeting or an earlier attack animation.
+	if not self:HasLineOfSight(targetChar) then return false end
 	if _G.Ecoshift and type(_G.Ecoshift.ApplyDamage) == "function" then
 		_G.Ecoshift.ApplyDamage(self.Model, targetChar, dmg, dmgType or "Melee")
 	else
-		hum:TakeDamage(dmg)
+		require(script.Parent.Parent.Services.CombatService):ApplyDamage(self.Model, targetChar, dmg, dmgType or "Melee")
 	end
 	return true
 end
@@ -140,6 +143,7 @@ function EntityBase:HasLineOfSight(targetChar)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { self.Model }
+	params.RespectCanCollide = true
 	local hit = Workspace:Raycast(origin, dir, params)
 	if not hit then
 		return true

@@ -1,9 +1,9 @@
 -- Initial tuning; rewards are issued only by authoritative expedition systems.
 return {
-	SchemaVersion = 2,
+	SchemaVersion = 3,
 	CurrencyName = "Field Marks",
 	DefaultTheme = "Dark",
-	ClassPrices = { Gatherer = 200, Builder = 250, Hunter = 250, Medic = 300, Engineer = 350 },
+	ClassPrices = { Gatherer=400, Builder=500, Hunter=500, Medic=600, Engineer=800, Scout=400, Cook=400, Botanist=600, Prospector=600, Warden=600, Climatologist=800 },
 	MaxCurrency = 1000000000000,
 	MaxRewardAmount = 1000000,
 	-- Never evict receipts and silently allow an old reward to be paid twice.

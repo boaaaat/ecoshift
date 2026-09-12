@@ -45,7 +45,9 @@ end
 local function hasUsefulEffect(plr, char, hum, itemId)
 	if FOOD_RESTORE[itemId] then
 		local maximum = StatsService:GetStat(plr, "MaxHunger") or 100
-		return (StatsService:GetBase(plr, "Hunger") or StatsService:GetStat(plr, "Hunger") or 0) < maximum, "Hunger is already full."
+		local hungry=(StatsService:GetBase(plr,"Hunger") or StatsService:GetStat(plr,"Hunger") or 0)<maximum
+		local tired=(itemId=="StaminaRation" or itemId=="ReinforcedRation") and (StatsService:GetBase(plr,"Stamina") or 0)<(StatsService:GetStat(plr,"MaxStamina") or 100)
+		return hungry or tired, "Hunger and relevant stamina are already full."
 	end
 	if itemId == "Bandage" then return hum.Health < hum.MaxHealth, "Health is already full." end
 	if itemId == "SpringWater" then
@@ -57,13 +59,17 @@ local function hasUsefulEffect(plr, char, hum, itemId)
 end
 
 local function applyFood(plr, itemId)
-	local restore = FOOD_RESTORE[itemId] or 0
+	local restore = (FOOD_RESTORE[itemId] or 0) * (1 + (plr:GetAttribute("Class_FoodBonus") or 0))
 	if restore <= 0 then return false end
 	if not StatsService then return false end
 	local maxHunger = StatsService:GetStat(plr, "MaxHunger") or 100
 	local curHunger = StatsService:GetBase(plr, "Hunger") or StatsService:GetStat(plr, "Hunger") or 0
 	local newHunger = math.min(maxHunger, curHunger + restore)
 	StatsService:SetBase(plr, "Hunger", newHunger)
+	if itemId == "StaminaRation" or itemId == "ReinforcedRation" then
+		local energy = itemId == "StaminaRation" and 20 or 35
+		StatsService:SetBase(plr, "Stamina", math.min(StatsService:GetStat(plr,"MaxStamina") or 100, (StatsService:GetBase(plr,"Stamina") or 0) + energy * (1 + (plr:GetAttribute("Class_FoodBonus") or 0))))
+	end
 	return true
 end
 
@@ -96,7 +102,7 @@ end
 local function applyConsumableEffects(plr, char, hum, itemId)
 	if itemId == "Bandage" then
 		if hum then
-			hum.Health = math.min(hum.MaxHealth, hum.Health + 25)
+			hum.Health = math.min(hum.MaxHealth, hum.Health + 25 * (1 + (plr:GetAttribute("Class_HealBonus") or 0)))
 		end
 		return
 	end
@@ -130,6 +136,7 @@ function InventoryActionService:_consumeFromSlot(plr, slotType, slotIndex)
 	if not removed then return false, "That inventory slot changed. Try again." end
 	local oldHunger = StatsService:GetBase(plr, "Hunger") or 0
 	local oldTemperature = StatsService:GetBase(plr, "Temperature") or 0
+	require(script.Parent.ExpeditionRewardsService):RecordActivity(plr)
 	local oldHealth = hum.Health
 	applyFood(plr, removed)
 	applyConsumableEffects(plr, char, hum, removed)

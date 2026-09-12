@@ -220,6 +220,17 @@ function StatsService:AddModifier(plr, statOrMod, value, mode, duration, id)
 	return modId
 end
 
+-- Replace a persistent modifier atomically, without temporarily lowering MaxHealth.
+function StatsService:SetModifier(plr, stat, value, mode, id)
+	local key=normalizeStat(stat)
+	if not key or type(id)~="string" then return false end
+	local data=getData(self,plr)
+	for i=#data.Mods[key],1,-1 do if data.Mods[key][i].Id==id then table.remove(data.Mods[key],i) end end
+	table.insert(data.Mods[key],{Id=id,Value=value or 0,Mode=normalizeMode(mode)})
+	self:_recompute(plr,{Force=true,HealthChanged=false})
+	return true
+end
+
 function StatsService:RemoveModifier(plr, stat, id)
 	local key = normalizeStat(stat) or stat
 	if not key then return false end

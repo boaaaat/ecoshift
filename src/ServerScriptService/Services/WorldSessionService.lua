@@ -201,7 +201,7 @@ function Service:CreateMatchedExpedition(match)
 			if party.CreatedAt < oldest then oldest, leader = party.CreatedAt, party.LeaderId end
 			for userId, member in pairs(party.Members) do
 				if members[userId] then return false, "DuplicateCrewMember" end
-				members[userId] = { UserId = member.UserId, Name = member.Name, DisplayName = member.DisplayName, Role = member.Role,
+				members[userId] = { UserId = member.UserId, Name = member.Name, DisplayName = member.DisplayName, Role = member.Role, ClassLevel = member.ClassLevel or 1,
 					JoinedAt = member.JoinedAt, SourcePartyId = source.Id, Session = member.Session, SessionAt = member.SessionAt }
 				table.insert(roster, member.UserId)
 			end
@@ -492,7 +492,7 @@ function Service:_loadPlayer(player)
 		if player.Parent ~= Players or self._stopped then return end
 		if not self._studio then
 			assert(active(self._record) and contains(self._record, player.UserId), "WorldAdmissionExpired")
-			require(script.Parent.RoleService):ApplyRunRole(player, self._record.Members[tostring(player.UserId)].Role)
+			require(script.Parent.RoleService):ApplyRunRole(player, self._record.Members[tostring(player.UserId)].Role, self._record.Members[tostring(player.UserId)].ClassLevel or 1)
 		end
 		player:LoadCharacterAsync()
 		if player.Parent ~= Players or self._stopped then return end
@@ -528,7 +528,7 @@ function Service:PrepareExpedition()
 		if not contains(self._record, player.UserId) then player:Kick("This reserved expedition belongs to another crew."); return end
 		self._present[player] = true
 		player:SetAttribute("WorldPlayerLoading", true)
-		require(script.Parent.RoleService):ApplyRunRole(player, self._record.Members[tostring(player.UserId)].Role)
+		require(script.Parent.RoleService):ApplyRunRole(player, self._record.Members[tostring(player.UserId)].Role, self._record.Members[tostring(player.UserId)].ClassLevel or 1)
 		if self._snapshots then task.spawn(function() self:_loadPlayer(player) end) end
 	end
 	Players.PlayerAdded:Connect(admit)

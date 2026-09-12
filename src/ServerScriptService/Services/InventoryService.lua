@@ -4,6 +4,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local Classes = require(ReplicatedStorage.Shared.ClassConfig)
 local Util = require(ReplicatedStorage.Shared.Util)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 
@@ -127,8 +128,9 @@ function InventoryService:Init()
 	end
 end
 
-function InventoryService:Reset(plr)
-	if plr:GetAttribute("WorldPlayerRestoring") then return end
+function InventoryService:Reset(plr, initializeWorld)
+	if self._worldInitialized[plr] or plr:GetAttribute("WorldPlayerRestoring") then return end
+	if not initializeWorld and (plr:GetAttribute("WorldPlayerLoading") or ReplicatedStorage:GetAttribute("WorldRestoring")) then return end
 	self._worldInitialized[plr] = true
 	local inv = {
 		Hotbar = emptySlots(HOTBAR_SLOTS),
@@ -137,8 +139,25 @@ function InventoryService:Reset(plr)
 	}
 	self._inventories[plr] = inv
 	inv.Hotbar[1] = { Id = "Harvester", N = 1 }
-	for _, entry in ipairs(Config.STARTER_ITEMS or {}) do
-		self:Give(plr, entry.Id, entry.N, true)
+	local kit = Classes.GetKit(plr:GetAttribute("Role") or "Generalist", plr:GetAttribute("ClassLevel") or 1)
+	local storageIndex = 1
+	for _, entry in ipairs(kit) do
+		local item = assert(ItemDatabase:Get(entry.Id), "Missing class starter item: " .. entry.Id)
+		local remaining = entry.N
+		if isArmor(entry.Id) and not inv.Armor then
+			inv.Armor = { Id = entry.Id, N = 1 }
+			remaining -= 1
+		elseif not inv.Hotbar[2] and (item:HasTag("Weapon") or item:HasTag("Tool")) then
+			inv.Hotbar[2] = { Id = entry.Id, N = 1 }
+			remaining -= 1
+		end
+		while remaining > 0 do
+			assert(storageIndex <= STORAGE_SLOTS, "Class starter kit exceeds storage capacity")
+			local n = math.min(remaining, maxStack(entry.Id))
+			inv.Storage[storageIndex] = { Id = entry.Id, N = n }
+			storageIndex += 1
+			remaining -= n
+		end
 	end
 	self:Sync(plr)
 end

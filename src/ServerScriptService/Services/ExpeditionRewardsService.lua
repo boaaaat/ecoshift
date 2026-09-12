@@ -7,6 +7,7 @@ local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
 local Economy = require(RS.Shared.EconomyConfig)
+local Classes = require(RS.Shared.ClassConfig)
 local Config = Economy.Rewards
 -- Schema1 worlds predate pinned tuning. These are their original grant amounts.
 local LEGACY_TUNING = {
@@ -18,7 +19,7 @@ local Profile = require(script.Parent.ProfileService)
 local Inventory = require(script.Parent.InventoryService)
 local Round = require(script.Parent.RoundService)
 local GameState = require(script.Parent.GameStateService)
-local Service = { _players = {}, _objectives = {}, _deaths = {}, _pending = {}, _samples = {}, _flushing = {}, _delivering = {} }
+local Service = { _players = {}, _objectives = {}, _deaths = {}, _pending = {}, _samples = {}, _flushing = {}, _delivering = {}, _activity = {}, _classSettled = {} }
 local function validId(value)
 	return type(value) == "string" and #value > 0 and #value <= 48 and value:match("^[%w_:%-]+$") ~= nil
 end
@@ -80,7 +81,7 @@ function Service:_player(userId)
 	local data = self._players[key]
 	if not data then
 		data = { SurvivedSeconds = 0, Milestones = 0, ReviveBucket = 0, RevivesInBucket = 0,
-			EarnedCurrency = 0, EarnedXP = 0, TotalsComplete = true }
+			EarnedCurrency = 0, EarnedXP = 0, TotalsComplete = true, ClassSeconds = {} }
 		self._players[key] = data
 	end
 	return data
@@ -94,7 +95,7 @@ function Service:GetSummary(playerOrId)
 	for _, claim in pairs(self._pending) do
 		if claim.UserId == id then pending += 1; currency += claim.Currency; xp += claim.XP end
 	end
-	return { UserId = id, EarnedCurrency = data.EarnedCurrency, EarnedXP = data.EarnedXP,
+	return { UserId = id, ClassSeconds = Util.DeepCopy(data.ClassSeconds or {}), EarnedCurrency = data.EarnedCurrency, EarnedXP = data.EarnedXP,
 		PendingCurrency = currency, PendingXP = xp, PendingClaims = pending,
 		SettledCurrency = RunService:IsStudio() and 0 or math.max(0, data.EarnedCurrency - currency),
 		SettledXP = RunService:IsStudio() and 0 or math.max(0, data.EarnedXP - xp),
@@ -119,6 +120,11 @@ function Service:_status(player)
 	if player.Parent == Players then
 		player:SetAttribute("ExpeditionRewardsPending", summary.PendingClaims)
 		player:SetAttribute("RunFieldMarksEarned", summary.EarnedCurrency)
+		local role = player:GetAttribute("Role") or "Generalist"
+		player:SetAttribute("RunClassSecondsEarned", (summary.ClassSeconds or {})[role] or 0)
+		local profile = Profile:GetProfile(player)
+		local progress = profile and profile.ClassProgress and profile.ClassProgress[role]
+		player:SetAttribute("ClassActiveSeconds", progress and progress.ActiveSeconds or 0)
 		player:SetAttribute("RunXPEarned", summary.EarnedXP)
 		player:SetAttribute("RunFieldMarksPending", summary.PendingCurrency)
 		player:SetAttribute("RunXPPending", summary.PendingXP)
@@ -143,7 +149,7 @@ function Service:_queue(player, kind, occurrenceId, reward)
 	return true
 end
 
-function Service:_flush(player)
+function Service:_flush(player, forceClass)
 	-- Pending claims were authorized when queued (or in a fenced saved world).
 	-- They may settle after lease loss, but not while a replacement ledger is staged.
 	if self._flushing[player] or self._pendingRestore then return end
@@ -165,6 +171,17 @@ function Service:_flush(player)
 			elseif reason ~= "SavePending" and reason ~= "ProfileUnavailable" then warn("[ExpeditionRewards] Payment pending:", reason) end
 			processed += 1
 			if processed >= 8 then break end
+		end
+	end
+	local worldId = self:_world()
+	if worldId and not RunService:IsStudio() and Profile:IsLoaded(player) then
+		local settled = self._classSettled[player] or {}
+		self._classSettled[player] = settled
+		for role, seconds in pairs(self:_player(player.UserId).ClassSeconds or {}) do
+			if seconds > (settled[role] or 0) and (forceClass or os.clock() - (settled.At or -math.huge) >= 60) then
+				local ok, paid = pcall(Profile.GrantClassTime, Profile, player, worldId, role, seconds)
+				if ok and paid then settled[role], settled.At = seconds, os.clock() end
+			end
 		end
 	end
 	self._flushing[player] = nil
@@ -192,10 +209,30 @@ function Service:_deliverItems(player)
 	self._delivering[player] = nil
 end
 
+-- Server-side successful gameplay hooks call this; client input is never trusted.
+function Service:RecordActivity(player)
+	if activeWorld() and alive(player) then
+		local entry = self._activity[player] or {}
+		entry.LastAction = os.clock()
+		self._activity[player] = entry
+	end
+end
 function Service:_sample(player)
 	local stamp = os.clock()
 	local eligible = activeWorld() and alive(player) and self:_world() ~= nil
 	local sample = self._samples[player]
+	local activity = self._activity[player] or { LastAction = stamp }
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if root then
+		local delta = activity.Position and (root.Position - activity.Position)
+		local distance = delta and Vector3.new(delta.X, 0, delta.Z).Magnitude or 0
+		if distance >= 0.75 and distance < 120 then
+			activity.LastAction = stamp
+		end
+		activity.Position = root.Position
+	end
+	self._activity[player] = activity
+	local classEligible = eligible and stamp - (activity.LastAction or stamp) <= 120
 	if sample and sample.Eligible and eligible then
 		local data = self:_player(player.UserId)
 		data.SurvivedSeconds += math.max(0, stamp - sample.At)
@@ -205,7 +242,16 @@ function Service:_sample(player)
 			self:_queue(player, "survival", tostring(data.Milestones), self._tuning.Survival)
 		end
 	end
-	self._samples[player] = { At = stamp, Eligible = eligible }
+	if sample and sample.ClassEligible and classEligible then
+		local role = player:GetAttribute("Role")
+		if Classes.Definitions[role] then
+			local data = self:_player(player.UserId)
+			data.ClassSeconds = data.ClassSeconds or {}
+			data.ClassSeconds[role] = (data.ClassSeconds[role] or 0) + math.max(0, stamp - sample.At)
+			player:SetAttribute("RunClassSecondsEarned", data.ClassSeconds[role])
+		end
+	end
+	self._samples[player] = { At = stamp, Eligible = eligible, ClassEligible = classEligible }
 end
 
 function Service:OnObjective(id, entry, items)
@@ -216,6 +262,7 @@ function Service:OnObjective(id, entry, items)
 	self._objectives[entry.InstanceId] = objective
 	for _, player in ipairs(Players:GetPlayers()) do
 		if participant(player) then
+			self:RecordActivity(player)
 			objective.Recipients[tostring(player.UserId)] = { InventoryIndex = 0 }
 			self:_queue(player, "objective", entry.InstanceId, self._tuning.Objective)
 			task.defer(function() self:_deliverItems(player); self:_flush(player) end)
@@ -236,6 +283,7 @@ function Service:OnRevive(helper, target, deathId)
 	local bucket = math.floor(Round:GetElapsed() / self._tuning.SurvivalSeconds)
 	if data.ReviveBucket ~= bucket then data.ReviveBucket, data.RevivesInBucket = bucket, 0 end
 	if data.RevivesInBucket >= self._tuning.RevivesPerMilestone then return false, "ReviveRewardLimit" end
+	self:RecordActivity(helper)
 	data.RevivesInBucket += 1
 	self:_queue(helper, "revive", deathId, self._tuning.Revive)
 	task.defer(function() self:_flush(helper) end)
@@ -246,27 +294,34 @@ function Service:CaptureState()
 	if self._pendingRestore then return Util.DeepCopy(self._pendingRestore) end
 	assert(self:_world(), "Stable WorldId required before capturing rewards")
 	for _, player in ipairs(Players:GetPlayers()) do self:_sample(player) end
-	return { SchemaVersion = 2, WorldId = self._worldId, Tuning = Util.DeepCopy(self._tuning), Players = Util.DeepCopy(self._players),
+	return { SchemaVersion = 3, WorldId = self._worldId, Tuning = Util.DeepCopy(self._tuning), Players = Util.DeepCopy(self._players),
 		Objectives = Util.DeepCopy(self._objectives), Deaths = Util.DeepCopy(self._deaths), Pending = Util.DeepCopy(self._pending) }
 end
 
 function Service:RestoreState(state)
-	if type(state) ~= "table" or (state.SchemaVersion ~= 1 and state.SchemaVersion ~= 2) or not validId(state.WorldId)
+	if type(state) ~= "table" or (state.SchemaVersion ~= 1 and state.SchemaVersion ~= 2 and state.SchemaVersion ~= 3) or not validId(state.WorldId)
 		or type(state.Players) ~= "table" or type(state.Objectives) ~= "table" or type(state.Deaths) ~= "table" or type(state.Pending) ~= "table"
 		or count(state.Players) > 100 or count(state.Objectives) > Config.MaxClaims or count(state.Deaths) > Config.MaxClaims or count(state.Pending) > Config.MaxClaims then return false, "InvalidRewardSnapshot" end
 	local currentWorld = RS:GetAttribute("WorldId")
 	if validId(currentWorld) and currentWorld ~= state.WorldId then return false, "RewardWorldMismatch" end
 	local tuning = readTuning(state.Tuning or (state.SchemaVersion == 1 and LEGACY_TUNING))
 	if not tuning then return false, "InvalidRewardTuning" end
-	local restored = { SchemaVersion = 2, WorldId = state.WorldId, Tuning = tuning, Players = {}, Objectives = {}, Deaths = {}, Pending = {} }
+	local restored = { SchemaVersion = 3, WorldId = state.WorldId, Tuning = tuning, Players = {}, Objectives = {}, Deaths = {}, Pending = {} }
 	for key, data in pairs(state.Players) do
 		if not userKey(key) or type(data) ~= "table" or not number(data.SurvivedSeconds) or not integer(data.Milestones)
 			or data.Milestones ~= math.floor(data.SurvivedSeconds / tuning.SurvivalSeconds) or not integer(data.ReviveBucket)
 			or not integer(data.RevivesInBucket, tuning.RevivesPerMilestone) then return false, "InvalidRewardSnapshot" end
-		if state.SchemaVersion == 2 and (not integer(data.EarnedCurrency, Economy.MaxCurrency) or not integer(data.EarnedXP, Economy.MaxCurrency)
+		if state.SchemaVersion >= 2 and (not integer(data.EarnedCurrency, Economy.MaxCurrency) or not integer(data.EarnedXP, Economy.MaxCurrency)
 			or type(data.TotalsComplete) ~= "boolean") then return false, "InvalidRewardTotals" end
 		restored.Players[key] = { SurvivedSeconds = data.SurvivedSeconds, Milestones = data.Milestones, ReviveBucket = data.ReviveBucket,
-			RevivesInBucket = data.RevivesInBucket, EarnedCurrency = data.EarnedCurrency or 0, EarnedXP = data.EarnedXP or 0, TotalsComplete = data.TotalsComplete ~= false }
+			RevivesInBucket = data.RevivesInBucket, EarnedCurrency = data.EarnedCurrency or 0, EarnedXP = data.EarnedXP or 0, TotalsComplete = data.TotalsComplete ~= false, ClassSeconds = {} }
+		if data.ClassSeconds ~= nil then
+			if type(data.ClassSeconds) ~= "table" then return false, "InvalidClassTime" end
+			for role, seconds in pairs(data.ClassSeconds) do
+				if not Classes.Definitions[role] or not number(seconds) then return false, "InvalidClassTime" end
+				restored.Players[key].ClassSeconds[role] = seconds
+			end
+		end
 	end
 	for id, objective in pairs(state.Objectives) do
 		if not validId(id) or type(objective) ~= "table" or type(objective.Id) ~= "string" or type(objective.Items) ~= "table" or #objective.Items > 20
@@ -298,7 +353,7 @@ function Service:RestoreState(state)
 		-- revive bucket. Reconstruct the known minimum instead of inventing old payouts.
 		local function legacyPlayer(key)
 			restored.Players[key] = restored.Players[key] or { SurvivedSeconds = 0, Milestones = 0, ReviveBucket = 0,
-				RevivesInBucket = 0, EarnedCurrency = 0, EarnedXP = 0, TotalsComplete = true }
+				RevivesInBucket = 0, EarnedCurrency = 0, EarnedXP = 0, TotalsComplete = true, ClassSeconds = {} }
 			return restored.Players[key]
 		end
 		for _, objective in pairs(restored.Objectives) do for key in pairs(objective.Recipients) do legacyPlayer(key) end end
@@ -348,7 +403,7 @@ function Service:CompleteWorldRestore()
 		self._pendingRestore = nil
 	end
 	if RunService:IsStudio() and not validId(RS:GetAttribute("WorldId")) then self._studioId = self._worldId end
-	self._samples = {}
+	self._samples, self._classSettled, self._activity = {}, {}, {}
 	for _, player in ipairs(Players:GetPlayers()) do
 		self:_sample(player)
 		self:_status(player)
@@ -395,13 +450,19 @@ function Service:Init()
 	Players.PlayerRemoving:Connect(function(player)
 		self:_sample(player)
 		for _, connection in ipairs(connections[player] or {}) do connection:Disconnect() end
-		connections[player], self._samples[player] = nil, nil
+		task.spawn(function() self:_flush(player) end)
+		connections[player], self._samples[player], self._activity[player] = nil, nil, nil
 	end)
 	for _, player in ipairs(Players:GetPlayers()) do bind(player) end
 	RS:GetAttributeChangedSignal("WorldRestoring"):Connect(function()
 		for _, player in ipairs(Players:GetPlayers()) do self:_sample(player) end
 	end)
 	Profile:OnLoaded(function(player) task.defer(function() self:_flush(player) end) end, true)
+	Profile:OnDeparture(function(player)
+		self:_sample(player)
+		while self._flushing[player] do task.wait() end
+		self:_flush(player, true)
+	end)
 	task.spawn(function()
 		local retryAt = 0
 		while self._started do

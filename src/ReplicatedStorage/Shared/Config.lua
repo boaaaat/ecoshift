@@ -65,17 +65,11 @@ Config.LOOT = {
 	},
 }
 
-Config.ROLES = {
-	Default = "Generalist",
-	Definitions = {
-		Generalist = { Name = "Generalist", Gather = 1.0, Build = 1.0, Combat = 1.0, Heal = 1.0, Craft = 1.0 },
-		Builder = { Name = "Builder", Gather = 0.9, Build = 1.3, Combat = 0.9, Heal = 0.9, Craft = 1.1 },
-		Hunter = { Name = "Hunter", Gather = 1.0, Build = 0.9, Combat = 1.25, Heal = 0.9, Craft = 1.0 },
-		Gatherer = { Name = "Gatherer", Gather = 1.3, Build = 0.9, Combat = 0.9, Heal = 0.9, Craft = 1.0 },
-		Engineer = { Name = "Engineer", Gather = 1.0, Build = 1.1, Combat = 0.9, Heal = 0.9, Craft = 1.25 },
-		Medic = { Name = "Medic", Gather = 0.9, Build = 0.9, Combat = 0.9, Heal = 1.4, Craft = 1.0 },
-	},
-}
+local Classes = require(script.Parent.ClassConfig)
+Config.ROLES = { Default = "Generalist", Definitions = {} }
+for id, definition in pairs(Classes.Definitions) do
+ Config.ROLES.Definitions[id] = {Name=definition.Name, Gather=1, Build=1, Combat=1, Heal=1, Craft=1}
+end
 
 Config.THREAT = {
 	Clamp = { 0, 10 },

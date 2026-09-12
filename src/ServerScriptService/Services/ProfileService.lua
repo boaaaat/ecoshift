@@ -5,11 +5,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Economy = require(ReplicatedStorage.Shared.EconomyConfig)
+local Classes = require(ReplicatedStorage.Shared.ClassConfig)
 local Util = require(ReplicatedStorage.Shared.Util)
 local SettingsConfig = require(ReplicatedStorage.Shared.SettingsConfig)
 
 local ProfileService = {
-	_profiles = {}, _sessions = {}, _loadCallbacks = {}, _changeCallbacks = {},
+	_profiles = {}, _sessions = {}, _loadCallbacks = {}, _changeCallbacks = {}, _departureCallbacks = {},
 	_store = DataStoreService:GetDataStore(Config.DATASTORE.ProfileStore),
 }
 
@@ -60,6 +61,16 @@ local function decode(raw)
 	for _, field in ipairs({ "UnlockedRoles", "Perks", "Cosmetics", "Blueprints" }) do data[field] = asSet(data[field]) end
 	data.UnlockedRoles[Config.ROLES.Default] = true
 	if type(data.Role) ~= "string" or not Config.ROLES.Definitions[data.Role] or not data.UnlockedRoles[data.Role] then data.Role = Config.ROLES.Default end
+	data.ClassProgress = type(data.ClassProgress) == "table" and data.ClassProgress or {}
+	for _, id in ipairs(Classes.Order) do
+		local progress = data.ClassProgress[id]
+		progress = type(progress) == "table" and progress or {}
+		local seconds = tonumber(progress.ActiveSeconds) or 0
+		data.ClassProgress[id] = { Level = math.clamp(integer(progress.Level, 1, 5), 1, 5),
+			ActiveSeconds = seconds == seconds and math.clamp(seconds, 0, 1e9) or 0 }
+	end
+	if data.ClassTimeReceipts ~= nil and type(data.ClassTimeReceipts) ~= "table" then return nil, "InvalidClassTimeLedger" end
+	data.ClassTimeReceipts = data.ClassTimeReceipts or {}
 	data.Preferences = type(data.Preferences) == "table" and data.Preferences or {}
 	if data.Preferences.UITheme ~= "Light" and data.Preferences.UITheme ~= "Dark" then data.Preferences.UITheme = Economy.DefaultTheme end
 	data.Preferences = SettingsConfig.Normalize(data.Preferences)
@@ -75,6 +86,7 @@ end
 local function publicProfile(data)
 	return {
 		XP = data.XP, Level = data.Level, Role = data.Role, Currency = data.Currency,
+		ClassProgress = Util.DeepCopy(data.ClassProgress),
 		CurrencyName = Economy.CurrencyName, UnlockedRoles = Util.DeepCopy(data.UnlockedRoles),
 		Perks = Util.DeepCopy(data.Perks), Cosmetics = Util.DeepCopy(data.Cosmetics), Blueprints = Util.DeepCopy(data.Blueprints),
 		Preferences = Util.DeepCopy(data.Preferences), UITheme = data.Preferences.UITheme,
@@ -99,6 +111,10 @@ function ProfileService:_accept(plr, data)
 		plr:SetAttribute("UITheme", data.Preferences.UITheme)
 		plr:SetAttribute("PersonalSettings", HttpService:JSONEncode(data.Preferences))
 		plr:SetAttribute("FieldMarks", data.Currency)
+		local role = plr:GetAttribute("Role") or data.Role
+		local progress = data.ClassProgress[role]
+		plr:SetAttribute("ClassActiveSeconds", progress and progress.ActiveSeconds or 0)
+		plr:SetAttribute("PermanentClassLevel", progress and progress.Level or 1)
 	end
 	for _, callback in ipairs(self._changeCallbacks) do
 		task.defer(function() if self:IsLoaded(plr) then pcall(callback, plr, self._profiles[plr]) end end)
@@ -119,6 +135,9 @@ function ProfileService:OnLoaded(callback, replayExisting)
 			task.defer(function() if self:IsLoaded(plr) then pcall(callback, plr, profile) end end)
 		end
 	end
+end
+function ProfileService:OnDeparture(callback)
+	if type(callback) == "function" then table.insert(self._departureCallbacks, callback) end
 end
 function ProfileService:OnChanged(callback)
 	if type(callback) == "function" then table.insert(self._changeCallbacks, callback) end
@@ -184,6 +203,28 @@ local function reduce(data, op)
 		data.XP += op.XP
 		data.Level = math.max(data.Level, levelForXP(data.XP))
 		data.RewardReceipts[op.RewardId] = fingerprint
+	elseif op.Kind == "ClassTime" then
+		local receipt = data.ClassTimeReceipts[op.WorldClassId] or 0
+		if type(receipt) ~= "number" or receipt ~= receipt or receipt < 0 then return false, "InvalidClassTimeLedger", false end
+		if op.TotalSeconds <= receipt then return true, "AlreadyApplied", false end
+		if receipt == 0 then
+			local count = 0
+			for _ in pairs(data.ClassTimeReceipts) do count += 1 end
+			if count >= Economy.MaxRewardReceipts then return false, "RewardLedgerFull", false end
+		end
+		local progress = data.ClassProgress[op.Role]
+		progress.ActiveSeconds = math.min(1e9, progress.ActiveSeconds + op.TotalSeconds - receipt)
+		data.ClassTimeReceipts[op.WorldClassId] = op.TotalSeconds
+	elseif op.Kind == "UpgradeClass" then
+		if not data.UnlockedRoles[op.Role] then return false, "RoleLocked", false end
+		local progress = data.ClassProgress[op.Role]
+		if progress.Level >= op.Level then return true, "AlreadyApplied", false end
+		if progress.Level ~= op.Level - 1 then return false, "UpgradeOutOfOrder", false end
+		if progress.ActiveSeconds < Classes.RequiredSeconds[op.Level] then return false, "InsufficientClassXP", false end
+		local price = Classes.UpgradePrices[op.Level]
+		if data.Currency < price then return false, "InsufficientCurrency", false end
+		data.Currency -= price
+		progress.Level = op.Level
 	elseif op.Kind == "PurchaseRole" then
 		if data.UnlockedRoles[op.Role] then return true, "AlreadyOwned", false end
 		if data.Currency < op.Price then return false, "InsufficientCurrency", false end
@@ -305,10 +346,24 @@ end
 function ProfileService:PurchaseRole(plr, roleId)
 	if type(roleId) ~= "string" or not Config.ROLES.Definitions[roleId] then return false, "InvalidRole" end
 	if not self:IsLoaded(plr) then return false, "ProfileUnavailable" end
-	local price = Economy.ClassPrices[roleId]
+	local price = Classes.Definitions[roleId].Price
 	if roleId == Config.ROLES.Default then return true, "AlreadyOwned" end
 	if not validAmount(price) or price <= 0 then return false, "RoleNotForSale" end
 	return self:_submit(plr, newOperation("PurchaseRole", { Role = roleId, Price = price }))
+end
+-- Cumulative, world-scoped watermarks safely settle retries and older saved snapshots.
+function ProfileService:GrantClassTime(plr, worldId, roleId, totalSeconds)
+	if not validId(worldId) or #worldId > 64 or not Classes.Definitions[roleId]
+		or type(totalSeconds) ~= "number" or totalSeconds ~= totalSeconds or totalSeconds <= 0 or totalSeconds > 1e9 then return false, "InvalidClassTime" end
+	return self:_submit(plr, newOperation("ClassTime", { WorldClassId = worldId .. ":" .. roleId, Role = roleId, TotalSeconds = totalSeconds }))
+end
+function ProfileService:UpgradeClass(plr, roleId, targetLevel)
+	if type(roleId) ~= "string" or not Classes.Definitions[roleId] then return false, "InvalidRole" end
+	if not self:IsLoaded(plr) then return false, "ProfileUnavailable" end
+	local current = self:GetProfile(plr).ClassProgress[roleId].Level
+	local level = targetLevel or current + 1
+	if type(level) ~= "number" or level % 1 ~= 0 or level < 2 or level > 5 then return false, "ClassMaxLevel" end
+	return self:_submit(plr, newOperation("UpgradeClass", { Role = roleId, Level = level }))
 end
 function ProfileService:SetUITheme(plr, theme)
 	if theme ~= "Dark" and theme ~= "Light" then return false, "InvalidTheme" end
@@ -365,6 +420,7 @@ function ProfileService:Init()
 	Players.PlayerAdded:Connect(function(plr) task.spawn(function() self:Load(plr) end) end)
 	for _, plr in ipairs(Players:GetPlayers()) do task.spawn(function() self:Load(plr) end) end
 	Players.PlayerRemoving:Connect(function(plr)
+		for _, callback in ipairs(self._departureCallbacks) do pcall(callback, plr) end
 		local session = self._sessions[plr]
 		if session then session.Leaving = true end
 		self:Save(plr)
@@ -376,7 +432,10 @@ function ProfileService:Init()
 		local pending = 0
 		for plr in pairs(self._sessions) do
 			pending += 1
-			task.spawn(function() pcall(function() self:Save(plr) end) pending -= 1 end)
+			task.spawn(function() pcall(function()
+				for _, callback in ipairs(self._departureCallbacks) do pcall(callback, plr) end
+				self:Save(plr)
+			end) pending -= 1 end)
 		end
 		local deadline = os.clock() + 25
 		while pending > 0 and os.clock() < deadline do task.wait(0.1) end

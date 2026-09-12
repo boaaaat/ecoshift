@@ -828,7 +828,7 @@ end
 function ChunkStreamingService:_rememberObject(key, entry)
 	local inst = entry.Instance
 	if not inst.Parent then return end
-	local state = { Prefab = inst:GetAttribute("SnapshotPrefab"), Category = entry.Category }
+	local state = { Prefab = inst:GetAttribute("SnapshotPrefab"), Category = entry.Category, Regrown = inst:GetAttribute("ClassRegrown") == true }
 	if entry.Category == "Enemies" then
 		state.Actor = SnapshotCodec.Actor(inst)
 		if not state.Actor then state.Destroyed = true end
@@ -881,6 +881,20 @@ function ChunkStreamingService:_trackPersistent(inst, prefabName, parent, catego
 	end
 	inst:SetAttribute("WorldObjectKey", key)
 	inst:SetAttribute("SnapshotPrefab", prefabName)
+	-- Keep a bounded template only for eligible plants in currently generated chunks.
+	self._plantTemplates = self._plantTemplates or {}
+	local kind = require(script.Parent.ClassEffects).Kind(inst)
+	inst:SetAttribute("ResourceKind", kind)
+	self._classMetadata=self._classMetadata or {}
+	if category=="Resources" or category=="ResourceNode" or category=="Structures" then
+		self._classMetadata[key]={Id=key,Position=inst:GetPivot().Position,Kind=category=="Structures" and "Structure" or kind=="Other" and "Resource" or kind,Label=inst.Name}
+	end
+	if kind=="Plant" and not inst:FindFirstAncestor("Objectives") and not inst:GetAttribute("ObjectiveId") then
+		local previous=self._plantTemplates[key]
+		if previous and previous.Template then previous.Template:Destroy() end
+		self._plantTemplates[key]={Template=inst:Clone(),Parent=parent,Chunk=chunk,Position=inst:GetPivot().Position,Prefab=prefabName,Category=category}
+	end
+	if state and state.Regrown then inst:SetAttribute("ClassRegrown",true) end
 	if state then
 		assert(state.Prefab == prefabName, "Saved generated prefab changed")
 		if state.Destroyed then inst:Destroy(); return false end
@@ -908,7 +922,7 @@ function ChunkStreamingService:_trackPersistent(inst, prefabName, parent, catego
 	inst.Destroying:Connect(function()
 		if self._tracked[key] ~= entry then return end
 		if not self._paused and not chunk:GetAttribute("WorldUnloading") then
-			self._persistent[key] = { Destroyed = true, Prefab = prefabName, Category = entry.Category }
+			self._persistent[key] = { Destroyed = true, Prefab = prefabName, Category = entry.Category, Regrown = inst:GetAttribute("ClassRegrown") == true }
 		end
 		self._tracked[key] = nil
 	end)
@@ -935,6 +949,40 @@ function ChunkStreamingService:_trackPersistent(inst, prefabName, parent, catego
 		end
 	end
 	return true
+end
+
+function ChunkStreamingService:GetClassScanMarkers(position, radius, mineralsOnly)
+	local markers={}
+	for key,metadata in pairs(self._classMetadata or {}) do
+		local state=self._persistent[key]
+		if not (state and state.Destroyed) and (not mineralsOnly or metadata.Kind=="Mineral") and (metadata.Position-position).Magnitude<=radius then
+			table.insert(markers,table.clone(metadata))
+		end
+	end
+	return markers
+end
+
+function ChunkStreamingService:RegrowPlants(position, radius, limit)
+	local candidates={}
+	for key,template in pairs(self._plantTemplates or {}) do
+		local state=self._persistent[key]
+		if state and state.Destroyed and not state.Regrown and template.Parent:IsDescendantOf(workspace)
+			and not template.Chunk:GetAttribute("WorldUnloading") and (template.Position-position).Magnitude<=radius then
+			table.insert(candidates,{Key=key,Data=template})
+		end
+	end
+	table.sort(candidates,function(a,b) return (a.Data.Position-position).Magnitude<(b.Data.Position-position).Magnitude end)
+	local count=0
+	for i=1,math.min(limit,#candidates) do
+		local entry=candidates[i]; local data=entry.Data
+		local clone=data.Template:Clone()
+		clone:SetAttribute("ClassRegrown",true)
+		-- Claim before exposing the node; every Botanist shares this per-shift ledger.
+		self._persistent[entry.Key]={Prefab=data.Prefab,Category=data.Category,Regrown=true}
+		clone.Parent=data.Parent
+		if self:_trackPersistent(clone,data.Prefab,data.Parent,data.Category,entry.Key) then count+=1; ResourceNodeService:BindFolder(data.Parent) end
+	end
+	return count
 end
 
 function ChunkStreamingService:CaptureWorldState()
@@ -2060,6 +2108,10 @@ function ChunkStreamingService:_placePrefab(prefab, position, parent, step)
 end
 
 function ChunkStreamingService:_unloadChunk(cx, cz)
+	for key,entry in pairs(self._plantTemplates or {}) do
+		if entry.Chunk:GetAttribute("ChunkX")==cx and entry.Chunk:GetAttribute("ChunkZ")==cz then entry.Template:Destroy(); self._plantTemplates[key]=nil end
+	end
+
 	local key = chunkKey(cx, cz)
 	local data = self._loadedChunks[key]
 	if not data then return end
@@ -2140,6 +2192,9 @@ function ChunkStreamingService:_updateChunks()
 end
 
 function ChunkStreamingService:Pause()
+	for _,entry in pairs(self._plantTemplates or {}) do entry.Template:Destroy() end
+	self._plantTemplates={}
+
 	-- Clear previous-biome region details before terrain regeneration starts.
 	TeamExplorationService:BeginBiome(BiomeService:GetCurrent(), BiomeService:GetTiming().ShiftCount)
 	for key, entry in pairs(self._tracked) do self:_rememberObject(key, entry) end
@@ -2165,7 +2220,7 @@ function ChunkStreamingService:SetBiome(biomeName, force)
 	if self._currentBiome == biomeName and not force and not self._paused then return end
 	self:Pause()
 	local epoch = BiomeService:GetTiming().ShiftCount
-	if self._epoch ~= epoch or self._currentBiome ~= biomeName then self._persistent = {} end
+	if self._epoch ~= epoch or self._currentBiome ~= biomeName then self._persistent = {}; self._classMetadata={} end
 	self._epoch = epoch
 	self._currentBiome = biomeName
 	TeamExplorationService:BeginBiome(biomeName, self._epoch)

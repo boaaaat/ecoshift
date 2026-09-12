@@ -24,10 +24,10 @@ local function resolveRecipe(recipeId)
 end
 
 local function adjustedIngredientsForPlayer(plr, ingredients)
-	local craftMult = tonumber(plr:GetAttribute("Role_Craft")) or 1.0
+	-- Class crafting bonuses change work rate, never material cost.
 	local adjusted = {}
 	for _, entry in ipairs(ingredients or {}) do
-		local n = math.max(1, math.floor((entry.N or 1) / math.max(craftMult, 0.1)))
+		local n = math.max(1, math.floor(entry.N or 1))
 		adjusted[#adjusted + 1] = { Id = entry.Id, N = n }
 	end
 	return adjusted
@@ -234,15 +234,28 @@ function CraftingService:_completeCraft(plr, context)
 end
 
 function CraftingService:_scheduleCompletion(plr, context, duration)
-	task.delay(duration, function()
-		local completed, err = pcall(self._completeCraft, self, plr, context)
-		if not completed then
-			warn("[CraftingService] Craft completion failed:", err)
-			if self._activeCrafts[plr] == context and plr.Parent == Players then
-				context.CancelReason = context.CancelReason or "RefundPending"
-				self:_scheduleCompletion(plr, context, 2)
+	if context.Worker then return end
+	context.Worker = true
+	task.spawn(function()
+		local previous = os.clock()
+		while self._activeCrafts[plr] == context and plr.Parent == Players do
+			local now = os.clock()
+			local rate = require(script.Parent.ClassAbilityService):GetCraftRate(plr, context.Station)
+			context.Work = (context.Work or 0) + (now - previous) * rate
+			previous = now
+			local remaining = math.max(0, context.Duration - context.Work) / rate
+			context.EndsAt = now + remaining
+			local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+			if context.Work >= context.Duration or context.CancelReason or not hum or hum.Health<=0
+				or plr.Character~=context.Character or GameStateService:IsGameOver() then
+				local completed, err = pcall(self._completeCraft,self,plr,context)
+				if not completed then warn("[CraftingService] completion deferred:",err); context.CancelReason="RefundPending" end
+			else
+				if self._remote then self._remote:FireClient(plr,"Progress",{RecipeId=context.RecipeId,StationType=context.StationType,Duration=context.Duration/rate,Remaining=remaining,Progress=math.clamp(context.Work/context.Duration,0,1),Quantity=context.Quantity}) end
 			end
+			task.wait(.1)
 		end
+		context.Worker = nil
 	end)
 end
 
@@ -276,6 +289,8 @@ function CraftingService:Craft(plr, recipeId, stationType, quantity)
 		Token = token,
 		RecipeId = recipeId,
 		StationType = effectiveStation,
+		Station = self:FindNearbyStation(plr,effectiveStation),
+		Work = 0,
 		Ingredients = ingredients,
 		OutputId = outputId,
 		OutputCount = outputCount,
@@ -287,6 +302,7 @@ function CraftingService:Craft(plr, recipeId, stationType, quantity)
 	-- No callback can observe paid ingredients without their refund escrow.
 	if not InventoryService:PayCost(plr, ingredients, true) then return false, "ConsumeFailed" end
 	self._activeCrafts[plr] = context
+	require(script.Parent.ExpeditionRewardsService):RecordActivity(plr)
 	self:_scheduleCompletion(plr, context, duration)
 	local started = {RecipeId = recipeId, StationType = effectiveStation, Duration = duration, Quantity = quantity, OutputId = outputId, OutputCount = outputCount}
 	if self._remote and plr.Parent == Players then self._remote:FireClient(plr, "Started", started) end

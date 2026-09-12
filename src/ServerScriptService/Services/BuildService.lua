@@ -259,10 +259,10 @@ function BuildService:Place(plr, buildType, worldPos, rotation)
 	else
 		-- Traditional building with resource costs
 		local cost = Config.BUILD.Costs[buildType] or {}
-		local buildMult = tonumber(plr:GetAttribute("Role_Build")) or 1.0
+		local discount = tonumber(plr:GetAttribute("Class_BuildDiscount")) or 0
 		local adjusted = {}
 		for _, entry in ipairs(cost) do
-			local n = math.max(1, math.floor((entry.N or 1) / math.max(buildMult, 0.1)))
+			local n = math.max(1, math.ceil((entry.N or 1) * (1 - discount)))
 			adjusted[#adjusted + 1] = { Id = entry.Id, N = n }
 		end
 		if not InventoryService:PayCost(plr, adjusted) then return false, "MissingCost" end
@@ -280,6 +280,7 @@ function BuildService:Place(plr, buildType, worldPos, rotation)
 		BuildPlacement.PutOnSurface(inst, CFrame.new(pos) * CFrame.Angles(0, math.rad(rotation), 0))
 
 		inst.Parent = workspace
+		require(script.Parent.ExpeditionRewardsService):RecordActivity(plr)
 		inst:SetAttribute("PlacementVersion", 1)
 		inst:SetAttribute("OwnerUserId", plr.UserId)
 		inst:SetAttribute("GridX", gx)
@@ -416,6 +417,7 @@ function BuildService:RestoreWorldState(states)
 				inst:PivotTo(cf + Vector3.new(0, ground.Position.Y - bottom, 0))
 			end
 		end
+		require(script.Parent.ExpeditionRewardsService):RecordActivity(plr)
 		inst:SetAttribute("PlacementVersion", 1)
 		inst:SetAttribute("OwnerUserId", SnapshotCodec.Number(state.Owner))
 		inst:SetAttribute("GridX", gx); inst:SetAttribute("GridZ", gz)

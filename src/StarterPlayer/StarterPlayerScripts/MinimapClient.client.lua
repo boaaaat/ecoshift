@@ -55,6 +55,7 @@ local STATE = {
 	},
 	spawnPosition = nil,
 	customBlips = {},
+	abilityBlips = {},
 	enemyEmojiByTypeKey = {},
 	usedEnemyEmojis = {},
 	enemyEmojiRng = Random.new(),
@@ -1931,6 +1932,18 @@ local function renderFullscreen(playerPos)
 		end
 	end
 
+	for key, data in pairs(STATE.abilityBlips) do
+		if data.Expires <= os.clock() then STATE.abilityBlips[key] = nil; continue end
+		local pos = data.Position
+		if data.Target and data.Target:IsDescendantOf(workspace) then
+			pos = data.Target:IsA("Model") and data.Target:GetPivot().Position or data.Target:IsA("BasePart") and data.Target.Position or pos
+		end
+		if typeof(pos) == "Vector3" then
+			local kind = data.Kind == "Monster" and "Enemies" or data.Kind == "Structure" and "Structures" or "Resources"
+			drawMarker("ability_" .. key, pos.X, pos.Z, kind, 0, 12)
+		end
+	end
+
 	hideUnusedNamedFrames(RENDER_CACHE.chunkFrames, RENDER_CACHE.usedChunkKeys)
 	hideUnusedNamedFrames(RENDER_CACHE.regionFrames, RENDER_CACHE.usedRegionKeys)
 	hideUnusedNamedFrames(RENDER_CACHE.markerFrames, RENDER_CACHE.usedMarkerKeys)
@@ -2160,6 +2173,18 @@ local function renderMinimap(playerPos, playerLook)
 		end
 	end
 
+	for key, data in pairs(STATE.abilityBlips) do
+		if data.Expires <= os.clock() then STATE.abilityBlips[key] = nil; continue end
+		local pos = data.Position
+		if data.Target and data.Target:IsDescendantOf(workspace) then
+			pos = data.Target:IsA("Model") and data.Target:GetPivot().Position or data.Target:IsA("BasePart") and data.Target.Position or pos
+		end
+		if typeof(pos) == "Vector3" then
+			local kind = data.Kind == "Monster" and "Enemies" or data.Kind == "Structure" and "Structures" or "Resources"
+			drawMiniMarker("ability_" .. key, pos.X, pos.Z, kind, 0, 10, nil, false)
+		end
+	end
+
 	hideUnusedNamedFrames(RENDER_CACHE.minimapChunkFrames, RENDER_CACHE.usedMinimapChunkKeys)
 	hideUnusedNamedFrames(RENDER_CACHE.minimapRegionFrames, RENDER_CACHE.usedMinimapRegionKeys)
 	hideUnusedNamedFrames(RENDER_CACHE.minimapMarkerFrames, RENDER_CACHE.usedMinimapMarkerKeys)
@@ -2366,3 +2391,25 @@ init()
 player:GetAttributeChangedSignal("FieldKitMap"):Connect(toggleFullMap)
 
 return MinimapClient
+
+-- Ability discoveries have server-bounded lifetimes and never activate world chunks.
+task.spawn(function()
+	local ability = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("ClassAbility")
+	ability.OnClientEvent:Connect(function(action, data)
+		if type(data) ~= "table" then return end
+		if action == "ClearMarkers" then
+			local groups={};for _,key in ipairs(data.Keys or {}) do groups[tostring(key)]=true end
+			for key,marker in pairs(STATE.abilityBlips) do if groups[marker.Group] then STATE.abilityBlips[key]=nil end end
+			STATE.fullRenderBoostUntil=os.clock()+1;return
+		end
+		if action ~= "Markers" then return end
+		local expires = os.clock() + math.clamp(tonumber(data.Duration) or 0, 0, 60)
+		for index, marker in ipairs(data.Markers or {}) do
+			if typeof(marker.Position) == "Vector3" then
+				local key = tostring(data.Key or "scan") .. ":" .. tostring(marker.Id or index)
+				STATE.abilityBlips[key] = {Position=marker.Position, Target=marker.Target, Kind=marker.Kind, Label=marker.Label, Expires=expires, Group=tostring(data.Key or "scan")}
+			end
+		end
+		STATE.fullRenderBoostUntil=os.clock()+1
+	end)
+end)

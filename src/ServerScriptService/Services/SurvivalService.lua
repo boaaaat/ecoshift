@@ -47,7 +47,7 @@ end
 local function applySprintModifier(plr, enabled)
 	if enabled then
 		if not SurvivalService._sprintApplied[plr] then
-			StatsService:AddModifier(plr, "Speed", 0.25, "Mult", nil, "Sprint")
+			StatsService:AddModifier(plr, "Speed", 0.25 * (1 + (plr:GetAttribute("Class_SpeedBonus") or 0)), "Mult", nil, "Sprint")
 			SurvivalService._sprintApplied[plr] = true
 		end
 	else
@@ -123,13 +123,14 @@ function SurvivalService:_tickPlayer(plr, dt)
 	local kind = ambient >= 0 and "Heat" or "Cold"
 	local gear = math.clamp(tonumber(char:GetAttribute("GearRes_" .. kind)) or 0, 0, 0.95)
 	local tonic = math.clamp(tonumber(char:GetAttribute("Res_" .. kind)) or 0, 0, 0.95)
-	ambient *= (1 - gear) * (1 - tonic)
+	local fieldReduction, fieldRecovery = require(script.Parent.ClassAbilityService):GetShelterEffect(plr)
+	ambient *= (1 - gear) * (1 - tonic) * (1 - (plr:GetAttribute("Class_ExposureReduction") or 0)) * (1 - fieldReduction)
 	if ambient < 0 then ambient *= 1 + (tonumber(char:GetAttribute("WetStacks")) or 0) * 0.1 end
 	if ambient ~= 0 then
 		temp += ambient * dt
 	end
 	-- Safe conditions and suitable gear allow body temperature to recover.
-	tempRes = math.max(0, tempRes) + 0.3
+	tempRes = (math.max(0, tempRes) + 0.3) * (1 + (plr:GetAttribute("Class_ExposureRecovery") or 0)) + fieldRecovery
 	if tempRes > 0 then
 		if temp > 0 then
 			temp = math.max(0, temp - (tempRes * dt))
@@ -146,7 +147,7 @@ function SurvivalService:_tickPlayer(plr, dt)
 
 	local maxHunger = StatsService:GetStat(plr, "MaxHunger") or 100
 	local hunger = StatsService:GetBase(plr, "Hunger") or StatsService:GetStat(plr, "Hunger") or maxHunger
-	hunger = math.max(0, hunger - (HUNGER_DRAIN * dt))
+	hunger = math.max(0, hunger - (HUNGER_DRAIN * (1 - (plr:GetAttribute("Class_HungerReduction") or 0)) * dt))
 	if hunger <= 0 then
 		hum:TakeDamage(HUNGER_DAMAGE * dt)
 	end

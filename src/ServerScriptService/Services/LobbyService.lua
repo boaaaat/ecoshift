@@ -3,14 +3,14 @@ local Players=game:GetService("Players")
 local RS=game:GetService("ReplicatedStorage")
 local Config=require(RS.Shared.SessionConfig)
 local Economy=require(RS.Shared.EconomyConfig)
-local Classes=require(RS.Shared.Config).ROLES
+local Classes=require(RS.Shared.ClassConfig)
 local Profile=require(script.Parent.ProfileService)
 local Roles=require(script.Parent.RoleService)
 local Parties=require(script.Parent.PartyService)
 local HttpService=game:GetService("HttpService")
 local Service={_clients={}}
 local actions={Snapshot=true,CreateParty=true,Invite=true,AcceptInvite=true,LeaveParty=true,Ready=true,KickMember=true,TransferLeader=true,
-	SelectClass=true,BuyClass=true,StartExpedition=true,Queue=true,CancelQueue=true,ResumeWorld=true,Rejoin=true,ReturnLobby=true,RenameWorld=true,RemoveWorld=true}
+	SelectClass=true,BuyClass=true,UpgradeClass=true,StartExpedition=true,Queue=true,CancelQueue=true,ResumeWorld=true,Rejoin=true,ReturnLobby=true,RenameWorld=true,RemoveWorld=true}
 local sections={Core=true,Archive=true,Rejoin=true,InviteDirectory=true,Invites=true}
 local messages={
 	InsufficientCurrency="You need more "..Economy.CurrencyName.." to unlock this class. Earn them on expeditions.",
@@ -23,6 +23,9 @@ local messages={
 	InvalidRole="That class is unavailable. Refresh the outfitter and choose again.",
 	RoleNotForSale="This class is not available to unlock right now.",
 	AlreadyOwned="You already own this class.",
+	InsufficientClassXP="Play this class longer to earn the required class XP.",
+	ClassMaxLevel="This class is already level 5.",
+	UpgradeOutOfOrder="Upgrade the previous class level first.",
 	Superseded="Your newer class choice is already applied.",
 	RateLimited="Please wait a moment before trying that again.",
 	ArchiveFull="You need a free save slot before starting a new expedition.",
@@ -36,6 +39,7 @@ local function displayMessage(action,success,reason)
 	if reason=="Saved" then
 		if action=="SelectClass" then return "Class equipped. Ready up when your crew is prepared." end
 		if action=="BuyClass" then return "Class unlocked. You can now equip it." end
+		if action=="UpgradeClass" then return "Class upgraded. Its new equipment and bonuses apply to new expeditions." end
 		return "Your changes were saved."
 	end
 	if type(reason)=="string" then
@@ -66,10 +70,15 @@ function Service:Snapshot(player,section,data)
 	local party=Parties:Snapshot(player)
 	local profile=Profile:GetProfile(player)
 	local classes={}
-	for id,def in pairs(Classes.Definitions) do
-		table.insert(classes,{Id=id,Name=def.Name,Price=Economy.ClassPrices[id] or 0,
+	for _,id in ipairs(Classes.Order) do
+		local def=Classes.Definitions[id]
+		local progress=profile and profile.ClassProgress[id] or {Level=1,ActiveSeconds=0}
+		table.insert(classes,{Id=id,Name=def.Name or id,Price=def.Price,Icon=def.Icon,Description=def.Description,
 			Owned=profile and profile.UnlockedRoles[id]==true or false,Selected=profile and profile.Role==id or false,
-			Gather=def.Gather,Build=def.Build,Combat=def.Combat,Heal=def.Heal,Craft=def.Craft})
+			Level=progress.Level,ActiveSeconds=progress.ActiveSeconds,XP=progress.ActiveSeconds/60,
+			NextRequiredSeconds=Classes.RequiredSeconds[progress.Level+1],
+			NextRequiredXP=Classes.RequiredSeconds[progress.Level+1] and Classes.RequiredSeconds[progress.Level+1]/60,
+			UpgradePrice=Classes.UpgradePrices[progress.Level+1]})
 	end
 	table.sort(classes,function(a,b) if a.Price==b.Price then return a.Name<b.Name end; return a.Price<b.Price end)
 	return {Mode=Config.GetMode(),ProfileReady=Profile:IsLoaded(player),Currency=profile and profile.Currency or 0,
@@ -85,6 +94,7 @@ function Service:_handle(player,action,data)
 	elseif action=="Ready" then return Parties:SetReady(player,data.Ready)
 	elseif action=="SelectClass" then return Roles:SetRole(player,data.Id)
 	elseif action=="BuyClass" then return Roles:PurchaseRole(player,data.Id)
+	elseif action=="UpgradeClass" then return Roles:UpgradeClass(player,data.Id,data.TargetLevel)
 	elseif action=="StartExpedition" or action=="Queue" or action=="CancelQueue" then
 		if Config.GetMode()~="Lobby" then return false,"Return to the lobby to find a new expedition." end
 		local queue=optional("MatchmakingService")
@@ -207,9 +217,11 @@ function Service:_receive(player,action,data)
 		Code=not ok and "ServiceUnavailable" or success==true and "Completed" or "ActionRejected",
 		Message=ok and displayMessage(action,success==true,message) or "Service unavailable. Please try again.",
 		StateRevision=state.Revision}
-	if ok and success==true and (action=="SelectClass" or action=="BuyClass") then
+	if ok and success==true and (action=="SelectClass" or action=="BuyClass" or action=="UpgradeClass") then
 		local profile=Profile:GetProfile(player)
 		request.Result.ConfirmedRole=profile and profile.Role or player:GetAttribute("Role")
+		request.Result.ConfirmedLevel=profile and profile.ClassProgress[data.Id] and profile.ClassProgress[data.Id].Level
+		request.Result.Currency=profile and profile.Currency
 	end
 	self:_send(player,"Result",request.Result)
 	if self._clients[player]~=state then return end

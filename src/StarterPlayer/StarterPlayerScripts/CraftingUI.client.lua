@@ -385,8 +385,7 @@ local function getItemCount(itemId)
 end
 
 local function ingredientCost(ingredient)
-	local craftMult = tonumber(player:GetAttribute("Role_Craft")) or 1
-	return math.max(1, math.floor((ingredient.N or 1) / math.max(craftMult, 0.1)))
+	return math.max(1, math.floor(ingredient.N or 1))
 end
 
 local function maxAffordable(recipeId)
@@ -413,7 +412,7 @@ local function craftDuration(recipeId, quantity)
 	local recipe = recipeId and WorkbenchConfig.RECIPES[recipeId]
 	if not recipe then return 0 end
 	local multiplier = WorkbenchConfig:GetEffectiveStationModifiers(recipe, "Hand")
-	return math.max(0.05, (tonumber(recipe.BaseCraftTime) or 0) * multiplier) * quantity
+	return math.max(0.05, (tonumber(recipe.BaseCraftTime) or 0) * multiplier) * quantity / math.min(2,1+(player:GetAttribute("Class_CraftBonus") or 0))
 end
 
 local function formatDuration(seconds)
@@ -745,7 +744,7 @@ end)
 quantityBox.FocusLost:Connect(function()
 	if craftQuantity then quantityBox.Text = tostring(craftQuantity) end
 end)
-player:GetAttributeChangedSignal("Role_Craft"):Connect(updateCraftButton)
+player:GetAttributeChangedSignal("Class_CraftBonus"):Connect(updateCraftButton)
 local progressTick = 0
 game:GetService("RunService").Heartbeat:Connect(function(delta)
 	progressTick += delta
@@ -895,6 +894,15 @@ if rCraft then
 	rCraft.OnClientEvent:Connect(function(kind, payload)
 		if type(payload) ~= "table" then return end
 		if not isCraftPending or payload.RecipeId ~= pendingRecipeId or payload.StationType ~= pendingStationType then return end
+		if kind == "Progress" then
+			pendingConfirmed = true
+			local progress = math.clamp(tonumber(payload.Progress) or 0, 0, 1)
+			local remaining = math.max(0, tonumber(payload.Remaining) or 0)
+			pendingDuration = remaining / math.max(.001, 1 - progress)
+			pendingStartedAt = os.clock() - progress * pendingDuration
+			updateCraftProgress()
+			return
+		end
 		if kind == "Started" then
 			pendingConfirmed = true
 			if type(payload.Duration) == "number" then pendingDuration = payload.Duration end

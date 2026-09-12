@@ -151,6 +151,24 @@ function Service:RevealFromPlayer(player, position)
 	return changed
 end
 
+-- Server-only discovery without instantiating world chunks or actors.
+function Service:RevealRadius(position, radius)
+	if not self._biome then return false end
+	self:Init()
+	local changed = false
+	for x=math.floor((position.X-radius)/CHUNK_SIZE),math.floor((position.X+radius)/CHUNK_SIZE) do
+		for z=math.floor((position.Z-radius)/CHUNK_SIZE),math.floor((position.Z+radius)/CHUNK_SIZE) do
+			local nearX=math.clamp(position.X,x*CHUNK_SIZE,(x+1)*CHUNK_SIZE)
+			local nearZ=math.clamp(position.Z,z*CHUNK_SIZE,(z+1)*CHUNK_SIZE)
+			if cellValid(x,z) and (Vector2.new(nearX,nearZ)-Vector2.new(position.X,position.Z)).Magnitude<=radius then
+				local id=key(x,z)
+				if not self._cells[id] then self._cells[id]=self._metadata[id] or {X=x,Z=z,Biome=self._biome,Regions={}}; self:_publish(self._cells[id]); changed=true end
+			end
+		end
+	end
+	return changed
+end
+
 function Service:CaptureWorldState()
 	local cells = {}
 	for _, cell in pairs(self._cells) do

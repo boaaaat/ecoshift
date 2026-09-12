@@ -158,8 +158,8 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 	if attackerPlayer then
 		local hum = attackerPlayer.Character and attackerPlayer.Character:FindFirstChildOfClass("Humanoid")
 		if not hum or hum.Health <= 0 or attackerPlayer:GetAttribute("IsDead") then return end
-		if not canHit(attackerPlayer) then return end
-		if not distanceOK(attackerPlayer, target, 175) then return end
+		if dmgType ~= "ClassTurret" and not canHit(attackerPlayer) then return end
+		if dmgType ~= "ClassTurret" and not distanceOK(attackerPlayer, target, 175) then return end
 		local combatMult = tonumber(attackerPlayer:GetAttribute("Role_Combat")) or 1.0
 		amount = amount * combatMult
 	end
@@ -169,6 +169,15 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 	local tgtPlr = Players:GetPlayerFromCharacter(target)
 	if tgtPlr and atkTeam and tgtPlr.Team == atkTeam then
 		return
+	end
+
+	if attackerPlayer and not tgtPlr then
+		local bonus = require(script.Parent.ClassAbilityService):GetMarkedBonus(target)
+		amount *= 1 + bonus
+		target:SetAttribute("LastAttackerUserId", attackerPlayer.UserId)
+		if dmgType~="ClassTurret" then require(script.Parent.ExpeditionRewardsService):RecordActivity(attackerPlayer) end
+	elseif tgtPlr and typeof(attacker)=="Instance" and attacker:IsA("Model") and game:GetService("CollectionService"):HasTag(attacker,"Monster") then
+		amount *= 1 - require(script.Parent.ClassAbilityService):GetMonsterReduction(tgtPlr)
 	end
 
 	-- Health component contract:

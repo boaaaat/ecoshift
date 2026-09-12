@@ -11,6 +11,7 @@ local AnimalClass = require(AIFolder:WaitForChild("Animal"))
 local EntityConfig = require(AIFolder:WaitForChild("EntityConfig"))
 local Progression = require(ReplicatedStorage.Shared.ProgressionConfig)
 local RoundService = require(script.Parent.RoundService)
+local ClassDeploymentService = require(script.Parent.ClassDeploymentService)
 
 local EntityAIService = {}
 EntityAIService._entities = {} -- [Model] = controller
@@ -301,7 +302,9 @@ function EntityAIService:Init()
 					if not self._stepping[model] then
 						self._stepping[model] = true
 						task.spawn(function()
-							local ok, err = pcall(function() controller:Step(dt) end)
+							local ok, err = pcall(function()
+								if not ClassDeploymentService:StepEnemy(controller) then controller:Step(dt) end
+							end)
 							self._stepping[model] = nil
 							if not ok then
 								warn("[EntityAIService] Update failed for " .. model.Name .. ": " .. tostring(err))

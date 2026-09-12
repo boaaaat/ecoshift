@@ -373,7 +373,7 @@ end
 
 function DeathService:RevivePlayer(player, reviver)
 	local hold = self._reviveHolds[reviver]
-	if not hold or hold.Target ~= player or os.clock() - hold.StartedAt < REVIVAL_TIME - 0.1 then return false end
+	if not hold or hold.Target ~= player or os.clock() - hold.StartedAt < (hold.Duration or REVIVAL_TIME) - 0.1 then return false end
 	if not self:_canRevive(player, reviver) then return false end
 	self._reviveHolds[reviver] = nil
 	local data = self._deadPlayers[player]
@@ -487,6 +487,7 @@ function DeathService:_createRagdoll(character)
 		prompt.ActionText = "Revive · 1 Revival Kit"
 		prompt.ObjectText = character.Name
 		prompt.HoldDuration = REVIVAL_TIME
+		prompt:SetAttribute("BaseReviveDuration", REVIVAL_TIME)
 		prompt.MaxActivationDistance = REVIVAL_RANGE
 		prompt.RequiresLineOfSight = false
 		prompt.Parent = hrp
@@ -501,7 +502,7 @@ function DeathService:_createRagdoll(character)
 		prompt.PromptButtonHoldEnded:Connect(function(reviver)
 			local hold = self._reviveHolds[reviver]
 			if not hold or hold.Target.Name ~= ragdoll:GetAttribute("OriginalPlayer") then return end
-			if os.clock() - hold.StartedAt < REVIVAL_TIME - 0.1 then
+			if os.clock() - hold.StartedAt < (hold.Duration or REVIVAL_TIME) - 0.1 then
 				self._reviveHolds[reviver] = nil
 			else
 				task.delay(0.25, function()
@@ -740,7 +741,7 @@ function DeathService:_startRevive(player, targetPlayer)
 		end
 		return
 	end
-	self._reviveHolds[player] = { Target = targetPlayer, StartedAt = os.clock() }
+	self._reviveHolds[player] = { Target = targetPlayer, StartedAt = os.clock(), Duration = require(script.Parent.ClassEffects).ReviveDuration(player, REVIVAL_TIME) }
 end
 
 function DeathService:_cancelRevive(player)

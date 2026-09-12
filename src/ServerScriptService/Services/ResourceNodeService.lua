@@ -201,6 +201,8 @@ local function attachDurationPrompt(instance)
 	ResourceNodeService._promptOwners[prompt] = instance
 	prompt.Parent = attachment
 	prompt.HoldDuration = duration
+	prompt:SetAttribute("BaseHarvestDuration", duration)
+	prompt:SetAttribute("ResourceKind", require(script.Parent.ClassEffects).Kind(instance))
 	local holds = setmetatable({}, { __mode = "k" })
 	local claimed = false
 	local function canHarvest(plr)
@@ -217,7 +219,7 @@ local function attachDurationPrompt(instance)
 	end
 	prompt.PromptButtonHoldBegan:Connect(function(plr)
 		if not canHarvest(plr) then return end
-		local hold = { StartedAt = os.clock(), Character = plr.Character }
+		local hold = { StartedAt = os.clock(), Character = plr.Character, Duration = require(script.Parent.ClassEffects).Duration(plr, instance, duration) }
 		holds[plr] = hold
 		-- A client cannot bank a hold while dead or away from the resource.
 		task.spawn(function()
@@ -256,7 +258,7 @@ local function attachDurationPrompt(instance)
 		if not hold or plr.Character ~= hold.Character or not canHarvest(plr)
 			or now - hold.StartedAt > duration + 2
 			or (hold.EndedAt and now - hold.EndedAt > 0.5)
-			or (hold.EndedAt or now) - hold.StartedAt < math.max(0, duration - 0.1) then
+			or (hold.EndedAt or now) - hold.StartedAt < math.max(0, hold.Duration - 0.1) then
 			return
 		end
 		-- Claim before inventory callbacks can yield or another player completes a hold.
@@ -265,10 +267,10 @@ local function attachDurationPrompt(instance)
 		local itemId = getAttr(instance, "DropItemId") or getAttr(instance, "DropItemID") or getAttr(instance, "ItemId") or instance.Name
 		itemId = ResourceItemMap.Normalize(itemId)
 		local count = parseDropCount(instance)
-		local roleMult = tonumber(plr:GetAttribute("Role_Gather")) or 1.0
-		count = math.max(1, math.floor(count * roleMult))
+		count += require(script.Parent.ClassEffects).Extra(plr, instance)
 		local added = InventoryService:Give(plr, itemId, count, true)
 		if added > 0 then
+			require(script.Parent.ExpeditionRewardsService):RecordActivity(plr)
 			instance:Destroy()
 		else
 			claimed = false

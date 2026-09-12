@@ -63,6 +63,7 @@ local function blocked()
 		or player:GetAttribute("IsDead") == true
 		or playerGui:GetAttribute("MenuCursorOpen") == true
 		or playerGui:GetAttribute("BuildPlacementActive") == true
+		or playerGui:GetAttribute("ClassPlacementActive") == true
 		or UserInputService:GetFocusedTextBox() ~= nil
 end
 local function release(cancelled)
@@ -135,7 +136,7 @@ UserInputService:GetPropertyChangedSignal("PreferredInput"):Connect(function()
 	end
 	update()
 end)
-for _, attribute in ipairs({"MenuCursorOpen", "BuildPlacementActive"}) do
+for _, attribute in ipairs({"MenuCursorOpen", "BuildPlacementActive", "ClassPlacementActive"}) do
 	playerGui:GetAttributeChangedSignal(attribute):Connect(update)
 end
 player:GetAttributeChangedSignal("IsDead"):Connect(update)

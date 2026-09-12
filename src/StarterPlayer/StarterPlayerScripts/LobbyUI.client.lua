@@ -5,6 +5,7 @@ local UIS = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 local SocialService = game:GetService("SocialService")
 local Theme = require(RS:WaitForChild("Shared"):WaitForChild("UI"):WaitForChild("UITheme"))
+local ClassOutfitter = require(RS.Shared.UI.ClassOutfitter)
 local Mode = require(RS.Shared.SessionConfig).GetMode()
 local player = Players.LocalPlayer
 local remote = RS:WaitForChild("Remotes"):WaitForChild("Lobby", 60)
@@ -426,7 +427,7 @@ local function renderMemberMenu()
 		button(menu,"×",w-46,2,44,44,closeMenu).TextSize=24
 		portrait(menu,member.UserId,12,12,48)
 		label(menu,member.DisplayName or member.Name or "Explorer",72,10,w-128,25,19,"Text",true)
-		label(menu,(member.Role or "Generalist").." · "..readiness(member),72,37,w-84,22,13,"Success")
+		label(menu,(member.Role or "Generalist").." · L"..tostring(member.ClassLevel or 1).." · "..readiness(member),72,37,w-84,22,13,"Success")
 		label(menu,descriptions[member.Role] or "Expedition crew member.",12,70,w-24,42,14,"TextMuted").TextWrapped=true
 		label(menu,"Career statistics are not available yet.",12,116,w-24,30,13,"TextMuted").TextWrapped=true
 		local leader=party.LeaderId==player.UserId and member.UserId~=player.UserId
@@ -449,7 +450,7 @@ local function renderMemberMenu()
 	label(menu, "@" .. (member.Name or "Explorer"), 136, 105, 292, 23, 15, "TextMuted")
 	label(menu, readiness(member) .. (member.UserId == party.LeaderId and "  /  LEADER" or ""), 136, 139, 292, 25, 14,
 		member.Online and member.Ready and "Success" or "TextMuted", true)
-	label(menu, member.Role or "Generalist", 20, 184, 408, 29, 21, "Text", true)
+	label(menu, (member.Role or "Generalist") .. " · LEVEL " .. tostring(member.ClassLevel or 1), 20, 184, 408, 29, 21, "Text", true)
 	label(menu, descriptions[member.Role] or "Expedition crew member.", 20, 218, 408, 43, 15, "TextMuted").TextWrapped = true
 	local records = box(menu, "FieldRecords", 20, 274, 408, 62)
 	label(records, "FIELD RECORDS", 12, 8, 384, 20, 12, "TextMuted", true)
@@ -472,7 +473,7 @@ end
 local function visualKey()
 	local party = snapshot.Party or {}
 	local crew = {}
-	for _, member in ipairs(party.Members or {}) do table.insert(crew, {member.UserId, member.DisplayName, member.Name, member.Role, member.Ready == true, member.Online == true}) end
+	for _, member in ipairs(party.Members or {}) do table.insert(crew, {member.UserId, member.DisplayName, member.Name, member.Role, member.ClassLevel, member.Ready == true, member.Online == true}) end
 	return HttpService:JSONEncode({page, snapshot.Currency, snapshot.Classes, party.Id, party.LeaderId, party.RunId,
 		party.Queue and party.Queue.Mode or false, party.Queue and party.Queue.Purpose or false, party.ManagementLocked == true, party.MergedCrew == true, selectedMemberId or false,
 		party.Queue ~= nil and party.Queue ~= false, party.QueueStartedAt, crew, liveInvitations(), snapshot.Rejoin, page == "Saves" and snapshot.Worlds or false,
@@ -519,7 +520,7 @@ local function renderContents()
 				card.Size = UDim2.fromOffset(392, 92); card.Parent = content; Theme.Button(card, false)
 				portrait(card, member.UserId, 14, 14, 64)
 				label(card, (member.DisplayName or member.Name or "Explorer") .. (member.UserId == party.LeaderId and "  /  LEADER" or ""), 92, 16, 284, 29, 18, "Text", true)
-				local detail = label(card, (member.Role or "Generalist") .. "  ·  " .. readiness(member), 92, 51, 284, 25, 16, member.Online and member.Ready and "Success" or "TextMuted")
+				local detail = label(card, (member.Role or "Generalist") .. " · L" .. tostring(member.ClassLevel or 1) .. " · " .. readiness(member), 92, 51, 284, 25, 15, member.Online and member.Ready and "Success" or "TextMuted")
 				detail.Name = "Readiness"
 				card.Activated:Connect(function() selectedMemberId = member.UserId; memberMessage = nil; render() end)
 				if member.UserId == player.UserId then selfMember = member end
@@ -555,16 +556,7 @@ local function renderContents()
 		if Mode == "Expedition" then actionButton(content, "RETURN TO OBSERVATORY", "RETURNING…", "ReturnLobby", nil, 0, y, 796, 46, true); y += 62 end
 		if snapshot.Rejoin and snapshot.Rejoin.Available then actionButton(content, "REJOIN ACTIVE EXPEDITION", "REJOINING…", "Rejoin", nil, 0, y, 796, 46, true); y += 62 end
 	elseif page == "Classes" then
-		label(content, "CLASS OUTFITTER", 0, 0, 796, 34, 25, "Text", true)
-		label(content, "Permanent unlocks · earn Field Marks on expeditions", 0, 43, 796, 28, 16, "TextMuted")
-		for index, class in ipairs(snapshot.Classes or {}) do
-			local card = box(content, class.Id, ((index - 1) % 2) * 404, 84 + math.floor((index - 1) / 2) * 180, 392, 166)
-			label(card, class.Name, 16, 14, 360, 30, 24, "Text", true)
-			local description = label(card, descriptions[class.Id] or "", 16, 50, 360, 49, 16, "TextMuted")
-			description.TextWrapped = true; description.TextTruncate = Enum.TextTruncate.None
-			local text = class.Selected and "EQUIPPED" or class.Owned and "EQUIP CLASS" or (tostring(class.Price) .. " FIELD MARKS  ·  UNLOCK")
-			actionButton(card, text, class.Owned and "EQUIPPING…" or "UNLOCKING…", class.Owned and "SelectClass" or "BuyClass", {Id = class.Id}, 16, 112, 360, 40, class.Selected, class.Selected)
-		end
+		ClassOutfitter.Render(content, snapshot, render, actionButton)
 	else
 		label(content, "WORLD ARCHIVE", 0, 0, 796, 34, 25, "Text", true)
 		label(content, "Five personal save slots · original crew required", 0, 43, 796, 28, 16, "TextMuted")
@@ -636,7 +628,7 @@ local function mobileParty()
 			portrait(card,member.UserId,6,6,32)
 			label(card,member.DisplayName or member.Name or "Explorer",44,5,cardW-50,19,14,"Text",true)
 			label(card,member.UserId==party.LeaderId and "LEADER" or "EXPLORER",44,23,cardW-50,15,10,"TextMuted",true)
-			local detail=label(card,(member.Role or "Generalist").."\n"..readiness(member),6,38,cardW-12,cardH-40,12,member.Online and member.Ready and "Success" or "TextMuted")
+			local detail=label(card,(member.Role or "Generalist").." · L"..tostring(member.ClassLevel or 1).."\n"..readiness(member),6,38,cardW-12,cardH-40,12,member.Online and member.Ready and "Success" or "TextMuted")
 			detail.Name="Readiness";detail.TextWrapped=true;detail.TextTruncate=Enum.TextTruncate.None
 		else
 			label(card,"+ INVITE",8,math.floor(cardH/2)-18,cardW-16,22,15,"TextMuted",true)
@@ -739,7 +731,7 @@ render=function()
 	elseif Theme.IsMobile() and page=="Inbox" then mobileInboxContents()
 	else
 		content.ScrollingEnabled=true;content.AutomaticCanvasSize=Enum.AutomaticSize.Y
-		renderContents();if Theme.IsMobile() then mobileLists() end
+		renderContents();if Theme.IsMobile() and page ~= "Classes" then mobileLists() end
 	end
 end
 local desktopGeometry={}
@@ -804,6 +796,9 @@ local function reconcile(request, result)
 	elseif request.Action == "TransferLeader" and party.Id == request.PartyId then
 		party.LeaderId = request.Data.UserId; selectedMemberId = nil
 		for _, member in ipairs(party.Members or {}) do member.Ready = false end
+	elseif request.Action == "UpgradeClass" then
+		for _, class in ipairs(snapshot.Classes or {}) do if class.Id == request.Data.Id then class.Level = result.ConfirmedLevel or request.Data.TargetLevel end end
+		if result.Currency then snapshot.Currency = result.Currency end
 	elseif request.Action == "BuyClass" then
 		for _, class in ipairs(snapshot.Classes or {}) do if class.Id == request.Data.Id then class.Owned = true end end
 	elseif request.Action == "Invite" then inviteStatus[request.Data.UserId] = "Invite sent"; inviteExpiry[request.Data.UserId] = os.clock() + 15
@@ -861,6 +856,7 @@ remote.OnClientEvent:Connect(function(action, data)
 		if data.Success then reconcile(completed, data) end
 		local message = data.Message or "Updated."
 		if data.Success and completed.Action == "SelectClass" then message = (data.ConfirmedRole or completed.Data.Id) .. " equipped."
+		elseif data.Success and completed.Action == "UpgradeClass" then message = "Class upgraded to level " .. tostring(data.ConfirmedLevel or completed.Data.TargetLevel) .. ". New expeditions use your upgrade."
 		elseif data.Success and completed.Action == "BuyClass" then message = "Class unlocked. Choose Equip Class to use it." end
 		notify(message, data.Success and "Success" or "Danger")
 		if completed.Action == "AcceptInvite" and not data.Success and activeInvitation

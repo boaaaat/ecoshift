@@ -15,6 +15,8 @@ function Snapshot:CapturePlayer(player)
 	local char = player.Character
 	local state = {
 		Role = player:GetAttribute("Role"),
+		ClassLevel = player:GetAttribute("ClassLevel") or 1,
+		ClassAbility = service("ClassAbilityService"):CapturePlayer(player),
 		Inventory = service("InventoryService"):CaptureWorldState(player),
 		Stats = service("StatsService"):CaptureWorldState(player),
 		Death = service("DeathService"):CaptureWorldState(player),
@@ -42,7 +44,7 @@ local function markJoiningPlayer(player)
 		player:SetAttribute("WorldPlayerRestoring", true)
 		-- A fresh character is needed to reconstruct a saved downed body.
 		player:SetAttribute("IsDead", false)
-		service("RoleService"):ApplyRunRole(player, state.Role)
+		service("RoleService"):ApplyRunRole(player, state.Role, state.ClassLevel or 1)
 	end
 end
 Players.PlayerAdded:Connect(markJoiningPlayer)
@@ -148,7 +150,7 @@ function Snapshot:RestorePlayer(player)
 	local state = self._players[tostring(player.UserId)]
 	if state then
 		player:SetAttribute("WorldPlayerRestoring", true)
-		service("RoleService"):ApplyRunRole(player, state.Role)
+		service("RoleService"):ApplyRunRole(player, state.Role, state.ClassLevel or 1)
 		char:SetAttribute("WorldStateRestored", true)
 		service("StatsService"):RestoreWorldState(player, state.Stats)
 		service("InventoryService"):RestoreWorldState(player, state.Inventory)
@@ -157,6 +159,15 @@ function Snapshot:RestorePlayer(player)
 		service("InventoryActionService"):RestoreCharacterState(char, state.ResistEffects or {})
 		service("DeathService"):RestoreWorldState(player, state.Death)
 		service("CraftingService"):RestoreRefund(player, state)
+		service("ClassAbilityService"):RestorePlayer(player, state.ClassAbility)
+	else
+		-- New expeditions start at their class-adjusted maximum; restores and revives never heal here.
+		local stats = service("StatsService")
+		stats:SetModifier(player, "MaxHealth", player:GetAttribute("Class_MaxHealth") or 0, "Add", "ClassHealth")
+		stats:SetModifier(player, "Speed", player:GetAttribute("Class_SpeedBonus") or 0, "Mult", "ClassSpeed")
+		stats:SetBase(player, "Health", stats:GetStat(player, "MaxHealth"))
+		char:SetAttribute("WorldStateRestored", true)
+		service("InventoryService"):Reset(player, true)
 	end
 	player:SetAttribute("WorldPlayerRestoring", nil)
 	player:SetAttribute("WorldPlayerLoading", nil)

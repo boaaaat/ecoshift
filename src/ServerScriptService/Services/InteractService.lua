@@ -370,8 +370,6 @@ local function destroyNodeWithDrop(node, plr)
 	itemId = ResourceItemMap.Normalize(itemId)
 	local dropScale = tonumber(getNodeAttr(node, "DropScale"))
 	local count = parseDropCount(node)
-	local roleMult = tonumber(plr:GetAttribute("Role_Gather")) or 1.0
-	count = math.max(1, math.floor(count * roleMult))
 
 	local nightMult = 1
 	if _G.Ecoshift and _G.Ecoshift.DayNightService and _G.Ecoshift.DayNightService.GetResourceMultiplier then
@@ -380,6 +378,7 @@ local function destroyNodeWithDrop(node, plr)
 		nightMult = tonumber(_G.Ecoshift.Mods.ResourceMultiplier) or 1
 	end
 	count = math.max(1, math.floor(count * nightMult))
+	count += require(script.Parent.ClassEffects).Extra(plr, node)
 
 	local dropOptions = nil
 	if not explicitDropItemId and dropScale and dropScale > 0 then
@@ -463,7 +462,7 @@ local function handleHarvest(plr, payload)
 		baseDamage = 1
 	end
 	baseDamage = math.clamp(baseDamage, 1, 500)
-	local roleMult = tonumber(plr:GetAttribute("Role_Gather")) or 1.0
+	local roleMult = require(script.Parent.ClassEffects).Power(plr, node)
 	local damage = math.max(1, math.floor(baseDamage * roleMult))
 	local weakness = tostring(getNodeAttr(node, "Weakness") or "")
 	if weakness ~= "" and cfg.ToolType == weakness then
@@ -483,6 +482,7 @@ local function handleHarvest(plr, payload)
 	setNodeAttr(node, "CurrentHealth", currentHealth)
 	setNodeAttr(node, "Health", currentHealth)
 	_lastInteract[plr] = os.clock()
+	require(script.Parent.ExpeditionRewardsService):RecordActivity(plr)
 
 	local feedbackRemote = getFeedbackRemote()
 	if feedbackRemote then
