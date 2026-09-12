@@ -11,7 +11,7 @@ function ItemTooltip.new(owner)
 	screen.Name = owner.Name .. "ItemDetails"
 	screen.ResetOnSpawn = false
 	screen.IgnoreGuiInset = true
-	screen.DisplayOrder = 95
+	screen.DisplayOrder = math.max(95, owner.DisplayOrder + 1)
 	screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	screen.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	local frame = Instance.new("Frame")

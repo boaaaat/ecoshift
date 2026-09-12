@@ -18,6 +18,7 @@ gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Enabled = false
 gui.Parent = player:WaitForChild("PlayerGui")
 Theme.TrackRoot(gui)
+local itemTooltip=require(RS.Shared.UI.ItemTooltip).new(gui)
 
 local function button(parent, text, size, position, callback, primary)
 	local b = Instance.new("TextButton")
@@ -206,6 +207,7 @@ local function destroyStack(slotType,index,data)
  request("DestroyItem",{SlotType=slotType,SlotIndex=index,ExpectedId=data.Id,Amount=data.N})
 end
 local function stopDrag()
+ itemTooltip:Hide()
  trashTouch=nil
  if drag and drag.Ghost then drag.Ghost:Destroy() end
  if drag and drag.Active then draggedUntil=os.clock()+.15 end
@@ -214,6 +216,7 @@ local function stopDrag()
  Theme.Bind(trash,"BackgroundColor3","SlotEmpty")
 end
 local function beginDrag(slotType,index,data,input)
+ itemTooltip:Hide()
  if pending or not canDelete() then return end
  if input.UserInputType~=Enum.UserInputType.MouseButton1 and input.UserInputType~=Enum.UserInputType.Touch then return end
  drag={Type=slotType,Index=index,Data={Id=data.Id,N=data.N},Input=input,Start=pointFor(input)}
@@ -229,7 +232,11 @@ local function renderOwned()
    local slot=button(owned,name and (name.." ×"..tostring(data.N)) or "—",UDim2.new())
    slot.Name=kind..index;slot.LayoutOrder=order;slot.TextSize=12;slot.TextWrapped=true
    local caption=Theme.Label(slot,kind=="Hotbar" and tostring(index) or kind=="Armor" and "ARMOR" or "",UDim2.new(1,-8,0,14),UDim2.fromOffset(4,2),10)
-   if data then slot.InputBegan:Connect(function(input) beginDrag(kind,index,data,input) end) end
+   if data then
+    slot.InputBegan:Connect(function(input) beginDrag(kind,index,data,input) end)
+    slot.MouseEnter:Connect(function() if not drag then itemTooltip:Show(data,"Drag to the catalog or trash to delete") end end)
+    slot.MouseLeave:Connect(function() itemTooltip:Hide() end)
+   end
   end
  end
 end
@@ -303,6 +310,7 @@ renderOwned()
 local allItems=Items:All()
 table.sort(allItems,function(a,b) return a.Name<b.Name end)
 renderItems=function()
+ itemTooltip:Hide()
 	for _,child in ipairs(catalog:GetChildren()) do if child:IsA("GuiObject") then child:Destroy() end end
 	local query=string.lower(search.Text)
 	local count=0
@@ -319,6 +327,8 @@ renderItems=function()
 				end)
 			end)
 			card.Name,card.LayoutOrder=item.Id,count
+   card.MouseEnter:Connect(function() if not drag then itemTooltip:Show({Id=item.Id,N=tonumber(quantity.Text) or 1},"Click to add this item") end end)
+   card.MouseLeave:Connect(function() itemTooltip:Hide() end)
 			if item.Icon and item.Icon~="" then
 				local image=Instance.new("ImageLabel");image.BackgroundTransparency=1;image.Size=UDim2.fromOffset(36,36);image.AnchorPoint=Vector2.new(.5,0);image.Position=UDim2.new(.5,0,0,9);image.Image=item.Icon;image.ScaleType=Enum.ScaleType.Fit;image.Parent=card
 			else

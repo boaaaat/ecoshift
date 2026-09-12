@@ -88,10 +88,8 @@ local function makeResource(parent, name, biome, resource)
 	if resource and not configureResource(model, name) then model:Destroy(); return end
 	publish(model, parent)
 end
-local toolPower = { Harvester = 20, StoneHatchet = 30, StonePickaxe = 30, SanditePickaxe = 45,
-	MireSickle = 45, CryoPickaxe = 60, ObsidianAxe = 75, PhaseMultitool = 100 }
-local weaponPower = { StoneSpear = 18, BoneSpear = 18, SanditeBlade = 27, MireDagger = 23, FrostLance = 38,
-	MagmaHammer = 50, CrystalBow = 44, VoidEdge = 65, MeteorPike = 82 }
+local EquipmentStats = require(ReplicatedStorage.Shared.EquipmentStats)
+local toolPower, weaponPower = EquipmentStats.ToolPower, EquipmentStats.WeaponPower
 local function configureTool(tool, item)
 	tool.Name, tool.ToolTip, tool.CanBeDropped = item.Id, item.Name, false
 	if item:HasTag("Placeable") then
@@ -104,7 +102,7 @@ local function configureTool(tool, item)
 	if item:HasTag("Tool") then
 		tool:SetAttribute("ToolType", "Universal")
 		tool:SetAttribute("Damage", toolPower[item.Id] or 20)
-		tool:SetAttribute("Range", 10)
+		tool:SetAttribute("Range", EquipmentStats.HarvestRange)
 		if item.Id == "Harvester" then
 			-- Emergency defense is separate from resource harvesting power.
 			tool:SetAttribute("CombatDamage", 6)
@@ -114,9 +112,9 @@ local function configureTool(tool, item)
 	else
 		tool:SetAttribute("WeaponType", item.Id == "CrystalBow" and "Bow" or "Sword")
 		tool:SetAttribute("Damage", weaponPower[item.Id] or 20)
-		tool:SetAttribute("Range", item.Id == "CrystalBow" and 180 or 9)
+		tool:SetAttribute("Range", item.Id == "CrystalBow" and EquipmentStats.BowRange or EquipmentStats.MeleeRange)
 	end
-	tool:SetAttribute("Cooldown", 0.6)
+	tool:SetAttribute("Cooldown", EquipmentStats.ToolCooldown)
 	-- Attribute reads take precedence over legacy child values.
 	-- Explicitly clear the opposite profile when updating generated templates.
 	if item:HasTag("Tool") then

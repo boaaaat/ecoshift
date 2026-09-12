@@ -1,6 +1,6 @@
 -- Player-facing uses, based on implemented effects rather than item names/tags.
 local Workbench = require(script.Parent.Parent.WorkbenchConfig)
-local Survival = require(script.Parent.Parent.SurvivalConfig)
+local EquipmentStats = require(script.Parent.Parent.EquipmentStats)
 local Descriptions = {}
 local direct = {
 	SpringWater = "Drink to remove 30 heat exposure. Gather it in Verdant Reach before entering hot biomes.",
@@ -72,15 +72,9 @@ function Descriptions.Apply(items)
 		end
 	end
 	for _, item in ipairs(items) do
-		local armor = Survival.ARMOR[item.Id]
-		if direct[item.Id] then item.Description = direct[item.Id]
-		elseif armor then
-			local protections = {}
-			for _, kind in ipairs({ { "Heat", "heat" }, { "Cold", "cold" }, { "Toxin", "toxins" }, { "Wet", "wetness" } }) do
-				local amount = armor[kind[1] .. "Resistance"] or 0
-				if amount > 0 then table.insert(protections, string.format("%s (%d%%)", kind[2], math.floor(amount * 100 + .5))) end
-			end
-			item.Description = "Equip to resist " .. table.concat(protections, ", ") .. "."
+		local stats = EquipmentStats.Description(item.Id)
+		if stats then item.Description = stats
+		elseif direct[item.Id] then item.Description = direct[item.Id]
 		else
 			local outputs = {}
 			for name in pairs(uses[item.Id] or {}) do table.insert(outputs, name) end
