@@ -1233,8 +1233,9 @@ function WorkbenchConfig:CanCraftAt(recipeId, stationType)
 	local recipe = self.RECIPES[recipeId]
 	if not recipe then return false end
 	if not self.STATIONS[stationType] then return false end
-	-- Anything craftable by hand remains available while using a placed station.
-	if stationType ~= "Hand" and self:CanCraftAt(recipeId, "Hand") then return true end
+	-- Only the two general-purpose benches inherit the basic field recipes.
+	if (stationType == "Workbench" or stationType == "AdvancedWorkbench")
+		and self:CanCraftAt(recipeId, "Hand") then return true end
 
 	if type(recipe.AllowedStations) == "table" and #recipe.AllowedStations > 0 then
 		return listContains(recipe.AllowedStations, stationType)
@@ -1246,6 +1247,7 @@ function WorkbenchConfig:CanCraftAt(recipeId, stationType)
 
 	local station = self.STATIONS[stationType]
 	local tier = recipe.StationTier or 0
+	if tier == 0 then return stationType == "Hand" end
 	return station.Tier >= tier
 end
 
