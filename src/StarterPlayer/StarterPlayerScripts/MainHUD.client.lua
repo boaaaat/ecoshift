@@ -97,6 +97,40 @@ kit.BackgroundTransparency = 1
 kit.Parent = gui
 local kitScale = Instance.new("UIScale")
 kitScale.Parent = kit
+-- Measure the rendered hotbar instead of duplicating its independent scale rules.
+-- InventoryUI draws above this HUD, so an estimated bottom offset can hide every button.
+local hudOrigin = Instance.new("Frame")
+hudOrigin.Name = "NavigationOrigin"
+hudOrigin.Size = UDim2.fromOffset(0, 0)
+hudOrigin.BackgroundTransparency = 1
+hudOrigin.Parent = gui
+local navigationHotbar
+local hotbarConnections = {}
+local function positionNavigation()
+	if Theme.IsMobile() or not navigationHotbar or not navigationHotbar.Parent then return end
+	local position, size = navigationHotbar.AbsolutePosition, navigationHotbar.AbsoluteSize
+	if size.X <= 0 or size.Y <= 0 then return end
+	local origin = hudOrigin.AbsolutePosition
+	kit.AnchorPoint = Vector2.new(.5, 1)
+	kit.Position = UDim2.fromOffset(position.X + size.X / 2 - origin.X, position.Y - origin.Y - 8)
+end
+local function bindNavigationHotbar(instance)
+	if instance.Name ~= "HotbarRoot" or not instance:IsA("GuiObject")
+		or not instance.Parent or instance.Parent.Name ~= "InventoryUI" then return end
+	if navigationHotbar == instance then return end
+	for _, connection in ipairs(hotbarConnections) do connection:Disconnect() end
+	hotbarConnections = {}
+	navigationHotbar = instance
+	for _, property in ipairs({ "AbsolutePosition", "AbsoluteSize" }) do
+		table.insert(hotbarConnections, instance:GetPropertyChangedSignal(property):Connect(positionNavigation))
+	end
+	task.defer(positionNavigation)
+end
+player.PlayerGui.DescendantAdded:Connect(bindNavigationHotbar)
+local existingInventory = player.PlayerGui:FindFirstChild("InventoryUI")
+local existingHotbar = existingInventory and existingInventory:FindFirstChild("HotbarRoot")
+if existingHotbar then bindNavigationHotbar(existingHotbar) end
+hudOrigin:GetPropertyChangedSignal("AbsolutePosition"):Connect(positionNavigation)
 local navigationButtons = {}
 for index, entry in ipairs({ { "Pack", "E" }, { "Craft", "C" }, { "Build", "B" }, { "Map", "M" }, { "Survey", "V" } }) do
 	local button = Instance.new("TextButton")
@@ -224,6 +258,8 @@ local function layout(_, available)
 	kit.Size=portrait and UDim2.fromOffset(92,92) or UDim2.fromOffset(mobile and 188 or 376,mobile and 44 or 32)
 	kit.AnchorPoint=Vector2.new(portrait and 0 or .5,1)
 	kit.Position=portrait and UDim2.new(0,8,1,-176) or UDim2.new(.5,mobile and -36 or 0,1,mobile and -64 or -94*desktopScale)
+	positionNavigation()
+	task.defer(positionNavigation)
 
 	updateHUDPreferences()
 end
