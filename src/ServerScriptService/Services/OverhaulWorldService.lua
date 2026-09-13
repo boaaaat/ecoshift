@@ -3,10 +3,8 @@ local RS = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local Http = game:GetService("HttpService")
 local Collection = game:GetService("CollectionService")
-local ServerStorage = game:GetService("ServerStorage")
 local Biomes = require(RS.Shared.OverhaulBiomes)
 local Rules = require(RS.Shared.GameRules)
-local TreeAssets = require(RS.Shared.TreeAssets)
 local Codec = require(script.Parent.WorldSnapshotCodec)
 local Service = {_seed=require(RS.Shared.BiomeConfig).seed,_serial=-1,_chunks={},_loading={},_terrain={},_records={},_regions={},_landmarks={},_nodes={},_generation=0}
 local CELL, CHUNK, RADIUS, CAMP = 12,240,1500,200
@@ -26,48 +24,33 @@ local function part(parent,name,size,cf,color,material)
  p.Material=material or Enum.Material.SmoothPlastic;p.Anchored=true;p.TopSurface=Enum.SurfaceType.Smooth;p.BottomSurface=Enum.SurfaceType.Smooth;p.Parent=parent
  return p
 end
-local function meshPart(parent,name,asset,size,cf,color,textureId,collidable)
- local p=part(parent,name,size,cf,color,Enum.Material.SmoothPlastic);p.CanCollide=collidable==true;p.CanTouch=collidable==true
- local mesh=Instance.new("SpecialMesh");mesh.MeshType=Enum.MeshType.FileMesh;mesh.MeshId=asset.Id;mesh.TextureId=textureId or ""
- mesh.Scale=Vector3.new(size.X/asset.Size.X,size.Y/asset.Size.Y,size.Z/asset.Size.Z);mesh.Parent=p
- return p
-end
 local function makeTree(model,height,color,rng,style)
  style=style or {};local pine=style.Pine==true
- local templates=ServerStorage:FindFirstChild("TreeTemplates")
- local template=templates and templates:FindFirstChild(pine and "Pine" or style.Birch and "Birch" or "Oak")
- if template and template:IsA("Model") then
-  local assembled=template:Clone();local _,originalSize=assembled:GetBoundingBox();assembled:ScaleTo(height/originalSize.Y)
-  local box,size=assembled:GetBoundingBox();local base=Vector3.new(box.Position.X,box.Position.Y-size.Y*.5,box.Position.Z)
-  assembled:PivotTo(CFrame.new(-base)*assembled:GetPivot())
-  local trunk
-  for _,piece in ipairs(assembled:GetDescendants()) do
-   if piece:IsA("BasePart") then
-    piece.Anchored=true
-    if piece.Name=="Trunk" then trunk=piece;piece.CanCollide=true;piece.CanTouch=true
-    else piece.Color=color:Lerp(piece.Color,.28);piece.CanCollide=false;piece.CanTouch=false end
-   end
-  end
-  for _,child in ipairs(assembled:GetChildren()) do child.Parent=model end;assembled:Destroy();model.PrimaryPart=trunk
-  return trunk
- end
  local trunkColor=style.Ironwood and Color3.fromRGB(79,64,59) or style.Heartwood and Color3.fromRGB(111,69,50) or Color3.fromRGB(111,84,57)
- local trunkMesh=pine and TreeAssets.Pine.Trunk or TreeAssets.Broadleaf.Trunks[rng:NextInteger(1,#TreeAssets.Broadleaf.Trunks)]
- local texture=pine and nil or (style.Birch and TreeAssets.Broadleaf.BirchTexture or TreeAssets.Broadleaf.OakTexture)
  if style.Birch then trunkColor=Color3.fromRGB(225,222,202) end
- local trunk=meshPart(model,"Trunk",trunkMesh,Vector3.new(height*.32,height,height*.32),CFrame.new(0,height*.48,0),trunkColor,texture,true)
+ local trunkHeight=height*(pine and .78 or .7)
+ local trunkWidth=math.clamp(height*.11,1.25,2.25)
+ local trunk=part(model,"Trunk",Vector3.new(trunkWidth,trunkHeight,trunkWidth),CFrame.new(0,trunkHeight*.5,0),trunkColor,Enum.Material.Wood)
  model.PrimaryPart=trunk
+ local leafColor=color:Lerp(style.Heartwood and Color3.fromRGB(119,83,54) or Color3.fromRGB(65,128,68),.42)
+ local clusters
  if pine then
-  local foliage=meshPart(model,"PineFoliage",TreeAssets.Pine.Foliage,Vector3.new(height*.9,height*1.18,height*.9),CFrame.new(0,height*.84,0),color:Lerp(Color3.fromRGB(47,91,67),.35),nil,false)
-  foliage.CanQuery=true
+  clusters={
+   {Vector3.new(0,height*.54,0),Vector3.new(height*.52,height*.27,height*.52)},
+   {Vector3.new(0,height*.7,0),Vector3.new(height*.4,height*.25,height*.4)},
+   {Vector3.new(0,height*.84,0),Vector3.new(height*.27,height*.22,height*.27)},
+  }
  else
-  local leafColor=color:Lerp(style.Heartwood and Color3.fromRGB(119,83,54) or Color3.fromRGB(74,137,71),.34)
-  local crown=meshPart(model,"Crown",TreeAssets.Broadleaf.Foliage,Vector3.new(height*.82,height*.62,height*.82),CFrame.new(0,height*.8,0)*CFrame.Angles(0,rng:NextNumber(0,math.pi*2),0),leafColor,nil,false)
-  crown.CanQuery=true
-  local crown2=meshPart(model,"Crown",TreeAssets.Broadleaf.Foliage,Vector3.new(height*.55,height*.43,height*.55),CFrame.new(height*.22,height*.76,-height*.12)*CFrame.Angles(0,rng:NextNumber(0,math.pi*2),0),leafColor:Lerp(Color3.new(1,1,1),.04),nil,false)
-  crown2.CanQuery=true
-  local crown3=meshPart(model,"Crown",TreeAssets.Broadleaf.Foliage,Vector3.new(height*.5,height*.42,height*.5),CFrame.new(-height*.12,height*1.02,height*.14)*CFrame.Angles(0,rng:NextNumber(0,math.pi*2),0),leafColor:Lerp(Color3.new(1,1,1),.08),nil,false)
-  crown3.CanQuery=true
+  local lean=rng:NextNumber(-1,1)*height*.035
+  clusters={
+   {Vector3.new(-height*.15,height*.7,lean),Vector3.new(height*.4,height*.3,height*.4)},
+   {Vector3.new(height*.15,height*.72,-lean),Vector3.new(height*.4,height*.31,height*.4)},
+   {Vector3.new(0,height*.86,0),Vector3.new(height*.43,height*.3,height*.43)},
+  }
+ end
+ for index,cluster in ipairs(clusters) do
+  local leaves=part(model,"Leaves",cluster[2],CFrame.new(cluster[1]),leafColor:Lerp(Color3.new(1,1,1),(index-2)*.045),Enum.Material.LeafyGrass)
+  leaves.Shape=Enum.PartType.Ball;leaves.CanCollide=false;leaves.CanTouch=false;leaves.CastShadow=false
  end
  return trunk
 end
@@ -384,7 +367,7 @@ function Service:_resource(id,key,position,parent,rng)
  local region=self:MetadataAt(position)
  local birch=region and region.Name=="Birch Woods"
  if isTree then
-  local h=large and 25 or 15
+  local h=large and 18 or 12
   makeTree(model,h,color,rng,{Birch=birch,Pine=self._biome=="FrozenTundra" or self._biome=="AuroraVale" or biome.Landform=="Alpine" or biome.Landform=="Highlands",Ironwood=id=="Ironwood",Heartwood=id=="Heartwood"})
  elseif id=="Cactus" then
   local stem=part(model,"CactusStem",Vector3.new(2,7,2),CFrame.new(0,3.5,0),Color3.fromRGB(92,130,65));model.PrimaryPart=stem
@@ -481,7 +464,7 @@ function Service:_decorate(parent,cx,cz)
    part(model,"Column",Vector3.new(9,40,9),CFrame.new(p+Vector3.new(18,20,0)),biome.Color,Enum.Material.Rock)
    part(model,"Vault",Vector3.new(48,7,26),CFrame.new(p+Vector3.new(0,42,0)),biome.Color,Enum.Material.Rock)
   elseif f=="Canopy" or f=="Forest" then
-   local h=f=="Canopy" and 50 or 20
+   local h=f=="Canopy" and 26 or 15
    makeTree(model,h,biome.Color,rng,{Birch=r.Name=="Birch Woods",Pine=self._biome=="FrozenTundra" or self._biome=="AuroraVale" or f=="Alpine" or f=="Highlands"})
    model:PivotTo(CFrame.new(p)*CFrame.Angles(0,rng:NextNumber(0,math.pi*2),0)*model:GetPivot())
    if f=="Canopy" then part(model,"RootRamp",Vector3.new(12,3,60),CFrame.new(p+Vector3.new(0,10,22))*CFrame.Angles(-.3,0,0),Color3.fromRGB(104,80,59),Enum.Material.Wood) end
