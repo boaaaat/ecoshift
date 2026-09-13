@@ -20,7 +20,7 @@ This ledger records delivered code and outstanding integration; a config or UI s
 | UI and compatibility | PC/mobile controls, shared inventory/chest tooltips with equipped comparisons and recipe/source summaries, surface/cave/interior maps, campaign/results UI, class kit/passive integration |
 | Save paths | Campaign, interiors, elites, loot, instruments, effects, unique gear, queues, fuel and reward receipts wired into snapshots |
 | Static source review | Integration review completed; concrete callback, old-ID, restore-tag, defense-leash and metadata issues corrected |
-| Both-place Rojo delivery | Servers running on 34872/34873; Studio plugins still need reconnection. User readiness question pending because another fullscreen game is active |
+| Both-place Rojo delivery | Connected and accepted in Studio: expedition on 34872 and lobby on 34873. Edit-mode inspection confirms the overhaul rules, catalog, campaign, world, instruments, and new UI modules in both places |
 | GitHub checkpoint | Full overhaul and old-data retirement included in this source checkpoint; publishing remains with the user |
 
 No tests, smoke tests, builds, or gameplay runs were created or executed. Runtime behavior, long-run balance, mobile rendering, and multi-server resume remain unverified. This is an implementation checkpoint, not a claim that acceptance scenarios have passed. The verification scenarios remain in the approved draft for a later explicit request.
