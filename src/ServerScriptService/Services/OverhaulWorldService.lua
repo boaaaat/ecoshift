@@ -3,6 +3,7 @@ local RS = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local Http = game:GetService("HttpService")
 local Collection = game:GetService("CollectionService")
+local ServerStorage = game:GetService("ServerStorage")
 local Biomes = require(RS.Shared.OverhaulBiomes)
 local Rules = require(RS.Shared.GameRules)
 local TreeAssets = require(RS.Shared.TreeAssets)
@@ -33,6 +34,23 @@ local function meshPart(parent,name,asset,size,cf,color,textureId,collidable)
 end
 local function makeTree(model,height,color,rng,style)
  style=style or {};local pine=style.Pine==true
+ local templates=ServerStorage:FindFirstChild("TreeTemplates")
+ local template=templates and templates:FindFirstChild(pine and "Pine" or style.Birch and "Birch" or "Oak")
+ if template and template:IsA("Model") then
+  local assembled=template:Clone();local _,originalSize=assembled:GetBoundingBox();assembled:ScaleTo(height/originalSize.Y)
+  local box,size=assembled:GetBoundingBox();local base=Vector3.new(box.Position.X,box.Position.Y-size.Y*.5,box.Position.Z)
+  assembled:PivotTo(CFrame.new(-base)*assembled:GetPivot())
+  local trunk
+  for _,piece in ipairs(assembled:GetDescendants()) do
+   if piece:IsA("BasePart") then
+    piece.Anchored=true
+    if piece.Name=="Trunk" then trunk=piece;piece.CanCollide=true;piece.CanTouch=true
+    else piece.Color=color:Lerp(piece.Color,.28);piece.CanCollide=false;piece.CanTouch=false end
+   end
+  end
+  for _,child in ipairs(assembled:GetChildren()) do child.Parent=model end;assembled:Destroy();model.PrimaryPart=trunk
+  return trunk
+ end
  local trunkColor=style.Ironwood and Color3.fromRGB(79,64,59) or style.Heartwood and Color3.fromRGB(111,69,50) or Color3.fromRGB(111,84,57)
  local trunkMesh=pine and TreeAssets.Pine.Trunk or TreeAssets.Broadleaf.Trunks[rng:NextInteger(1,#TreeAssets.Broadleaf.Trunks)]
  local texture=pine and nil or (style.Birch and TreeAssets.Broadleaf.BirchTexture or TreeAssets.Broadleaf.OakTexture)
