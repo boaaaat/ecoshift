@@ -85,16 +85,7 @@ local function sourceHint(id)
 	local guide = require(script.Parent.Parent.RecipeGuide).GetEntry(id)
 	if not guide then return "" end
 	if guide.Recipe then
-		local ingredients = {}
-		for _, entry in ipairs(guide.Recipe.Ingredients or {}) do
-			local item = entry.Id and ItemDatabase:Get(entry.Id)
-			local text = item and item.Name or "deep-region trophy"
-			if entry.Distinct then text = "different deep-region trophies" end
-			table.insert(ingredients, tostring(entry.N or 1) .. " " .. text)
-		end
-		local stations = {}
-		for _, id in ipairs(guide.Recipe.AllowedStations or {}) do table.insert(stations, Catalog.Stations[id] and Catalog.Stations[id].Name or id) end
-		return "Craft: " .. table.concat(ingredients, ", ") .. (#stations > 0 and "\nAt: " .. table.concat(stations, " / ") or "")
+		return ""
 	end
 	return table.concat(guide.Sources or {}, "\n")
 end
