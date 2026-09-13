@@ -70,7 +70,10 @@ function Creature:_damageAt(position,radius,amount,cone)
    local humanoid=player.Character:FindFirstChildOfClass("Humanoid");local before=humanoid and humanoid.Health
    require(script.Parent.Parent.Services.CombatService):ApplyDamage(self.Model,player.Character,amount,"Melee")
    if self.Model:GetAttribute("EntityId")=="LavaGolem" and self.Mode=="Slam" and humanoid and before and humanoid.Health<before then require(script.Parent.Parent.Services.StatusService):ApplyBurn(player,3,3) end
-   if self.Mode=="Web" or self.Mode=="Tongue" then player:SetAttribute("MonsterSnaredUntil",workspace:GetServerTimeNow()+1.5*(1-math.clamp(player:GetAttribute("Gear_StaggerReduction") or 0,0,.75))) end
+   if self.Mode=="Web" or self.Mode=="Tongue" then
+    local baseDuration=self.Mode=="Web" and 1 or 1.5
+    player:SetAttribute("MonsterSnaredUntil",workspace:GetServerTimeNow()+baseDuration*(1-math.clamp(player:GetAttribute("Gear_StaggerReduction") or 0,0,.75)))
+   end
   end
  end
 end

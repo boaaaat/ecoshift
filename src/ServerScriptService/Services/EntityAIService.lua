@@ -190,6 +190,13 @@ function EntityAIService:BindEntity(model, forcedType)
 		warn("[EntityAIService] No Humanoid found for model:", model:GetFullName())
 		return
 	end
+	-- Creature health and names use EnemyHealthUI's single numbered display.
+	-- Disable Roblox's built-in nameplate for every creature source, including
+	-- older templates and restored entities.
+	hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+	hum.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+	hum.NameDisplayDistance = 0
+	hum.HealthDisplayDistance = 0
 
 	local entityType = forcedType or getEntityType(model)
 	local entityId = getEntityId(model)

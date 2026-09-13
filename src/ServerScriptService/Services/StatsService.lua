@@ -372,11 +372,20 @@ function StatsService:CaptureWorldState(plr)
 	local state = { Base = table.clone(data.Base), Modifiers = {} }
 	local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
 	if hum then state.Health = hum.Health end
+	local transientModifiers = {
+		Sprint = true,
+		ArmorEquip = true,
+		TempResEquip = true,
+		GearMovement = true,
+		GroundMovement = true,
+		LandingRecovery = true,
+		MonsterSnare = true,
+	}
 	for stat, modifiers in pairs(data.Mods) do
 		cleanupExpired(modifiers)
 		for _, mod in ipairs(modifiers) do
-			-- Gear is rebuilt from inventory. Held sprint input is never persisted.
-			if mod.Id ~= "Sprint" and mod.Id ~= "ArmorEquip" and mod.Id ~= "TempResEquip" then
+			-- Equipment and short-lived movement state are rebuilt from live state.
+			if not transientModifiers[mod.Id] then
 				table.insert(state.Modifiers, { Stat = stat, Id = tostring(mod.Id), Value = mod.Value, Mode = mod.Mode,
 					Remaining = mod.ExpiresAt and math.max(0, mod.ExpiresAt - os.clock()) or false })
 			end

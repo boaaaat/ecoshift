@@ -43,7 +43,10 @@ function Art.Create(id)
  end
  limb("Head",Vector3.new(1.8,1.7,1.8),Vector3.new(0,.7,-2.6),color,Enum.PartType.Ball)
  for side=-1,1,2 do local eye=limb("Eye",Vector3.new(.25,.25,.2),Vector3.new(side*.5,1,-3.45),Color3.fromRGB(234,207,114));eye.Material=Enum.Material.Neon end
- local hum=Instance.new("Humanoid");hum.Name="Humanoid";hum.RequiresNeck=false;hum.BreakJointsOnDeath=false;hum.UseJumpPower=false;hum.JumpHeight=7;hum.HipHeight=1.5*scale;hum.MaxHealth=72;hum.Health=72;hum.Parent=m
+ local hum=Instance.new("Humanoid");hum.Name="Humanoid";hum.RequiresNeck=false;hum.BreakJointsOnDeath=false;hum.UseJumpPower=false;hum.JumpHeight=7;hum.HipHeight=1.5*scale;hum.MaxHealth=72;hum.Health=72
+ hum.DisplayDistanceType=Enum.HumanoidDisplayDistanceType.None
+ hum.HealthDisplayType=Enum.HumanoidHealthDisplayType.AlwaysOff
+ hum.NameDisplayDistance=0;hum.HealthDisplayDistance=0;hum.Parent=m
  m:SetAttribute("EntityId",id);m:SetAttribute("EntityType",def.Role=="N" and "Animal" or "Monster");m:SetAttribute("CreatureRole",def.Role);m:SetAttribute("AIClass","OverhaulCreature");m:SetAttribute("OverhaulCreature",true);m:SetAttribute("DisplayName",def.Name)
  return m
 end

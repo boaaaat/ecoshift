@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
 
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 local C = Theme.Colors
@@ -254,7 +255,16 @@ local function handleFeedback(data)
 		createDamageNumber(position, damage, destroyed)
 	end
 
-	if node then
+	-- Monsters and animals already have the always-visible numbered nameplate in
+	-- EnemyHealthUI. HarvestFeedback's old resource bar would otherwise create a
+	-- second, unnumbered health bar whenever a creature was hit.
+	local isCreature = node and node:IsA("Model") and (
+		CollectionService:HasTag(node, "Monster")
+		or CollectionService:HasTag(node, "Animal")
+		or node:GetAttribute("EntityType") == "Monster"
+		or node:GetAttribute("EntityType") == "Animal"
+	)
+	if node and not isCreature then
 		updateHealthBar(node, position, currentHealth, maxHealth, destroyed)
 	end
 end

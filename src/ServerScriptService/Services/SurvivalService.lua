@@ -78,11 +78,15 @@ local function applySprintModifier(plr, enabled)
 		local movement=gear.WalkSpeedBonus or 0
 		local hum=plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
 		if hum and hum:GetState()==Enum.HumanoidStateType.Swimming then movement+=(gear.SwimSpeedBonus or 0)+(plr:GetAttribute("Food_SwimSpeedBonus") or 0) end
-		StatsService:AddModifier(plr,"Speed",movement,"Mult",nil,"GearMovement")
+		StatsService:SetModifier(plr,"Speed",movement,"Mult","GearMovement")
 		local penalty=hum and hum.FloorMaterial==Enum.Material.Mud and .2*(1-(gear.MudPenaltyReduction or 0)) or hum and hum.FloorMaterial==Enum.Material.Snow and .15*(1-(gear.SnowPenaltyReduction or 0)) or 0
-		StatsService:AddModifier(plr,"Speed",-penalty,"Mult",nil,"GroundMovement")
-		StatsService:AddModifier(plr,"Speed",plr:GetAttribute("GearLandingSlow") and -.25 or 0,"Mult",nil,"LandingRecovery")
-		StatsService:AddModifier(plr,"Speed",(plr:GetAttribute("MonsterSnaredUntil") or 0)>workspace:GetServerTimeNow() and -.4 or 0,"Mult",nil,"MonsterSnare")
+		StatsService:SetModifier(plr,"Speed",-penalty,"Mult","GroundMovement")
+		StatsService:SetModifier(plr,"Speed",plr:GetAttribute("GearLandingSlow") and -.25 or 0,"Mult","LandingRecovery")
+		local now=workspace:GetServerTimeNow()
+		local snaredUntil=tonumber(plr:GetAttribute("MonsterSnaredUntil")) or 0
+		local snared=snaredUntil>now and snaredUntil<=now+5
+		if not snared and plr:GetAttribute("MonsterSnaredUntil")~=nil then plr:SetAttribute("MonsterSnaredUntil",nil) end
+		StatsService:SetModifier(plr,"Speed",snared and -.25 or 0,"Mult","MonsterSnare")
 		plr:SetAttribute("InCamp",camp==true)
 		SurvivalService._sprintApplied[plr]=enabled or nil
 end
@@ -236,7 +240,7 @@ function SurvivalService:Init()
 	end)
 	local function bindPlayer(plr)
 		plr.CharacterRemoving:Connect(function()
-			self:_stopSprint(plr); self._sprintExhausted[plr] = nil
+			self:_stopSprint(plr); self._sprintExhausted[plr] = nil; plr:SetAttribute("MonsterSnaredUntil",nil)
 		end)
 		plr:GetAttributeChangedSignal("IsDead"):Connect(function() if plr:GetAttribute("IsDead") then self:_stopSprint(plr) end end)
 	end
@@ -259,6 +263,7 @@ function SurvivalService:Init()
 	end)
 
 	Players.PlayerRemoving:Connect(function(plr)
+		plr:SetAttribute("MonsterSnaredUntil",nil)
 		self._sprintWanted[plr] = nil
 		self._sprintApplied[plr] = nil
 		self._sprintExhausted[plr] = nil
