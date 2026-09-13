@@ -102,7 +102,8 @@ end
 local function send(action, data, waiting)
 	if pending then notify("Your previous action is still finishing…", "Amber"); return end
 	data = table.clone(data or {}); data.RequestId = requestId()
-	pending = {Id = data.RequestId, Action = action, Data = data, Key = tostring(data.Id or data.UserId or ""), Started = os.clock(), PartyId = (snapshot.Party or {}).Id}
+	pending = {Id = data.RequestId, Action = action, Data = data, Key = tostring(data.Id or data.UserId or data.WorldType or ""), Started = os.clock(), PartyId = (snapshot.Party or {}).Id}
+	if action == "SetWorldType" then render() end
 	notify(waiting or "Updating…", "Amber"); applyControls()
 	remote:FireServer(action, data)
 end
@@ -113,7 +114,7 @@ local function actionButton(parent, text, waiting, action, data, x, y, w, h, pri
 		else send(action, data, waiting) end
 	end, primary)
 	table.insert(controls, {Button = b, Text = text, Waiting = waiting, Action = action,
-		Key = tostring(data and (data.Id or data.UserId) or ""), Primary = primary, Disabled = disabled})
+		Key = tostring(data and (data.Id or data.UserId or data.WorldType) or ""), Primary = primary, Disabled = disabled})
 	return b
 end
 local function renderWorldSetup()
@@ -132,11 +133,14 @@ local function renderWorldSetup()
 	Theme.Panel(worldSetup); Theme.Fit(worldSetup, width, height, mobile and 1 or nil); Theme.CaptureCursor(worldSetup); Theme.AnimatePanel(worldSetup)
 	label(worldSetup, "CHOOSE YOUR WORLD", 22, mobile and 8 or 18, width - 98, 32, mobile and 19 or 23, "Text", true)
 	button(worldSetup, "×", width - 66, mobile and 4 or 14, 44, 44, function() worldSetupOpen = false; render() end).TextSize = 26
-	local creative = party.WorldType == "Creative"
+	-- Preview the pending choice; only the successful result commits it to the snapshot.
+	local worldType = party.WorldType
+	if pending and pending.Action == "SetWorldType" and pending.PartyId == party.Id then worldType = pending.Data.WorldType end
+	local creative = worldType == "Creative"
 	label(worldSetup, "World type stays with this save.", 22, mobile and 38 or 59, width - 44, mobile and 20 or 28, mobile and 13 or 15, "TextMuted")
 	local half = (width - 56) / 2
-	actionButton(worldSetup, (creative and "" or "✓  ") .. "SURVIVAL", "SAVING…", "SetWorldType", {WorldType = "Survival"}, 22, mobile and 64 or 100, half, 48, not creative)
-	actionButton(worldSetup, (creative and "✓  " or "") .. "CREATIVE", "SAVING…", "SetWorldType", {WorldType = "Creative"}, 34 + half, mobile and 64 or 100, half, 48, creative)
+	actionButton(worldSetup, (creative and "" or "✓  ") .. "SURVIVAL", "✓  SAVING…", "SetWorldType", {WorldType = "Survival"}, 22, mobile and 64 or 100, half, 48, not creative)
+	actionButton(worldSetup, (creative and "✓  " or "") .. "CREATIVE", "✓  SAVING…", "SetWorldType", {WorldType = "Creative"}, 34 + half, mobile and 64 or 100, half, 48, creative)
 	local description = creative and "Everyone gets the creative inventory and world controls. Switch between creative and survival play anytime. This world never earns class XP, account XP, or Field Marks."
 		or "Explore, gather and craft with your crew. Earn class XP, account XP and Field Marks. Creative controls are unavailable in this world."
 	local info = label(worldSetup, description, 22, mobile and 117 or 167, width - 44, mobile and 79 or 137, mobile and 14 or 18, "TextMuted")
@@ -513,7 +517,7 @@ local function visualKey()
 	local party = snapshot.Party or {}
 	local crew = {}
 	for _, member in ipairs(party.Members or {}) do table.insert(crew, {member.UserId, member.DisplayName, member.Name, member.Role, member.ClassLevel, member.Ready == true, member.Online == true}) end
-	return HttpService:JSONEncode({page, snapshot.Currency, snapshot.Classes, party.Id, party.LeaderId, party.RunId,
+	return HttpService:JSONEncode({page, snapshot.Currency, snapshot.Classes, party.Id, party.LeaderId, party.RunId, party.WorldType or "Survival",
 		party.Queue and party.Queue.Mode or false, party.Queue and party.Queue.Purpose or false, party.ManagementLocked == true, party.MergedCrew == true, selectedMemberId or false,
 		party.Queue ~= nil and party.Queue ~= false, party.QueueStartedAt, crew, liveInvitations(), snapshot.Rejoin, page == "Saves" and snapshot.Worlds or false,
 		page == "Saves" and snapshot.ArchiveAvailable, page == "Invite" and snapshot.InviteDirectory or false})
@@ -826,6 +830,8 @@ local function reconcile(request, result)
 				member.Role = role
 			end
 		end
+	elseif request.Action == "SetWorldType" and party.Id == request.PartyId then
+		party.WorldType = request.Data.WorldType
 	elseif request.Action == "Ready" then
 		for _, member in ipairs(party.Members or {}) do if member.UserId == player.UserId then member.Ready = request.Data.Ready end end
 	elseif request.Action == "CancelQueue" then party.Queue = false; party.QueueStartedAt = nil
