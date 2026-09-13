@@ -1614,6 +1614,7 @@ if rInventory then
 		end
 		
 		inventorySnapshot = payload
+		require(ReplicatedStorage.Shared.UI.ItemTooltip).SetInventory(payload)
 		if arrangePack then arrangePack() end
 		
 		-- Debug: Log storage contents

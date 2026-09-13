@@ -17,7 +17,7 @@ This ledger records delivered code and outstanding integration; a config or UI s
 | Interiors and elites | Four campaign bosses, optional Deep Bog King, Archive diving/air routes, 16 E-region elite challenges and shared trophy claims |
 | Events and objectives | 20 events, active-time warnings, local hazards, physical objectives, persistent rewards and actor state |
 | Instruments and controls | Discoverable capabilities, installed journal modules, resource bearings, trail beacons, four fuelled majority-vote devices |
-| UI and compatibility | PC/mobile controls, recipe and equipment details, surface/cave/interior maps, campaign/results UI, class kit/passive integration |
+| UI and compatibility | PC/mobile controls, shared inventory/chest tooltips with equipped comparisons and recipe/source summaries, surface/cave/interior maps, campaign/results UI, class kit/passive integration |
 | Save paths | Campaign, interiors, elites, loot, instruments, effects, unique gear, queues, fuel and reward receipts wired into snapshots |
 | Static source review | Integration review completed; concrete callback, old-ID, restore-tag, defense-leash and metadata issues corrected |
 | Both-place Rojo delivery | Servers running on 34872/34873; Studio plugins still need reconnection. User readiness question pending because another fullscreen game is active |
