@@ -17,12 +17,23 @@ local panel=make("CanvasGroup",gui,{Size=UDim2.new(.95,0,.92,0),Position=UDim2.f
 make("UISizeConstraint",panel,{MaxSize=Vector2.new(900,820)});Theme.Panel(panel);Theme.CaptureCursor(panel);Theme.TrackRoot(gui)
 local title=make("TextLabel",panel,{Position=UDim2.fromOffset(18,8),Size=UDim2.new(1,-90,0,48),Text="Gear workshop",Font=Enum.Font.GothamBold,TextSize=24,TextColor3=colors.Text,BackgroundTransparency=1,TextXAlignment=Enum.TextXAlignment.Left})
 local close=make("TextButton",panel,{Position=UDim2.new(1,-60,0,10),Size=UDim2.fromOffset(44,44),Text="×",TextSize=28});Theme.Button(close);close.Activated:Connect(function()gui.Enabled=false end)
+local search=make("TextBox",panel,{Name="ItemSearch",Position=UDim2.fromOffset(18,65),Size=UDim2.new(1,-36,0,40),BackgroundColor3=colors.SlotEmpty,BorderSizePixel=0,Text="",PlaceholderText="Search gear, schematics, or enchantments",PlaceholderColor3=colors.TextMuted,TextColor3=colors.Text,TextSize=15,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left,ClearTextOnFocus=false,Visible=false})
+Theme.Corner(search,8)
+make("UIPadding",search,{PaddingLeft=UDim.new(0,12),PaddingRight=UDim.new(0,12)})
 local list=make("ScrollingFrame",panel,{Position=UDim2.fromOffset(18,65),Size=UDim2.new(1,-36,1,-123),BackgroundTransparency=1,BorderSizePixel=0,CanvasSize=UDim2.new(),AutomaticCanvasSize=Enum.AutomaticSize.Y,ScrollBarThickness=5})
 make("UIListLayout",list,{Padding=UDim.new(0,8)})
 local status=make("TextLabel",panel,{Position=UDim2.new(0,18,1,-52),Size=UDim2.new(1,-36,0,44),Text="Choose an item.",TextSize=15,TextColor3=colors.Text,Font=Enum.Font.Gotham,TextWrapped=true,BackgroundTransparency=1})
 local state,selected,enchantment,page,pending,inventory,workshop=nil,nil,nil,"Gear",false,nil,false
+local searchQuery=""
 local render
 local function name(id)local item=Items:Get(id);return item and item.Name or id end
+local function matchesSearch(...)
+ if searchQuery=="" then return true end
+ for index=1,select("#",...) do
+  if string.find(string.lower(tostring(select(index,...) or "")),searchQuery,1,true) then return true end
+ end
+ return false
+end
 local function text(value,height,size)return make("TextLabel",list,{Size=UDim2.new(1,-12,0,height or 40),Text=value,TextSize=size or 17,TextWrapped=true,TextColor3=colors.Text,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left,BackgroundTransparency=1}) end
 local function button(value,fn)
  local b=make("TextButton",list,{Size=UDim2.new(1,-12,0,50),Text=value,TextSize=17,TextWrapped=true,Font=Enum.Font.GothamMedium});Theme.Button(b);b.Activated:Connect(fn);return b
@@ -46,19 +57,27 @@ render=function(reset)
  if not state or not gui.Enabled then return end
  local y=reset and 0 or list.CanvasPosition.Y
  for _,child in ipairs(list:GetChildren()) do if child:IsA("GuiObject") then child:Destroy() end end
+ search.Visible=page=="Gear" or page=="Enchantments"
+ list.Position=search.Visible and UDim2.fromOffset(18,113) or UDim2.fromOffset(18,65)
+ list.Size=search.Visible and UDim2.new(1,-36,1,-171) or UDim2.new(1,-36,1,-123)
  if page=="Gear" then
   title.Text=workshop and "Gear maintenance" or "Enchanting workshop"
   if not workshop then
    button("Craft Enchanting Dust",function()gui.Enabled=false;require(Shared.UI.RecipeGuideUI).Open("EnchantingDust",{PreferredStationType="EnchantingTable"}) end)
    for source,options in pairs(state.Choices or {}) do
-    text("Choose a crew schematic · "..source,44,20)
-    for _,id in ipairs(options) do button(Catalog.Enchantments[id].Name..((state.ChoiceRanks or {})[source]=="Maximum" and " � final rank" or ""),function()send("Choose",{Source=source,Enchantment=id}) end) end
+    local filtered={}
+    for _,id in ipairs(options) do
+     local def=Catalog.Enchantments[id]
+     if def and matchesSearch(id,def.Name,def.Description,source) then table.insert(filtered,id) end
+    end
+    if #filtered>0 then text("Choose a crew schematic · "..source,44,20) end
+    for _,id in ipairs(filtered) do button(Catalog.Enchantments[id].Name..((state.ChoiceRanks or {})[source]=="Maximum" and " · final rank" or ""),function()send("Choose",{Source=source,Enchantment=id}) end) end
    end
-   for _,id in ipairs(state.Pages or {}) do button("Read "..name(id),function()send("Read",{ItemId=id}) end) end
+   for _,id in ipairs(state.Pages or {}) do if matchesSearch(id,name(id)) then button("Read "..name(id),function()send("Read",{ItemId=id}) end) end end
   end
   text("Select a piece of gear",38,20)
   for _,e in ipairs(state.Gear or {}) do
-   button(name(e.Id).." · grade "..e.Grade..(e.Durability and string.format(" · %d / %d durability",e.Durability,e.MaxDurability) or ""),function()selected=e.Uid;go(workshop and "Maintenance" or "Enchantments") end)
+   if matchesSearch(e.Id,name(e.Id),e.Grade,e.Uid) then button(name(e.Id).." · grade "..e.Grade..(e.Durability and string.format(" · %d / %d durability",e.Durability,e.MaxDurability) or ""),function()selected=e.Uid;go(workshop and "Maintenance" or "Enchantments") end) end
   end
  else
   local e=entry();if not e then page="Gear";render(true);return end
@@ -83,7 +102,7 @@ render=function(reset)
     local def=Catalog.Enchantments[id]
     local current=rank(e,id)
     local gear=table.clone(Catalog.Gear[e.Id]);gear.Grade=e.Grade
-    if current>0 or Catalog.CanEnchant(gear,def,math.max(1,current)) then
+    if (current>0 or Catalog.CanEnchant(gear,def,math.max(1,current))) and matchesSearch(id,def.Name,def.Description,def.Source) then
      button(def.Name..(current>0 and " · rank "..current.." / "..def.MaxLevel or " · "..def.MaxLevel.." ranks"),function()enchantment=id;go("Detail") end)
     end
    end
@@ -112,10 +131,14 @@ render=function(reset)
  end
  task.defer(function()list.CanvasPosition=Vector2.new(0,y) end)
 end
+search:GetPropertyChangedSignal("Text"):Connect(function()
+ searchQuery=string.lower(search.Text):match("^%s*(.-)%s*$") or ""
+ if gui.Enabled and (page=="Gear" or page=="Enchantments") then render(true) end
+end)
 remote.OnClientEvent:Connect(function(action,a,b)
  if action=="Open" or action=="State" then
   state=a;workshop=false
-  if action=="Open" then gui.Enabled=true;page="Gear";selected=nil end
+  if action=="Open" then gui.Enabled=true;page="Gear";selected=nil;searchQuery="";search.Text="" end
   render(action=="Open")
  elseif action=="Result" then pending=false;status.Text=b or (a and "Ready." or "Unavailable.") end
 end)
@@ -130,7 +153,7 @@ end
 remotes:WaitForChild("InventoryUpdate").OnClientEvent:Connect(function(action,data)if action=="Snapshot" then inventory=data;refreshWorkshop() end end)
 remotes.InventoryUpdate:FireServer("RequestSnapshot")
 local open=make("BindableEvent",player.PlayerGui,{Name="OpenGearWorkshop"})
-open.Event:Connect(function(station)state={Station=station,Gear={},Known={},Choices={},Scrolls={},Pages={}};workshop=true;page="Gear";selected=nil;gui.Enabled=true;refreshWorkshop();remotes.InventoryUpdate:FireServer("RequestSnapshot") end)
+open.Event:Connect(function(station)state={Station=station,Gear={},Known={},Choices={},Scrolls={},Pages={}};workshop=true;page="Gear";selected=nil;searchQuery="";search.Text="";gui.Enabled=true;refreshWorkshop();remotes.InventoryUpdate:FireServer("RequestSnapshot") end)
 local gearRemote=remotes:WaitForChild("GearAction",120)
 if gearRemote then gearRemote.OnClientEvent:Connect(function(action,data)
  if action=="Result" and gui.Enabled then status.Text=type(data)=="table" and (data.Message or data.Reason or "Updated.") or tostring(data) end

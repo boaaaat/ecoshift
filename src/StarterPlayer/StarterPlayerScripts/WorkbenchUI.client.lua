@@ -55,6 +55,7 @@ local pendingStartedAt = 0
 local pendingConfirmed = false
 local pendingRecipeId = nil
 local pendingStationType = nil
+local recipeSearch = ""
 
 -- Create main GUI
 local gui = Instance.new("ScreenGui")
@@ -220,11 +221,33 @@ categoryLayout.Parent = categoryBar
 local selectedCategory = "All"
 local categoryButtons = {}
 
+local recipeSearchBox = Instance.new("TextBox")
+recipeSearchBox.Name = "RecipeSearch"
+recipeSearchBox.Size = UDim2.new(1, -MARGIN * 2, 0, 36)
+recipeSearchBox.Position = UDim2.new(0, MARGIN, 0, 103)
+recipeSearchBox.BackgroundColor3 = COLORS.SlotEmpty
+recipeSearchBox.BorderSizePixel = 0
+recipeSearchBox.Text = ""
+recipeSearchBox.PlaceholderText = "Search recipes or ingredients"
+recipeSearchBox.PlaceholderColor3 = COLORS.TextMuted
+recipeSearchBox.TextColor3 = COLORS.Text
+recipeSearchBox.TextSize = 14
+recipeSearchBox.Font = Enum.Font.Gotham
+recipeSearchBox.TextXAlignment = Enum.TextXAlignment.Left
+recipeSearchBox.ClearTextOnFocus = false
+recipeSearchBox.ZIndex = 12
+recipeSearchBox.Parent = mainPanel
+Theme.Corner(recipeSearchBox, 8)
+local recipeSearchPadding = Instance.new("UIPadding")
+recipeSearchPadding.PaddingLeft = UDim.new(0, 12)
+recipeSearchPadding.PaddingRight = UDim.new(0, 12)
+recipeSearchPadding.Parent = recipeSearchBox
+
 -- Recipe list container
 local recipeContainer = Instance.new("ScrollingFrame")
 recipeContainer.Name = "RecipeList"
-recipeContainer.Size = UDim2.new(1, -MARGIN * 2, 1, -280)
-recipeContainer.Position = UDim2.new(0, MARGIN, 0, 105)
+recipeContainer.Size = UDim2.new(1, -MARGIN * 2, 1, -322)
+recipeContainer.Position = UDim2.new(0, MARGIN, 0, 147)
 recipeContainer.BackgroundColor3 = COLORS.Background
 recipeContainer.BackgroundTransparency = 0.5
 recipeContainer.BorderSizePixel = 0
@@ -883,7 +906,22 @@ function refreshRecipes(preserveScroll)
 	-- Filter by category
 	for recipeId, recipe in pairs(recipes) do
 		local matchesCategory = selectedCategory == "All" or recipe.Category == selectedCategory
-		if matchesCategory then
+		local outputId = recipe.Output and recipe.Output.Id or recipeId
+		local searchable = { recipeId, outputId, recipe.Category, (ItemDatabase:Get(outputId) or {}).Name }
+		for _, ingredient in ipairs(recipe.Ingredients or {}) do
+			table.insert(searchable, ingredient.Id)
+			table.insert(searchable, (ItemDatabase:Get(ingredient.Id) or {}).Name)
+		end
+		local matchesSearch = recipeSearch == ""
+		if not matchesSearch then
+			for _, value in ipairs(searchable) do
+				if string.find(string.lower(tostring(value or "")), recipeSearch, 1, true) then
+					matchesSearch = true
+					break
+				end
+			end
+		end
+		if matchesCategory and matchesSearch then
 			createRecipeCard(recipeId, recipe)
 		end
 	end
@@ -895,6 +933,11 @@ function refreshRecipes(preserveScroll)
 		recipeContainer.CanvasPosition = Vector2.new(0, math.min(previousScroll, maxY))
 	end)
 end
+
+recipeSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+	recipeSearch = string.lower(recipeSearchBox.Text):match("^%s*(.-)%s*$") or ""
+	if isOpen then refreshRecipes(false) end
+end)
 
 local function setupCategories()
 	-- Clear existing
@@ -936,6 +979,8 @@ local function openWorkbench(station, stationType)
 	if isOpen then return end
 	
 	currentStation = station
+	recipeSearch = ""
+	recipeSearchBox.Text = ""
  if gradeConnection then gradeConnection:Disconnect() end
  gradeConnection=station:GetAttributeChangedSignal("StationGrade"):Connect(function()
   local grade=station:GetAttribute("StationGrade") or 1
@@ -1156,7 +1201,14 @@ print("[WorkbenchUI] Ready - interact with placed workbenches to craft")
 Theme.CaptureCursor(mainPanel); Theme.Panel(mainPanel)
 Theme.FitMenu(mainPanel, 500, 630, {OnClose = closeWorkbench, MobileWidth = 360, MobileHeight = 630, OnResize = function(width, _, mobile)
 	closeBtn.Visible = not mobile
-	if not mobile then stationIcon.Visible = true; return end
+	if not mobile then
+		stationIcon.Visible = true
+		recipeSearchBox.Position = UDim2.new(0, MARGIN, 0, 103)
+		recipeSearchBox.Size = UDim2.new(1, -MARGIN * 2, 0, 36)
+		recipeContainer.Position = UDim2.new(0, MARGIN, 0, 147)
+		recipeContainer.Size = UDim2.new(1, -MARGIN * 2, 1, -322)
+		return
+	end
 	closeBtn.Size = UDim2.fromOffset(44, 44)
 	recipeBookBtn.Size = UDim2.fromOffset(104, 44)
 	recipeBookBtn.Position = UDim2.new(1, -172, 0, 4)
@@ -1165,7 +1217,8 @@ Theme.FitMenu(mainPanel, 500, 630, {OnClose = closeWorkbench, MobileWidth = 360,
 	titleLabel.Position = UDim2.fromOffset(16, 8); titleLabel.Size = UDim2.new(1, -200, 0, 24)
 	subtitleLabel.Position = UDim2.fromOffset(16, 34); subtitleLabel.Size = UDim2.new(1, -32, 0, 20)
 	categoryBar.Size = UDim2.new(1, -32, 0, 44)
-	recipeContainer.Position = UDim2.fromOffset(16, 117); recipeContainer.Size = UDim2.new(1, -32, 1, -292)
+	recipeSearchBox.Position = UDim2.fromOffset(16, 117); recipeSearchBox.Size = UDim2.new(1, -32, 0, 40)
+	recipeContainer.Position = UDim2.fromOffset(16, 165); recipeContainer.Size = UDim2.new(1, -32, 1, -340)
 	quantityLabel.Size = UDim2.fromOffset(58, 44)
 	quantityLabel.TextSize = 14
 	decreaseBtn.Position = UDim2.fromOffset(58, 0); decreaseBtn.Size = UDim2.fromOffset(44, 44)

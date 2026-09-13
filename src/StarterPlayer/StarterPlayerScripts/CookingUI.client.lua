@@ -26,6 +26,7 @@ local state, inventory = nil, {}
 local page, recipeId, seasoningId, quantity = "Meals", nil, nil, 1
 local pending, rowCallbacks = {}, {}
 local receivedAt, signature = 0, ""
+local searchQuery = ""
 local render
 local function make(class, parent, props)
  local object = Instance.new(class)
@@ -58,6 +59,9 @@ local tabs=make("Frame",panel,{BackgroundTransparency=1,Position=UDim2.fromOffse
 button(tabs,"Meals",function() page="Meals";render(true) end).Size=UDim2.new(.5,-4,1,0)
 local kitchenTab=button(tabs,"Kitchen",function() page="Kitchen";render(true) end)
 kitchenTab.Position=UDim2.new(.5,4,0,0);kitchenTab.Size=UDim2.new(.5,-4,1,0)
+local search=make("TextBox",panel,{Name="ItemSearch",BackgroundColor3=colors.SlotEmpty,BorderSizePixel=0,Position=UDim2.fromOffset(16,112),Size=UDim2.new(1,-32,0,40),Text="",PlaceholderText="Search meals, ingredients, or seasonings",PlaceholderColor3=colors.TextMuted,TextColor3=colors.Text,TextSize=15,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left,ClearTextOnFocus=false,Visible=false})
+Theme.Corner(search,8)
+make("UIPadding",search,{PaddingLeft=UDim.new(0,12),PaddingRight=UDim.new(0,12)})
 local content=make("ScrollingFrame",panel,{Name="Content",BackgroundTransparency=1,BorderSizePixel=0,Position=UDim2.fromOffset(16,112),Size=UDim2.new(1,-32,1,-210),CanvasSize=UDim2.new(),AutomaticCanvasSize=Enum.AutomaticSize.Y,ScrollBarThickness=5,ScrollingDirection=Enum.ScrollingDirection.Y,ElasticBehavior=Enum.ElasticBehavior.WhenScrollable})
 make("UIListLayout",content,{Padding=UDim.new(0,8),SortOrder=Enum.SortOrder.LayoutOrder})
 make("UIPadding",content,{PaddingRight=UDim.new(0,8),PaddingBottom=UDim.new(0,8)})
@@ -116,6 +120,20 @@ local function chosenRecipe() return recipeId and Catalog.Recipes[recipeId] end
 local function seasoningDescription(seasoning)
  return tostring(seasoning.Effect or seasoning.Description or "").." · 4 min"
 end
+local function matchesSearch(...)
+ if searchQuery=="" then return true end
+ for index=1,select("#",...) do
+  if string.find(string.lower(tostring(select(index,...) or "")),searchQuery,1,true) then return true end
+ end
+ return false
+end
+local function recipeMatches(id,recipe)
+ if matchesSearch(id,recipe.Name,recipe.Category) then return true end
+ for _,ingredient in ipairs(recipe.Ingredients or {}) do
+  if matchesSearch(ingredient.Id,name(ingredient.Id)) then return true end
+ end
+ return false
+end
 local function renderDetails()
  local recipe=chosenRecipe();if not recipe then go("Meals");return end
  addButton("‹ All meals",function() go("Meals") end,44)
@@ -160,6 +178,9 @@ render=function(resetScroll)
  rowCallbacks={}
  for _,child in ipairs(content:GetChildren()) do if child:IsA("GuiObject") then child:Destroy() end end
  if not state then return end
+ search.Visible=page=="Meals" or page=="Seasoning"
+ content.Position=search.Visible and UDim2.fromOffset(16,160) or UDim2.fromOffset(16,112)
+ content.Size=search.Visible and UDim2.new(1,-32,1,-258) or UDim2.new(1,-32,1,-210)
  title.Text=(state.StationType or "Camp").." kitchen"
  kitchenTab.Text="Kitchen · "..#(state.Jobs or {}).."/3"
  local activeSpice=Catalog.Seasonings[player:GetAttribute("FoodSeasoning")]
@@ -174,7 +195,7 @@ render=function(resetScroll)
  if page=="Meals" then
   addText("Choose a recipe. Seasoning is optional.",36,14)
   local recipes={}
-  for id,recipe in pairs(Catalog.Recipes) do if recipe.StationType==state.StationType and not recipe.Future then table.insert(recipes,{Id=id,Recipe=recipe}) end end
+  for id,recipe in pairs(Catalog.Recipes) do if recipe.StationType==state.StationType and not recipe.Future and recipeMatches(id,recipe) then table.insert(recipes,{Id=id,Recipe=recipe}) end end
   table.sort(recipes,function(a,b) if a.Recipe.Tier~=b.Recipe.Tier then return (a.Recipe.Tier or 1)<(b.Recipe.Tier or 1) end return a.Recipe.Name<b.Recipe.Name end)
   for _,entry in ipairs(recipes) do
    addButton(entry.Recipe.Name..string.format("\n+%d food · +%d energy · %ss",entry.Recipe.Hunger or 0,entry.Recipe.Stamina or 0,recipeWork(entry.Recipe)),function()
@@ -186,7 +207,7 @@ render=function(resetScroll)
   addButton("‹ Back to meal",function() go("Detail") end,44)
   addButton("No seasoning",function() seasoningId=nil;go("Detail") end)
   local spices={}
-  for _,spice in pairs(Catalog.Seasonings) do if not spice.Future then table.insert(spices,spice) end end
+  for _,spice in pairs(Catalog.Seasonings) do if not spice.Future and matchesSearch(spice.Id,spice.Name,spice.Effect,spice.Description,biomeName(spice.Biome)) then table.insert(spices,spice) end end
   table.sort(spices,function(a,b) return a.Name<b.Name end)
   for _,spice in ipairs(spices) do
    local itemId=spice.Id
@@ -225,6 +246,10 @@ render=function(resetScroll)
  end
  content.CanvasPosition=resetScroll and Vector2.zero or oldPosition
 end
+search:GetPropertyChangedSignal("Text"):Connect(function()
+ searchQuery=string.lower(search.Text):match("^%s*(.-)%s*$") or ""
+ if gui.Enabled and (page=="Meals" or page=="Seasoning") then render(true) end
+end)
 local function stateSignature(value)
  local pieces={tostring(value.Enabled),tostring(value.KeepWarm)}
  for _,job in ipairs(value.Jobs or {}) do table.insert(pieces,tostring(job.Id)..":"..tostring(job.Remaining)) end
@@ -246,7 +271,7 @@ remote.OnClientEvent:Connect(function(kind,payload)
  state=payload;receivedAt=os.clock()
  local newSignature=stateSignature(state)
  if kind=="Open" then
-  if changedStation then page="Meals";recipeId=nil;seasoningId=nil;quantity=1;table.clear(pending) end
+  if changedStation then page="Meals";recipeId=nil;seasoningId=nil;quantity=1;searchQuery="";search.Text="";table.clear(pending) end
   if payload.RecipeId and Catalog.Recipes[payload.RecipeId] then
    recipeId=payload.RecipeId;page="Detail"
    local spice=payload.SeasoningId and Catalog.Seasonings[payload.SeasoningId]

@@ -24,6 +24,7 @@ local function button(parent,value,fn)
  local b=make("TextButton",parent,{Size=UDim2.new(1,0,0,46),Text=value,TextColor3=colors.Text,Font=Enum.Font.GothamMedium,TextSize=16,TextWrapped=true,BackgroundColor3=colors.SlotEmpty});Theme.Button(b);b.Activated:Connect(fn);return b
 end
 local state,recipeId,page,quantity,signature=nil,nil,"Recipes",1,""
+local searchQuery=""
 local render
 local fuelLabel
 local title=label(panel,"Station",40);title.Position=UDim2.fromOffset(16,8);title.Size=UDim2.new(1,-88,0,40);title.TextSize=23;title.Font=Enum.Font.GothamBold
@@ -38,6 +39,9 @@ local x=button(panel,"×",close);x.Size=UDim2.fromOffset(44,44);x.Position=UDim2
 local tabs=make("Frame",panel,{Position=UDim2.fromOffset(16,58),Size=UDim2.new(1,-32,0,44),BackgroundTransparency=1})
 local recipesTab=button(tabs,"Recipes",function()page="Recipes";render(true) end);recipesTab.Size=UDim2.new(.5,-4,1,0)
 local queueTab=button(tabs,"Station / queue",function()page="Station";render(true) end);queueTab.Position=UDim2.new(.5,4,0,0);queueTab.Size=UDim2.new(.5,-4,1,0)
+local search=make("TextBox",panel,{Name="RecipeSearch",Position=UDim2.fromOffset(16,110),Size=UDim2.new(1,-32,0,40),BackgroundColor3=colors.SlotEmpty,BorderSizePixel=0,Text="",PlaceholderText="Search furnace recipes or ingredients",PlaceholderColor3=colors.TextMuted,TextColor3=colors.Text,TextSize=15,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left,ClearTextOnFocus=false,Visible=false})
+Theme.Corner(search,8)
+make("UIPadding",search,{PaddingLeft=UDim.new(0,12),PaddingRight=UDim.new(0,12)})
 local content=make("ScrollingFrame",panel,{Name="Content",Position=UDim2.fromOffset(16,110),Size=UDim2.new(1,-32,1,-198),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=5,CanvasSize=UDim2.new(),AutomaticCanvasSize=Enum.AutomaticSize.Y,ScrollingDirection=Enum.ScrollingDirection.Y})
 make("UIListLayout",content,{Padding=UDim.new(0,8),SortOrder=Enum.SortOrder.LayoutOrder})
 make("UIPadding",content,{PaddingRight=UDim.new(0,8),PaddingBottom=UDim.new(0,8)})
@@ -46,6 +50,13 @@ local fill=make("Frame",progress,{Size=UDim2.fromScale(0,1),BackgroundColor3=col
 local work=label(panel,"No work queued",22);work.Position=UDim2.new(0,16,1,-64);work.Size=UDim2.new(1,-32,0,22);work.TextSize=14
 local function name(id)local item=Items:Get(id);return item and item.Name or id end
 local function costs(list)local pieces={};for _,v in ipairs(list or {}) do table.insert(pieces,name(v.Id).." ×"..v.N) end;return table.concat(pieces," + ") end
+local function recipeMatches(id,r)
+ if searchQuery=="" then return true end
+ local values={id,r.Output and r.Output.Id,r.Output and name(r.Output.Id),r.Category}
+ for _,ingredient in ipairs(r.Ingredients or {}) do table.insert(values,ingredient.Id);table.insert(values,name(ingredient.Id)) end
+ for _,value in ipairs(values) do if string.find(string.lower(tostring(value or "")),searchQuery,1,true) then return true end end
+ return false
+end
 render=function(reset)
  if not state then return end
  local pos=content.CanvasPosition
@@ -55,8 +66,11 @@ render=function(reset)
  if state.StationType=="Workbench" then title.Text=(state.Grade>=7 and "Master Workbench" or state.Grade>=4 and "Advanced Workbench" or "Workbench").." · Grade "..state.Grade end
  recipesTab.Visible=state.StationType=="Furnace"
  if state.StationType~="Furnace" then page="Station" end
+ search.Visible=state.StationType=="Furnace" and page=="Recipes"
+ content.Position=search.Visible and UDim2.fromOffset(16,158) or UDim2.fromOffset(16,110)
+ content.Size=search.Visible and UDim2.new(1,-32,1,-246) or UDim2.new(1,-32,1,-198)
  if page=="Recipes" then
-  local recipes={};for id,r in pairs(Catalog.Recipes) do if table.find(r.AllowedStations or {},"Furnace") then table.insert(recipes,{Id=id,Recipe=r}) end end
+  local recipes={};for id,r in pairs(Catalog.Recipes) do if table.find(r.AllowedStations or {},"Furnace") and recipeMatches(id,r) then table.insert(recipes,{Id=id,Recipe=r}) end end
   table.sort(recipes,function(a,b)return a.Recipe.RequiredGrade==b.Recipe.RequiredGrade and a.Id<b.Id or a.Recipe.RequiredGrade<b.Recipe.RequiredGrade end)
   for _,entry in ipairs(recipes) do
    local r=entry.Recipe
@@ -95,13 +109,17 @@ render=function(reset)
  end
  content.CanvasPosition=reset and Vector2.zero or pos
 end
+search:GetPropertyChangedSignal("Text"):Connect(function()
+ searchQuery=string.lower(search.Text):match("^%s*(.-)%s*$") or ""
+ if gui.Enabled and state and page=="Recipes" then render(true) end
+end)
 remote.OnClientEvent:Connect(function(kind,payload)
  if kind=="Close" then gui.Enabled=false;state=nil;return end
  if kind=="Result" then if payload.Message then status.Text=payload.Message end;return end
  if kind~="Snapshot" then return end
  local fresh=not state or state.Station~=payload.Station
  state=payload;gui.Enabled=true
- if fresh then page=state.StationType=="Furnace" and "Recipes" or "Station";recipeId=nil;quantity=1 end
+ if fresh then page=state.StationType=="Furnace" and "Recipes" or "Station";recipeId=nil;quantity=1;searchQuery="";search.Text="" end
  if payload.Message then status.Text=payload.Message end
  local bits={tostring(state.Grade),tostring(state.CampaignTier),tostring(state.State.Enabled)}
  for _,job in ipairs(state.State.Jobs) do table.insert(bits,job.RecipeId..job.Remaining) end
