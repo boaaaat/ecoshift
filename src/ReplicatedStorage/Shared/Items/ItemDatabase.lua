@@ -197,6 +197,38 @@ local raw = {
 	{ Id = "HazardAnalyzer", Name = "Hazard Analyzer", StackSize = 1, Tags = { "Utility", "Intel" } },
 }
 
+-- Seasoned meals have stable IDs; no per-stack metadata can be lost on transfer.
+local Cooking = require(script.Parent.Parent.CookingConfig)
+local existingCookingIds = {}
+for _, item in ipairs(raw) do existingCookingIds[item.Id] = item end
+local function cookingItem(id,name,stack,tags)
+ if existingCookingIds[id] then return end -- preserve legacy stack capacities
+ local def={Id=id,Name=name,StackSize=stack,Tags=tags}
+ table.insert(raw,def); existingCookingIds[id]=def
+end
+cookingItem("Stove","Stove",1,{"Placeable","Station"})
+cookingItem("Oven","Oven",1,{"Placeable","Station"})
+cookingItem("RawMeat","Raw Meat",30,{"Resource","MonsterDrop"})
+cookingItem("Berries","Berries",30,{"Resource","Raw","Forest","Food","Consumable"})
+cookingItem("RootVegetable","Root Vegetable",30,{"Resource","Raw","Forest","Food","Consumable"})
+for _, id in ipairs(Cooking.SeasoningOrder) do
+ local spice=Cooking.Seasonings[id]
+ if not spice.Future then cookingItem(id,spice.Name,30,{"Resource","Raw","Seasoning",spice.Biome}) end
+end
+for _, id in ipairs(Cooking.RecipeOrder) do
+ local recipe=Cooking.Recipes[id]
+ cookingItem(id,recipe.Name,recipe.StackSize,{"Food","Consumable","Cooking"})
+ if not recipe.Drink then
+  for _, spiceId in ipairs(Cooking.SeasoningOrder) do
+   local output=Cooking.GetOutputId(id,spiceId)
+   if output then
+    cookingItem(output,recipe.Name,recipe.StackSize,{"Food","Consumable","Cooking","Seasoned"})
+    existingCookingIds[output].IconColor=Cooking.Seasonings[spiceId].Color
+   end
+  end
+ end
+end
+
 -- Structural parts now travel through the same inventory placement flow as stations.
 for _, id in ipairs({ "Wall", "Floor", "Ramp", "Gate", "Tower", "Trap", "Machine" }) do
 	table.insert(raw, {Id=id, Name=id, StackSize=99, Tags={"Placeable", "Structure", "Holdable"}})
@@ -208,6 +240,14 @@ for _, def in ipairs(raw) do
 	end
 end
 require(script.Parent.ItemDescriptions).Apply(raw)
+for _, def in ipairs(raw) do
+ def.LegacyCookingDescription=def.Description
+ local description=Cooking.Describe(def.Id)
+ if description then def.Description=description end
+ if Cooking.Stations[def.Id] then
+  def.Description=def.Id=="Campfire" and "Place to queue simple cooked meals. Uses visible fuel for cooking and optional warmth. F opens cooking." or "Place to queue "..(def.Id=="Stove" and "soups, drinks and rations" or "roasts and baked meals")..". Choose one optional seasoning. Uses a shared output tray and visible fuel. F opens cooking."
+ end
+end
 
 -- OPTIMIZED: Pre-build lookup table for O(1) access
 local rawLookup = {}
@@ -249,16 +289,21 @@ local function resolveIcon(def)
 	return nil
 end
 
+local function displayDescription(def)
+ if ReplicatedStorage:GetAttribute("CookingEnabled")==false and def.LegacyCookingDescription then return def.LegacyCookingDescription end
+ return def.Description
+end
+
 function ItemDatabase:Get(id)
 	if not id then return nil end
-	if cache[id] then return cache[id] end
+	if cache[id] then cache[id].Description=displayDescription(rawLookup[id]); return cache[id] end
 	local def = rawLookup[id]
 	if def then
 		local icon = resolveIcon(def)
 		local item = Item.new({
 			Id = def.Id,
 			Name = def.Name,
-			Description = def.Description,
+			Description = displayDescription(def),
 			StackSize = def.StackSize,
 			Tags = def.Tags,
 			Icon = icon,
@@ -276,7 +321,7 @@ function ItemDatabase:All()
 		list[#list + 1] = Item.new({
 			Id = def.Id,
 			Name = def.Name,
-			Description = def.Description,
+			Description = displayDescription(def),
 			StackSize = def.StackSize,
 			Tags = def.Tags,
 			Icon = resolveIcon(def),

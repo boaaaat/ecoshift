@@ -309,6 +309,7 @@ local function crystals(model, palette, name)
 end
 
 local RESOURCE_FAMILIES = {
+	WildHerb="Seasoning",CoolMint="Seasoning",BitterSeed="Seasoning",WarmPepper="Seasoning",EmberPepper="Seasoning",CrystalBasil="Seasoning",StarSeed="Seasoning",Berries="Berries",RootVegetable="Vegetable",
 	Tree = "Tree", BigTree = "BigTree", SmallTree = "SmallTree", ForestWood = "Tree",
 	Frostwood = "Pine", MangroveTree = "Mangrove", MangroveWood = "Mangrove", CypressTree = "Cypress", WillowTreeSwamp = "Willow", WillowBark = "Bark",
 	Mushroom = "Mushroom", BrownMushroom = "Mushroom", GlowcapCluster = "Glowcap", Glowcap = "Glowcap",
@@ -329,7 +330,31 @@ function ExpeditionModels.CreateResource(name, biome)
 	if not family then return nil end
 	local palette = PALETTES[biome] or PALETTES.Forest
 	local model = newWorld(name, biome or "Forest", family)
-	if family == "Tree" or family == "BigTree" or family == "SmallTree" then
+	if family == "Seasoning" then
+  local spice=require(game:GetService("ReplicatedStorage").Shared.CookingConfig).Seasonings[name]
+  local leaves=spice and spice.Color or palette.Light
+  for index=0,2 do
+   local x=(index-1)*.55
+   beam(model,"HerbStem",V(x,0,0),V(x,.85+index*.08,0),.07,.07,palette.Bark)
+   for side=-1,1,2 do
+    solid(model,"EdibleLeaf",V(.48,.14,.32),CF(x+side*.18,.45+index*.07,0)*A(0,side*.6,side*.2),leaves,"WedgePart")
+   end
+   solid(model,"SeasoningBud",V(.22,.28,.22),CF(x,.98+index*.08,0),leaves,"WedgePart")
+  end
+  if name=="CrystalBasil" or name=="StarSeed" then glow(model,"SeasoningGlow",V(.1,.12,.1),CF(0,1.13,0),leaves) end
+ elseif family == "Berries" then
+  crown(model,V(0,.45,0),1.9,.8,1.4,palette.Leaf,.2)
+  for index=0,4 do
+   local a=index*math.pi*.4
+   solid(model,"Berry",V(.23,.23,.23),CF(math.cos(a)*.65,.8,math.sin(a)*.45),Color3.fromRGB(177,75,105))
+  end
+ elseif family == "Vegetable" then
+  for index=0,2 do
+   local x=(index-1)*.5
+   solid(model,"EdibleRoot",V(.35,.42,.35),CF(x,.17,0),Color3.fromRGB(191,151,104),"WedgePart")
+   solid(model,"RootLeaves",V(.4,.55,.12),CF(x,.53,0)*A(0,index,.2),palette.Light,"WedgePart")
+  end
+ elseif family == "Tree" or family == "BigTree" or family == "SmallTree" then
 		tree(model, palette, "Broadleaf", family == "BigTree" and 1.25 or family == "SmallTree" and 0.67 or 1)
 	elseif family == "Pine" or family == "Mangrove" or family == "Cypress" or family == "Willow" then tree(model, palette, family)
 	elseif family == "Bark" then log(model, palette, false, true)

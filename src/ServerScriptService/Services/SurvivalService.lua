@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
@@ -42,6 +43,16 @@ local function getAmbientTemp(position)
 	ambient += tonumber(mods.Temp) or 0
 	ambient += tonumber((BiomeService:GetWeather() or {}).Temp) or 0
 	return ambient
+end
+
+local function campfireRecovery(position)
+	if ReplicatedStorage:GetAttribute("CookingEnabled") ~= true then return 0 end
+	for _, station in ipairs(CollectionService:GetTagged("CraftingStation")) do
+		if station:GetAttribute("StationType") == "Campfire" and station:GetAttribute("CookingBurning") == true
+			and station:IsDescendantOf(workspace) and (station:IsA("Model") or station:IsA("BasePart"))
+			and (station:GetPivot().Position - position).Magnitude <= 12 then return 1 end
+	end
+	return 0
 end
 
 local function applySprintModifier(plr, enabled)
@@ -86,7 +97,8 @@ function SurvivalService:_tickSprint(plr, dt)
 	local velocity = hrp.AssemblyLinearVelocity
 	local moving = hum.MoveDirection.Magnitude > 0.1 or Vector3.new(velocity.X, 0, velocity.Z).Magnitude > 0.75
 	local sprinting = self._sprintWanted[plr] == true and not self._sprintExhausted[plr] and moving and stamina > 0
-	local nextStamina = clamp(stamina + (sprinting and -STAMINA_DRAIN or STAMINA_REGEN) * dt, 0, maxStamina)
+	local drain = STAMINA_DRAIN * (1 - (plr:GetAttribute("Class_SprintReduction") or 0)) * (1 - (plr:GetAttribute("Food_SprintDrainReduction") or 0))
+	local nextStamina = clamp(stamina + (sprinting and -drain or STAMINA_REGEN) * dt, 0, maxStamina)
 	if protected then nextStamina = maxStamina end
 	if nextStamina <= 0 and self._sprintWanted[plr] then
 		self._sprintExhausted[plr] = true
@@ -128,14 +140,16 @@ function SurvivalService:_tickPlayer(plr, dt)
 	local kind = ambient >= 0 and "Heat" or "Cold"
 	local gear = math.clamp(tonumber(char:GetAttribute("GearRes_" .. kind)) or 0, 0, 0.95)
 	local tonic = math.clamp(tonumber(char:GetAttribute("Res_" .. kind)) or 0, 0, 0.95)
+	local foodProtection = math.max(plr:GetAttribute("FoodThermal_" .. kind) or 0, plr:GetAttribute("Food_" .. kind .. "Reduction") or 0)
 	local fieldReduction, fieldRecovery = require(script.Parent.ClassAbilityService):GetShelterEffect(plr)
-	ambient *= (1 - gear) * (1 - tonic) * (1 - (plr:GetAttribute("Class_ExposureReduction") or 0)) * (1 - fieldReduction)
+	ambient *= (1 - gear) * (1 - math.max(tonic, foodProtection)) * (1 - (plr:GetAttribute("Class_ExposureReduction") or 0)) * (1 - fieldReduction)
 	if ambient < 0 then ambient *= 1 + (tonumber(char:GetAttribute("WetStacks")) or 0) * 0.1 end
 	if ambient ~= 0 then
 		temp += ambient * dt
 	end
 	-- Safe conditions and suitable gear allow body temperature to recover.
-	tempRes = (math.max(0, tempRes) + 0.3) * (1 + (plr:GetAttribute("Class_ExposureRecovery") or 0)) + fieldRecovery
+	tempRes = (math.max(0, tempRes) + 0.3) * (1 + (plr:GetAttribute("Class_ExposureRecovery") or 0)) * (1 + (plr:GetAttribute("Food_ExposureRecoveryBonus") or 0)) + fieldRecovery
+	if temp < 0 then tempRes += campfireRecovery(hrp.Position) end
 	if tempRes > 0 then
 		if temp > 0 then
 			temp = math.max(0, temp - (tempRes * dt))
@@ -152,7 +166,7 @@ function SurvivalService:_tickPlayer(plr, dt)
 
 	local maxHunger = StatsService:GetStat(plr, "MaxHunger") or 100
 	local hunger = StatsService:GetBase(plr, "Hunger") or StatsService:GetStat(plr, "Hunger") or maxHunger
-	hunger = math.max(0, hunger - (HUNGER_DRAIN * (1 - (plr:GetAttribute("Class_HungerReduction") or 0)) * dt))
+	hunger = math.max(0, hunger - (HUNGER_DRAIN * (1 - (plr:GetAttribute("Class_HungerReduction") or 0)) * (1 - (plr:GetAttribute("Food_HungerDrainReduction") or 0)) * dt))
 	if hunger <= 0 then
 		hum:TakeDamage(HUNGER_DAMAGE * dt)
 	end

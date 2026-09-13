@@ -9,6 +9,7 @@ local InventoryService = require(script.Parent.InventoryService)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local StatsService = require(script.Parent.StatsService)
 local ToolService = require(script.Parent.ToolService)
+local FoodService = require(script.Parent.FoodService)
 
 local InventoryActionService = {}
 local resistEffects = setmetatable({}, { __mode = "k" })
@@ -28,6 +29,7 @@ local RESIST_EFFECTS = {
 
 local function canConsume(item)
 	if not item then return false end
+	if FoodService:CanConsume(item.Id) then return true end
 	return (item:HasTag("Food") or item:HasTag("Consumable"))
 		and (FOOD_RESTORE[item.Id] ~= nil or RESIST_EFFECTS[item.Id] ~= nil or item.Id == "Bandage"
 			or item.Id == "ThermalPatch" or item.Id == "SpringWater")
@@ -122,11 +124,12 @@ local function applyConsumableEffects(plr, char, hum, itemId)
 	end
 end
 
-function InventoryActionService:_consumeFromSlot(plr, slotType, slotIndex)
+function InventoryActionService:_consumeFromSlot(plr, slotType, slotIndex, callback)
 	local char, hum = canAct(plr)
 	if not char then return false, "You cannot use items right now." end
 	local slot = InventoryService:PeekSlot(plr, slotType, slotIndex)
 	local item = slot and ItemDatabase:Get(slot.Id)
+	if item and FoodService:CanConsume(item.Id) then return FoodService:Consume(plr, slotType, slotIndex, callback) end
 	if not canConsume(item) then return false, "This item cannot be consumed." end
 	local useful, reason = hasUsefulEffect(plr, char, hum, slot.Id)
 	if not useful then return false, reason end
@@ -159,7 +162,9 @@ function InventoryActionService:Init()
 	if not remote then return end
 	self._initialized = true
 	local function consume(plr, slotType, slotIndex)
-		local success, message = self:_consumeFromSlot(plr, slotType, slotIndex)
+		local success, message = self:_consumeFromSlot(plr, slotType, slotIndex, function(completed, result)
+			remote:FireClient(plr, "UseResult", {Success = completed, Message = result})
+		end)
 		remote:FireClient(plr, "UseResult", { Success = success, Message = message })
 	end
 	remote.OnServerEvent:Connect(function(plr, action, payload)

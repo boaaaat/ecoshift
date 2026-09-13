@@ -62,6 +62,8 @@ local tier2Services = {
 	{ name = "ArmorService", method = "Init" },
 	{ name = "DayNightService", method = "Init" },
 	{ name = "CraftingService", method = "Init" },
+	{ name = "CookingService", method = "Init" },
+	{ name = "FoodService", method = "Init" },
 	{ name = "WorldControlService", method = "Init" },
 	{ name = "LootService", method = "Init" },
 	{ name = "RewardsObserver", method = "Init" },

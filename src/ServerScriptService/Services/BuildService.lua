@@ -392,6 +392,8 @@ function BuildService:Remove(plr, target)
 	end
 	
 	local buildType = placed:GetAttribute("BuildType")
+	local kitchenReady, kitchenReason = require(script.Parent.CookingService):CanSalvage(placed)
+	if not kitchenReady then return false, kitchenReason end
 	if buildType and isPlaceableItem(buildType) then
 		if not InventoryService:CanFit(plr, buildType, 1) then
 			return false, "InventoryFull"
@@ -431,6 +433,7 @@ function BuildService:CaptureWorldState()
 				GridX = inst:GetAttribute("GridX"), GridZ = inst:GetAttribute("GridZ"), Transform = SnapshotCodec.CFrame(inst:GetPivot()),
 				Durability = durability and durability.Value or 100, DurabilityMax = inst:GetAttribute("DurabilityMax") or 100 }
 			if isChestStructure(inst, state.Type) then state.Chest = LootService:CaptureChestState(inst) end
+			state.Cooking = require(script.Parent.CookingService):CaptureStation(inst)
 			table.insert(result, state)
 		end
 	end
@@ -473,6 +476,7 @@ function BuildService:RestoreWorldState(states)
 		inst:SetAttribute("DurabilityMax", SnapshotCodec.Number(state.DurabilityMax, 1, 1e6))
 		if WorkbenchConfig.STATIONS[state.Type] then setupWorkbenchInteraction(inst, state.Type) end
 		if state.Chest then LootService:RestoreChestState(inst, state.Chest) end
+		if ReplicatedStorage:GetAttribute("CookingEnabled") == true then require(script.Parent.CookingService):RestoreStation(inst, state.Cooking) end
 		table.insert(prepared, inst)
 	end
 	for _, inst in ipairs(CollectionService:GetTagged("Structure")) do

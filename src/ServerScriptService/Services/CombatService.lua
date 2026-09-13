@@ -174,6 +174,9 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 	end
 
 	if attackerPlayer and not tgtPlr then
+		if dmgType == "Melee" or dmgType == "Gun" or dmgType == "Bow" or dmgType == "Throwable" then
+			amount *= 1 + (attackerPlayer:GetAttribute("Food_MonsterDamageBonus") or 0)
+		end
 		local bonus = require(script.Parent.ClassAbilityService):GetMarkedBonus(target)
 		amount *= 1 + bonus
 		target:SetAttribute("LastAttackerUserId", attackerPlayer.UserId)

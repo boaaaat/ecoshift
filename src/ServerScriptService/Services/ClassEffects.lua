@@ -10,6 +10,7 @@ function E.Power(player, node)
 	local bonus = player:GetAttribute("Class_GatherPower") or 0
 	if E.Kind(node)=="Mineral" then bonus += player:GetAttribute("Class_MineralPower") or 0; bonus += player:GetAttribute("ClassMineralPower") or 0 end
 	bonus += player:GetAttribute("ClassHarvestPower") or 0
+	bonus += player:GetAttribute("Food_ResourcePowerBonus") or 0
 	return 1 + math.clamp(bonus,0,.75)
 end
 function E.Duration(player, node, duration)

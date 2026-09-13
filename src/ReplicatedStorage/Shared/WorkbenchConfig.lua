@@ -1207,6 +1207,34 @@ WorkbenchConfig.RECIPES = {
 	},
 }
 
+-- Shared cooking is a separate escrow/queue service; entries also support recipe discovery.
+local Cooking = require(script.Parent.CookingConfig)
+local RS = game:GetService("ReplicatedStorage")
+for id,station in pairs(Cooking.Stations) do
+ WorkbenchConfig.STATIONS[id]={Name=station.Name,Tier=20+station.Tier,BuildType=id,InteractRadius=station.InteractRadius,Description="Shared cooking queue",Cooking=true}
+ WorkbenchConfig.STATION_TIERS[id]=20+station.Tier
+end
+local legacyFoodRecipes={}
+for id,recipe in pairs(WorkbenchConfig.RECIPES) do
+ if recipe.ProcessKind=="Food" or Cooking.Recipes[id] then legacyFoodRecipes[id]=recipe end
+end
+local function applyCookingRecipes()
+ for id in pairs(legacyFoodRecipes) do WorkbenchConfig.RECIPES[id]=nil end
+ for id in pairs(Cooking.Recipes) do WorkbenchConfig.RECIPES[id]=nil end
+ WorkbenchConfig.RECIPES.Stove=nil; WorkbenchConfig.RECIPES.Oven=nil
+ if RS:GetAttribute("CookingEnabled")==false then
+  for id,recipe in pairs(legacyFoodRecipes) do WorkbenchConfig.RECIPES[id]=recipe end
+  return
+ end
+ WorkbenchConfig.RECIPES.Stove={Ingredients={{Id="ForestStone",N=10},{Id="ForestPlank",N=6},{Id="SanditeIngot",N=2}},Output={Id="Stove",N=1},AllowedStations={"Workbench","AdvancedWorkbench"},Category="Stations",BaseCraftTime=20}
+ WorkbenchConfig.RECIPES.Oven={Ingredients={{Id="ClayMud",N=12},{Id="ForestStone",N=12},{Id="SanditeIngot",N=4}},Output={Id="Oven",N=1},AllowedStations={"Workbench","AdvancedWorkbench"},Category="Stations",BaseCraftTime=24}
+ for id,recipe in pairs(Cooking.Recipes) do
+  WorkbenchConfig.RECIPES[id]={Ingredients=recipe.Ingredients,Output={Id=id,N=1},AllowedStations={recipe.StationType},Category="Cooking",ProcessKind="Food",BaseCraftTime=recipe.Work,Cooking=true}
+ end
+end
+applyCookingRecipes()
+RS:GetAttributeChangedSignal("CookingEnabled"):Connect(applyCookingRecipes)
+
 -- Structural costs move to crafting; stations retain their own recipes and costs.
 for id, costs in pairs(require(script.Parent.Config).BUILD.Costs) do
 	local ingredients = {}
@@ -1226,6 +1254,7 @@ function WorkbenchConfig:IngredientCost(ingredient, player)
 end
 
 WorkbenchConfig.CATEGORIES = {
+	"Cooking",
 	"Structures",
 	"Materials",
 	"Tools",

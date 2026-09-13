@@ -109,4 +109,16 @@ MonsterDropConfig.Monsters = {
 	},
 }
 
+local meatMonsters={"Wolf","SandSerpent","BogToad","FrostWolf","AuroraStag"}
+local function applyCookingDrops()
+ for _,id in ipairs(meatMonsters) do
+  local drops=MonsterDropConfig.Monsters[id].Drops
+  for index=#drops,1,-1 do if drops[index].ItemId=="RawMeat" then table.remove(drops,index) end end
+  if game:GetService("ReplicatedStorage"):GetAttribute("CookingEnabled")~=false then
+   table.insert(drops,{ItemId="RawMeat",Min=1,Max=2,Chance=1})
+  end
+ end
+end
+applyCookingDrops()
+game:GetService("ReplicatedStorage"):GetAttributeChangedSignal("CookingEnabled"):Connect(applyCookingDrops)
 return MonsterDropConfig

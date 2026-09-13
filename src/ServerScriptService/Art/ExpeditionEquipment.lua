@@ -100,7 +100,7 @@ local BUILD_IDS = {
 	Wall = true, Floor = true, Ramp = true, Gate = true, Tower = true, Trap = true, Machine = true,
 	Workbench = true, AdvancedWorkbench = true, MasterWorkbench = true, Furnace = true, Anvil = true,
 	Loom = true, DryingRack = true, AlchemyTable = true, Kiln = true, Refinery = true, SurveyBench = true,
-	Campfire = true, Chest = true, Torch = true,
+	Campfire = true, Stove = true, Oven = true, Chest = true, Torch = true,
 }
 
 function Equipment.CreateBuild(id)
@@ -225,6 +225,22 @@ function Equipment.CreateBuild(id)
 		beam(m, "SightStand", V(1.4, 2.4, 0.45), V(1.4, 3.35, 0.45), 0.15, 0.17, STEEL)
 		beam(m, "SurveySight", V(1.4, 3.37, 0.85), V(1.4, 3.65, -0.65), 0.28, 0.32, TIMBER)
 		part(m, "SightLens", V(0.32, 0.31, 0.065), CF(1.4, 3.66, -0.7) * A(-0.18, 0, 0), ICE)
+	elseif id == "Stove" or id == "Oven" then
+  local oven=id=="Oven"
+  local width=oven and 4 or 3.2
+  part(m,"StonePlinth",V(width+.3,.3,2.8),CF(0,.15,0),STEEL,nil,true)
+  part(m,"CookerBody",V(width,2.2,2.5),CF(0,1.4,0),oven and WOOD or LEAF,nil,true)
+  part(m,"IronCookingTop",V(width+.15,.15,2.6),CF(0,2.58,0),CHARCOAL,nil,true)
+  part(m,"FuelDoor",V(width*.65,1.2,.12),CF(0,1.3,-1.31),CHARCOAL)
+  part(m,"BrassDoorHandle",V(.75,.12,.18),CF(0,1.65,-1.45),AMBER)
+  for side=-1,1,2 do part(m,"HeatVent",V(.12,.45,.05),CF(side*.43,1.17,-1.39),AMBER) end
+  if oven then
+   part(m,"Chimney",V(.55,2.1,.55),CF(1.25,3.7,.7),CHARCOAL,nil,true)
+   part(m,"OvenHood",V(width,.75,2.45),CF(0,2.98,0),tint(WOOD,.12),"WedgePart",true)
+  else
+   vessel(m,V(-.58,2.67,0),CHARCOAL,.8)
+   part(m,"SecondBurner",V(.75,.08,.75),CF(.75,2.73,0),STEEL)
+  end
 	elseif id == "Campfire" then
 		for index = 0, 5 do
 			local angle = index * math.pi / 3

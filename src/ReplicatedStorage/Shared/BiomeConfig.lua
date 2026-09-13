@@ -839,6 +839,24 @@ Config.biomes.StarfallCrater = {
 	chests = { { Name = "Rare_Chest", Weight = 1 } }, chest_count = 0.08,
 }
 
+-- Keep content changes out of restored worlds using the legacy generation rules.
+local cookingSources={Forest={WildHerb=.7,Berries=.8,RootVegetable=.8},Desert={CoolMint=.7},Swamp={BitterSeed=.7},FrozenTundra={WarmPepper=.7},Volcanic={EmberPepper=.7},CrystalWastes={CrystalBasil=.7},StarfallCrater={StarSeed=.7}}
+local cookingRegions={}
+for biomeId, additions in pairs(cookingSources) do
+ for _, region in ipairs(Config.biomes[biomeId].regions) do
+  table.insert(cookingRegions,{Region=region,Original=table.clone(region.resources or {}),Additions=additions})
+ end
+end
+local function applyCookingSources()
+ local enabled=game:GetService("ReplicatedStorage"):GetAttribute("CookingEnabled")~=false
+ for _,record in ipairs(cookingRegions) do
+  record.Region.resources=table.clone(record.Original)
+  if enabled then for id,weight in pairs(record.Additions) do record.Region.resources[id]={Weight=weight} end end
+ end
+end
+applyCookingSources()
+game:GetService("ReplicatedStorage"):GetAttributeChangedSignal("CookingEnabled"):Connect(applyCookingSources)
+
 -- Roadmap only: these eight entries never enter generation, forecasts or voting.
 Config.future_biomes = {
 	SaltglassCoast = { DisplayName = "Saltglass Coast", Implemented = false, Theme = "Tides, brine and shell composites" },

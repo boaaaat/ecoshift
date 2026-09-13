@@ -120,7 +120,7 @@ end
 function Service:GetCraftRate(player,station)
 	local bonus=0
 	for owner,effect in pairs(self._overclocks[station] or {}) do if living(owner) and effect.Until>os.clock() then bonus=math.max(bonus,effect.Rate) end end
-	return math.clamp(1+(player:GetAttribute("Class_CraftBonus") or 0)+bonus,1,2)
+	return math.clamp(1+(player and player:GetAttribute("Class_CraftBonus") or 0)+bonus,1,2)
 end
 function Service:GetShelterEffect(player)
 	local reduction,recovery=0,0

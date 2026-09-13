@@ -96,9 +96,12 @@ function C.GetKit(id, level)
 	end
 	local result, emitted = {}, {}
 	for _,itemId in ipairs(order) do if counts[itemId] and not emitted[itemId] then table.insert(result,{Id=itemId,N=counts[itemId]}); emitted[itemId]=true end end
+ if id=="Cook" and game:GetService("ReplicatedStorage"):GetAttribute("CookingEnabled")~=false then
+  for _,entry in ipairs(result) do if entry.Id=="DryingRack" then entry.Id="Stove" end end
+ end
 	return result
 end
-C.Plants = { BrownMushroom=true,MossBloom=true,ReedFiber=true,Glowcap=true,BogReed=true,RootFiber=true,SnowLichen=true,ChillBloom=true,FrozenReed=true,EmberBloom=true,AshFiber=true,EchoBloom=true,LatticeFiber=true,AuroraFiber=true,DawnBloom=true }
+C.Plants = { WildHerb=true,CoolMint=true,BitterSeed=true,WarmPepper=true,EmberPepper=true,CrystalBasil=true,StarSeed=true,Berries=true,RootVegetable=true, BrownMushroom=true,MossBloom=true,ReedFiber=true,Glowcap=true,BogReed=true,RootFiber=true,SnowLichen=true,ChillBloom=true,FrozenReed=true,EmberBloom=true,AshFiber=true,EchoBloom=true,LatticeFiber=true,AuroraFiber=true,DawnBloom=true }
 C.Minerals = { ForestStone=true,SandstoneChunk=true,Coal=true,SulfiteOre=true,SaltCrystal=true,SunShard=true,MireStone=true,IceCrystal=true,PermafrostOre=true,GlacialStone=true,BasaltChunk=true,SulfurOre=true,ObsidianShard=true,LavaSalt=true,ScoriaRock=true,CrystalShard=true,PhaseQuartz=true,PolarQuartz=true,MeteorIron=true,ImpactGlass=true }
 function C.ResourceKind(id) return C.Plants[id] and "Plant" or C.Minerals[id] and "Mineral" or "Other" end
 return C

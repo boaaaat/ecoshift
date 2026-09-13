@@ -162,6 +162,7 @@ function CraftingService:CanCraft(plr, recipeId, stationType, quantity)
 	if not recipe then
 		return false, "NoRecipe"
 	end
+	if recipe.Cooking then return false, "UseCookingStation", recipe.StationType end
 
 	local effectiveStation = stationType or "Hand"
 	if not WorkbenchConfig:CanCraftAt(recipeId, effectiveStation) then
@@ -270,6 +271,7 @@ function CraftingService:Craft(plr, recipeId, stationType, quantity)
 	if not recipe then
 		return false, "NoRecipe"
 	end
+	if recipe.Cooking then return false, "UseCookingStation", recipe.StationType end
 
 	local effectiveStation = stationType or "Hand"
 	local ingredients = adjustedIngredientsForPlayer(plr, recipe.Ingredients or recipe)

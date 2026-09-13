@@ -7,6 +7,7 @@ local TextService = game:GetService("TextService")
 local Theme = require(script.Parent.UITheme)
 local Resolver = require(script.Parent.Parent:WaitForChild("RecipeGuide"))
 local Recipes = require(script.Parent.Parent.WorkbenchConfig)
+local Cooking = require(script.Parent.Parent.CookingConfig)
 local Items = require(script.Parent.Parent.Items.ItemDatabase)
 local Config = require(script.Parent.Parent.Config)
 local Util = require(script.Parent.Parent.Util)
@@ -109,6 +110,14 @@ Theme.Corner(fill,2)
 local status=label(panel,"",20,13); status.Name="Status"; status.Position=UDim2.new(0,16,1,-26); status.Size=UDim2.new(1,-32,0,20)
 
 local function current() return stack[#stack] end
+local function selectedRecipe(node)
+	if not node or not node.RecipeId then return nil end
+	local entry=node.ItemId and Resolver.GetEntry(node.ItemId)
+	-- The resolver adds the chosen seasoning to this variant's ingredient list.
+	-- Preserve a separately selected alternative recipe for ordinary items.
+	if entry and entry.RecipeId==node.RecipeId and entry.Recipe then return entry.Recipe end
+	return Recipes.RECIPES[node.RecipeId]
+end
 local function itemName(id) local item=Items:Get(id); return item and item.Name or tostring(id) end
 local function count(id)
 	local n=0
@@ -192,7 +201,7 @@ end
 
 refresh=function()
 	local node=current(); if not node then return end
-	local recipe=node.RecipeId and Recipes.RECIPES[node.RecipeId]
+	local recipe=selectedRecipe(node)
 	local n=parsedQuantity()
 	local allowed=recipe and Resolver.GetStations(node.RecipeId,player) or {}
 	local station=recipe and Resolver.GetUsableStation(node.RecipeId,player,preferredStation)
@@ -248,9 +257,10 @@ refresh=function()
 	else
 		timing.Text="Station times: see the allowed stations above"
 	end
-	local canCraft=station~=nil and n<=max
+	local canCraft=station~=nil and (recipe.Cooking or n<=max)
 	setEnabled(craft,canCraft); craft.BackgroundColor3=canCraft and colors.SuccessFill or colors.SlotEmpty
 	craft.Text=not station and "Required station not nearby" or (n>max and "Missing materials" or ("Craft "..outputText(recipe,n).." · "..Recipes.STATIONS[station].Name))
+	if recipe.Cooking and station then craft.Text="Open "..Recipes.STATIONS[station].Name.." kitchen" end
 	if canCraft then craft.TextColor3=colors.Paper end
 end
 
@@ -316,7 +326,7 @@ render=function()
 			description.LayoutOrder=-1
 			description.TextColor3=colors.TextMuted
 		end
-		local recipe=node.RecipeId and Recipes.RECIPES[node.RecipeId]
+		local recipe=selectedRecipe(node)
 		if recipe then
 			local heading=label(content,"CRAFTING STATION · click to see how to make it",24,14); heading.LayoutOrder=0; heading.TextColor3=colors.TextMuted
 			for index,station in ipairs(Resolver.GetStations(node.RecipeId,player)) do
@@ -384,13 +394,38 @@ end
 minus.Activated:Connect(function() if minus.Active then setQuantity((parsedQuantity() or 2)-1) end end)
 plus.Activated:Connect(function() if plus.Active then setQuantity((parsedQuantity() or 1)+1) end end)
 maximum.Activated:Connect(function()
-	local node=current(); local recipe=node and node.RecipeId and Recipes.RECIPES[node.RecipeId]
+	local node=current(); local recipe=selectedRecipe(node)
 	if maximum.Active and recipe then setQuantity(affordable(recipe)) end
 end)
 craft.Activated:Connect(function()
-	local node=current(); local recipe=node and node.RecipeId and Recipes.RECIPES[node.RecipeId]
+	local node=current(); local recipe=selectedRecipe(node)
 	local n=parsedQuantity()
-	if activeCraft or not recipe or not n or n>affordable(recipe) or not craftRemote then return end
+	if activeCraft or not recipe or not n or not craftRemote then return end
+	if recipe.Cooking and RS:GetAttribute("CookingEnabled") ~= false then
+		local stationType=Resolver.GetUsableStation(node.RecipeId,player,preferredStation)
+		local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		local closest,distance=nil,math.huge
+		local definition=stationType and Recipes.STATIONS[stationType]
+		if root and definition then
+			for _,structure in ipairs(game:GetService("CollectionService"):GetTagged("Structure")) do
+				local kind=structure:GetAttribute("StationType") or structure:GetAttribute("BuildType")
+				if structure:IsDescendantOf(workspace) and (kind==stationType or kind==definition.BuildType) then
+					local position=structure:IsA("Model") and structure:GetPivot().Position or (structure:IsA("BasePart") and structure.Position)
+					local currentDistance=position and (root.Position-position).Magnitude
+					if currentDistance and currentDistance<distance and currentDistance<=(definition.InteractRadius or 8) then closest,distance=structure,currentDistance end
+				end
+			end
+		end
+		local cooking=remoteFolder and remoteFolder:FindFirstChild("Cooking")
+		if closest and cooking then
+			local meal,seasoning=Cooking.GetMeal(node.ItemId)
+			cooking:FireServer("Open",{Station=closest,RecipeId=meal and meal.Id or recipe.Output.Id,
+				SeasoningId=seasoning and seasoning.Id or nil,RequestId=game:GetService("HttpService"):GenerateGUID(false)})
+			gui.Enabled=false
+		else feedback("Move closer to the required cooking station.",false) end
+		return
+	end
+	if n>affordable(recipe) then return end
 	local station=Resolver.GetUsableStation(node.RecipeId,player,preferredStation)
 	if not station then refresh(); feedback("Move closer to one of the listed stations.",false); return end
 	activeCraft={RecipeId=node.RecipeId,StationType=station,Quantity=n,Duration=duration(recipe,station,n),StartedAt=os.clock(),Confirmed=false}

@@ -9,6 +9,7 @@ local ResourceMap = require(Shared.ResourceItemMap)
 local Loot = require(Shared.ExpeditionLootConfig)
 local MonsterDrops = require(Shared.MonsterDropConfig)
 local Config = require(Shared.Config)
+local Cooking = require(Shared.CookingConfig)
 
 local Guide = {}
 local recipesByOutput, sourcesByItem, stationIds = {}, {}, {}
@@ -41,15 +42,18 @@ local function weightedEntries(entries, visit)
 	end
 end
 
-for recipeId, recipe in pairs(Workbench.RECIPES) do
-	local outputId = recipe.Output and recipe.Output.Id
-	if outputId then
-		local recipes = recipesByOutput[outputId] or {}
-		table.insert(recipes, recipeId)
-		recipesByOutput[outputId] = recipes
-	end
+local function refreshRecipes()
+ table.clear(recipesByOutput)
+ for recipeId,recipe in pairs(Workbench.RECIPES) do
+  local outputId=recipe.Output and recipe.Output.Id
+  if outputId then
+   recipesByOutput[outputId]=recipesByOutput[outputId] or {}
+   table.insert(recipesByOutput[outputId],recipeId)
+  end
+ end
+ for _,recipes in pairs(recipesByOutput) do table.sort(recipes) end
 end
-for _, recipes in pairs(recipesByOutput) do table.sort(recipes) end
+refreshRecipes()
 for stationId in pairs(Workbench.STATIONS) do table.insert(stationIds, stationId) end
 table.sort(stationIds, function(a, b)
 	local aTier, bTier = Workbench.STATIONS[a].Tier or 0, Workbench.STATIONS[b].Tier or 0
@@ -100,6 +104,19 @@ for _, sources in pairs(sourcesByItem) do table.sort(sources) end
 -- Recipes are recipe IDs, not item IDs: several outputs use a different key.
 function Guide.GetEntry(itemId)
 	if type(itemId) ~= "string" then return nil end
+ refreshRecipes()
+ local base,seasoning=Cooking.GetMeal(itemId)
+ if base and seasoning then
+  local baseEntry=Guide.GetEntry(base.Id)
+  if baseEntry and baseEntry.Recipe then
+   baseEntry.ItemId=itemId
+   baseEntry.Name=base.Name.." / "..seasoning.Name
+   baseEntry.Recipe=table.clone(baseEntry.Recipe)
+   baseEntry.Recipe.Ingredients=table.clone(baseEntry.Recipe.Ingredients)
+   table.insert(baseEntry.Recipe.Ingredients,{Id=seasoning.Id,N=1})
+   return baseEntry
+  end
+ end
 	local recipes = recipesByOutput[itemId] or {}
 	local sources = sourcesByItem[itemId] or {}
 	return {
@@ -111,6 +128,7 @@ function Guide.GetEntry(itemId)
 end
 
 function Guide.GetStations(recipeId, player)
+ refreshRecipes()
 	local result = {}
 	if not Workbench.RECIPES[recipeId] then return result end
 	local root = player and player.Character and player.Character:FindFirstChild("HumanoidRootPart")

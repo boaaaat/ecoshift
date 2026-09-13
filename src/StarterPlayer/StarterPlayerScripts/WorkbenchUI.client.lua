@@ -916,6 +916,12 @@ local function setupCategories()
 end
 
 local function openWorkbench(station, stationType)
+	if ReplicatedStorage:GetAttribute("CookingEnabled") ~= false
+		and (stationType == "Campfire" or stationType == "Stove" or stationType == "Oven") then
+		local cooking = remotesFolder and remotesFolder:FindFirstChild("Cooking")
+		if cooking then cooking:FireServer("Open", { Station = station, RequestId = game:GetService("HttpService"):GenerateGUID(false) }) end
+		return
+	end
 	if isOpen then return end
 	
 	currentStation = station

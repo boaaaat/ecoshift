@@ -27,6 +27,7 @@ end
 -- Only loose, soft supplies can be gathered by hand. Everything else needs a
 -- tool, so missing tags or differently capitalized names cannot make ore instant.
 local gatherDuration = {
+	WildHerb=.8,CoolMint=.8,BitterSeed=1,WarmPepper=1,EmberPepper=1.1,CrystalBasil=1,StarSeed=1.1,Berries=.8,RootVegetable=1.1,
 	BrownMushroom = 0.6, MossBloom = 0.7, Glowcap = 0.8,
 	SnowLichen = 1, ChillBloom = 0.9, EmberBloom = 1.1, EchoBloom = 1.1, DawnBloom = 0.9,
 	ReedFiber = 1, BogReed = 1.2, FrozenReed = 1.4, AshFiber = 1.1,

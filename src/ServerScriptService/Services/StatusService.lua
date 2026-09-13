@@ -52,7 +52,7 @@ function StatusService:_tickPlayer(plr)
 	-- toxin
 	if toxin > 0 then
 		local base = 0.8 * toxin
-		local dmg = base * (1 - rToxin)
+		local dmg = base * (1 - rToxin) * (1 - (plr:GetAttribute("Food_PoisonDamageReduction") or 0))
 		applyDamage(hum, dmg)
 	end
 
