@@ -6,7 +6,7 @@ local Collection = game:GetService("CollectionService")
 local Biomes = require(RS.Shared.OverhaulBiomes)
 local Rules = require(RS.Shared.GameRules)
 local Codec = require(script.Parent.WorldSnapshotCodec)
-local Service = {_seed=require(RS.Shared.BiomeConfig).seed,_serial=-1,_chunks={},_loading={},_terrain={},_records={},_regions={},_landmarks={},_nodes={},_generation=0}
+local Service = {_seed=require(RS.Shared.BiomeConfig).seed,_serial=-1,_chunks={},_loading={},_terrain={},_terrainFootprints={},_records={},_regions={},_landmarks={},_nodes={},_generation=0}
 local CELL, CHUNK, RADIUS, CAMP = 12,240,1500,200
 local CAMP_HEIGHT, CAMP_BLEND = 12, 104
 local function hash(text,seed)
@@ -306,8 +306,30 @@ function Service:_plan()
   table.insert(self._landmarks,{Id=id,Position=p-Vector3.new(0,5,0),RegionId=r.Id,Name=r.Name,Biome=self._biome,Depth=r.Depth,FoundationRadius=(Biomes.Biomes[self._biome].Landform=="Forest" or Biomes.Biomes[self._biome].Landform=="Canopy") and 90 or 40})
  end
 end
+function Service:_clearSurface()
+ -- Terrain is not parented to GeneratedWorld: deleting chunk models does not
+ -- remove its grass, water or cave roofs. Track even partial/unloaded chunks.
+ if not self._surfaceInitialized then
+  -- Also remove surface geometry already present in the place on server start.
+  -- This slab ends at Y=416; separately generated interiors live at Y=3000.
+  for cx=-7,6 do
+   workspace.Terrain:FillBlock(CFrame.new((cx+.5)*CHUNK,128,0),Vector3.new(CHUNK,576,14*CHUNK),Enum.Material.Air)
+   task.wait()
+  end
+  self._surfaceInitialized=true
+ else
+  for key,cell in pairs(self._terrainFootprints) do
+   workspace.Terrain:FillBlock(CFrame.new((cell.X+.5)*CHUNK,128,(cell.Z+.5)*CHUNK),Vector3.new(CHUNK,576,CHUNK),Enum.Material.Air)
+   self._terrainFootprints[key]=nil
+   task.wait()
+  end
+ end
+ self._terrainFootprints={};self._terrain={};self._campMade=false
+end
 function Service:_paint(cx,cz,token)
  local key=cx..","..cz;if self._terrain[key] then return end
+ if token~=self._generation then return end
+ self._terrainFootprints[key]={X=cx,Z=cz}
  local b=Biomes.Biomes[self._biome];local material=Enum.Material[b.Material] or Enum.Material.Grass
  for ix=0,CHUNK/CELL-1 do
   for iz=0,CHUNK/CELL-1 do
@@ -343,7 +365,7 @@ function Service:_paint(cx,cz,token)
   end
   if ix%2==0 then task.wait() end
  end
- self._terrain[key]=true
+ if token==self._generation then self._terrain[key]=true end
 end
 function Service:GroundPoint(position)
  local height=self:GetHeight(position.X,position.Z)
@@ -486,9 +508,10 @@ function Service:_decorate(parent,cx,cz)
   end
  end
 end
-function Service:_chunkWork(cx,cz)
+function Service:_chunkWork(cx,cz,token)
+ if token~=self._generation then return end
  local key=cx..","..cz;if self._chunks[key] then self._chunks[key].Last=os.clock();return end
- local token=self._generation;self:_paint(cx,cz,token);if token~=self._generation then return end
+ self:_paint(cx,cz,token);if token~=self._generation then return end
  local f=folder(self._folder,key);local resources=folder(f,"Resources");local props=folder(f,"Props")
  local regions={}
  local center=Vector3.new((cx+.5)*CHUNK,0,(cz+.5)*CHUNK)
@@ -504,13 +527,18 @@ function Service:_chunkWork(cx,cz)
  require(script.Parent.ResourceNodeService):BindFolder(resources)
  self:_materializeLandmarks(f,cx,cz)
 end
-function Service:_chunk(cx,cz)
+function Service:_chunk(cx,cz,token)
  local key=cx..","..cz
- while self._loading[key] do task.wait() end
+ while self._loading[key] do
+  if token~=self._generation then return end
+  task.wait()
+ end
+ if token~=self._generation then return end
  if self._chunks[key] then self._chunks[key].Last=os.clock();return end
  self._loading[key]=true
- local ok,err=pcall(self._chunkWork,self,cx,cz)
+ local ok,err=pcall(self._chunkWork,self,cx,cz,token)
  self._loading[key]=nil
+ if token~=self._generation then return end
  if not ok then
   local partial=self._folder and self._folder:FindFirstChild(key)
   if partial then for _,n in ipairs(partial:GetDescendants()) do if n:GetAttribute("OverhaulNode") then n:SetAttribute("Unloading",true) end end;partial:Destroy() end
@@ -561,8 +589,13 @@ function Service:_materializeLandmarks(parent,cx,cz)
  end
 end
 function Service:EnsureArea(position)
+ local token=self._generation
+ if self._clearingSurface then return end
  local cx,cz=math.floor(position.X/CHUNK),math.floor(position.Z/CHUNK)
- for dx=-1,1 do for dz=-1,1 do self:_chunk(cx+dx,cz+dz) end end
+ for dx=-1,1 do for dz=-1,1 do
+  if token~=self._generation then return end
+  self:_chunk(cx+dx,cz+dz,token)
+ end end
 end
 function Service:GetClassScanMarkers(position,radius,mineralsOnly)
  local result={};local Loot=require(RS.Shared.ExpeditionLootConfig);local Items=require(RS.Shared.Items.ItemDatabase)
@@ -600,11 +633,14 @@ end
 function Service:Generate(biome)
  local BiomeService=require(script.Parent.BiomeService);local serial=BiomeService:GetVisitSerial()
  self._generation+=1;self._busy=true
+ self._clearingSurface=true
  for _,node in pairs(self._nodes) do if node.Instance.Parent then node.Instance:SetAttribute("Unloading",true) end end
- self._folder=folder(workspace,"GeneratedWorld");self._folder:SetAttribute("Generated",false);self._folder:ClearAllChildren();self._chunks={};self._nodes={};self._terrain={}
+ self._folder=folder(workspace,"GeneratedWorld");self._folder:SetAttribute("Generated",false);self._folder:ClearAllChildren();self._chunks={};self._nodes={}
+ self:_clearSurface()
  if self._serial~=serial or self._biome~=biome then self._records={};self._encounters={} end
  self._serial,self._biome=serial,biome;self._previousVisits=BiomeService:GetPreviousVisits()
  self._visitSeed=hash(biome..":"..serial,self._seed);self:_plan()
+ self._clearingSurface=false
  local exploration=require(script.Parent.TeamExplorationService);exploration:BeginBiome(biome,serial)
  -- Publish full coarse metadata without creating distant content.
  for cx=-7,6 do for cz=-7,6 do
@@ -627,16 +663,20 @@ function Service:Generate(biome)
   task.spawn(function()
    while true do
     if Rules.IsOverhaul() and not self._busy and not RS:GetAttribute("WorldRestoring") then
+     local token=self._generation
      for _,player in ipairs(Players:GetPlayers()) do
+      if token~=self._generation or self._busy then break end
       local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
       if root and not player:GetAttribute("InteriorId") then
        local ok,err=pcall(self.EnsureArea,self,root.Position)
+       if token~=self._generation or self._busy then break end
        if not ok then warn("[SurfaceStreaming]",err) else exploration:RevealFromPlayer(player,root.Position) end
        local region=self:MetadataAt(root.Position)
        if region then player:SetAttribute("RegionId",region.TypeId);player:SetAttribute("RegionDepth",region.Depth);player:SetAttribute("RegionName",region.Name) end
       end
      end
      for key,c in pairs(self._chunks) do
+      if token~=self._generation or self._busy then break end
       if os.clock()-c.Last>25 then
        for _,n in ipairs(c.Folder:GetDescendants()) do if n:GetAttribute("OverhaulNode") then n:SetAttribute("Unloading",true) end end
        c.Folder:Destroy();self._chunks[key]=nil
