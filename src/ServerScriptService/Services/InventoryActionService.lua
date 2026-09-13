@@ -106,6 +106,19 @@ function InventoryActionService:Init()
 				return
 			end
 
+			-- Pressing or tapping the slot that is already in the player's hand
+			-- toggles it away. Checking this on the server keeps keyboard, touch,
+			-- gamepad, and inventory-menu equip requests consistent.
+			for _, equipped in ipairs(char:GetChildren()) do
+				if equipped:IsA("Tool") and equipped:GetAttribute("InventorySlotIndex") == slotIndex then
+					local expectedUid = slot.Uid
+					if expectedUid == nil or equipped:GetAttribute("GearUid") == expectedUid then
+						hum:UnequipTools()
+						return
+					end
+				end
+			end
+
 			local item = ItemDatabase:Get(slot.Id)
 			if not item or not ToolService:IsHoldable(slot.Id) then
 				print(string.format("[InventoryAction] Slot %s is not holdable, unequipping for %s", tostring(slotIndex), plr.Name))
