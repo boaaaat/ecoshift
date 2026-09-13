@@ -18,9 +18,15 @@ SurvivalService._sprintWanted = setmetatable({}, { __mode = "k" })
 SurvivalService._sprintApplied = setmetatable({}, { __mode = "k" })
 SurvivalService._sprintExhausted = setmetatable({}, { __mode = "k" })
 SurvivalService._lastSprintRequest = setmetatable({}, { __mode = "k" })
+SurvivalService._naturalRegenElapsed = setmetatable({}, { __mode = "k" })
 
 local HUNGER_DRAIN = 0.05
+local SPRINT_HUNGER_MULTIPLIER = 2
 local HUNGER_DAMAGE = 10
+local NATURAL_REGEN_THRESHOLD = 0.8
+local NATURAL_REGEN_INTERVAL = 4
+local NATURAL_REGEN_HEALTH = 1
+local NATURAL_REGEN_FOOD_COST = 1
 local STAMINA_DRAIN = 12
 local STAMINA_REGEN = 8
 local TEMP_MIN = -100
@@ -182,8 +188,24 @@ function SurvivalService:_tickPlayer(plr, dt)
 
 	local maxHunger = StatsService:GetStat(plr, "MaxHunger") or 100
 	local hunger = StatsService:GetBase(plr, "Hunger") or StatsService:GetStat(plr, "Hunger") or maxHunger
- local drain=HUNGER_DRAIN*(1-(modifiers.HungerDrainReduction or 0))*(1-(plr:GetAttribute("Class_HungerReduction") or 0))*(1-(plr:GetAttribute("Food_HungerDrainReduction") or 0))
- hunger=math.max(0,hunger-drain*dt)
+	local exertion = self._sprintApplied[plr] and SPRINT_HUNGER_MULTIPLIER or 1
+	local drain = HUNGER_DRAIN * exertion * (1-(modifiers.HungerDrainReduction or 0)) * (1-(plr:GetAttribute("Class_HungerReduction") or 0)) * (1-(plr:GetAttribute("Food_HungerDrainReduction") or 0))
+	hunger = math.max(0, hunger - drain * dt)
+
+	-- Natural healing is deliberately slow and spends food. Roblox's default
+	-- Health script is disabled in StarterCharacterScripts so this is the sole
+	-- passive regeneration path.
+	if hunger > maxHunger * NATURAL_REGEN_THRESHOLD and hum.Health < hum.MaxHealth then
+		local elapsed = (self._naturalRegenElapsed[plr] or 0) + dt
+		while elapsed >= NATURAL_REGEN_INTERVAL and hunger > maxHunger * NATURAL_REGEN_THRESHOLD and hum.Health < hum.MaxHealth do
+			elapsed -= NATURAL_REGEN_INTERVAL
+			hum.Health = math.min(hum.MaxHealth, hum.Health + NATURAL_REGEN_HEALTH)
+			hunger = math.max(0, hunger - NATURAL_REGEN_FOOD_COST)
+		end
+		self._naturalRegenElapsed[plr] = elapsed
+	else
+		self._naturalRegenElapsed[plr] = nil
+	end
 	if hunger <= 0 then
 		hum:TakeDamage(HUNGER_DAMAGE * dt)
 	end
@@ -241,6 +263,7 @@ function SurvivalService:Init()
 		self._sprintApplied[plr] = nil
 		self._sprintExhausted[plr] = nil
 		self._lastSprintRequest[plr] = nil
+		self._naturalRegenElapsed[plr] = nil
 	end)
 end
 

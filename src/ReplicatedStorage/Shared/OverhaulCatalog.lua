@@ -951,6 +951,15 @@ C.WeaponFamilies = {
  ["Bow"] = {["DamageFactor"]=1.2,["AttackCycle"]=1.3,["Reach"]=120,["Special"]="PiercingShot",["SpecialFactor"]=1.6,["SpecialTargets"]=2,["Ammo"]="Arrow"},
  ["Staff"] = {["DamageFactor"]=1,["AttackCycle"]=1.1,["Reach"]=50,["Special"]="Burst",["SpecialFactor"]=1.25,["SpecialTargets"]=6,["SpecialRadius"]=7,["BasicStamina"]=3},
 }
+-- Melee spacing is intentionally a little more forgiving than the authored
+-- model lengths so attacks connect reliably without creating oversized hits.
+local meleeFamilies = {Spear=true,Sword=true,Dagger=true,Axe=true,Hammer=true}
+for family, profile in pairs(C.WeaponFamilies) do
+ if meleeFamilies[family] then profile.Reach += 2 end
+end
+for _, gear in pairs(C.Gear) do
+ if gear.Kind=="Weapon" and meleeFamilies[gear.WeaponFamily] then gear.Reach += 2 end
+end
 C.FurnaceFuels = {
  ["Wood"] = 15,
  ["Peat"] = 30,

@@ -30,18 +30,35 @@ function InventoryActionService:_consumeFromSlot(plr,slotType,slotIndex,callback
  return FoodService:Consume(plr,slotType,slotIndex,callback)
 end
 
+function InventoryActionService:_sendUseResult(plr, success, message)
+	if self._remote then
+		self._remote:FireClient(plr, "UseResult", { Success = success, Message = message })
+	end
+end
+
+function InventoryActionService:UseHeld(plr, tool)
+	local char = canAct(plr)
+	if not char or not tool or not tool:IsA("Tool") or tool.Parent ~= char then return end
+	local slotIndex = tool:GetAttribute("InventorySlotIndex")
+	local expectedId = tool:GetAttribute("InventoryItemId")
+	if typeof(slotIndex) ~= "number" or slotIndex % 1 ~= 0 or slotIndex < 1 or slotIndex > 6 then return end
+	local slot = InventoryService:PeekSlot(plr, "Hotbar", slotIndex)
+	if not slot or slot.Id ~= expectedId or (slot.Uid and slot.Uid ~= tool:GetAttribute("GearUid")) then return end
+	local item = ItemDatabase:Get(slot.Id)
+	if not canConsume(item) then return end
+	local success, message = self:_consumeFromSlot(plr, "Hotbar", slotIndex, function(completed, result)
+		self:_sendUseResult(plr, completed, result)
+	end)
+	self:_sendUseResult(plr, success, message)
+end
+
 function InventoryActionService:Init()
 	if self._initialized then return end
 	local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
 	local remote = Util.GetRemote(remotesFolder, Config.RemoteNames.InventoryAction)
 	if not remote then return end
 	self._initialized = true
-	local function consume(plr, slotType, slotIndex)
-		local success, message = self:_consumeFromSlot(plr, slotType, slotIndex, function(completed, result)
-			remote:FireClient(plr, "UseResult", {Success = completed, Message = result})
-		end)
-		remote:FireClient(plr, "UseResult", { Success = success, Message = message })
-	end
+	self._remote = remote
 	remote.OnServerEvent:Connect(function(plr, action, payload)
 		local _, hum = canAct(plr)
 		if not hum then return end
@@ -63,7 +80,7 @@ function InventoryActionService:Init()
 			return
 		end
 		if action == "Use" and type(payload) == "table" then
-			consume(plr, payload.SlotType, payload.SlotIndex)
+			remote:FireClient(plr, "UseResult", {Success=false, Message="Put the item in your hotbar, equip it, then activate it."})
 			return
 		end
 		if action == "Equip" and type(payload) == "table" then
@@ -90,22 +107,31 @@ function InventoryActionService:Init()
 			end
 
 			local item = ItemDatabase:Get(slot.Id)
-			if item and canConsume(item) then
-				consume(plr, "Hotbar", slotIndex)
-				return
-			end
-			if not item or not item:HasTag("Holdable") then
+			if not item or not ToolService:IsHoldable(slot.Id) then
 				print(string.format("[InventoryAction] Slot %s is not holdable, unequipping for %s", tostring(slotIndex), plr.Name))
 				hum:UnequipTools()
 				return
 			end
 			
 			local backpack = plr:FindFirstChildOfClass("Backpack")
-			local tool = (char and char:FindFirstChild(slot.Id)) or (backpack and backpack:FindFirstChild(slot.Id))
+			local tool
+			for _, container in ipairs({char, backpack}) do
+				if container then
+					for _, candidate in ipairs(container:GetChildren()) do
+						if candidate:IsA("Tool") and candidate:GetAttribute("InventorySlotIndex") == slotIndex then tool = candidate break end
+					end
+				end
+				if tool then break end
+			end
 			if not tool then
 				ToolService:Sync(plr)
 				backpack = plr:FindFirstChildOfClass("Backpack")
-				tool = (char and char:FindFirstChild(slot.Id)) or (backpack and backpack:FindFirstChild(slot.Id))
+				for _, container in ipairs({char, backpack}) do
+					if container then for _, candidate in ipairs(container:GetChildren()) do
+						if candidate:IsA("Tool") and candidate:GetAttribute("InventorySlotIndex") == slotIndex then tool = candidate break end
+					end end
+					if tool then break end
+				end
 			end
 			if slot.Uid then
 				tool=nil

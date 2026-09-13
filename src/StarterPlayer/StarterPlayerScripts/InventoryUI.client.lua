@@ -434,7 +434,7 @@ local selectedSlot = nil
 local hoveredSlot = nil
 local inventoryOpen = false
 local contextMenu = nil
-local equippedToolName, equippedToolUid = nil, nil
+local equippedToolName, equippedToolUid, equippedToolSlotIndex = nil, nil, nil
 local characterConnections = {}
 local INVENTORY_TOGGLE_ACTION = "EcoshiftToggleInventory"
 local inventoryToggleActionBound = false
@@ -564,6 +564,14 @@ local function isPlaceableItem(itemId)
 	return Config.BUILD.PlaceableItems and Config.BUILD.PlaceableItems[itemId] == true
 end
 
+local function canHoldItem(itemId)
+	local definition = Instances.Definition(itemId)
+	if definition and (definition.Kind == "Armor" or definition.Kind == "Accessory") then
+		return itemId == "WaterFlask"
+	end
+	return ItemDatabase:Get(itemId) ~= nil
+end
+
 
 local function getSlotData(slotType, index)
 	if slotType=="Equipment" or slotType=="Accessory" then return inventorySnapshot and (inventorySnapshot[slotType] or {})[index] end
@@ -599,7 +607,7 @@ local function updateCapacity()
 end
 
 local function showTooltip(slot, data)
-	itemTooltip:Show(data, "Drag to move • Right-click to split • Q drops one")
+	itemTooltip:Show(data, "Drag to move • Equip to hold/use • Right-click to split • Q drops one")
 end
 
 local function hideTooltip()
@@ -623,6 +631,7 @@ local function getEquippedHotbarIndex()
 	if not inventorySnapshot or not equippedToolName then
 		return nil
 	end
+	if equippedToolSlotIndex then return equippedToolSlotIndex end
 	local hotbar = inventorySnapshot.Hotbar or {}
 	for i = 1, HOTBAR_SLOTS do
 		local slot = hotbar[i]
@@ -741,18 +750,18 @@ local function disconnectCharacterConnections()
 end
 
 local function syncEquippedToolName()
-	local nextName, nextUid = nil, nil
+	local nextName, nextUid, nextSlotIndex = nil, nil, nil
 	local char = player.Character
 	if char then
 		for _, child in ipairs(char:GetChildren()) do
 			if child:IsA("Tool") then
-				nextName, nextUid = child.Name, child:GetAttribute("GearUid")
+				nextName, nextUid, nextSlotIndex = child.Name, child:GetAttribute("GearUid"), child:GetAttribute("InventorySlotIndex")
 				break
 			end
 		end
 	end
-	if equippedToolName ~= nextName or equippedToolUid ~= nextUid then
-		equippedToolName, equippedToolUid = nextName, nextUid
+	if equippedToolName ~= nextName or equippedToolUid ~= nextUid or equippedToolSlotIndex ~= nextSlotIndex then
+		equippedToolName, equippedToolUid, equippedToolSlotIndex = nextName, nextUid, nextSlotIndex
 		renderAll()
 	end
 end
@@ -760,7 +769,7 @@ end
 local function bindCharacter(char)
 	disconnectCharacterConnections()
 	if not char then
-		equippedToolName = nil
+		equippedToolName, equippedToolUid, equippedToolSlotIndex = nil, nil, nil
 		renderAll()
 		return
 	end
@@ -990,7 +999,7 @@ local function makeMenuButton(text, order)
 	return btn
 end
 
-local contextUse = makeMenuButton("Use", 1)
+local contextUse = makeMenuButton("Hold", 1)
 local contextDrop = makeMenuButton("Drop", 2)
 local contextSplit = makeMenuButton("Split", 3)
 local contextPlace = makeMenuButton("Equip", 4)
@@ -1004,10 +1013,10 @@ local function showContextMenu(slot, position, touch)
 	local menuSize = contextMenu.AbsoluteSize
 	contextMenu.Position = UDim2.fromOffset(math.clamp(position.X - inset.X + 6, 4, math.max(4, viewport.X - menuSize.X - 8)), math.clamp(position.Y - inset.Y + 6, 4, math.max(4, viewport.Y - inset.Y - menuSize.Y - 8)))
 	local data = getSlotData(slot.Type, slot.Index)
-	local item = data and ItemDatabase:Get(data.Id) or nil
-	local canUse = item and (item:HasTag("Food") or item:HasTag("Consumable") or item.Id=="WaterFlask") or false
+	local canUse = data and canHoldItem(data.Id) or false
 	local canPlace = data and isPlaceableItem(data.Id) and not isChestTransferLockActive() or false
 	contextUse.Visible = canUse
+	contextUse.Text = slot.Type == "Hotbar" and "Hold" or "To hotbar"
 	contextPlace.Visible = canPlace
 	contextPlace.Text = slot.Type == "Hotbar" and "Equip" or "To hotbar"
 	contextMenu.Visible = true
@@ -1046,10 +1055,12 @@ contextUse.MouseButton1Click:Connect(function()
 	if not contextSlot then return end
 	local data = getSlotData(contextSlot.Type, contextSlot.Index)
 	if not data or not rInventoryAction then return end
-	rInventoryAction:FireServer("Use", {
-		SlotType = contextSlot.Type,
-		SlotIndex = contextSlot.Index,
-	})
+	if contextSlot.Type == "Hotbar" then
+		rInventoryAction:FireServer("Equip", {SlotType="Hotbar", SlotIndex=contextSlot.Index})
+		setInventoryOpen(false)
+	else
+		shiftMove(contextSlot)
+	end
 	hideContextMenu()
 end)
 

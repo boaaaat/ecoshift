@@ -67,7 +67,9 @@ end
 function Service:_flow(x,z)
  if not riverBiomes[self._biome] or x*x+z*z<270^2 then return nil end
  local distance=math.abs(x-self:_riverLine(z))
- local level=28-z*.018-math.floor((z+1440)/480)*8
+ -- Keep the surface below the ordinary land band and let the channel carve
+ -- down to it. The stepped grade creates occasional small drops downstream.
+ local level=4-z*.01-math.floor((z+1440)/480)*4
  return level,distance
 end
 function Service:_pool(x,z)
@@ -106,7 +108,20 @@ function Service:_rawHeight(x,z)
  local pool,poolDistance=self:_pool(x,z)
  if pool and poolDistance<140 then h=(pool-6)+(h-(pool-6))*smooth((poolDistance-76)/64) end
  local water,distance=self:_flow(x,z)
- if water and distance<75 then h=(water-6)+(h-(water-6))*smooth((distance-19)/56) end
+ if water then
+  if distance<34 then
+   -- A submerged, curved bed instead of terrain ending at the water surface.
+   local t=distance/34
+   h=water-9+7*t*t
+  elseif distance<44 then
+   -- Short visible bank rising from the waterline.
+   h=(water-2)+6*smooth((distance-34)/10)
+  elseif distance<82 then
+   -- Blend the raised bank back into the surrounding generated terrain.
+   local t=smooth((distance-44)/38)
+   h=(water+4)+(h-(water+4))*t
+  end
+ end
  -- River crossings retain a broad, gently graded dry route.
  local radius=math.sqrt(x*x+z*z);local road=math.abs(math.sin(math.atan2(z,x)*4+self._roadAngle))*radius
  if road<57 then local approach=self:_baseHeight(x,z);h=approach+(h-approach)*smooth((road-12)/45) end
@@ -134,9 +149,9 @@ function Service:GetWaterLevel(x,z)
  local b=Biomes.Biomes[self._biome];if not b then return nil end
  for _,landmark in ipairs(self._landmarks) do if Vector2.new(x-landmark.Position.X,z-landmark.Position.Z).Magnitude<(landmark.FoundationRadius or 40) then return nil end end
  local river,distance=self:_flow(x,z)
- if river and distance<22 then
-  local road=math.abs(math.sin(math.atan2(z,x)*4+self._roadAngle))*math.sqrt(x*x+z*z)
-  if road>=22 then return river end
+	if river and distance<34 then
+	 local road=math.abs(math.sin(math.atan2(z,x)*4+self._roadAngle))*math.sqrt(x*x+z*z)
+	 if road>=24 then return river end
  end
  local pool,poolDistance=self:_pool(x,z)
  if pool and poolDistance<80 then return pool end

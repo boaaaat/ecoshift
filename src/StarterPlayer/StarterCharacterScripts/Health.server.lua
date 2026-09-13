@@ -1,0 +1,3 @@
+-- Roblox inserts a default Health script when a character has none. Its free
+-- regeneration conflicts with EcoShift's food-powered healing in SurvivalService.
+-- Keeping this intentionally empty suppresses that default character script.
