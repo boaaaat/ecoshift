@@ -517,11 +517,14 @@ local function nearbyStation(player,types,grade)
 end
 function Gear:StoreWater(player,amount)
  local remaining=amount
- for _,entry in pairs(Inventory:GetAll(player).Accessory or {}) do
-  local def=self:GetDefinition(entry)
-  if def and (def.Modifiers or {}).WaterUses then
-   entry.State=entry.State or {};local stored=entry.State.Water or 0
-   local add=math.min(remaining,math.max(0,def.Modifiers.WaterUses-stored));entry.State.Water=stored+add;remaining-=add
+ local inventory=Inventory:GetAll(player)
+ for _,container in ipairs({inventory.Accessory or {},inventory.Hotbar or {}}) do
+  for _,entry in pairs(container) do
+   local def=self:GetDefinition(entry)
+   if def and (def.Modifiers or {}).WaterUses then
+    entry.State=entry.State or {};local stored=entry.State.Water or 0
+    local add=math.min(remaining,math.max(0,def.Modifiers.WaterUses-stored));entry.State.Water=stored+add;remaining-=add
+   end
   end
  end
  if remaining<amount then self:Touch(player) end
@@ -532,11 +535,14 @@ function Gear:DrinkFlask(player)
  if current.Timers.Flask then return false,"Wait before drinking again." end
  local temperature=Stats:GetBase(player,"Temperature") or 0
  if temperature<=0 then return false,"You have no heat exposure to cool." end
- for _,entry in pairs(Inventory:GetAll(player).Accessory or {}) do
-  if entry.Id=="WaterFlask" and (entry.State or {}).Water and entry.State.Water>0 then
-   entry.State.Water-=1;current.Timers.Flask=3
-   self:RestoreExposure(player,30+(self:GetModifiers(player).WaterExposureBonus or 0));self:OnConsumable(player,temperature,0,true);self:Touch(player)
-   return true,"Drank from flask · "..entry.State.Water.."/5 uses left."
+ local inventory=Inventory:GetAll(player)
+ for _,container in ipairs({inventory.Accessory or {},inventory.Hotbar or {}}) do
+  for _,entry in pairs(container) do
+   if entry.Id=="WaterFlask" and (entry.State or {}).Water and entry.State.Water>0 then
+    entry.State.Water-=1;current.Timers.Flask=3
+    self:RestoreExposure(player,30+(self:GetModifiers(player).WaterExposureBonus or 0));self:OnConsumable(player,temperature,0,true);self:Touch(player)
+    return true,"Drank from flask · "..entry.State.Water.."/5 uses left."
+   end
   end
  end
  return false,"Equip your flask and gather water to fill it."

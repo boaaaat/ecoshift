@@ -65,6 +65,12 @@ local function makeFallbackTool(entry, item, definition)
 		head.Parent = tool
 		local weld = Instance.new("WeldConstraint")
 		weld.Part0, weld.Part1, weld.Parent = handle, head, handle
+	elseif entry.Id == "Bucket" then
+		handle.Size = Vector3.new(1.25, 1.15, 1.25)
+		handle.Shape = Enum.PartType.Cylinder
+		handle.Color = Color3.fromRGB(128, 91, 52)
+		handle.Material = Enum.Material.Wood
+		tool.Grip = CFrame.Angles(0, 0, math.pi / 2) * CFrame.new(0, -0.25, 0)
 	elseif item and item:HasTag("Food") then
 		handle.Size = Vector3.new(1.05, 1.05, 1.05)
 		handle.Shape = Enum.PartType.Ball

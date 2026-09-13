@@ -4,9 +4,11 @@ local Players = game:GetService("Players")
 local Http = game:GetService("HttpService")
 local Biomes = require(RS.Shared.OverhaulBiomes)
 local Rules = require(RS.Shared.GameRules)
+local TreeAssets = require(RS.Shared.TreeAssets)
 local Codec = require(script.Parent.WorldSnapshotCodec)
 local Service = {_seed=require(RS.Shared.BiomeConfig).seed,_serial=-1,_chunks={},_loading={},_terrain={},_records={},_regions={},_landmarks={},_nodes={},_generation=0}
-local CELL, CHUNK, RADIUS, CAMP = 16,240,1500,200
+local CELL, CHUNK, RADIUS, CAMP = 12,240,1500,200
+local CAMP_HEIGHT, CAMP_BLEND = 12, 104
 local function hash(text,seed)
  local n=seed or 5381
  for i=1,#text do n=(n*33+string.byte(text,i))%2147483647 end
@@ -21,6 +23,34 @@ local function part(parent,name,size,cf,color,material)
  local p=Instance.new("Part");p.Name=name;p.Size=size;p.CFrame=cf;p.Color=color
  p.Material=material or Enum.Material.SmoothPlastic;p.Anchored=true;p.TopSurface=Enum.SurfaceType.Smooth;p.BottomSurface=Enum.SurfaceType.Smooth;p.Parent=parent
  return p
+end
+local function meshPart(parent,name,asset,size,cf,color,textureId,collidable)
+ local p=part(parent,name,size,cf,color,Enum.Material.SmoothPlastic);p.CanCollide=collidable==true;p.CanTouch=collidable==true
+ local mesh=Instance.new("SpecialMesh");mesh.MeshType=Enum.MeshType.FileMesh;mesh.MeshId=asset.Id;mesh.TextureId=textureId or ""
+ mesh.Scale=Vector3.new(size.X/asset.Size.X,size.Y/asset.Size.Y,size.Z/asset.Size.Z);mesh.Parent=p
+ return p
+end
+local function makeTree(model,height,color,rng,style)
+ style=style or {};local pine=style.Pine==true
+ local trunkColor=style.Ironwood and Color3.fromRGB(79,64,59) or style.Heartwood and Color3.fromRGB(111,69,50) or Color3.fromRGB(111,84,57)
+ local trunkMesh=pine and TreeAssets.Pine.Trunk or TreeAssets.Broadleaf.Trunks[rng:NextInteger(1,#TreeAssets.Broadleaf.Trunks)]
+ local texture=pine and nil or (style.Birch and TreeAssets.Broadleaf.BirchTexture or TreeAssets.Broadleaf.OakTexture)
+ if style.Birch then trunkColor=Color3.fromRGB(225,222,202) end
+ local trunk=meshPart(model,"Trunk",trunkMesh,Vector3.new(height*.32,height,height*.32),CFrame.new(0,height*.48,0),trunkColor,texture,true)
+ model.PrimaryPart=trunk
+ if pine then
+  local foliage=meshPart(model,"PineFoliage",TreeAssets.Pine.Foliage,Vector3.new(height*.9,height*1.18,height*.9),CFrame.new(0,height*.84,0),color:Lerp(Color3.fromRGB(47,91,67),.35),nil,false)
+  foliage.CanQuery=true
+ else
+  local leafColor=color:Lerp(style.Heartwood and Color3.fromRGB(119,83,54) or Color3.fromRGB(74,137,71),.34)
+  local crown=meshPart(model,"Crown",TreeAssets.Broadleaf.Foliage,Vector3.new(height*.82,height*.62,height*.82),CFrame.new(0,height*.8,0)*CFrame.Angles(0,rng:NextNumber(0,math.pi*2),0),leafColor,nil,false)
+  crown.CanQuery=true
+  local crown2=meshPart(model,"Crown",TreeAssets.Broadleaf.Foliage,Vector3.new(height*.55,height*.43,height*.55),CFrame.new(height*.22,height*.76,-height*.12)*CFrame.Angles(0,rng:NextNumber(0,math.pi*2),0),leafColor:Lerp(Color3.new(1,1,1),.04),nil,false)
+  crown2.CanQuery=true
+  local crown3=meshPart(model,"Crown",TreeAssets.Broadleaf.Foliage,Vector3.new(height*.5,height*.42,height*.5),CFrame.new(-height*.12,height*1.02,height*.14)*CFrame.Angles(0,rng:NextNumber(0,math.pi*2),0),leafColor:Lerp(Color3.new(1,1,1),.08),nil,false)
+  crown3.CanQuery=true
+ end
+ return trunk
 end
 local function smooth(n) n=math.clamp(n,0,1);return n*n*(3-2*n) end
 function Service:GetRegions() return self._regions end
@@ -135,8 +165,9 @@ function Service:GetMapLayer(position)
 end
 function Service:GetHeight(x,z)
  local r=math.sqrt(x*x+z*z)
- if r<=CAMP then return 0 end
- local h=self:_rawHeight(x,z)*smooth((r-CAMP)/40)
+ if r<=CAMP then return CAMP_HEIGHT end
+ local raw=self:_rawHeight(x,z)
+ local h=CAMP_HEIGHT+(raw-CAMP_HEIGHT)*smooth((r-CAMP)/CAMP_BLEND)
  for _,landmark in ipairs(self._landmarks) do
   local distance=Vector2.new(x-landmark.Position.X,z-landmark.Position.Z).Magnitude
   local radius=landmark.FoundationRadius or 40
@@ -189,7 +220,7 @@ function Service:SafePosition(position,terrainOnly)
    end
   end
  end
- return terrainOnly and Vector3.new(position.X,self:GetHeight(position.X,position.Z)+5,position.Z) or Vector3.new(math.random(-30,30),5,math.random(-30,30))
+ return terrainOnly and Vector3.new(position.X,self:GetHeight(position.X,position.Z)+5,position.Z) or Vector3.new(math.random(-30,30),CAMP_HEIGHT+5,math.random(-30,30))
 end
 function Service:_plan()
  local rng=Random.new(self._visitSeed);self._regions={};self._landmarks={};self._roadAngle=rng:NextNumber(0,math.pi)
@@ -226,7 +257,7 @@ function Service:_paint(cx,cz,token)
    local x,z=cx*CHUNK+(ix+.5)*CELL,cz*CHUNK+(iz+.5)*CELL
    if x*x+z*z<(RADIUS+CELL)^2 then
     local campCell=x*x+z*z<=(CAMP+CELL*.7072)^2
-    local h=campCell and 0 or self:GetHeight(x,z)
+    local h=campCell and CAMP_HEIGHT or self:GetHeight(x,z)
     local region=self:MetadataAt(Vector3.new(x,h,z))
     local surface=material
     if region then
@@ -238,7 +269,7 @@ function Service:_paint(cx,cz,token)
      elseif name:find("Crystal") or name:find("Glass") then surface=Enum.Material.Slate
      elseif name:find("Meadow") or name:find("Gardens") then surface=Enum.Material.Grass end
     end
-    -- The camp never changes elevation. Bulk writes stay within the surface domain.
+    -- The raised camp plateau never changes elevation. Smaller columns soften slopes.
     if not campCell or not self._campMade then
      workspace.Terrain:FillBlock(CFrame.new(x,128,z),Vector3.new(CELL,576,CELL),Enum.Material.Air)
      workspace.Terrain:FillBlock(CFrame.new(x,(h-160)/2,z),Vector3.new(CELL,h+160,CELL),campCell and Enum.Material.Ground or surface)
@@ -252,7 +283,7 @@ function Service:_paint(cx,cz,token)
     end
    end
   end
-  if ix%3==0 then task.wait() end
+  if ix%2==0 then task.wait() end
  end
  self._terrain[key]=true
 end
@@ -264,6 +295,7 @@ function Service:GroundPoint(position)
  return hit and hit.Position or Vector3.new(position.X,height,position.Z)
 end
 function Service:_resource(id,key,position,parent,rng)
+ if id=="Water" or id=="DirtyWater" then return nil end
  local Items=require(RS.Shared.Items.ItemDatabase);local item=Items:Get(id);if not item then return nil end
  local Loot=require(RS.Shared.ExpeditionLootConfig)
  local profile=require(RS.Shared.OverhaulCatalog).ResourceDefinitions[id] or Loot.ResourceProfile(item,id)
@@ -277,23 +309,15 @@ function Service:_resource(id,key,position,parent,rng)
  local region=self:MetadataAt(position)
  local birch=region and region.Name=="Birch Woods"
  if isTree then
-  local h=large and 24 or 13;local trunk=part(model,"Trunk",Vector3.new(3,h,3),CFrame.new(0,h/2,0),id=="Ironwood" and Color3.fromRGB(90,65,55) or Color3.fromRGB(104,80,53),Enum.Material.Wood)
-  model.PrimaryPart=trunk
-  for n=1,3 do
-   local leaf=part(model,"Crown",Vector3.new(13-n*2,7,13-n*2),CFrame.new(0,h-3+n*3,0)*CFrame.Angles(0,n,0),color:Lerp(Color3.new(.3,.65,.3),.45),Enum.Material.Grass)
-   leaf.Shape=Enum.PartType.Ball;leaf.CanCollide=false
-  end
+  local h=large and 25 or 15
+  makeTree(model,h,color,rng,{Birch=birch,Pine=self._biome=="FrozenTundra" or self._biome=="AuroraVale" or biome.Landform=="Alpine" or biome.Landform=="Highlands",Ironwood=id=="Ironwood",Heartwood=id=="Heartwood"})
  elseif id=="Cactus" then
   local stem=part(model,"CactusStem",Vector3.new(2,7,2),CFrame.new(0,3.5,0),Color3.fromRGB(92,130,65));model.PrimaryPart=stem
   for side=-1,1,2 do part(model,"Arm",Vector3.new(3,1.5,1.5),CFrame.new(side*1.7,4,0),stem.Color);part(model,"Tip",Vector3.new(1.5,3,1.5),CFrame.new(side*3,5,0),stem.Color) end
  elseif (profile.Duration or 0)>0 then
   local root=part(model,"Root",Vector3.new(1,1,1),CFrame.new(0,.5,0),Color3.fromRGB(67,110,53));model.PrimaryPart=root
-  if id=="Water" or id=="DirtyWater" then
-   root.Size=Vector3.new(7,.5,7);root.Color=id=="Water" and Color3.fromRGB(88,173,199) or Color3.fromRGB(110,125,70);root.Material=Enum.Material.Glass;root.Transparency=.35
-  else
-   for n=1,4 do local a=n*1.57;local leaf=part(model,"Leaf",Vector3.new(.8,2.2,.25),CFrame.new(math.cos(a)*.6,1.4,math.sin(a)*.6)*CFrame.Angles(.35,a,.5),color:Lerp(Color3.new(.45,.7,.3),.5));leaf.CanCollide=false end
-   local cap=part(model,"Bloom",Vector3.new(1.8,.8,1.8),CFrame.new(0,2.3,0),id:find("Mushroom") and Color3.fromRGB(147,100,72) or Color3.fromHSV(rng:NextNumber(),.45,.85));cap.Shape=Enum.PartType.Ball;cap.CanCollide=false
-  end
+  for n=1,4 do local a=n*1.57;local leaf=part(model,"Leaf",Vector3.new(.8,2.2,.25),CFrame.new(math.cos(a)*.6,1.4,math.sin(a)*.6)*CFrame.Angles(.35,a,.5),color:Lerp(Color3.new(.45,.7,.3),.5));leaf.CanCollide=false end
+  local cap=part(model,"Bloom",Vector3.new(1.8,.8,1.8),CFrame.new(0,2.3,0),id:find("Mushroom") and Color3.fromRGB(147,100,72) or Color3.fromHSV(rng:NextNumber(),.45,.85));cap.Shape=Enum.PartType.Ball;cap.CanCollide=false
  else
   local root=part(model,"Rock",Vector3.new(4,3,4),CFrame.new(0,1.5,0)*CFrame.Angles(0,rng:NextNumber()*6,.15),color:Lerp(Color3.new(.35,.35,.4),.5),Enum.Material.Rock);model.PrimaryPart=root
   for n=1,3 do part(model,"Seam",Vector3.new(.9,2,.9),CFrame.new(n-2,2.5,0)*CFrame.Angles(0,n,.3),Color3.fromHSV((hash(id)%100)/100,.5,.8),id:find("Crystal") and Enum.Material.Neon or Enum.Material.Slate) end
@@ -303,9 +327,6 @@ function Service:_resource(id,key,position,parent,rng)
  model:SetAttribute("Health",state and state.Health or hp);model:SetAttribute("CurrentHealth",state and state.Health or hp);model:SetAttribute("MaxHealth",hp)
  model:SetAttribute("Duration",profile.Duration or 0);model:SetAttribute("MiningGrade",profile.MiningGrade or 1);model:SetAttribute("ResourceGrade",profile.Grade or 1);model:SetAttribute("ResourceKind",kind)
  model:SetAttribute("SnapshotKey",key);model:SetAttribute("OverhaulNode",true);model:SetAttribute("ContactDamage",id=="Cactus" and 4 or nil)
- if birch and isTree then
-  for _,piece in ipairs(model:GetChildren()) do if piece:IsA("BasePart") and (piece.Name=="Trunk" or piece.Name=="Branch") then piece.Color=Color3.fromRGB(219,220,198) end end
- end
  model:PivotTo(CFrame.new(position)*model:GetPivot());model.Parent=parent
  self._nodes[key]={Instance=model,Id=id,Position=position,Kind=kind,Profile=profile}
  model:GetAttributeChangedSignal("Health"):Connect(function() self._records[key]=self._records[key] or {};self._records[key].Health=model:GetAttribute("Health") end)
@@ -325,7 +346,7 @@ function Service:_candidates(cx,cz)
    for _,landmark in ipairs(self._landmarks) do if (p-landmark.Position).Magnitude<(landmark.FoundationRadius or 40)+8 then blocked=true;break end end
    if blocked then continue end
    local pool=region.Resources;local id=pool[rng:NextInteger(1,#pool)]
-   if i%8==0 then id="Stone" elseif i%11==0 then id="Water" end
+    if i%8==0 then id="Stone" end
    table.insert(result,{Id=id,Key=cx..","..cz..":"..i,Position=p,Seed=rng:NextInteger(1,2147483646),Region=region})
   end
  end
@@ -333,6 +354,30 @@ function Service:_candidates(cx,cz)
 end
 function Service:_decorate(parent,cx,cz)
  if riverBiomes[self._biome] then
+  for z=-1440,1440,32 do
+   local riverX=self:_riverLine(z);local water=self:GetWaterLevel(riverX,z)
+   for _,side in ipairs({-1,1}) do
+    local x=riverX+side*30
+    if water and math.floor(x/CHUNK)==cx and math.floor(z/CHUNK)==cz and Vector2.new(x,z).Magnitude>270 then
+    local source=part(parent,"RiverWaterSource",Vector3.new(10,1,10),CFrame.new(x,self:GetHeight(x,z)+1,z),Color3.new(1,1,1));source.Transparency=1;source.CanCollide=false;source.CanTouch=false;source:SetAttribute("Decoration",true)
+    local prompt=Instance.new("ProximityPrompt");prompt.ActionText="Collect water";prompt.ObjectText="River";prompt.KeyboardKeyCode=Enum.KeyCode.F;prompt.HoldDuration=1.4;prompt.MaxActivationDistance=10;prompt.RequiresLineOfSight=false;prompt.Parent=source
+    prompt.Triggered:Connect(function(player)
+     local character=player.Character;local humanoid=character and character:FindFirstChildOfClass("Humanoid");local root=character and character:FindFirstChild("HumanoidRootPart")
+     if not root or not humanoid or humanoid.Health<=0 or player:GetAttribute("IsDead") or (root.Position-source.Position).Magnitude>12 then return end
+     local held=character:FindFirstChildOfClass("Tool");local itemId=held and held:GetAttribute("InventoryItemId")
+     local gear=require(script.Parent.GearService);local inventory=require(script.Parent.InventoryService);local success,message=false,"Hold a Water Flask or Bucket to collect water."
+     if itemId=="WaterFlask" then
+      local stored=gear:StoreWater(player,5);success=stored>0;message=success and ("Filled "..stored.." flask use"..(stored==1 and "" or "s")..".") or "That flask is already full."
+     elseif itemId=="Bucket" then
+      local stored=gear:StoreWater(player,3);local added=inventory:Give(player,"Water",3-stored,true)
+      success=stored+added>0;message=success and ("Collected "..(stored+added).." Water.") or "Your flasks and inventory are full."
+     end
+     if success then require(script.Parent.ExpeditionRewardsService):RecordActivity(player) end
+     if gear.Remote then gear.Remote:FireClient(player,"Result",{Success=success,Message=message}) end
+    end)
+    end
+   end
+  end
   for z=-960,960,480 do
    local x=self:_riverLine(z)
    if math.floor(x/CHUNK)==cx and math.floor(z/CHUNK)==cz and Vector2.new(x,z).Magnitude>270 then
@@ -362,8 +407,8 @@ function Service:_decorate(parent,cx,cz)
    part(model,"Vault",Vector3.new(48,7,26),CFrame.new(p+Vector3.new(0,42,0)),biome.Color,Enum.Material.Rock)
   elseif f=="Canopy" or f=="Forest" then
    local h=f=="Canopy" and 50 or 20
-   part(model,"OldTrunk",Vector3.new(8,h,8),CFrame.new(p+Vector3.new(0,h/2,0)),Color3.fromRGB(94,72,50),Enum.Material.Wood)
-   local crown=part(model,"Canopy",Vector3.new(35,13,35),CFrame.new(p+Vector3.new(0,h,0)),biome.Color);crown.Shape=Enum.PartType.Ball;crown.CanCollide=false
+   makeTree(model,h,biome.Color,rng,{Birch=r.Name=="Birch Woods",Pine=self._biome=="FrozenTundra" or self._biome=="AuroraVale" or f=="Alpine" or f=="Highlands"})
+   model:PivotTo(CFrame.new(p)*CFrame.Angles(0,rng:NextNumber(0,math.pi*2),0)*model:GetPivot())
    if f=="Canopy" then part(model,"RootRamp",Vector3.new(12,3,60),CFrame.new(p+Vector3.new(0,10,22))*CFrame.Angles(-.3,0,0),Color3.fromRGB(104,80,59),Enum.Material.Wood) end
   elseif f=="Mushroom" then
    part(model,"Stem",Vector3.new(4,18,4),CFrame.new(p+Vector3.new(0,9,0)),Color3.fromRGB(162,151,129))
@@ -511,6 +556,8 @@ function Service:Generate(biome)
   end
  end end
  self:EnsureArea(Vector3.zero)
+ local spawn=workspace:FindFirstChildWhichIsA("SpawnLocation",true)
+ if spawn and Vector2.new(spawn.Position.X,spawn.Position.Z).Magnitude<=CAMP then spawn.Position=Vector3.new(spawn.Position.X,CAMP_HEIGHT+spawn.Size.Y*.5+.15,spawn.Position.Z) end
  for _,player in ipairs(Players:GetPlayers()) do
   local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
   if root and not player:GetAttribute("InteriorId") then self:EnsureArea(self:SafePosition(root.Position)) end
