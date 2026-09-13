@@ -223,9 +223,19 @@ local function cleanupHealthBars()
 	end
 end
 
+local harvestHint=Instance.new("TextLabel")
+harvestHint.Name="HarvestHint";harvestHint.AnchorPoint=Vector2.new(.5,.5);harvestHint.Position=UDim2.fromScale(.5,.57)
+harvestHint.Size=UDim2.new(.7,0,0,48);harvestHint.TextWrapped=true;harvestHint.TextSize=18;harvestHint.Font=Enum.Font.GothamMedium
+harvestHint.TextColor3=C.Paper;harvestHint.BackgroundColor3=C.Night;harvestHint.BackgroundTransparency=.25;harvestHint.Visible=false;harvestHint.Parent=gui
+Theme.Corner(harvestHint,10)
+local hintRevision=0
 local function handleFeedback(data)
 	dprint("[HarvestFeedbackUI] Received feedback:", data)
 	if type(data) ~= "table" then return end
+	if type(data.Message)=="string" then
+		hintRevision+=1;local revision=hintRevision;harvestHint.Text=data.Message;harvestHint.Visible=true
+		task.delay(2,function()if hintRevision==revision then harvestHint.Visible=false end end);return
+	end
 
 	local node = data.Node
 	local position = data.Position

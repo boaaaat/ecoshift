@@ -388,15 +388,17 @@ local function destroyNodeWithDrop(node, plr)
 		}
 	end
 
-	local nodePos = getNodePosition(node)
-	if nodePos then
-		local drop = ItemDropService:SpawnDrop(itemId, count, nodePos + Vector3.new(0, 2, 0), dropOptions)
-		if drop then node:Destroy() end
-	end
+ local nodePos=getNodePosition(node)
+ if nodePos then
+  local drops={{Id=itemId,N=count}}
+  require(script.Parent.GearService):OnHarvestComplete(plr,node,drops)
+  if drops[1].N<=0 then node:Destroy()
+  else local drop=ItemDropService:SpawnDrop(itemId,drops[1].N,nodePos+Vector3.new(0,2,0),dropOptions);if drop then node:Destroy() end end
+ end
 end
 
 local function handleHarvest(plr, payload)
-	if GameStateService:IsGameOver() or ReplicatedStorage:GetAttribute("WorldRestoring")
+	if GameStateService:IsGameOver() or ReplicatedStorage:GetAttribute("WorldShifting") or ReplicatedStorage:GetAttribute("WorldRestoring")
 		or plr:GetAttribute("IsDead") or plr:GetAttribute("WorldPlayerRestoring") or plr:GetAttribute("WorldPlayerLoading") then
 		return
 	end
@@ -454,21 +456,22 @@ local function handleHarvest(plr, payload)
 		return
 	end
 
-	local baseDamage = tonumber(cfg.Damage)
-	if not baseDamage or baseDamage <= 0 then
-		baseDamage = tonumber(tool:GetAttribute("HarvestDamage"))
-	end
-	if not baseDamage or baseDamage <= 0 then
-		baseDamage = 1
-	end
-	baseDamage = math.clamp(baseDamage, 1, 500)
-	local roleMult = require(script.Parent.ClassEffects).Power(plr, node)
-	local damage = math.max(1, math.floor(baseDamage * roleMult))
-	local weakness = tostring(getNodeAttr(node, "Weakness") or "")
-	if weakness ~= "" and cfg.ToolType == weakness then
-		local weaknessMult = tonumber(cfg.Multiplier) or 1.5
-		damage = math.max(1, math.floor(damage * weaknessMult))
-	end
+ local gear=require(script.Parent.GearService)
+ local entry,definition=gear:GetHeld(plr)
+ local miningGrade=tonumber(node:GetAttribute("MiningGrade")) or 1
+ local family=definition and definition.ToolFamily or tool:GetAttribute("ToolFamily")
+ if not entry or not definition or definition.Kind~="Tool" or (entry.Durability or 0)<=0
+  or (entry.Grade or 1)<miningGrade or (node:GetAttribute("ResourceKind")=="Mineral" and miningGrade>1 and family~="Pickaxe" and family~="Universal") then
+  local feedback=getFeedbackRemote()
+  if feedback then feedback:FireClient(plr,{Node=node,Position=nodePos,Message="Requires a working grade "..miningGrade.." tool."}) end
+  _lastInteract[plr]=os.clock();return
+ end
+ local baseDamage=(definition.Power or 20)*2^((entry.Grade or 1)-(definition.Grade or 1))
+ -- The universal starter is intentionally slower; specialized tools keep their listed power.
+ local kind=node:GetAttribute("ResourceKind")
+ if family~="Universal" and ((kind=="Mineral" and family~="Pickaxe") or (kind=="Wood" and family~="Axe")) then baseDamage*=.4 end
+ local damage=math.max(0,math.floor(gear:HarvestPower(plr,node,baseDamage)))
+ if damage<=0 then return end
 
 	local maxHealth = tonumber(getNodeAttr(node, "MaxHealth")) or tonumber(getNodeAttr(node, "Health")) or 100
 	local currentHealth = tonumber(node:GetAttribute("CurrentHealth"))
@@ -482,6 +485,7 @@ local function handleHarvest(plr, payload)
 	setNodeAttr(node, "CurrentHealth", currentHealth)
 	setNodeAttr(node, "Health", currentHealth)
 	_lastInteract[plr] = os.clock()
+	gear:WearHeld(plr,1)
 	require(script.Parent.ExpeditionRewardsService):RecordActivity(plr)
 
 	local feedbackRemote = getFeedbackRemote()

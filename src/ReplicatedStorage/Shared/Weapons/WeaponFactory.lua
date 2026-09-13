@@ -1,46 +1,23 @@
-local WeaponUtil = require(script.Parent.WeaponUtil)
-local Sword = require(script.Parent.Sword)
-local Bow = require(script.Parent.Bow)
-local Gun = require(script.Parent.Gun)
-local Shield = require(script.Parent.Shield)
-local Throwable = require(script.Parent.Throwable)
-
-local WeaponFactory = {}
-
-local TYPE_MAP = {
-	sword = Sword,
-	swords = Sword,
-	bow = Bow,
-	bows = Bow,
-	gun = Gun,
-	guns = Gun,
-	shield = Shield,
-	shields = Shield,
-	throwable = Throwable,
-	throwables = Throwable,
-}
-
-local function isHarvestTool(tool)
-	local weaponType = WeaponUtil.GetType(tool)
-	if weaponType and weaponType ~= "" then
-		return false
-	end
-	local toolType = WeaponUtil.GetString(tool, "ToolType", "")
-	return toolType ~= ""
+-- One shared weapon profile adapter; all numbers originate in the current gear catalog.
+local Catalog=require(script.Parent.Parent.OverhaulCatalog)
+local Factory={}
+function Factory.GetType(tool)
+ local def=tool and Catalog.Gear[tool.Name]
+ if not def or def.Kind~="Weapon" then return "" end
+ return def.WeaponFamily=="Bow" and "Bow" or def.WeaponFamily=="Staff" and "Gun" or "Sword"
 end
-
-function WeaponFactory.GetType(tool)
-	local t = WeaponUtil.GetType(tool)
-	return (t and t:lower()) or ""
+function Factory.Create(tool,owner)
+ local kind=Factory.GetType(tool)
+ if kind=="" then return nil end
+ local def=Catalog.Gear[tool.Name]
+ local profile={Tool=tool,Owner=owner}
+ function profile:GetType()return kind end
+ function profile:GetDamage()return (tool:GetAttribute("Durability") or 1)>0 and def.Damage or 0 end
+ function profile:GetRange()return def.Reach end
+ function profile:GetCooldown()return def.AttackCycle end
+ function profile:GetNumber(name,default)if name=="Range" then return self:GetRange() end;return def[name] or default end
+ function profile:GetChargeTime()return 1.3 end
+ function profile:ComputeDamage(ratio)return def.Damage*math.clamp(ratio,0.25,1) end
+ return profile
 end
-
-function WeaponFactory.Create(tool, owner)
-	if not tool then return nil end
-	if isHarvestTool(tool) then return nil end
-	local t = WeaponFactory.GetType(tool)
-	local cls = TYPE_MAP[t]
-	if not cls then return nil end
-	return cls.new(tool, owner)
-end
-
-return WeaponFactory
+return Factory

@@ -14,11 +14,11 @@ local function canDrop(plr)
 		and not plr:GetAttribute("WorldPlayerLoading") and not plr:GetAttribute("IsDead")
 end
 
-local function createThenTake(plr, root, itemId, amount, take)
+local function createThenTake(plr, root, itemId, amount, take, entry)
 	-- Preparation may fail. Keep inventory intact and the pickup unclaimable
 	-- until the matching debit commits without yielding to inventory callbacks.
 	local ok, drop = pcall(function()
-		return ItemDropService:SpawnDrop(itemId, amount, root.Position + Vector3.new(0, 2, -4), {PendingPickup = true})
+		return ItemDropService:SpawnDrop(itemId, amount, root.Position + Vector3.new(0, 2, -4), {PendingPickup = true, Entry = entry})
 	end)
 	if not ok or not drop then return false end
 	local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
@@ -55,16 +55,10 @@ function DropItemService:Init()
 			if payload.ExpectedId ~= nil and payload.ExpectedId ~= slot.Id then return end
 			createThenTake(plr, root, slot.Id, dropAmount, function()
 				return InventoryService:TakeFromSlot(plr, slotType, slotIndex, dropAmount, {ExpectedId = slot.Id, DeferSync = true}) ~= nil
-			end)
+			end, slot)
 			return
 		end
-		local itemId = payloadOrId
-		amount = math.floor(tonumber(amount) or 0)
-		if amount ~= amount or amount == math.huge or amount <= 0 or type(itemId) ~= "string" then return end
-		if not InventoryService:Has(plr, itemId, amount) then return end
-		createThenTake(plr, root, itemId, amount, function()
-			return InventoryService:Consume(plr, itemId, amount, true)
-		end)
+		-- Dropping requires an exact slot, including identity and installed modules.
 	end)
 end
 

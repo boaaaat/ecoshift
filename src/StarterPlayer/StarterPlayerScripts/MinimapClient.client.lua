@@ -41,6 +41,7 @@ local STATE = {
 	minimapVisible = true,
 	fullMapOpen = false,
 	fullZoom = MapConfig.Fullscreen.DefaultZoom,
+ mapLayer = player:GetAttribute("MapLayer") or "Surface",
 	panWorld = Vector2.new(0, 0),
 	fullRenderBoostUntil = 0,
 	fogEnabled = true,
@@ -256,7 +257,8 @@ end
 
 local function getBiomeColor(biome)
 	local map = MapConfig.Colors.BiomeTile or {}
-	return map[biome] or map.Unknown or Color3.fromRGB(72, 78, 86)
+	local meta=BiomeConfig.biome_metadata[biome]
+ return meta and meta.MapColor or map[biome] or map.Unknown or Color3.fromRGB(72, 78, 86)
 end
 
 local function hashString(text)
@@ -453,8 +455,33 @@ local function resolveRegionStyle(regionName)
 	return style
 end
 
+local function interiorFolder()
+ local folders=Workspace:FindFirstChild("ExpeditionInteriors")
+ local id=player:GetAttribute("InteriorId")
+ return id and folders and folders:FindFirstChild(id)
+end
+local function mapOrigin()
+ local folder=STATE.mapLayer=="Interior" and interiorFolder()
+ return folder and folder:GetAttribute("MapOrigin") or Vector3.zero
+end
+local function mapRadius()
+ local folder=STATE.mapLayer=="Interior" and interiorFolder()
+ local extent=folder and folder:GetAttribute("MapExtent")
+ return typeof(extent)=="Vector2" and math.max(extent.X,extent.Y)*.6 or WORLD_RADIUS
+end
+local function chunkLayer(chunk)
+ local region=chunk.regions and chunk.regions[1]
+ return region and region.layer or "Surface"
+end
+local function terrainMapColor(chunk)
+ local base=getBiomeColor(chunk.biome);local region=chunk.regions and chunk.regions[1]
+ if not region then return base end
+ if region.water then return base:Lerp(Color3.fromRGB(57,116,140),.65) end
+ local height=tonumber(region.height) or 0
+ return height>0 and base:Lerp(Color3.fromRGB(222,220,184),math.clamp(height/380,0,.5)) or base:Lerp(Color3.fromRGB(22,31,33),math.clamp(-height/180,0,.5))
+end
 local function clampPan()
-	local maxPan = WORLD_RADIUS * 1.35
+	local maxPan = mapRadius() * 1.35
 	STATE.panWorld = Vector2.new(
 		math.clamp(STATE.panWorld.X, -maxPan, maxPan),
 		math.clamp(STATE.panWorld.Y, -maxPan, maxPan)
@@ -464,14 +491,15 @@ end
 local function mapScale(absSize, zoom)
 	local usable = math.min(absSize.X, absSize.Y)
 	if usable <= 0 then return 1 end
-	return (usable / (WORLD_RADIUS * 2)) * zoom
+	return (usable / (mapRadius() * 2)) * zoom
 end
 
 local function worldToCanvas(wx, wz, absSize, zoom, panWorld)
 	local scale = mapScale(absSize, zoom)
 	local cx = absSize.X * 0.5
 	local cy = absSize.Y * 0.5
-	local mapX, mapZ = mapOrientedXZ(wx, wz)
+	local origin=mapOrigin()
+ local mapX, mapZ = mapOrientedXZ(wx-origin.X, wz-origin.Z)
 	local x = cx + (mapX + panWorld.X) * scale
 	local y = cy - (mapZ + panWorld.Y) * scale
 	return x, y, scale
@@ -492,7 +520,8 @@ local function canvasToWorld(px, py, absSize, zoom, panWorld)
 	if MAP_FLIP_Z then
 		wz = -wz
 	end
-	return wx, wz
+	local origin=mapOrigin()
+ return wx+origin.X, wz+origin.Z
 end
 
 local function safeJSONDecode(raw)
@@ -769,6 +798,14 @@ local function createUI()
 	resetZoomBtn.Text = "Reset Zoom"
 	resetZoomBtn.Parent = sidebar
 	y += 36
+ local layerBtn=centerBtn:Clone();layerBtn.Name="MapLayer";layerBtn.Text="Layer: Surface";layerBtn.Position=UDim2.fromOffset(10,y);layerBtn.Parent=sidebar;y+=36
+ UI.layerButton=layerBtn
+ layerBtn.Activated:Connect(function()
+  local layers=player:GetAttribute("InteriorId") and {"Surface","Cave","Interior"} or {"Surface","Cave"}
+  STATE.mapLayer=layers[((table.find(layers,STATE.mapLayer) or 0)%#layers)+1]
+  STATE.panWorld=Vector2.zero;STATE.fullZoom=MapConfig.Fullscreen.DefaultZoom
+  layerBtn.Text="Layer: "..STATE.mapLayer;STATE.fullRenderBoostUntil=os.clock()+1
+ end)
 
 	local zoomLabel = buildLabel(sidebar, "Zoom: 100%", UDim2.new(1, -20, 0, 18), UDim2.fromOffset(10, y), Enum.Font.GothamMedium, 12, MapConfig.Colors.TextPrimary)
 	y += 22
@@ -824,7 +861,7 @@ local function createUI()
 			button.TextSize = mobile and 14 or 12
 			rowY += mobile and 48 or 28
 		end
-		for _, button in ipairs({centerBtn, resetZoomBtn}) do
+		for _, button in ipairs({centerBtn, resetZoomBtn, layerBtn}) do
 			button.Position = UDim2.fromOffset(10, rowY + 8)
 			button.Size = UDim2.new(1, -20, 0, mobile and 44 or 26)
 			button.TextSize = mobile and 14 or 12
@@ -943,6 +980,7 @@ local function parseChunkFolder(folder)
 				sx = math.max(0, tonumber(r.sx) or 0),
 				sz = math.max(0, tonumber(r.sz) or 0),
 				temp = tonumber(r.temp),
+ height=tonumber(r.height),water=r.water==true,layer=r.layer=="Cave" and "Cave" or "Surface",
 			}
 		end
 	end
@@ -1749,8 +1787,57 @@ local function styleMarkerFrame(frame, markerKind, rotation, markerSize, glyphKe
 
 end
 
+-- Interior coordinates are deliberately separate from the shifting surface atlas.
+local function renderInteriorMap(canvas,mini)
+ local overlay=canvas:FindFirstChild("InteriorLayer")
+ if not overlay then overlay=buildCoreFrame(canvas,UDim2.fromScale(1,1),UDim2.fromOffset(0,0),Theme.Colors.Night,0);overlay.Name="InteriorLayer";overlay.ZIndex=15 end
+ local enabled=mini and player:GetAttribute("InteriorId")~=nil or not mini and STATE.mapLayer=="Interior"
+ overlay.Visible=enabled
+ if not enabled then return false end
+ local folder=interiorFolder();local used={}
+ if not folder then return true end
+ local origin=folder:GetAttribute("MapOrigin");if typeof(origin)~="Vector3" then return true end
+ local size=mini and Vector2.new(canvas.Size.X.Offset,canvas.Size.Y.Offset) or canvas.AbsoluteSize
+ local scale=math.min(size.X,size.Y)/228
+ local function project(pos)
+  if not mini then return worldToCanvas(pos.X,pos.Z,size,STATE.fullZoom,STATE.panWorld) end
+  local x,z=mapOrientedXZ(pos.X-origin.X,pos.Z-origin.Z)
+  return size.X*.5+x*scale,size.Y*.5-z*scale,scale
+ end
+ local function frame(key)
+  local f=overlay:FindFirstChild(key)
+  if not f then f=buildCoreFrame(overlay,UDim2.fromOffset(1,1),UDim2.fromOffset(0,0),Theme.Colors.Accent,0);f.Name=key end
+  f.Visible=true;used[key]=true;return f
+ end
+ for i,part in ipairs(folder:GetChildren()) do
+  if part:IsA("BasePart") and part.Transparency<.95 then
+   local x,y,factor=project(part.Position);local f=frame("room_"..i)
+   f.AnchorPoint=Vector2.new(.5,.5);f.Position=UDim2.fromOffset(x,y)
+   f.Size=UDim2.fromOffset(math.max(2,part.Size.X*factor),math.max(2,part.Size.Z*factor))
+   f.BackgroundColor3=part.Color;f.BackgroundTransparency=part.Name=="Floor" and .65 or .1;f.ZIndex=part.Name=="Floor" and 15 or 16
+  end
+ end
+ for _,p in ipairs(Players:GetPlayers()) do
+  if p:GetAttribute("InteriorId")==player:GetAttribute("InteriorId") then
+   local pos,look=getPlayerMapPose(p)
+   if pos then local x,y=project(pos);local f=frame("crew_"..p.UserId)
+    f.AnchorPoint=Vector2.new(.5,.5);f.Position=UDim2.fromOffset(x,y);f.Size=UDim2.fromOffset(mini and 16 or 26,mini and 16 or 26)
+    f.ZIndex=20;f.BackgroundTransparency=1;f.Rotation=headingDegFromLook(look);applyPlayerPortrait(f,getPlayerGlyph(p))
+   end
+  end
+ end
+ for i,actor in ipairs(folder:GetChildren()) do
+  if actor:IsA("Model") and actor:FindFirstChildOfClass("Humanoid") and actor:FindFirstChildOfClass("Humanoid").Health>0 then
+   local x,y=project(actor:GetPivot().Position);local f=frame("enemy_"..i)
+   f.AnchorPoint=Vector2.new(.5,.5);f.Position=UDim2.fromOffset(x,y);f.Size=UDim2.fromOffset(mini and 5 or 9,mini and 5 or 9);f.BackgroundColor3=Color3.fromRGB(222,97,74);f.ZIndex=19
+  end
+ end
+ for _,f in ipairs(overlay:GetChildren()) do if f:IsA("GuiObject") and not used[f.Name] then f.Visible=false end end
+ return true
+end
 local function renderFullscreen(playerPos)
 	if not UI.fullCanvas or not UI.fullRoot.Visible then return end
+ if renderInteriorMap(UI.fullCanvas,false) then return end
 
 	local canvasSize = UI.fullCanvas.AbsoluteSize
 	if canvasSize.X <= 0 or canvasSize.Y <= 0 then return end
@@ -1763,7 +1850,7 @@ local function renderFullscreen(playerPos)
 	getOptionalMarkers()
 
 	for key, chunk in pairs(WORLD.chunksByKey) do
-		if isChunkExplored(chunk.cx, chunk.cz) then
+		if isChunkExplored(chunk.cx, chunk.cz) and chunkLayer(chunk)==STATE.mapLayer then
 			local cx, cz = chunkCenter(chunk.cx, chunk.cz)
 			local px, py, scale = worldToCanvas(cx, cz, canvasSize, STATE.fullZoom, STATE.panWorld)
 			local sizePx = math.max(2, CHUNK_SIZE * scale)
@@ -1771,7 +1858,7 @@ local function renderFullscreen(playerPos)
 				local frame = acquireNamedFrame(RENDER_CACHE.chunkFrames, key, UI.fullChunkLayer)
 				frame.Position = UDim2.fromOffset(math.floor(px - sizePx * 0.5), math.floor(py - sizePx * 0.5))
 				frame.Size = UDim2.fromOffset(math.ceil(sizePx), math.ceil(sizePx))
-				frame.BackgroundColor3 = getBiomeColor(chunk.biome)
+				frame.BackgroundColor3 = terrainMapColor(chunk)
 				frame.BackgroundTransparency = 0.16
 				local label = frame:FindFirstChild("BiomeLabel")
 				if not label then
@@ -1796,7 +1883,7 @@ local function renderFullscreen(playerPos)
 
 	if STATE.markerVisibility.Regions then
 		for key, chunk in pairs(WORLD.chunksByKey) do
-			if isChunkExplored(chunk.cx, chunk.cz) then
+			if isChunkExplored(chunk.cx, chunk.cz) and chunkLayer(chunk)==STATE.mapLayer then
 				for i = 1, #chunk.regions do
 					local region = chunk.regions[i]
 					local rk = key .. ":" .. tostring(i)
@@ -1847,6 +1934,8 @@ local function renderFullscreen(playerPos)
 	end
 
 	local function drawMarker(key, wx, wz, markerKind, rotation, size, glyphKey)
+  local cell=WORLD.chunksByKey[chunkKey(math.floor(wx/CHUNK_SIZE),math.floor(wz/CHUNK_SIZE))]
+  if cell and chunkLayer(cell)~=STATE.mapLayer then return end
 		local px, py = worldToCanvas(wx, wz, canvasSize, STATE.fullZoom, STATE.panWorld)
 		if px < -20 or py < -20 or px > canvasSize.X + 20 or py > canvasSize.Y + 20 then
 			return
@@ -1888,7 +1977,7 @@ local function renderFullscreen(playerPos)
 	if STATE.markerVisibility.Players then
 		for _, plr in ipairs(Players:GetPlayers()) do
 			local position, look = getPlayerMapPose(plr)
-			if position then
+			if position and (plr:GetAttribute("MapLayer") or "Surface")==STATE.mapLayer then
 				local heading = headingDegFromLook(look)
 				local size = (MapConfig.PlayerPortraits and MapConfig.PlayerPortraits.FullscreenSize) or 24
 				drawMarker("player_" .. tostring(plr.UserId), position.X, position.Z, "Players", heading, size, getPlayerGlyph(plr))
@@ -1974,6 +2063,7 @@ local function renderMinimap(playerPos, playerLook)
 	UI.minimapContainer.Visible = STATE.minimapVisible and playerPos ~= nil and not (Theme.IsMobile() and (playerGui:GetAttribute("BuildPlacementActive") or playerGui:GetAttribute("MenuCursorOpen")))
 	if not STATE.minimapVisible then return end
 	if not playerPos then return end
+ if renderInteriorMap(UI.minimapFrame,true) then return end
 	local playerMapX, playerMapZ = mapOrientedXZ(playerPos.X, playerPos.Z)
 
 	UI.minimapCoords.Text = string.format("X: %d  Z: %d", math.floor(playerPos.X), math.floor(playerPos.Z))
@@ -2025,7 +2115,7 @@ local function renderMinimap(playerPos, playerLook)
 				local frame = acquireNamedFrame(RENDER_CACHE.minimapChunkFrames, key, UI.minimapChunkLayer)
 				frame.Position = UDim2.fromOffset(math.floor((mx or centerX) - sizePx * 0.5), math.floor((my or centerY) - sizePx * 0.5))
 				frame.Size = UDim2.fromOffset(math.ceil(sizePx), math.ceil(sizePx))
-				frame.BackgroundColor3 = getBiomeColor(chunk.biome)
+				frame.BackgroundColor3 = terrainMapColor(chunk)
 				frame.BackgroundTransparency = 0.16
 				RENDER_CACHE.usedMinimapChunkKeys[key] = true
 			end
@@ -2389,6 +2479,12 @@ end
 init()
 
 player:GetAttributeChangedSignal("FieldKitMap"):Connect(toggleFullMap)
+player:GetAttributeChangedSignal("MapLayer"):Connect(function()
+ STATE.mapLayer=player:GetAttribute("MapLayer") or "Surface"
+ STATE.panWorld=Vector2.zero;STATE.fullZoom=MapConfig.Fullscreen.DefaultZoom
+ if UI.layerButton then UI.layerButton.Text="Layer: "..STATE.mapLayer end
+ STATE.fullRenderBoostUntil=os.clock()+1
+end)
 
 -- Ability discoveries have server-bounded lifetimes and never activate world chunks.
 task.spawn(function()
@@ -2412,4 +2508,37 @@ task.spawn(function()
 	end)
 end)
 
+task.spawn(function()
+ local remotes=ReplicatedStorage:WaitForChild("Remotes")
+ remotes:WaitForChild("GearAction").OnClientEvent:Connect(function(action,markers)
+  if action~="Warnings" or type(markers)~="table" then return end
+  for i,marker in ipairs(markers) do if typeof(marker.Position)=="Vector3" then
+   STATE.abilityBlips["packwarning:"..i]={Position=marker.Position,Kind="Enemies",Label=marker.Name,Expires=os.clock()+math.clamp(tonumber(marker.Expires) or 8,0,8)}
+  end end
+ end)
+end)
+task.spawn(function()
+ local remote=ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("InstrumentAction")
+ remote.OnClientEvent:Connect(function(action,data)
+  if action~="Snapshot" or type(data)~="table" then return end
+  for key in pairs(STATE.abilityBlips) do if key:sub(1,11)=="instrument:" then STATE.abilityBlips[key]=nil end end
+  local entries={};if data.ResourceTarget then entries[#entries+1]=data.ResourceTarget end
+  for _,beacon in ipairs(data.Beacons or {}) do entries[#entries+1]=beacon end
+  if data.Event then entries[#entries+1]=data.Event end
+  for i,entry in ipairs(entries) do if typeof(entry.Position)=="Vector3" then
+   STATE.abilityBlips["instrument:"..i]={Position=entry.Position,Kind="Objectives",Label=entry.Name or entry.Id or "Signal",Expires=os.clock()+6}
+  end end
+ end)
+end)
+task.spawn(function()
+ local remote=ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("EventBroadcast")
+ remote.OnClientEvent:Connect(function(action,id,data)
+  if type(data)~="table" then return end
+  if action=="Minor_End" or action=="Major_End" then STATE.abilityBlips["event:"..id]=nil;return end
+  if action~="Minor_Start" and action~="Major_Start" then return end
+  local p=data.Position
+  if type(p)=="table" and type(p[1])=="number" then STATE.abilityBlips["event:"..id]={Position=Vector3.new(p[1],p[2],p[3]),Kind="Objectives",Label=data.Name or id,Expires=os.clock()+math.max(0,(data.Duration or 0)-(data.Elapsed or 0))} end
+ end)
+ remote:FireServer("RequestActive")
+end)
 return MinimapClient

@@ -17,7 +17,9 @@ local LootService = require(script.Parent.LootService)
 local GameStateService = require(script.Parent.GameStateService)
 local ItemDropService = require(script.Parent.ItemDropService)
 
-local BuildService = { _salvageHolds = {}, _requests = {} }
+local BuildService = { _salvageHolds = {}, _requests = {}, _entries = setmetatable({}, {__mode="k"}) }
+local Instances=require(ReplicatedStorage.Shared.ItemInstance)
+local Catalog=require(ReplicatedStorage.Shared.OverhaulCatalog)
 local SnapshotCodec = require(script.Parent.WorldSnapshotCodec)
 BuildService._remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
 BuildService._remoteBuild = Util.GetRemote(BuildService._remotesFolder, Config.RemoteNames.Build)
@@ -38,7 +40,7 @@ local function isPlaceableItem(t)
 end
 
 local function isChestStructure(inst, buildType)
-	if buildType == "Chest" then
+	if buildType == "Chest" or buildType == "LargeChest" then
 		return true
 	end
 	for tag in pairs(CHEST_TAGS) do
@@ -106,7 +108,8 @@ local function createFallbackPart(buildType, position)
 	end
 
 	local part = Instance.new("Part")
-	part.Size = Vector3.new(Config.GRID.Size, Config.GRID.Size, Config.GRID.Size)
+	local definition=Catalog.Placeables[buildType]
+	part.Size=definition and definition.Size or Vector3.new(Config.GRID.Size,Config.GRID.Size,Config.GRID.Size)
 	part.Anchored = true
 	part.Position = position
 	part.Name = "Build_" .. buildType
@@ -121,10 +124,11 @@ local function refundItems(plr, entries)
 		local itemId = entry and entry.Id
 		local amount = math.max(0, math.floor(tonumber(entry and entry.N) or 0))
 		if itemId and amount > 0 then
-			local added = InventoryService:Give(plr, itemId, amount)
+			local added = InventoryService:GiveEntry(plr, entry, false)
 			local remaining = amount - added
 			if remaining > 0 and basePos then
-				ItemDropService:SpawnDrop(itemId, remaining, basePos + Vector3.new(0, 2, 0))
+				local spill=Instances.Copy(entry);spill.N=remaining
+				ItemDropService:SpawnDrop(itemId, remaining, basePos + Vector3.new(0, 2, 0), {Entry=spill})
 			end
 		end
 	end
@@ -238,42 +242,29 @@ function BuildService:Place(plr, buildType, worldPos, rotation)
 	if not withinRange(plr, worldPos) then return false, "OutOfRange" end
 	local held = plr.Character and plr.Character:FindFirstChildOfClass("Tool")
 	if not held or held.Name ~= buildType then return false, "EquipBuildItem" end
-	if not BuildPlacement.WithinCamp(worldPos) then return false, "OutsideCamp" end
+	if not BuildPlacement.WithinCamp(worldPos) and buildType~="TrailBeacon" then return false, "OutsideCamp" end
 
 	local gx, gz = GridService:WorldToGrid(worldPos)
 	if GridService:IsOccupied(gx, gz) then return false, "Occupied" end
 	local pos = BuildPlacement.Surface(worldPos)
 	if not pos then return false, "NoSurface" end
-	if not BuildPlacement.WithinCamp(pos) then return false, "OutsideCamp" end
+	if not BuildPlacement.WithinCamp(pos) and buildType~="TrailBeacon" then return false, "OutsideCamp" end
 	if not withinRange(plr, pos) then return false, "OutOfRange" end
 
-	-- Check if this is a placeable item (uses item from inventory)
-	local refundEntries = nil
-	if isPlaceableItem(buildType) then
-		-- Check if player has the item
-		if not InventoryService:HasItem(plr, buildType, 1) then
-			print(string.format("[BuildService] Player %s doesn't have %s to place", plr.Name, buildType))
-			return false, "MissingPlaceableItem"
-		end
-		local creative = workspace:GetAttribute("WorldType") == "Creative" and plr:GetAttribute("CreativeMode") == true
-		-- Sandbox placement still requires the held item but keeps it in the pack.
-		if not creative and not InventoryService:Take(plr, buildType, 1) then
-			print(string.format("[BuildService] Failed to consume %s from %s", buildType, plr.Name))
-			return false, "MissingPlaceableItem"
-		end
-		refundEntries = creative and {} or { { Id = buildType, N = 1 } }
-	else
-		-- Traditional building with resource costs
-		local cost = Config.BUILD.Costs[buildType] or {}
-		local discount = tonumber(plr:GetAttribute("Class_BuildDiscount")) or 0
-		local adjusted = {}
-		for _, entry in ipairs(cost) do
-			local n = math.max(1, math.ceil((entry.N or 1) * (1 - discount)))
-			adjusted[#adjusted + 1] = { Id = entry.Id, N = n }
-		end
-		if not InventoryService:PayCost(plr, adjusted) then return false, "MissingCost" end
-		refundEntries = adjusted
-	end
+ -- Every build is an inventory item; retain its station grade and contents.
+ local selectedIndex,heldEntry
+ for index,entry in pairs(InventoryService:GetAll(plr).Hotbar) do
+  if entry and entry.Id==buildType and (not held:GetAttribute("GearUid") or held:GetAttribute("GearUid")==entry.Uid) then selectedIndex=index;heldEntry=entry;break end
+ end
+ if not heldEntry then return false,"EquipBuildItem" end
+ local creative=workspace:GetAttribute("WorldType")=="Creative" and plr:GetAttribute("CreativeMode")==true
+ local placedEntry=Instances.Copy(heldEntry);placedEntry.N=1
+ if creative then placedEntry.Uid=game:GetService("HttpService"):GenerateGUID(false)
+ else
+  placedEntry=InventoryService:TakeEntryFromSlot(plr,"Hotbar",selectedIndex,1,{ExpectedId=buildType})
+  if not placedEntry then return false,"MissingPlaceableItem" end
+ end
+ local refundEntries=creative and {} or {placedEntry}
 
 	local inst
 	local placeOk, placeErr = pcall(function()
@@ -292,19 +283,27 @@ function BuildService:Place(plr, buildType, worldPos, rotation)
 		inst:SetAttribute("GridX", gx)
 		inst:SetAttribute("GridZ", gz)
 		inst:SetAttribute("BuildType", buildType)
+		self._entries[inst]=Instances.Copy(placedEntry)
+		inst:SetAttribute("StationGrade",placedEntry.StationGrade or (Catalog.Stations[buildType] and Catalog.Stations[buildType].Grade))
 		inst:SetAttribute("MapMarkerType", "PlayerBuiltStructure")
 		inst:SetAttribute("MapMarkerLabel", tostring(buildType))
 		applyDurability(inst)
 		pcall(function() CollectionService:AddTag(inst, "Structure") end)
+		require(script.Parent.UtilityBuildService):Bind(inst)
+		require(script.Parent.UtilityBuildService):Restore(inst,placedEntry.UtilityState)
 
 		-- Setup workbench interaction if this is a crafting station
 		local stationDef = WorkbenchConfig.STATIONS[buildType]
-		if stationDef and stationDef.BuildType then
+		if stationDef then
 			setupWorkbenchInteraction(inst, buildType)
+			require(script.Parent.StationService):Bind(inst,buildType,placedEntry.StationGrade)
+			require(script.Parent.StationService):Restore(inst,placedEntry.StationState)
+			require(script.Parent.CookingService):RestoreStation(inst,placedEntry.CookingState)
 		end
+		if placedEntry.ChestState then LootService:RestoreChestState(inst,placedEntry.ChestState) end
 
 		-- Placed chests must be tagged so LootService binds prompts and UI events.
-		if buildType == "Chest" then
+		if buildType == "Chest" or buildType == "LargeChest" then
 			setupChestInteraction(inst)
 		end
 
@@ -392,24 +391,24 @@ function BuildService:Remove(plr, target)
 	end
 	
 	local buildType = placed:GetAttribute("BuildType")
+	local utilityReady,utilityReason=require(script.Parent.UtilityBuildService):CanSalvage(placed)
+	if not utilityReady then return false,utilityReason end
+	local stationReady,stationReason=require(script.Parent.StationService):CanSalvage(plr,placed)
+	if not stationReady then return false,stationReason end
 	local kitchenReady, kitchenReason = require(script.Parent.CookingService):CanSalvage(placed)
 	if not kitchenReady then return false, kitchenReason end
-	if buildType and isPlaceableItem(buildType) then
-		if not InventoryService:CanFit(plr, buildType, 1) then
-			return false, "InventoryFull"
-		end
-		if isChestStructure(placed, buildType) then
-			local contents = LootService:GetChestContents(placed)
-			if #contents > 0 then
-				LootService:SpillChestContents(placed, pos)
-			end
-		end
-		if InventoryService:Give(plr, buildType, 1, true) ~= 1 then
-			return false, "InventoryFull"
-		end
-		print(string.format("[BuildService] Returned %s to %s's inventory", buildType, plr.Name))
-	end
-	
+ if buildType and isPlaceableItem(buildType) then
+  local entry=Instances.Copy(self._entries[placed] or {Id=buildType,N=1})
+  entry.N=1;entry.StationGrade=placed:GetAttribute("StationGrade")
+  entry.StationState=require(script.Parent.StationService):Snapshot(placed)
+  entry.CookingState=require(script.Parent.CookingService):CaptureStation(placed)
+  entry.UtilityState=require(script.Parent.UtilityBuildService):Capture(placed)
+  if isChestStructure(placed,buildType) then entry.ChestState=LootService:CaptureChestState(placed) end
+  if InventoryService:GiveEntry(plr,entry,true)~=1 then return false,"InventoryFull" end
+  require(script.Parent.StationService):Remove(placed)
+  require(script.Parent.UtilityBuildService):Remove(placed)
+ end
+
 	local gx = placed:GetAttribute("GridX")
 	local gz = placed:GetAttribute("GridZ")
 	if typeof(gx) == "number" and typeof(gz) == "number" then
@@ -434,6 +433,10 @@ function BuildService:CaptureWorldState()
 				Durability = durability and durability.Value or 100, DurabilityMax = inst:GetAttribute("DurabilityMax") or 100 }
 			if isChestStructure(inst, state.Type) then state.Chest = LootService:CaptureChestState(inst) end
 			state.Cooking = require(script.Parent.CookingService):CaptureStation(inst)
+			state.Station = require(script.Parent.StationService):Snapshot(inst)
+			state.StationGrade=inst:GetAttribute("StationGrade")
+			state.Item=Instances.Copy(self._entries[inst])
+			state.Utility=require(script.Parent.UtilityBuildService):Capture(inst)
 			table.insert(result, state)
 		end
 	end
@@ -453,28 +456,23 @@ function BuildService:RestoreWorldState(states)
 		local prefab = getPrefab(state.Type)
 		local inst = prefab and prefab:Clone() or createFallbackPart(state.Type, cf.Position)
 		inst:PivotTo(cf)
-		if state.PlacementVersion == nil and inst:IsA("Model") and inst:GetAttribute("ArtStyle") == "Expedition" then
-			-- Correct only the recognizable old half-grid gap. Grounded or deliberately
-			-- elevated saved builds keep their transform; no repeated lowering on resume.
-			local params = RaycastParams.new()
-			params.FilterType = Enum.RaycastFilterType.Include
-			params.FilterDescendantsInstances = { workspace.Terrain }
-			local bottom = BuildPlacement.Bottom(inst)
-			local ground = workspace:Raycast(Vector3.new(cf.X, bottom + .1, cf.Z), Vector3.new(0, -Config.GRID.Size, 0), params)
-			if ground and math.abs(bottom - ground.Position.Y - Config.GRID.Size / 2) < .1 then
-				inst:PivotTo(cf + Vector3.new(0, ground.Position.Y - bottom, 0))
-			end
-		end
 		inst:SetAttribute("PlacementVersion", 1)
 		inst:SetAttribute("OwnerUserId", SnapshotCodec.Number(state.Owner))
 		inst:SetAttribute("GridX", gx); inst:SetAttribute("GridZ", gz)
 		inst:SetAttribute("BuildType", state.Type)
+		inst:SetAttribute("StationGrade",state.StationGrade)
+		require(script.Parent.UtilityBuildService):Restore(inst,state.Utility)
+		self._entries[inst]=Instances.Copy(state.Item or {Id=state.Type,N=1})
 		inst:SetAttribute("MapMarkerType", "PlayerBuiltStructure")
 		inst:SetAttribute("MapMarkerLabel", state.Type)
 		applyDurability(inst)
 		inst.Durability.Value = SnapshotCodec.Number(state.Durability, 0, 1e6)
 		inst:SetAttribute("DurabilityMax", SnapshotCodec.Number(state.DurabilityMax, 1, 1e6))
-		if WorkbenchConfig.STATIONS[state.Type] then setupWorkbenchInteraction(inst, state.Type) end
+		if WorkbenchConfig.STATIONS[state.Type] then
+			setupWorkbenchInteraction(inst, state.Type)
+			require(script.Parent.StationService):Bind(inst,state.Type,state.StationGrade)
+			require(script.Parent.StationService):Restore(inst,state.Station)
+		end
 		if state.Chest then LootService:RestoreChestState(inst, state.Chest) end
 		if ReplicatedStorage:GetAttribute("CookingEnabled") == true then require(script.Parent.CookingService):RestoreStation(inst, state.Cooking) end
 		table.insert(prepared, inst)
@@ -486,7 +484,8 @@ function BuildService:RestoreWorldState(states)
 	for _, inst in ipairs(prepared) do
 		inst.Parent = workspace
 		CollectionService:AddTag(inst, "Structure")
-		if inst:GetAttribute("BuildType") == "Chest" then setupChestInteraction(inst) end
+		require(script.Parent.UtilityBuildService):Bind(inst)
+		if inst:GetAttribute("BuildType") == "Chest" or inst:GetAttribute("BuildType")=="LargeChest" then setupChestInteraction(inst) end
 		assert(GridService:Reserve(inst:GetAttribute("GridX"), inst:GetAttribute("GridZ"), inst:GetAttribute("OwnerUserId"), inst), "Saved structure grid conflict")
 	end
 end

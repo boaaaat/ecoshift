@@ -6,7 +6,7 @@ local Cooking = require(RS.Shared.CookingConfig)
 local Food = {}
 local gameState
 local states = setmetatable({}, {__mode = "k"})
-local MODIFIERS = {"HungerDrainReduction", "HeatReduction", "PoisonDamageReduction", "ColdReduction", "MonsterDamageBonus", "ResourcePowerBonus", "ExposureRecoveryBonus", "SprintDrainReduction"}
+local MODIFIERS = {"HungerDrainReduction","HeatReduction","PoisonDamageReduction","ColdReduction","MonsterDamageBonus","ResourcePowerBonus","ExposureRecoveryBonus","SprintDrainReduction","WetnessReduction","StaminaRecoveryBonus","GatherDurationReduction","MonsterDamageReduction","DodgeDrainReduction","SwimSpeedBonus","AirDrainReduction","SpecialDrainReduction"}
 
 local function state(player)
 	if not states[player] then states[player] = {Thermal = {}, FoodCooldown = 0, DrinkCooldown = 0} end
@@ -41,7 +41,7 @@ end
 
 function Food:CanConsume(id)
 	local recipe, seasoning = meal(id)
-	return RS:GetAttribute("CookingEnabled") == true and recipe ~= nil and not (seasoning and seasoning.Future)
+	return RS:GetAttribute("CookingEnabled") == true and recipe ~= nil
 end
 
 function Food:Consume(player, slotType, slotIndex, callback)
@@ -75,14 +75,17 @@ function Food:Consume(player, slotType, slotIndex, callback)
 		if not removed then finish(false, "The item moved; nothing was consumed."); return end
 		local bonus = 1 + (player:GetAttribute("Class_FoodBonus") or 0)
 		local temperature = Stats:GetBase(player, "Temperature") or 0
+		local oldTemperature=temperature
+		local overflow=math.max(0,(Stats:GetBase(player,"Hunger") or 0)+(recipe.Hunger or 0)*bonus-(Stats:GetStat(player,"MaxHunger") or 100))
 		local relief = recipe.ExposureRelief or {}
-		if temperature > 0 then temperature = math.max(0, temperature - (relief.Heat or 0))
+		if temperature > 0 then temperature = math.max(0, temperature - ((relief.Heat or 0)+(recipe.Drink and require(script.Parent.GearService):GetModifiers(player).WaterExposureBonus or 0)))
 		elseif temperature < 0 then temperature = math.min(0, temperature + (relief.Cold or 0)) end
 		Stats:SetBaseStats(player, {
 			Hunger = math.min(Stats:GetStat(player, "MaxHunger") or 100, (Stats:GetBase(player, "Hunger") or 0) + (recipe.Hunger or 0) * bonus),
 			Stamina = math.min(Stats:GetStat(player, "MaxStamina") or 100, (Stats:GetBase(player, "Stamina") or 0) + (recipe.Stamina or 0) * bonus),
 			Temperature = temperature,
 		})
+		require(script.Parent.GearService):OnConsumable(player,oldTemperature,overflow,recipe.Drink)
 		if seasoning then entry.Seasoning = {Id = seasoning.Id, Remaining = seasoning.Duration or 240} end
 		local thermal = recipe.Thermal
 		if thermal and (thermal.Channel == "Heat" or thermal.Channel == "Cold") then
@@ -119,7 +122,7 @@ function Food:RestorePlayer(player, saved)
 		entry.DrinkCooldown = bounded(saved.DrinkCooldown, 3)
 		local s = saved.Seasoning
 		local definition = type(s) == "table" and Cooking.Seasonings[s.Id]
-		if definition and not definition.Future and bounded(s.Remaining, 240) > 0 then entry.Seasoning = {Id = s.Id, Remaining = bounded(s.Remaining, 240)} end
+		if definition and bounded(s.Remaining, 240) > 0 then entry.Seasoning = {Id = s.Id, Remaining = bounded(s.Remaining, 240)} end
 		for _, key in ipairs({"Heat", "Cold"}) do
 			local value = type(saved.Thermal) == "table" and saved.Thermal[key]
 			if type(value) == "table" and bounded(value.Remaining, 120) > 0 then

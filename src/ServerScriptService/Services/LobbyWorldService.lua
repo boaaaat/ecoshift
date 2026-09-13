@@ -57,7 +57,7 @@ function Service:Init()
 		part(root,"MapContour",Vector3.new(1.6,.03,3.5),CFrame.new(i*2,3.7,-45)*CFrame.Angles(0,i*.3,0),C.Moss)
 		part(root,"CrewMarker",Vector3.new(.25,.4,.25),CFrame.new(i*1.4,3.9,-44),C.Brass)
 	end
-	for _,entry in ipairs({{"FieldClock",-35,-29},{"ResourceCompass",-31,-29},{"ReviveKit",-39,-29},{"BiomePredictor",32,-29},{"EventSeismograph",38,-29}}) do
+	for _,entry in ipairs({{"FieldClock",-35,-29},{"ResourceCompass",-31,-29},{"RevivalKit",-39,-29},{"BiomePredictor",32,-29},{"EventDetector",38,-29}}) do
 		local item=Objects.CreateDrop(Items:Get(entry[1])); item:PivotTo(CFrame.new(entry[2],3.65,entry[3])); item.Parent=root
 	end
 	for i=1,5 do

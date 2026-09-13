@@ -53,7 +53,10 @@ local function regionsCopy(regions)
 			assert(finite(region.temp) and math.abs(region.temp) <= 1000, "Invalid exploration temperature")
 			copy.temp = region.temp
 		end
-		table.insert(result, copy)
+		if finite(region.height) then copy.height=math.clamp(region.height,-200,300) end
+        if type(region.water)=="boolean" then copy.water=region.water end
+        if region.layer=="Cave" or region.layer=="Surface" then copy.layer=region.layer end
+        table.insert(result, copy)
 	end
 	assert(#HttpService:JSONEncode(result) <= MAX_REGION_JSON, "Exploration region data too large")
 	return result
@@ -95,6 +98,10 @@ function Service:BeginBiome(biome, epoch)
 	if self._biome == biome and self._epoch == epoch then return end
 	self._biome, self._epoch = biome, epoch
 	self._metadata = {}
+ if require(ReplicatedStorage.Shared.GameRules).IsOverhaul() then
+  self._cells, self._lastCells = {}, {}
+  self._folder:ClearAllChildren()
+ end
 	for _, cell in pairs(self._cells) do
 		cell.Biome, cell.Regions = biome, {}
 		self:_publish(cell)
@@ -103,6 +110,13 @@ function Service:BeginBiome(biome, epoch)
 	self._folder:SetAttribute("Epoch", epoch)
 end
 
+function Service:RecordMetadata(x,z,biome,regions,epoch)
+ if epoch~=self._epoch or biome~=self._biome or not cellValid(x,z) then return false end
+ local record={X=x,Z=z,Biome=biome,Regions=regionsCopy(regions)}
+ local id=key(x,z);self._metadata[id]=record
+ if self._cells[id] then self._cells[id]=record;self:_publish(record) end
+ return true
+end
 function Service:RecordChunk(folder, epoch)
 	if epoch ~= self._epoch or not folder or not folder.Parent then return false end
 	local x, z = folder:GetAttribute("MapChunkX"), folder:GetAttribute("MapChunkZ")
@@ -118,6 +132,7 @@ function Service:RecordChunk(folder, epoch)
 end
 
 function Service:RevealFromPlayer(player, position)
+	if player:GetAttribute("InteriorId") then return false end
 	if player.Parent ~= Players or player:GetAttribute("IsDead") or player:GetAttribute("WorldPlayerLoading")
 		or player:GetAttribute("WorldPlayerRestoring") or ReplicatedStorage:GetAttribute("WorldRestoring") then return false end
 	local character = player.Character

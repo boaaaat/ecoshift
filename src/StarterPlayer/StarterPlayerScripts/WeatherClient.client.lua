@@ -45,7 +45,18 @@ local styles = {
 	MeteorShower = {0.31, 2, Color3.fromRGB(230, 177, 123), 65},
 	CosmicHaze = {0.38, 2.3, Color3.fromRGB(174, 150, 207), 40},
 }
-local current
+local Biomes=require(ReplicatedStorage.Shared.OverhaulBiomes)
+styles.SeaFog={.25,1.2,Color3.fromRGB(180,206,204)}
+styles.Thunderstorm={.29,1.5,Color3.fromRGB(137,157,183),100}
+styles.DustWind={.22,1.2,Color3.fromRGB(210,166,123),20}
+styles.DryStorm={.28,1.6,Color3.fromRGB(191,143,99),45}
+styles.Monsoon={.3,1.7,Color3.fromRGB(142,177,165),150}
+styles.FloodMist={.23,1.2,Color3.fromRGB(142,182,190),15}
+styles.CaveDrip={.15,.5,Color3.fromRGB(159,189,180),8}
+styles.DeepMist={.22,1.1,Color3.fromRGB(139,170,161),12}
+styles.MoonDust={.2,.8,Color3.fromRGB(183,189,212),12}
+styles.SilverHaze={.24,1.2,Color3.fromRGB(177,177,214),16}
+local current, currentBiome
 local weatherRate = 0
 local function applyQuality()
 	local multiplier = ({ Low = 0.2, Medium = 0.5, High = 1 })[Settings.Get("GraphicsQuality")] or 1
@@ -54,11 +65,14 @@ local function applyQuality()
 end
 Settings.Changed:Connect(applyQuality)
 ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("GameStateUpdate").OnClientEvent:Connect(function(state)
-	if type(state) ~= "table" or current == state.WeatherId then return end
-	current = state.WeatherId
+	if type(state) ~= "table" or (current == state.WeatherId and currentBiome==ReplicatedStorage:GetAttribute("CurrentBiome")) then return end
+	current = state.WeatherId;currentBiome=ReplicatedStorage:GetAttribute("CurrentBiome")
 	local style = styles[current] or styles.Clear
-	TweenService:Create(atmosphere, TweenInfo.new(3), {Density = style[1], Haze = style[2], Color = style[3]}):Play()
-	TweenService:Create(correction, TweenInfo.new(3), {TintColor = Color3.new(1, 1, 1):Lerp(style[3], 0.15)}):Play()
+	local biome=Biomes.Biomes[currentBiome]
+ local color=biome and style[3]:Lerp(biome.Color,.3) or style[3]
+ local density=math.min(.32,style[1])
+ TweenService:Create(atmosphere, TweenInfo.new(3), {Density = density, Haze = math.min(1.8,style[2]), Color = color}):Play()
+	TweenService:Create(correction, TweenInfo.new(3), {TintColor = Color3.new(1, 1, 1):Lerp(color, 0.12)}):Play()
 	weatherRate = style[4] or 0
 	applyQuality()
 	particles.Color = ColorSequence.new(style[3])

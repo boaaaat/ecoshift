@@ -11,6 +11,7 @@ local InventoryService = require(script.Parent.InventoryService)
 local GameStateService = require(script.Parent.GameStateService)
 local ItemDropService = require(script.Parent.ItemDropService)
 local Codec = require(script.Parent.WorldSnapshotCodec)
+local IngredientResolver=require(ReplicatedStorage.Shared.IngredientResolver)
 
 local CraftingService = {}
 CraftingService._initialized = false
@@ -23,14 +24,8 @@ local function resolveRecipe(recipeId)
 	return WorkbenchConfig.RECIPES[recipeId]
 end
 
-local function adjustedIngredientsForPlayer(plr, ingredients)
-	-- Builder discounts apply only to structural construction components.
-	local adjusted = {}
-	for _, entry in ipairs(ingredients or {}) do
-		local n = WorkbenchConfig:IngredientCost(entry, plr)
-		adjusted[#adjusted + 1] = { Id = entry.Id, N = n }
-	end
-	return adjusted
+local function adjustedIngredientsForPlayer(plr,ingredients,quantity)
+ return IngredientResolver.Resolve(ingredients,quantity or 1,function(id)return InventoryService:TotalCount(plr,id) end,plr)
 end
 
 local function nextToken(self)
@@ -61,7 +56,7 @@ local function prepareRefund(inventory, refund)
 	local prepared = {}
 	local ok, err = pcall(function()
 		for _, entry in ipairs(overflow) do
-			local drop = ItemDropService:SpawnDrop(entry.Id, entry.N, position + Vector3.new(0, 2, 0), {PendingPickup = true})
+			local drop = ItemDropService:SpawnDrop(entry.Id, entry.N, position + Vector3.new(0, 2, 0), {PendingPickup = true, Entry=entry})
 			assert(drop, "Craft refund drop preparation failed")
 			table.insert(prepared, drop)
 		end
@@ -106,7 +101,7 @@ function CraftingService:_refundCraft(plr, context, reason)
 end
 
 -- Find nearest workbench of a specific type within range
-function CraftingService:FindNearbyStation(plr, stationType)
+function CraftingService:FindNearbyStation(plr, stationType, requiredGrade)
 	local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
 	if not root then return nil end
 
@@ -119,6 +114,7 @@ function CraftingService:FindNearbyStation(plr, stationType)
 	local interactRadius = station.InteractRadius or 8
 	local nearestStation = nil
 	local nearestDist = interactRadius
+ local nearestQualified = false
 
 	for _, structure in ipairs(CollectionService:GetTagged("Structure")) do
 		local structType = structure:GetAttribute("BuildType") or structure:GetAttribute("StationType")
@@ -132,7 +128,9 @@ function CraftingService:FindNearbyStation(plr, stationType)
 
 			if pos then
 				local dist = (root.Position - pos).Magnitude
-				if dist <= nearestDist then
+				local qualified=(structure:GetAttribute("StationGrade") or station.Grade or 1)>=(requiredGrade or 1)
+    if dist<=interactRadius and ((qualified and not nearestQualified) or (qualified==nearestQualified and dist<=nearestDist)) then
+     nearestQualified=qualified
 					nearestDist = dist
 					nearestStation = structure
 				end
@@ -162,7 +160,10 @@ function CraftingService:CanCraft(plr, recipeId, stationType, quantity)
 	if not recipe then
 		return false, "NoRecipe"
 	end
-	if recipe.Cooking then return false, "UseCookingStation", recipe.StationType end
+	if recipe.Cooking then return false, "UseCookingStation", WorkbenchConfig:GetMinimumStation(recipeId) end
+ if table.find(recipe.AllowedStations or {},"Furnace") then return false,"Open the furnace to queue a shared batch" end
+ local campaignLock=WorkbenchConfig:GetCampaignLock(recipeId)
+ if campaignLock then return false,campaignLock end
 
 	local effectiveStation = stationType or "Hand"
 	if not WorkbenchConfig:CanCraftAt(recipeId, effectiveStation) then
@@ -171,15 +172,15 @@ function CraftingService:CanCraft(plr, recipeId, stationType, quantity)
 	end
 
 	if effectiveStation ~= "Hand" then
-		local foundStation = self:FindNearbyStation(plr, effectiveStation)
-		if not foundStation then
-			return false, "NotNearStation", effectiveStation
-		end
+		local foundStation = self:FindNearbyStation(plr, effectiveStation, recipe.RequiredGrade)
+		if not foundStation then return false,"NotNearStation",effectiveStation end
+  local valid,why=require(script.Parent.StationService):Validate(plr,foundStation,recipe.RequiredGrade or 1)
+  if not valid then return false,why end
 	end
 
 	local ingredients = recipe.Ingredients or recipe
-	local adjusted = adjustedIngredientsForPlayer(plr, ingredients)
-	for _, entry in ipairs(adjusted) do entry.N *= quantity end
+	local adjusted,missing = adjustedIngredientsForPlayer(plr, ingredients, quantity)
+ if not adjusted then return false,missing end
 	if not InventoryService:CanAfford(plr, adjusted) then
 		return false, "MissingItems"
 	end
@@ -271,11 +272,14 @@ function CraftingService:Craft(plr, recipeId, stationType, quantity)
 	if not recipe then
 		return false, "NoRecipe"
 	end
-	if recipe.Cooking then return false, "UseCookingStation", recipe.StationType end
+	if recipe.Cooking then return false, "UseCookingStation", WorkbenchConfig:GetMinimumStation(recipeId) end
+ if table.find(recipe.AllowedStations or {},"Furnace") then return false,"Open the furnace to queue a shared batch" end
+ local campaignLock=WorkbenchConfig:GetCampaignLock(recipeId)
+ if campaignLock then return false,campaignLock end
 
 	local effectiveStation = stationType or "Hand"
-	local ingredients = adjustedIngredientsForPlayer(plr, recipe.Ingredients or recipe)
-	for _, entry in ipairs(ingredients) do entry.N *= quantity end
+	local ingredients,missing = adjustedIngredientsForPlayer(plr, recipe.Ingredients or recipe,quantity)
+ if not ingredients then return false,missing end
 	local output = recipe.Output or { Id = recipeId, N = 1 }
 	local outputId = output.Id or recipeId
 	local outputCount = math.max(1, math.floor(tonumber(output.N) or 1)) * quantity
@@ -291,7 +295,7 @@ function CraftingService:Craft(plr, recipeId, stationType, quantity)
 		Token = token,
 		RecipeId = recipeId,
 		StationType = effectiveStation,
-		Station = self:FindNearbyStation(plr,effectiveStation),
+		Station = self:FindNearbyStation(plr,effectiveStation,recipe.RequiredGrade),
 		Work = 0,
 		Ingredients = ingredients,
 		OutputId = outputId,
@@ -302,7 +306,9 @@ function CraftingService:Craft(plr, recipeId, stationType, quantity)
 		EndsAt = os.clock() + duration,
 	}
 	-- No callback can observe paid ingredients without their refund escrow.
-	if not InventoryService:PayCost(plr, ingredients, true) then return false, "ConsumeFailed" end
+	local escrow=InventoryService:TakeCost(plr,ingredients,true)
+ if not escrow then return false,"ConsumeFailed" end
+ context.Ingredients=escrow
 	self._activeCrafts[plr] = context
 	require(script.Parent.ExpeditionRewardsService):RecordActivity(plr)
 	self:_scheduleCompletion(plr, context, duration)

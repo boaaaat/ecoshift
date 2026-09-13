@@ -16,15 +16,17 @@ end
 function E.Duration(player, node, duration)
 	local bonus = (player:GetAttribute("Class_GatherTimeReduction") or 0) + (player:GetAttribute("ClassHarvestReduction") or 0)
 	if E.Kind(node)=="Plant" then bonus += player:GetAttribute("Class_PlantTimeReduction") or 0 end
+	bonus += require(script.Parent.GearService):GetGatherReduction(player,E.Kind(node)=="Plant")+(player:GetAttribute("Food_GatherDurationReduction") or 0)
 	return duration * (1-math.clamp(bonus,0,.5))
 end
 function E.Extra(player, node)
 	if node:GetAttribute("ObjectiveId") or node:GetAttribute("ObjectiveInstanceId") or node:FindFirstAncestor("Objectives") then return 0 end
 	local kind = E.Kind(node)
 	local chance = kind=="Plant" and player:GetAttribute("Class_PlantYield") or kind=="Mineral" and player:GetAttribute("Class_MineralYield") or 0
-	return math.random() < (chance or 0) and 1 or 0
+	chance=(chance or 0)+(require(script.Parent.GearService):GetModifiers(player).PrimaryHarvestChance or 0)
+	return math.random() < chance and 1 or 0
 end
 function E.ReviveDuration(player, duration)
-	return duration * math.max(.25,(1-(player:GetAttribute("Class_ReviveReduction") or 0))*(1-(player:GetAttribute("ClassReviveReduction") or 0)))
+	return duration * math.max(.25,(1-(player:GetAttribute("Class_ReviveReduction") or 0))*(1-(player:GetAttribute("ClassReviveReduction") or 0))*(1-(require(script.Parent.GearService):GetModifiers(player).ReviveDurationReduction or 0)))
 end
 return E

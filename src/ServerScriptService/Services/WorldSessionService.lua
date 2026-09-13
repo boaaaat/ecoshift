@@ -6,6 +6,7 @@ local RunService = game:GetService("RunService")
 local Teleport = game:GetService("TeleportService")
 local Http = game:GetService("HttpService")
 local Config = require(RS.Shared.SessionConfig)
+local Rules = require(RS.Shared.GameRules)
 local Util = require(RS.Shared.Util)
 local Policy = require(RS.Shared.MatchmakingPolicy)
 local Store = require(script.Parent.WorldStateStore)
@@ -213,7 +214,7 @@ function Service:CreateMatchedExpedition(match)
 		table.sort(roster)
 		record, reason = Store:Mutate(match.WorldId, function(current)
 			if current then return current.MatchId == match.Id and current or nil, "WorldCommitChanged" end
-			return { SchemaVersion = 1, Id = match.WorldId, MatchId = match.Id, WorldType = worldType, LaunchMode = launchMode, Sources = sources, SourceIds = sourceIds,
+			return { SchemaVersion = 1, Id = match.WorldId, MatchId = match.Id, GameplayRulesVersion = Rules.CurrentVersion, ContentRelease = Rules.CurrentContentRelease, WorldType = worldType, LaunchMode = launchMode, Sources = sources, SourceIds = sourceIds,
 				Roster = roster, Members = members, LeaderId = leader, PartyId = "world:" .. match.WorldId,
 				MatchmakingType = match.MatchmakingType, CreatedAt = os.time(), Generation = 0, Phase = "Preparing", CrewCommitted = false }
 		end)
@@ -231,7 +232,7 @@ function Service:CreateMatchedExpedition(match)
 		if record.SlotToken and not Saves:AbortRoster(record.Id, record.SlotToken) then return nil, "ArchiveAbortPending" end
 		return false, "ReservationAborted"
 	end
-	local reserved, tokenOrReason, possibleToken = Saves:ReserveRoster(record.Id, record.Roster)
+	local reserved, tokenOrReason, possibleToken = Saves:ReserveRoster(record.Id, record.Roster, record.GameplayRulesVersion, record.ContentRelease)
 	if not reserved then
 		local manifest = Saves:GetManifest(record.Id)
 		if manifest and manifest.State == "Aborted" then return false, tokenOrReason end
@@ -514,6 +515,7 @@ function Service:PrepareExpedition()
 	RS:SetAttribute("WorldLeaseOwned", false); RS:SetAttribute("WorldLeaseUntil", 0)
 	if RunService:IsStudio() then
 		self._studio = true
+		Rules.Configure(Rules.CurrentVersion, Rules.CurrentContentRelease)
 		local worldType = workspace:GetAttribute("WorldType") == "Creative" and "Creative" or "Survival"
 		workspace:SetAttribute("WorldType", worldType); RS:SetAttribute("WorldType", worldType)
 		return true, nil
@@ -524,6 +526,10 @@ function Service:PrepareExpedition()
 	if not record.CrewCommitted or record.Ended or not validRoster(record.Roster) or record.MatchmakingType ~= nativeType() then return false, "InvalidExpeditionAdmission" end
 	local manifest, manifestError = Saves:GetManifest(record.Id)
 	if not manifest or manifest.State ~= "Committed" or manifest.Token ~= record.SlotToken or not sameRoster(manifest.OwnerIds, record.Roster) then return false, manifestError or "SaveSlotsNotCommitted" end
+	if (record.GameplayRulesVersion) ~= (manifest.GameplayRulesVersion) then return false, "WorldRulesMismatch" end
+	local rulesVersion = record.GameplayRulesVersion
+	if rulesVersion ~= Rules.CurrentVersion then return false, "UnsupportedGameplayRules" end
+	Rules.Configure(rulesVersion, record.ContentRelease)
 	local acquired, acquireError = Store:AcquireServer(record, game.JobId, nativeType())
 	if not acquired then return false, acquireError end
 	self:_adopt(acquired)
@@ -531,6 +537,7 @@ function Service:PrepareExpedition()
 	workspace:SetAttribute("WorldType", worldType); RS:SetAttribute("WorldType", worldType)
 	RS:SetAttribute("WorldId", acquired.Id)
 	RS:SetAttribute("WorldGeneration", acquired.Generation)
+	RS:SetAttribute("OriginalCrewSize", #acquired.Roster)
 	RS:SetAttribute("WorldSessionState", "AwaitingOriginalCrew")
 	self:_startLeaseWorkers(); self:_initTravel()
 	local function admit(player)
@@ -562,6 +569,7 @@ function Service:PrepareExpedition()
 	local snapshot, readError = Store:ReadSnapshot(self._record)
 	if readError then self:_stop("SnapshotUnavailable"); return false, readError end
 	if snapshot and snapshot.Match and snapshot.Match.MatchState == "GameOver" then self:_stop("ExpeditionEnded"); return false, "ExpeditionEnded" end
+	if snapshot and (snapshot.GameplayRulesVersion) ~= (record.GameplayRulesVersion) then self:_stop("WorldRulesMismatch"); return false, "WorldRulesMismatch" end
 	self._loadedSnapshot = snapshot
 	return true, snapshot
 end

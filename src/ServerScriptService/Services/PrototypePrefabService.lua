@@ -72,7 +72,9 @@ local function configureResource(model, name)
 	model:SetAttribute("Duration", profile.Duration)
 	model:SetAttribute("HarvestDuration", nil)
 	model:SetAttribute("HarvestProfileVersion", 2)
-	model:SetAttribute("ContactDamage", id == "CactusStem" and 4 or nil)
+ model:SetAttribute("MiningGrade",profile.MiningGrade or 1)
+ model:SetAttribute("ResourceKind",profile.Kind)
+	model:SetAttribute("ContactDamage", id == "Cactus" and 4 or nil)
 	return true
 end
 local function makeResource(parent, name, biome, resource)
@@ -88,41 +90,28 @@ local function makeResource(parent, name, biome, resource)
 	if resource and not configureResource(model, name) then model:Destroy(); return end
 	publish(model, parent)
 end
-local EquipmentStats = require(ReplicatedStorage.Shared.EquipmentStats)
-local toolPower, weaponPower = EquipmentStats.ToolPower, EquipmentStats.WeaponPower
-local function configureTool(tool, item)
-	tool.Name, tool.ToolTip, tool.CanBeDropped = item.Id, item.Name, false
-	if item:HasTag("Placeable") then
-		tool:SetAttribute("PlaceableItem", true)
-		tool:SetAttribute("ToolType", "")
-		tool:SetAttribute("WeaponType", "")
-		tool:SetAttribute("Damage", 0)
-		return
-	end
-	if item:HasTag("Tool") then
-		tool:SetAttribute("ToolType", "Universal")
-		tool:SetAttribute("Damage", toolPower[item.Id] or 20)
-		tool:SetAttribute("Range", EquipmentStats.HarvestRange)
-		if item.Id == "Harvester" then
-			-- Emergency defense is separate from resource harvesting power.
-			tool:SetAttribute("CombatDamage", 6)
-			tool:SetAttribute("CombatRange", 6)
-			tool:SetAttribute("CombatCooldown", 0.6)
-		end
-	else
-		tool:SetAttribute("WeaponType", item.Id == "CrystalBow" and "Bow" or "Sword")
-		tool:SetAttribute("Damage", weaponPower[item.Id] or 20)
-		tool:SetAttribute("Range", item.Id == "CrystalBow" and EquipmentStats.BowRange or EquipmentStats.MeleeRange)
-	end
-	tool:SetAttribute("Cooldown", EquipmentStats.ToolCooldown)
-	-- Attribute reads take precedence over legacy child values.
-	-- Explicitly clear the opposite profile when updating generated templates.
-	if item:HasTag("Tool") then
-		tool:SetAttribute("WeaponType", "")
-		tool:SetAttribute("Type", "")
-	else
-		tool:SetAttribute("ToolType", "")
-	end
+local Catalog=require(ReplicatedStorage.Shared.OverhaulCatalog)
+local function configureTool(tool,item)
+ tool.Name,tool.ToolTip,tool.CanBeDropped=item.Id,item.Name,false
+ local gear=Catalog.Gear[item.Id]
+ for _,key in ipairs({"ToolType","WeaponType","Type","Damage","CombatDamage","Range","Cooldown","CombatRange","CombatCooldown","ToolPower","HarvestPower","MiningGrade","ToolFamily","WeaponFamily","AttackSpeed"}) do
+  tool:SetAttribute(key,nil)
+  local child=tool:FindFirstChild(key);if child and child:IsA("ValueBase") then child:Destroy() end
+ end
+ tool:SetAttribute("PlaceableItem",item:HasTag("Placeable") and true or nil)
+ if item:HasTag("Placeable") then tool:SetAttribute("Damage",0);return end
+ if not gear then return end
+ tool:SetAttribute("GearGrade",gear.Grade);tool:SetAttribute("Damage",gear.Damage or 0)
+ tool:SetAttribute("Range",gear.Reach or 8);tool:SetAttribute("Cooldown",gear.AttackCycle or .6)
+ tool:SetAttribute("AttackSpeed",1/(gear.AttackCycle or .6))
+ if gear.Kind=="Tool" then
+  tool:SetAttribute("ToolType",gear.ToolFamily or "Universal");tool:SetAttribute("ToolFamily",gear.ToolFamily)
+  tool:SetAttribute("ToolPower",gear.Power);tool:SetAttribute("HarvestPower",gear.Power);tool:SetAttribute("MiningGrade",gear.Grade)
+  tool:SetAttribute("CombatDamage",gear.Damage or 0);tool:SetAttribute("CombatRange",gear.Reach or 8);tool:SetAttribute("CombatCooldown",gear.AttackCycle or .6)
+ elseif gear.Kind=="Weapon" then
+  tool:SetAttribute("WeaponFamily",gear.WeaponFamily)
+  tool:SetAttribute("WeaponType",gear.WeaponFamily=="Bow" and "Bow" or gear.WeaponFamily=="Staff" and "Gun" or "Sword")
+ end
 end
 local function makeTool(parent, item)
 	if keepExisting(parent, item.Id) then
@@ -164,52 +153,19 @@ local function authoredBounds(model)
 	end
 	return (low + high) * 0.5, high - low
 end
-local function makeEnemy(parent, id, def, biome)
-	if keepExisting(parent, id) then return end
-	local model = ExpeditionEquipment.CreateCreature(id, biome)
-	if not model then warn("[Art] No authored creature model:", id); return end
-	local center, size = authoredBounds(model)
-	-- A compact central collider avoids catching antlers, tails and outstretched legs.
-	local rootSize = Vector3.new(math.clamp(size.X * 0.55, 0.7, 3), math.clamp(size.Y * 0.55, 0.6, 3.4), math.clamp(size.Z * 0.55, 0.8, 3.6))
-	local root = part(model, "HumanoidRootPart", rootSize, CFrame.new(center), Color3.fromRGB(47, 49, 56))
-	root.Transparency = 1
-	root.CastShadow = false
-	for _, p in ipairs(model:GetDescendants()) do
-		if p:IsA("BasePart") then
-			p.Anchored, p.CanCollide = false, p == root
-			if p ~= root then
-				p.Massless, p.CanTouch = true, false
-				local w = Instance.new("WeldConstraint"); w.Part0, w.Part1, w.Parent = root, p, p
-			end
-		end
-	end
-	model.PrimaryPart = root
-	-- The physical root follows the model bounds, while placement keeps ground Y=0.
-	root.PivotOffset = root.CFrame:Inverse()
-	local hum = Instance.new("Humanoid")
-	hum.MaxHealth = def.Health or 85
-	hum.Health = hum.MaxHealth
-	hum.HipHeight, hum.RequiresNeck = math.max(0, center.Y - rootSize.Y * 0.5), false
-	hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-	hum.Parent = model
-	model:SetAttribute("EntityId", id)
-	model:SetAttribute("EntityType", def.Type or "Monster")
-	model:SetAttribute("ArtWidth", size.X)
-	model:SetAttribute("ArtHeight", size.Y)
-	model:SetAttribute("ArtDepth", size.Z)
-	publish(model, parent)
+local function makeEnemy(parent,id,def,biome)
+ local existing=parent:FindFirstChild(id)
+ if existing then existing:Destroy() end
+ local model=require(script.Parent.Parent.Art.OverhaulCreatures).Create(id)
+ if model then publish(model,parent) end
 end
-local function makeBuild(parent, name)
-	if keepExisting(parent, name) then return end
-	local model = ExpeditionEquipment.CreateBuild(name)
-	if not model then warn("[Art] No authored build model:", name); return end
-	if name == "Torch" then
-		local light = Instance.new("PointLight")
-		light.Name, light.Brightness, light.Range = "TorchLight", 2, 16
-		light.Color, light.Shadows = Color3.fromRGB(255, 214, 138), true
-		light.Parent = model:FindFirstChild("FlameFacet") or model.PrimaryPart
-	end
-	publish(model, parent)
+local function makeBuild(parent,name)
+ local existing=parent:FindFirstChild(name)
+ if existing and existing:GetAttribute("PrefabOverride")==true then return end
+ if existing then existing:Destroy() end
+ local model=require(ReplicatedStorage.Shared.Art.OverhaulBuildModels).Create(name)
+ if not model then warn("[Art] No build model:",name);return end
+ publish(model,parent)
 end
 local function makeArmor(parent, item)
 	if keepExisting(parent, item.Id) then return end
@@ -254,7 +210,7 @@ function Service:Init()
 		if item:HasTag("Holdable") then makeTool(tools, item) end
 		if item:HasTag("Armor") then makeArmor(gameItems, item) end
 		if not item:HasTag("Holdable") and not item:HasTag("Armor") and not keepExisting(drops,item.Id) then
-			local drop = Config.BUILD.AllowedTypes[item.Id] and ExpeditionEquipment.CreateBuild(item.Id) or FieldObjects.CreateDrop(item)
+			local drop = Config.BUILD.AllowedTypes[item.Id] and require(ReplicatedStorage.Shared.Art.OverhaulBuildModels).Create(item.Id) or FieldObjects.CreateDrop(item)
 			if Config.BUILD.AllowedTypes[item.Id] then drop:ScaleTo(.2) end
 			publish(drop,drops)
 		end

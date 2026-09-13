@@ -9,7 +9,9 @@ local PromptQueueService = require(script.Parent.PromptQueueService)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local ResourceItemMap = require(ReplicatedStorage.Shared.ResourceItemMap)
 
+local ItemInstance = require(ReplicatedStorage.Shared.ItemInstance)
 local ItemDropService = {}
+local entries = setmetatable({}, {__mode="k"})
 
 local function finiteVector(value)
 	return typeof(value) == "Vector3" and value.X == value.X and value.Y == value.Y
@@ -154,7 +156,8 @@ local function attachPrompt(model)
 		if type(id) ~= "string" or not ItemDatabase:Get(id) then return end
 		if typeof(count) ~= "number" or count % 1 ~= 0 or count <= 0 or count == math.huge then return end
 		claimed = true
-		local added = InventoryService:Give(plr, id, count, true)
+		local entry = entries[model] or {Id=id,N=count}
+		local added = InventoryService:GiveEntry(plr, entry, true)
 		if added > 0 then
 			model:Destroy()
 		else
@@ -169,6 +172,12 @@ function ItemDropService:SpawnDrop(itemId, count, position, options)
 	count = tonumber(count) or 1
 	if count ~= count or count <= 0 or count == math.huge then return nil end
 	count = math.max(1, math.floor(count))
+ if count>1 and ItemInstance.Definition(itemId) then
+  if options and options.Entry and options.Entry.Uid then return nil end
+  local first
+  for i=1,count do local drop=self:SpawnDrop(itemId,1,position+Vector3.new((i-1)%3,0,math.floor((i-1)/3)),options);first=first or drop end
+  return first
+ end
 	if type(options) ~= "table" then options = nil end
 	local itemsFolder = ServerStorage:FindFirstChild("GameItems")
 	local prefab = itemsFolder and itemsFolder:FindFirstChild(itemId)
@@ -221,6 +230,7 @@ function ItemDropService:SpawnDrop(itemId, count, position, options)
 	setAnchoredRecursive(model, false)
 	model:SetAttribute("ItemId", itemId)
 	model:SetAttribute("Count", count)
+	entries[model] = ItemInstance.New(itemId,count,options and options.Entry)
 	if options and options.PendingPickup then model:SetAttribute("PickupPending", true) end
 	model:PivotTo(CFrame.new(position))
 	model.Parent = ensureFolder()
@@ -238,7 +248,7 @@ function ItemDropService:CaptureWorldState()
 	for _, model in ipairs(folder and folder:GetChildren() or {}) do
 		if model:IsA("Model") and model:GetAttribute("ItemId") and not model:GetAttribute("PickupPending") then
 			assert(#result < codec.MaxDrops, "Ground drop snapshot capacity exceeded; refusing partial save")
-			table.insert(result, { Id = model:GetAttribute("ItemId"), N = model:GetAttribute("Count"), Transform = codec.CFrame(model:GetPivot()) })
+			table.insert(result, { Id = model:GetAttribute("ItemId"), N = model:GetAttribute("Count"), Entry = ItemInstance.Copy(entries[model]), Transform = codec.CFrame(model:GetPivot()) })
 		end
 	end
 	return result
@@ -256,7 +266,7 @@ function ItemDropService:RestoreWorldState(states)
 	ensureFolder():ClearAllChildren()
 	for _, state in ipairs(states) do
 		local transform = codec.ReadCFrame(state.Transform)
-		local model = assert(self:SpawnDrop(state.Id, state.N, transform.Position), "Could not restore ground drop")
+		local model = assert(self:SpawnDrop(state.Id, state.N, transform.Position, {Entry=state.Entry}), "Could not restore ground drop")
 		model:PivotTo(transform)
 		-- Terrain is generated in Tier3; prevent drops falling before it exists.
 		setAnchoredRecursive(model, true)

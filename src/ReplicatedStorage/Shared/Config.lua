@@ -35,7 +35,7 @@ Config.RemoteNames = {
 }
 
 Config.DATASTORE = {
-	ProfileStore = "EcoshiftProfile_v1",
+	ProfileStore = "EcoshiftProfile_Overhaul_20260912",
 	AutosaveInterval = 60,
 }
 
@@ -72,97 +72,11 @@ for id, definition in pairs(Classes.Definitions) do
  Config.ROLES.Definitions[id] = {Name=definition.Name, Gather=1, Build=1, Combat=1, Heal=1, Craft=1}
 end
 
-Config.THREAT = {
-	Clamp = { 0, 10 },
-	BasePerMinute = 0.35,
-	BossKill = 2.5,
-	FailedObjective = 1.5,
-}
+-- CampaignConfig and EventsConfig own progression and event cadence.
 
--- Event cadence values consumed by EventService.
-Config.EVENTS = {
-	MinorCadence = { 180, 300 },
-	MajorCadence = { 420, 540 },
-}
-
-Config.OBJECTIVES = {
-	MaxConcurrent = 2,
-	DurationSeconds = { 140, 240 },
-	Pool = {
-		{ Id = "RelayRepair", MinMinute = 0 },
-		{ Id = "InfectionPurge", MinMinute = 2 },
-		{ Id = "CrystalHarvest", MinMinute = 3 },
-		{ Id = "LostResearcher", MinMinute = 4 },
-		{ Id = "CommsUplink", MinMinute = 5 },
-		{ Id = "BeastCull", MinMinute = 6 },
-		{ Id = "SupplyHeist", MinMinute = 7 },
-		{ Id = "DamSluice", MinMinute = 8 },
-	},
-}
-
--- NOTE: Biome configuration moved to ReplicatedStorage/Shared/BiomeConfig.lua
-
-Config.BUILD = {
-	SalvageSeconds = 3,
-	CampRadius = 100, -- 200-stud diameter around the expedition spawn at X/Z zero.
-	AllowedTypes = {
-		Wall = true,
-		Floor = true,
-		Ramp = true,
-		Gate = true,
-		Tower = true,
-		Trap = true,
-		Machine = true,
-		-- Crafting Stations (placeable from inventory)
-		Workbench = true,
-		AdvancedWorkbench = true,
-		MasterWorkbench = true,
-		Furnace = true,
-		Anvil = true,
-		Loom = true,
-		DryingRack = true,
-		AlchemyTable = true,
-		Kiln = true,
-		Refinery = true,
-		SurveyBench = true,
-		Campfire = true,
-		Stove = true,
-		Oven = true,
-		Chest = true,
-		Torch = true,
-	},
-	Costs = {
-		Wall = { { Id = "ForestWood", N = 2 } },
-		Floor = { { Id = "ForestWood", N = 2 } },
-		Ramp = { { Id = "ForestWood", N = 3 } },
-		Gate = { { Id = "ForestWood", N = 4 }, { Id = "ForestStone", N = 2 } },
-		Tower = { { Id = "ForestWood", N = 6 }, { Id = "ForestStone", N = 4 } },
-		Trap = { { Id = "ForestStone", N = 2 } },
-		Machine = { { Id = "ForestStone", N = 6 } },
-		-- Crafting stations are placed from inventory items, no direct cost
-		-- (player must craft the item first, then place it)
-	},
-	-- Items that can be placed as structures (consume the item when placed)
-	PlaceableItems = {
-		Wall = true, Floor = true, Ramp = true, Gate = true, Tower = true, Trap = true, Machine = true,
-		Workbench = true,
-		AdvancedWorkbench = true,
-		MasterWorkbench = true,
-		Furnace = true,
-		Anvil = true,
-		Loom = true,
-		DryingRack = true,
-		AlchemyTable = true,
-		Kiln = true,
-		Refinery = true,
-		SurveyBench = true,
-		Campfire = true,
-		Stove = true,
-		Oven = true,
-		Chest = true,
-		Torch = true,
-	},
-}
+Config.BUILD = {SalvageSeconds=3,CampRadius=200,AllowedTypes={},PlaceableItems={},Costs={}}
+local Catalog=require(script.Parent.OverhaulCatalog)
+for id in pairs(Catalog.Placeables) do Config.BUILD.AllowedTypes[id]=true;Config.BUILD.PlaceableItems[id]=true end
 
 Config.UI = Config.UI or {}
 Config.UI.UpdateInterval = 0.25

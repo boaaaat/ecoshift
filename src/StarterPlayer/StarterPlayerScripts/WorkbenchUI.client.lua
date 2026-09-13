@@ -15,6 +15,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local WorkbenchConfig = require(ReplicatedStorage.Shared.WorkbenchConfig)
+local IngredientResolver=require(ReplicatedStorage.Shared.IngredientResolver)
 local ResultMessages = require(ReplicatedStorage.Shared.ResultMessages)
 
 local player = Players.LocalPlayer
@@ -41,6 +42,7 @@ local isOpen = false
 local inventorySnapshot = nil
 local selectedRecipe = nil
 local currentStation = nil
+local gradeConnection
 local currentStationType = nil
 local isCraftPending = false
 local pendingRequestToken = 0
@@ -165,14 +167,15 @@ recipeBookBtn.Size = UDim2.fromOffset(104, 32)
 recipeBookBtn.Position = UDim2.new(1, -166, 0, 10)
 recipeBookBtn.BackgroundColor3 = COLORS.SlotEmpty
 recipeBookBtn.TextColor3 = COLORS.Text
-recipeBookBtn.Text = "Recipe book"
+recipeBookBtn.Text = "Upgrade"
 recipeBookBtn.TextSize = 13
 recipeBookBtn.Font = Enum.Font.GothamBold
 recipeBookBtn.ZIndex = 12
 recipeBookBtn.Parent = header
 Theme.Button(recipeBookBtn)
 recipeBookBtn.Activated:Connect(function()
-	RecipeGuideUI.OpenBook({ PreferredStationType = currentStationType })
+	local stationRemote=remotesFolder and remotesFolder:FindFirstChild("Station")
+ if stationRemote and currentStation then stationRemote:FireServer("Open",{Station=currentStation,RequestId=game:GetService("HttpService"):GenerateGUID(false)}) end
 end)
 
 -- Close button
@@ -396,7 +399,7 @@ inlineStatusLabel.Parent = mainPanel
 
 local function messageForReason(reason)
 	local key = tostring(reason or "Unknown")
-	return CRAFT_MESSAGES[key] or CRAFT_MESSAGES.Unknown or "Crafting failed."
+	return CRAFT_MESSAGES[key] or key
 end
 
 local function showInlineStatus(text, color, duration)
@@ -439,17 +442,11 @@ local function ingredientCost(ingredient)
 end
 
 local function maxAffordable(recipeId)
-	local recipe = recipeId and WorkbenchConfig.RECIPES[recipeId]
-	if not recipe or not inventorySnapshot then return 0 end
-	local costs = {}
-	for _, ingredient in ipairs(recipe.Ingredients or {}) do
-		costs[ingredient.Id] = (costs[ingredient.Id] or 0) + ingredientCost(ingredient)
-	end
-	local maximum = MAX_CRAFT_QUANTITY
-	for id, cost in pairs(costs) do
-		maximum = math.min(maximum, math.floor(getItemCount(id) / cost))
-	end
-	return maximum
+ local recipe=recipeId and WorkbenchConfig.RECIPES[recipeId]
+ if not recipe or not inventorySnapshot then return 0 end
+ if WorkbenchConfig:GetCampaignLock(recipeId) then return 0 end
+ if currentStation and (currentStation:GetAttribute("StationGrade") or 1)<(recipe.RequiredGrade or 1) then return 0 end
+ return IngredientResolver.Max(recipe.Ingredients,inventorySnapshot,player,MAX_CRAFT_QUANTITY)
 end
 
 local function canCraftRecipe(recipeId, quantity)
@@ -829,7 +826,9 @@ function updateCraftButton()
 	local affordable = canCraftRecipe(selectedRecipe, craftQuantity)
 	craftBtn.Active = affordable
 	craftBtn.Selectable = affordable
-	craftBtn.Text = affordable and ("Craft " .. output) or "Missing Materials"
+	craftBtn.Text = WorkbenchConfig:GetCampaignLock(selectedRecipe) or (affordable and ("Craft " .. output) or "Missing Materials")
+ if (recipe.CampaignTier or 1)>(workspace:GetAttribute("CampaignTier") or 1) then craftBtn.Text="Campaign tier "..recipe.CampaignTier.." required"
+ elseif currentStation and (currentStation:GetAttribute("StationGrade") or 1)<(recipe.RequiredGrade or 1) then craftBtn.Text="Upgrade station to grade "..recipe.RequiredGrade end
 	craftBtn.TextColor3 = COLORS.Paper
 	craftBtn.BackgroundColor3 = affordable and COLORS.SuccessFill or COLORS.DangerFill
 	craftBtnStroke.Color = affordable and COLORS.Success or COLORS.Danger
@@ -858,6 +857,8 @@ quantityBox.FocusLost:Connect(function()
 	if craftQuantity then quantityBox.Text = tostring(craftQuantity) end
 end)
 player:GetAttributeChangedSignal("Class_CraftBonus"):Connect(updateCraftButton)
+workspace:GetAttributeChangedSignal("CampaignTier"):Connect(updateCraftButton)
+ReplicatedStorage.AttributeChanged:Connect(function(name) if name:sub(1,18)=="CampaignCompleted_" then updateCraftButton() end end)
 local progressTick = 0
 game:GetService("RunService").Heartbeat:Connect(function(delta)
 	progressTick += delta
@@ -916,6 +917,16 @@ local function setupCategories()
 end
 
 local function openWorkbench(station, stationType)
+ if stationType=="EnchantingTable" then
+  local remote=remotesFolder and remotesFolder:FindFirstChild("Enchanting")
+  if remote then remote:FireServer("Open",{Station=station}) end
+  return
+ end
+ if stationType=="Furnace" then
+  local stationRemote=remotesFolder and remotesFolder:FindFirstChild("Station")
+  if stationRemote then stationRemote:FireServer("Open",{Station=station,RequestId=game:GetService("HttpService"):GenerateGUID(false)}) end
+  return
+ end
 	if ReplicatedStorage:GetAttribute("CookingEnabled") ~= false
 		and (stationType == "Campfire" or stationType == "Stove" or stationType == "Oven") then
 		local cooking = remotesFolder and remotesFolder:FindFirstChild("Cooking")
@@ -925,12 +936,19 @@ local function openWorkbench(station, stationType)
 	if isOpen then return end
 	
 	currentStation = station
+ if gradeConnection then gradeConnection:Disconnect() end
+ gradeConnection=station:GetAttributeChangedSignal("StationGrade"):Connect(function()
+  local grade=station:GetAttribute("StationGrade") or 1
+  titleLabel.Text=(stationType=="Workbench" and (grade>=7 and "Master Workbench" or grade>=4 and "Advanced Workbench" or "Workbench") or WorkbenchConfig.STATIONS[stationType].Name).." · "..grade
+  updateCraftButton()
+ end)
 	currentStationType = stationType
 	
 	local stationDef = WorkbenchConfig.STATIONS[stationType]
 	if stationDef then
 		stationIcon.Text = string.format("%02d", stationDef.Tier or 1)
-		titleLabel.Text = stationDef.Name or stationType
+		local grade=station:GetAttribute("StationGrade") or stationDef.Grade or 1
+  titleLabel.Text = (stationType=="Workbench" and (grade>=7 and "Master Workbench" or grade>=4 and "Advanced Workbench" or "Workbench") or stationDef.Name or stationType).." · "..grade
 		subtitleLabel.Text = stationDef.Description or "Craft items"
 		mainStroke.Color = getTierColor({ StationTier = stationDef.Tier, StationType = stationDef.Tier >= 10 and stationType or nil })
 	end
@@ -967,6 +985,7 @@ end
 local function closeWorkbench()
 	if not isOpen then return end
 	isOpen = false
+ if gradeConnection then gradeConnection:Disconnect();gradeConnection=nil end
 	selectedRecipe = nil
 	currentStation = nil
 	currentStationType = nil

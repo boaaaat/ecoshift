@@ -5,71 +5,81 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local WorldGenConfig = require(ReplicatedStorage.Shared.BiomeConfig)
 local BiomeService = require(script.Parent.BiomeService)
-local TerrainService = require(script.Parent.TerrainService)
 local ChunkStreamingService = require(script.Parent.ChunkStreamingService)
 
+local Players = game:GetService("Players")
 local WorldGenController = {}
 WorldGenController._busy = false
 WorldGenController._initialized = false
 WorldGenController._pendingBiome = nil
 
-local function clearFolder(folder)
-	if not folder then return end
-	local children = folder:GetChildren()
-	for i = 1, #children do
-		if children[i] and children[i].Parent then
-			children[i]:Destroy()
-		end
-	end
+function WorldGenController:_generateOverhaul(biomeName)
+ self._pendingBiome=biomeName
+ if self._busy then return end
+ self._busy=true
+ task.spawn(function()
+  local held={}
+  while self._pendingBiome do
+   local name=self._pendingBiome;self._pendingBiome=nil
+   ReplicatedStorage:SetAttribute("WorldShifting",true)
+   local frozen=held
+   local death=require(script.Parent.DeathService)
+   for _,player in ipairs(Players:GetPlayers()) do
+    local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if frozen[player] then continue end
+    if root and not player:GetAttribute("InteriorId") then
+     frozen[player]={Root=root,Anchored=root.Anchored,Position=root.Position}
+     root.Anchored=true;root.AssemblyLinearVelocity=Vector3.zero
+     player:SetAttribute("WorldPlayerLoading",true)
+    elseif player:GetAttribute("IsDead") and not player:GetAttribute("InteriorId") then
+     local record=death._deadPlayers[player]
+     if record and record.ragdoll and record.ragdoll.Parent then
+      local parts={}
+      for _,p in ipairs(record.ragdoll:GetDescendants()) do if p:IsA("BasePart") then parts[p]=p.Anchored;p.Anchored=true end end
+      frozen[player]={Corpse=record.ragdoll,Record=record,Parts=parts,Position=record.ragdoll:GetPivot().Position}
+      death._reviveHolds[player]=nil
+     end
+    end
+   end
+   local ok,err=pcall(function()
+    if self._hasGenerated then require(script.Parent.EventService):EndAll("BiomeShift") end
+    local enemies=workspace:FindFirstChild("Enemies")
+    if enemies then for _,model in ipairs(enemies:GetChildren()) do if not model:GetAttribute("InteriorId") then model:Destroy() end end end
+    local world=require(script.Parent.OverhaulWorldService);world:Generate(name)
+    for player,entry in pairs(frozen) do
+     if entry.Root and entry.Root.Parent and not player:GetAttribute("InteriorId") then
+      local safe=world:SafePosition(entry.Position);world:EnsureArea(safe);safe=world:SafePosition(safe)
+      player.Character:PivotTo(CFrame.new(safe)*player.Character:GetPivot().Rotation)
+      entry.Root.AssemblyLinearVelocity=Vector3.zero
+     elseif entry.Corpse and entry.Corpse.Parent then
+      local safe=world:SafePosition(entry.Position);world:EnsureArea(safe);safe=world:SafePosition(safe)
+      entry.Corpse:PivotTo(CFrame.new(safe)*entry.Corpse:GetPivot().Rotation)
+      entry.Record.deathPosition=safe
+     end
+    end
+   end)
+   if self._hasGenerated then require(script.Parent.WorldControlService):ResolveGeneration(ok) end
+   if ok then
+   for player,entry in pairs(frozen) do
+    if entry.Root and entry.Root.Parent then entry.Root.Anchored=entry.Anchored end
+    for p,anchored in pairs(entry.Parts or {}) do if p.Parent then p.Anchored=anchored;p.AssemblyLinearVelocity=Vector3.zero end end
+    player:SetAttribute("WorldPlayerLoading",nil)
+   end
+   held={}
+   self._hasGenerated=true;ReplicatedStorage:SetAttribute("WorldShifting",false)
+   else
+    warn("[OverhaulWorld] Surface generation failed; retaining frozen active timers",err)
+    -- Retry the committed serial/seed, without awarding another visit or rerolling resources.
+    self._pendingBiome=self._pendingBiome or name
+    task.wait(2)
+   end
+  end
+  self._busy=false
+ end)
 end
-
-local function clearGeneratedWorld()
-	local folderName = WorldGenConfig.spawn_folder_name or "GeneratedWorld"
-	local existing = Workspace:FindFirstChild(folderName)
-	if existing then
-		clearFolder(existing)
-		existing:SetAttribute("Generated", false)
-	end
-end
-
-local function clearEnemies()
-	local worldEnemies = Workspace:FindFirstChild("Enemies")
-	if worldEnemies then
-		clearFolder(worldEnemies)
-	end
-end
-
 function WorldGenController:GenerateBiome(biomeName)
-	if type(biomeName) ~= "string" or not WorldGenConfig.biomes[biomeName] then return end
-	self._pendingBiome = biomeName
-	if self._busy then return end
-	self._busy = true
-	
-	task.spawn(function()
-		while self._pendingBiome do
-			local requestedBiome = self._pendingBiome
-			self._pendingBiome = nil
-			local ok, err = pcall(function()
-				-- Invalidate workers before any old folder or terrain is removed.
-				ChunkStreamingService:Pause()
-				clearGeneratedWorld()
-				clearEnemies()
-				-- Player buildings and their occupancy records persist through shifts.
-				TerrainService:GenerateFlat(requestedBiome)
-				task.wait()
-				-- A newer request supersedes this terrain pass; do not spawn stale content.
-				if self._pendingBiome then return end
-				ChunkStreamingService:SetBiome(requestedBiome, true)
-				local folderName = WorldGenConfig.spawn_folder_name or "GeneratedWorld"
-				local created = Workspace:FindFirstChild(folderName)
-				if created then created:SetAttribute("Generated", true) end
-			end)
-			if not ok then
-				warn(string.format("[WorldGenController] Failed to generate %s: %s", requestedBiome, tostring(err)))
-			end
-		end
-		self._busy = false
-	end)
+ if type(biomeName)~="string" or not WorldGenConfig.BIOMES[biomeName] then return end
+ self:_generateOverhaul(biomeName)
 end
 
 function WorldGenController:Init()

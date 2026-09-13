@@ -15,10 +15,10 @@ Settings.Definitions = {
 	ReducedMotion = { Label = "Reduce menu motion", Default = false, Section = "Graphics" },
 	FieldOfView = { Label = "Camera field of view", Default = 70, Values = { 60, 70, 80, 90 }, Section = "Graphics" },
 }
-Settings.Actions = { "Pack", "Craft", "Map", "Survey", "Settings", "Sprint", "Ability" }
-local defaults = { Pack = "E", Craft = "C", Build = "B", Map = "M", Survey = "V", Settings = "F4", Sprint = "LeftShift", Salvage = "R", Ability = "G" }
+Settings.Actions = { "Pack", "Craft", "Map", "Survey", "Settings", "Sprint", "Ability", "Dodge", "Glide" }
+local defaults = { Pack = "E", Craft = "C", Build = "B", Map = "M", Survey = "V", Settings = "F4", Sprint = "LeftShift", Salvage = "R", Ability = "G", Dodge = "Q", Glide = "R" }
 -- Movement, interaction, hotbar, chat, camera lock and spectating keys stay reserved.
-Settings.AllowedKeys = { "B", "C", "E", "G", "H", "J", "K", "L", "M", "N", "O", "P", "R", "U", "V", "Y", "Z", "F4", "F6", "F7", "LeftShift", "RightShift" }
+Settings.AllowedKeys = { "Q", "B", "C", "E", "G", "H", "J", "K", "L", "M", "N", "O", "P", "R", "U", "V", "Y", "Z", "F4", "F6", "F7", "LeftShift", "RightShift" }
 for _, action in ipairs(Settings.Actions) do
 	Settings.Definitions["Key" .. action] = { Label = action, Default = defaults[action], Values = Settings.AllowedKeys, Section = "Keybinds" }
 	table.insert(Settings.Order, "Key" .. action)
@@ -43,9 +43,9 @@ function Settings.Normalize(raw)
 	-- Repair legacy/corrupt conflicting bindings as one set.
 	for _, action in ipairs(Settings.Actions) do
 		local key = result["Key" .. action]
-		if action == "Ability" and used[key] then
-			for _, candidate in ipairs({"G", "H", "J", "K", "L"}) do
-				if not used[candidate] then key = candidate; result.KeyAbility = candidate; break end
+		if used[key] then
+			for _, candidate in ipairs(Settings.AllowedKeys) do
+				if not used[candidate] then key = candidate; result["Key"..action] = candidate; break end
 			end
 		end
 		if used[key] then

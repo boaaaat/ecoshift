@@ -9,11 +9,6 @@ local HttpService = game:GetService("HttpService")
 local Economy = require(RS.Shared.EconomyConfig)
 local Classes = require(RS.Shared.ClassConfig)
 local Config = Economy.Rewards
--- Schema1 worlds predate pinned tuning. These are their original grant amounts.
-local LEGACY_TUNING = {
-	SurvivalSeconds = 300, Survival = { Currency = 20, XP = 25 },
-	Objective = { Currency = 15, XP = 15 }, Revive = { Currency = 5, XP = 10 }, RevivesPerMilestone = 2,
-}
 local Util = require(RS.Shared.Util)
 local Profile = require(script.Parent.ProfileService)
 local Inventory = require(script.Parent.InventoryService)
@@ -54,7 +49,7 @@ local function ownsLease()
 end
 local function activeWorld()
 	return RS:GetAttribute("PlaceMode") == "Expedition" and not RS:GetAttribute("WorldRestoring")
-		and ownsLease() and not GameState:IsGameOver() and not Round:IsEnded()
+		and not RS:GetAttribute("WorldShifting") and ownsLease() and not GameState:IsGameOver() and not Round:IsEnded()
 end
 local function participant(player)
 	return player.Parent == Players and not player:GetAttribute("WorldPlayerLoading") and not player:GetAttribute("WorldPlayerRestoring")
@@ -274,6 +269,23 @@ function Service:OnObjective(id, entry, items)
 	return true
 end
 
+-- Server-only shared milestone claims use the existing durable objective receipt ledger.
+function Service:AwardCampaign(id)
+ if not activeWorld() or not self:_world() or not validId(id) then return false end
+ local key="campaign:"..id
+ if self._objectives[key] then return false end
+ local objective={Id=id,Items={},Recipients={}}
+ self._objectives[key]=objective
+ for _,player in ipairs(Players:GetPlayers()) do
+  if participant(player) then
+   objective.Recipients[tostring(player.UserId)]={InventoryIndex=0}
+   self:_queue(player,"objective",key,{Currency=30,XP=0})
+   task.defer(function() self:_flush(player) end)
+  end
+ end
+ return true
+end
+
 function Service:OnRevive(helper, target, deathId)
 	if not activeWorld() or not self:_world() or not validId(deathId) or helper == target
 		or typeof(helper) ~= "Instance" or not helper:IsA("Player") or typeof(target) ~= "Instance" or not target:IsA("Player")
@@ -302,19 +314,19 @@ function Service:CaptureState()
 end
 
 function Service:RestoreState(state)
-	if type(state) ~= "table" or (state.SchemaVersion ~= 1 and state.SchemaVersion ~= 2 and state.SchemaVersion ~= 3) or not validId(state.WorldId)
+	if type(state) ~= "table" or state.SchemaVersion ~= 3 or not validId(state.WorldId)
 		or type(state.Players) ~= "table" or type(state.Objectives) ~= "table" or type(state.Deaths) ~= "table" or type(state.Pending) ~= "table"
 		or count(state.Players) > 100 or count(state.Objectives) > Config.MaxClaims or count(state.Deaths) > Config.MaxClaims or count(state.Pending) > Config.MaxClaims then return false, "InvalidRewardSnapshot" end
 	local currentWorld = RS:GetAttribute("WorldId")
 	if validId(currentWorld) and currentWorld ~= state.WorldId then return false, "RewardWorldMismatch" end
-	local tuning = readTuning(state.Tuning or (state.SchemaVersion == 1 and LEGACY_TUNING))
+	local tuning = readTuning(state.Tuning)
 	if not tuning then return false, "InvalidRewardTuning" end
 	local restored = { SchemaVersion = 3, WorldId = state.WorldId, Tuning = tuning, Players = {}, Objectives = {}, Deaths = {}, Pending = {} }
 	for key, data in pairs(state.Players) do
 		if not userKey(key) or type(data) ~= "table" or not number(data.SurvivedSeconds) or not integer(data.Milestones)
 			or data.Milestones ~= math.floor(data.SurvivedSeconds / tuning.SurvivalSeconds) or not integer(data.ReviveBucket)
 			or not integer(data.RevivesInBucket, tuning.RevivesPerMilestone) then return false, "InvalidRewardSnapshot" end
-		if state.SchemaVersion >= 2 and (not integer(data.EarnedCurrency, Economy.MaxCurrency) or not integer(data.EarnedXP, Economy.MaxCurrency)
+		if (not integer(data.EarnedCurrency, Economy.MaxCurrency) or not integer(data.EarnedXP, Economy.MaxCurrency)
 			or type(data.TotalsComplete) ~= "boolean") then return false, "InvalidRewardTotals" end
 		restored.Players[key] = { SurvivedSeconds = data.SurvivedSeconds, Milestones = data.Milestones, ReviveBucket = data.ReviveBucket,
 			RevivesInBucket = data.RevivesInBucket, EarnedCurrency = data.EarnedCurrency or 0, EarnedXP = data.EarnedXP or 0, TotalsComplete = data.TotalsComplete ~= false, ClassSeconds = {} }
@@ -350,33 +362,6 @@ function Service:RestoreState(state)
 			or claim.Id:sub(1, #state.WorldId + 7) ~= "world:" .. state.WorldId .. ":"
 			or not integer(claim.Currency, Economy.MaxRewardAmount) or not integer(claim.XP, Economy.MaxRewardAmount) then return false, "InvalidRewardSnapshot" end
 		restored.Pending[key] = { UserId = claim.UserId, Id = claim.Id, Currency = claim.Currency, XP = claim.XP }
-	end
-	if state.SchemaVersion == 1 then
-		-- V1 kept objective recipients and survival counts, but only the latest
-		-- revive bucket. Reconstruct the known minimum instead of inventing old payouts.
-		local function legacyPlayer(key)
-			restored.Players[key] = restored.Players[key] or { SurvivedSeconds = 0, Milestones = 0, ReviveBucket = 0,
-				RevivesInBucket = 0, EarnedCurrency = 0, EarnedXP = 0, TotalsComplete = true, ClassSeconds = {} }
-			return restored.Players[key]
-		end
-		for _, objective in pairs(restored.Objectives) do for key in pairs(objective.Recipients) do legacyPlayer(key) end end
-		for _, claim in pairs(restored.Pending) do legacyPlayer(tostring(claim.UserId)) end
-		for _, receipt in pairs(restored.Deaths) do legacyPlayer(tostring(receipt.Helper)) end
-		for key, data in pairs(restored.Players) do
-			local objectives, deaths, pendingRevives, pendingCurrency, pendingXP = 0, 0, 0, 0, 0
-			for _, objective in pairs(restored.Objectives) do if objective.Recipients[key] then objectives += 1 end end
-			for _, receipt in pairs(restored.Deaths) do if tostring(receipt.Helper) == key then deaths += 1 end end
-			for _, claim in pairs(restored.Pending) do
-				if tostring(claim.UserId) == key then
-					pendingCurrency += claim.Currency; pendingXP += claim.XP
-					if claim.Id:sub(#state.WorldId + 8, #state.WorldId + 14) == "revive:" then pendingRevives += 1 end
-				end
-			end
-			local revives = math.max(data.RevivesInBucket, pendingRevives)
-			data.EarnedCurrency = math.max(pendingCurrency, data.Milestones * tuning.Survival.Currency + objectives * tuning.Objective.Currency + revives * tuning.Revive.Currency)
-			data.EarnedXP = math.max(pendingXP, data.Milestones * tuning.Survival.XP + objectives * tuning.Objective.XP + revives * tuning.Revive.XP)
-			data.TotalsComplete = deaths <= revives
-		end
 	end
 	if count(restored.Players) > 100 then return false, "InvalidRewardSnapshot" end
 	local pendingTotals = {}

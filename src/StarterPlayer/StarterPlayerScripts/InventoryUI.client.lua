@@ -13,7 +13,10 @@ local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
+local Instances = require(ReplicatedStorage.Shared.ItemInstance)
 local DEBUG = false
+local storageCapacity=18
+local arrangePack
 
 local function dprint(...)
 	if DEBUG then
@@ -192,7 +195,11 @@ storageLabel.Font = Enum.Font.GothamBold
 storageLabel.TextXAlignment = Enum.TextXAlignment.Left
 storageLabel.Parent = storageSection
 
-local storageContainer = Instance.new("Frame")
+local storageContainer = Instance.new("ScrollingFrame")
+storageContainer.ScrollBarThickness=4
+storageContainer.BorderSizePixel=0
+storageContainer.ScrollingDirection=Enum.ScrollingDirection.Y
+storageContainer.CanvasSize=UDim2.new()
 storageContainer.Name = "Slots"
 storageContainer.Size = UDim2.new(1, 0, 0, STORAGE_HEIGHT)
 storageContainer.Position = UDim2.new(0, 0, 0, 16)
@@ -402,11 +409,17 @@ for i = 1, HOTBAR_SLOTS do
 end
 
 -- Armor slot (inside inventory)
-local armorSlot = createSlot(armorContainer, 0, 0, "Armor", 1, SLOT_SIZE)
-table.insert(slots, armorSlot)
+local equipmentSlots={}
+for i=1,8 do
+ local kind=i<=4 and "Equipment" or "Accessory"
+ local slot=createSlot(armorContainer, (i-1)*52, 0,kind,i<=4 and i or i-4,46)
+ local label=Instance.new("TextLabel");label.Name="EquipmentLabel";label.BackgroundTransparency=1;label.Text=({"HEAD","CHEST","LEGS","BOOTS","I","II","III","IV"})[i];label.TextSize=8;label.TextColor3=COLORS.TextMuted;label.Size=UDim2.new(1,0,0,10);label.Position=UDim2.fromOffset(0,-11);label.Parent=slot.Frame
+ table.insert(equipmentSlots,slot);table.insert(slots,slot)
+end
+local armorSlot=equipmentSlots[1]
 
 -- Storage slots
-for i = 1, STORAGE_COLS * STORAGE_ROWS do
+for i = 1, 36 do
 	local row = math.floor((i - 1) / STORAGE_COLS)
 	local col = (i - 1) % STORAGE_COLS
 	local x = col * (SLOT_SIZE + SLOT_GAP)
@@ -421,7 +434,7 @@ local selectedSlot = nil
 local hoveredSlot = nil
 local inventoryOpen = false
 local contextMenu = nil
-local equippedToolName = nil
+local equippedToolName, equippedToolUid = nil, nil
 local characterConnections = {}
 local INVENTORY_TOGGLE_ACTION = "EcoshiftToggleInventory"
 local inventoryToggleActionBound = false
@@ -553,6 +566,7 @@ end
 
 
 local function getSlotData(slotType, index)
+	if slotType=="Equipment" or slotType=="Accessory" then return inventorySnapshot and (inventorySnapshot[slotType] or {})[index] end
 	if not inventorySnapshot then return nil end
 	if slotType == "Hotbar" then
 		return inventorySnapshot.Hotbar and inventorySnapshot.Hotbar[index]
@@ -567,11 +581,11 @@ end
 local function updateCapacity()
 	if not inventorySnapshot then return end
 	local count = 0
-	local total = HOTBAR_SLOTS + STORAGE_COLS * STORAGE_ROWS
+	local total = HOTBAR_SLOTS + storageCapacity
 	for i = 1, HOTBAR_SLOTS do
 		if inventorySnapshot.Hotbar and inventorySnapshot.Hotbar[i] then count = count + 1 end
 	end
-	for i = 1, STORAGE_COLS * STORAGE_ROWS do
+	for i = 1, storageCapacity do
 		if inventorySnapshot.Storage and inventorySnapshot.Storage[i] then count = count + 1 end
 	end
 	capacityLabel.Text = string.format("%d/%d", count, total)
@@ -612,7 +626,7 @@ local function getEquippedHotbarIndex()
 	local hotbar = inventorySnapshot.Hotbar or {}
 	for i = 1, HOTBAR_SLOTS do
 		local slot = hotbar[i]
-		if slot and slot.Id == equippedToolName then
+		if slot and (equippedToolUid and slot.Uid == equippedToolUid or not equippedToolUid and slot.Id == equippedToolName) then
 			return i
 		end
 	end
@@ -647,6 +661,13 @@ end
 
 local function renderSlot(slot)
 	local data = getSlotData(slot.Type, slot.Index)
+	if slot.Type=="Storage" then slot.Frame.Visible=slot.Index<=storageCapacity end
+	if slot.DurabilityBar then slot.DurabilityBar.Visible=false end
+	if data and data.MaxDurability and data.MaxDurability>0 then
+		if not slot.DurabilityBar then local bar=Instance.new("Frame");bar.Name="Durability";bar.BorderSizePixel=0;bar.Position=UDim2.new(0,4,1,-4);bar.Parent=slot.Frame;slot.DurabilityBar=bar end
+		local fraction=(data.Durability or 0)/data.MaxDurability
+		slot.DurabilityBar.Size=UDim2.new(math.clamp(fraction,0,1),-8*math.clamp(fraction,0,1),0,3);slot.DurabilityBar.BackgroundColor3=fraction<=.05 and COLORS.Danger or fraction<=.2 and COLORS.Warning or COLORS.Accent;slot.DurabilityBar.Visible=true
+	end
 	if slot.HarvestGlyph then slot.HarvestGlyph.Visible = false end
 	
 	if not data then
@@ -720,18 +741,18 @@ local function disconnectCharacterConnections()
 end
 
 local function syncEquippedToolName()
-	local nextName = nil
+	local nextName, nextUid = nil, nil
 	local char = player.Character
 	if char then
 		for _, child in ipairs(char:GetChildren()) do
 			if child:IsA("Tool") then
-				nextName = child.Name
+				nextName, nextUid = child.Name, child:GetAttribute("GearUid")
 				break
 			end
 		end
 	end
-	if equippedToolName ~= nextName then
-		equippedToolName = nextName
+	if equippedToolName ~= nextName or equippedToolUid ~= nextUid then
+		equippedToolName, equippedToolUid = nextName, nextUid
 		renderAll()
 	end
 end
@@ -771,7 +792,7 @@ local function findEmptySlot(slotType)
 		end
 	elseif slotType == "Storage" then
 		local storage = inventorySnapshot.Storage or {}
-		for i = 1, STORAGE_COLS * STORAGE_ROWS do
+		for i = 1, storageCapacity do
 			if not storage[i] then
 				return i
 			end
@@ -797,7 +818,7 @@ local function findStackSlot(slotType, itemId, fromSlot)
 		end
 	elseif slotType == "Storage" then
 		local storage = inventorySnapshot.Storage or {}
-		for i = 1, STORAGE_COLS * STORAGE_ROWS do
+		for i = 1, storageCapacity do
 			local slotData = storage[i]
 			if slotData and slotData.Id == itemId and slotData.N < maxStack and not isSameSlot(fromSlot, slotType, i) then
 				return i
@@ -875,19 +896,19 @@ local function shiftMove(slot, chestOnly)
 	local data = getSlotData(slot.Type, slot.Index)
 	if not data then return end
 	local item = ItemDatabase:Get(data.Id)
-	if not chestOnly and slot.Type ~= "Armor" and item and item:HasTag("Armor") then
-		if not rInventoryAction then return end
-		-- Move atomically returns the old armor to this same slot, even with a
-		-- full inventory. Armor equip takes priority over open-chest transfers.
-		rInventoryAction:FireServer("Move", {
-			FromType = slot.Type,
-			FromIndex = slot.Index,
-			ToType = "Armor",
-			ToIndex = 1,
-		})
-		showTransferStatus("Equipping armor...", COLORS.Accent, 0.9)
-		return
-	end
+ local definition=Instances.Definition(data.Id)
+ if not chestOnly and definition and (definition.Kind=="Armor" or definition.Kind=="Accessory") and slot.Type~="Equipment" and slot.Type~="Accessory" then
+  if not rInventoryAction then return end
+  local destination=definition.Kind=="Armor" and "Equipment" or "Accessory"
+  local index=definition.Kind=="Armor" and table.find({"Head","Chest","Legs","Boots"},definition.Slot) or 1
+  if destination=="Accessory" then
+   for i=1,4 do local other=getSlotData("Accessory",i);local def=other and Instances.Definition(other.Id)
+    if def and def.Family==definition.Family then index=i;break elseif not other and index==1 then index=i end
+   end
+  end
+  rInventoryAction:FireServer("Move",{FromType=slot.Type,FromIndex=slot.Index,ToType=destination,ToIndex=index})
+  showTransferStatus("Equipping…",COLORS.Accent,.9);return
+ end
 	local chestAttempted = false
 	if rChest then
 		local chestId = getOpenChestSlotsContainer()
@@ -984,7 +1005,7 @@ local function showContextMenu(slot, position, touch)
 	contextMenu.Position = UDim2.fromOffset(math.clamp(position.X - inset.X + 6, 4, math.max(4, viewport.X - menuSize.X - 8)), math.clamp(position.Y - inset.Y + 6, 4, math.max(4, viewport.Y - inset.Y - menuSize.Y - 8)))
 	local data = getSlotData(slot.Type, slot.Index)
 	local item = data and ItemDatabase:Get(data.Id) or nil
-	local canUse = item and (item:HasTag("Food") or item:HasTag("Consumable")) or false
+	local canUse = item and (item:HasTag("Food") or item:HasTag("Consumable") or item.Id=="WaterFlask") or false
 	local canPlace = data and isPlaceableItem(data.Id) and not isChestTransferLockActive() or false
 	contextUse.Visible = canUse
 	contextPlace.Visible = canPlace
@@ -1046,6 +1067,7 @@ contextPlace.MouseButton1Click:Connect(function()
 end)
 
 local function getLocalSlot(slotType, index)
+	if slotType=="Equipment" or slotType=="Accessory" then return inventorySnapshot and (inventorySnapshot[slotType] or {})[index] end
 	if not inventorySnapshot then return nil end
 	if slotType == "Hotbar" then
 		inventorySnapshot.Hotbar = inventorySnapshot.Hotbar or {}
@@ -1060,6 +1082,7 @@ local function getLocalSlot(slotType, index)
 end
 
 local function setLocalSlot(slotType, index, value)
+	if inventorySnapshot and (slotType=="Equipment" or slotType=="Accessory") then inventorySnapshot[slotType]=inventorySnapshot[slotType] or {};inventorySnapshot[slotType][index]=value;return end
 	if not inventorySnapshot then return end
 	if slotType == "Hotbar" then
 		inventorySnapshot.Hotbar = inventorySnapshot.Hotbar or {}
@@ -1554,12 +1577,14 @@ end)
 if rInventory then
 	rInventory.OnClientEvent:Connect(function(kind, payload)
 		if kind ~= "Snapshot" or type(payload) ~= "table" then return end
+		storageCapacity=math.clamp(tonumber(payload.StorageCapacity) or 18,18,36)
+		for _,kind in ipairs({"Equipment","Accessory"}) do payload[kind]=payload[kind] or {};for i=1,4 do if payload[kind][i]==false then payload[kind][i]=nil end end end
 		
 		-- FIXED: Server now sends false for empty slots to preserve array structure
 		-- Convert false back to nil for consistent local handling
 		if payload.Storage then
 			local normalized = {}
-			for i = 1, STORAGE_COLS * STORAGE_ROWS do -- STORAGE_SLOTS
+			for i = 1, storageCapacity do -- STORAGE_SLOTS
 				local slot = payload.Storage[i]
 				-- Treat false as nil (empty slot)
 				if slot and slot ~= false and type(slot) == "table" then
@@ -1589,11 +1614,12 @@ if rInventory then
 		end
 		
 		inventorySnapshot = payload
+		if arrangePack then arrangePack() end
 		
 		-- Debug: Log storage contents
 		dprint("[InventoryUI] Snapshot received:")
 		if payload.Storage then
-			for i = 1, STORAGE_COLS * STORAGE_ROWS do
+			for i = 1, storageCapacity do
 				local slot = payload.Storage[i]
 				if slot then
 					dprint(string.format("  Storage[%d]: %s x%d", i, slot.Id, slot.N))
@@ -1636,7 +1662,7 @@ Theme.Panel(hotbarPanel)
 local hotbarScale = Instance.new("UIScale")
 hotbarScale.Name, hotbarScale.Parent = "ViewportScale", hotbarRoot
 shadow.Visible = false
-local armorHelp = Theme.Label(armorSection, "Weather protection goes here.\nDrag armor into the equipment slot.", UDim2.fromOffset(280, 42), UDim2.fromOffset(80, 27), 14, COLORS.TextMuted)
+local armorHelp = Theme.Label(armorSection, "", UDim2.fromOffset(280, 42), UDim2.fromOffset(80, 27), 14, COLORS.TextMuted)
 local closePack = Instance.new("TextButton")
 closePack.Name = "ClosePack"
 closePack.Size = UDim2.fromOffset(28, 28)
@@ -1648,7 +1674,7 @@ closePack.Parent = header
 Theme.Button(closePack, false)
 closePack.Activated:Connect(function() setInventoryOpen(false) end)
 player:GetAttributeChangedSignal("FieldKitPack"):Connect(function() setInventoryOpen(not inventoryOpen) end)
-local function arrangePack()
+arrangePack = function()
  local camera = workspace.CurrentCamera
  if not camera then return end
  local mobile = Theme.IsMobile()
@@ -1661,7 +1687,7 @@ local function arrangePack()
  local widePack = mobile and not portrait and not chestOpen
  local columns = widePack and 9 or STORAGE_COLS
  local packWidth = columns * SLOT_SIZE + (columns - 1) * SLOT_GAP + MARGIN * 2
- local packHeight = mobile and (widePack and 224 or 292) or MAIN_HEIGHT
+ local packHeight = mobile and (widePack and 292 or 380) or MAIN_HEIGHT
  local chestHeight = tonumber(gui:GetAttribute("ChestLayoutHeight")) or 200
  local maxScale = mobile and 1.65 or 2.5
 	hotbarScale.Scale = math.min(mobile and 0.8 or 1.5, (width - 64) / 422)
@@ -1690,13 +1716,20 @@ local function arrangePack()
  titleLabel.TextSize = mobile and 22 or 20
  titleLabel.Size = UDim2.fromOffset(mobile and 200 or 230, 44)
  capacityLabel.Visible = not mobile
- armorLabel.Visible = not mobile
- armorHelp.Visible = not mobile
- armorSection.Position = mobile and UDim2.fromOffset(258, 4) or UDim2.fromOffset(MARGIN, HEADER_HEIGHT)
- armorSection.Size = mobile and UDim2.fromOffset(130, 64) or UDim2.new(1, -MARGIN * 2, 0, ARMOR_SECTION_HEIGHT)
- armorContainer.Position = UDim2.fromOffset(0, mobile and 0 or 16)
- armorSlot.Frame.Size = UDim2.fromOffset(mobile and 56 or SLOT_SIZE, mobile and 56 or SLOT_SIZE)
- storageSection.Position = UDim2.fromOffset(MARGIN, mobile and 68 or HEADER_HEIGHT + ARMOR_SECTION_HEIGHT + 8)
+ armorLabel.Visible = true;armorLabel.Text="ARMOR                                  ACCESSORIES"
+ armorHelp.Visible = false
+ armorSection.Position = UDim2.fromOffset(MARGIN, HEADER_HEIGHT)
+ armorSection.Size = UDim2.new(1,-MARGIN*2,0,ARMOR_SECTION_HEIGHT)
+ armorContainer.Position = UDim2.fromOffset(0, 25)
+ local equipmentColumns=portrait and 4 or 8
+ local equipmentWidth=math.min(portrait and 64 or 72,(packWidth-MARGIN*2-(equipmentColumns-1)*SLOT_GAP)/equipmentColumns)
+ local equipmentHeight=math.ceil(8/equipmentColumns)*(equipmentWidth+14)
+ for i,slot in ipairs(equipmentSlots) do slot.Frame.Position=UDim2.fromOffset(((i-1)%equipmentColumns)*(equipmentWidth+SLOT_GAP),math.floor((i-1)/equipmentColumns)*(equipmentWidth+14));slot.Frame.Size=UDim2.fromOffset(equipmentWidth,equipmentWidth) end
+ armorContainer.Size=UDim2.new(1,0,0,equipmentHeight)
+ storageSection.Position = UDim2.fromOffset(MARGIN, HEADER_HEIGHT + 25 + equipmentHeight + 4)
+ storageSection.Size=UDim2.new(1,-MARGIN*2,0,packHeight-storageSection.Position.Y.Offset-12)
+ storageContainer.Size=UDim2.new(1,0,1,-20)
+ storageContainer.CanvasSize=UDim2.fromOffset(0,math.ceil(storageCapacity/columns)*(SLOT_SIZE+SLOT_GAP))
  storageLabel.Text = mobile and (chestOpen and "TAP TO STORE · DRAG TO ARRANGE" or "TAP FOR ACTIONS · DRAG TO ARRANGE") or "STORAGE"
  storageLabel.TextSize = mobile and 13 or 12
  transferStatusLabel.Size = UDim2.fromOffset(mobile and 236 or 240, 18)
@@ -1707,7 +1740,7 @@ local function arrangePack()
  for _, slot in ipairs(slots) do
   local slotScale = slot.Type == "Hotbar" and hotbarScale.Scale or scale
   slot.Frame.BackgroundTransparency = mobile and slot.Type == "Hotbar" and not mainContainer.Visible and .4 or 0
-  slot.ItemText.TextSize = mobile and 12 / slotScale or 12
+  slot.ItemText.TextSize = (slot.Type=="Equipment" or slot.Type=="Accessory") and 9 or mobile and 12 / slotScale or 12
   slot.QtyLabel.TextSize = mobile and 12 / slotScale or 12
   if mobile then
    slot.QtyBadge.Size = UDim2.fromOffset(30 / slotScale, 16 / slotScale)

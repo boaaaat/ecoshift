@@ -19,6 +19,7 @@ local holdingPrimary = false
 local holdingSecondary = false
 local lastClientFire = 0
 local bowCharging = false
+	player:SetAttribute("BowChargeStarted",nil)
 local boundTools = setmetatable({}, { __mode = "k" })
 local characterConnections = {}
 
@@ -117,12 +118,14 @@ local function startBowCharge()
 	local wtype = activeWeapon:GetType():lower()
 	if wtype ~= "bow" and wtype ~= "bows" then return end
 	bowCharging = true
+	player:SetAttribute("BowChargeStarted",os.clock())
 	CombatRE:FireServer("ChargeStart")
 end
 
 local function releaseBowCharge()
 	if not bowCharging or not activeWeapon or not CombatRE then return end
 	bowCharging = false
+	player:SetAttribute("BowChargeStarted",nil)
 	if inputBlocked() then
 		CombatRE:FireServer("ChargeCancel")
 		return
@@ -132,16 +135,9 @@ local function releaseBowCharge()
 end
 
 local function startBlock()
-	if inputBlocked() or not activeWeapon or not CombatRE then return end
-	local wtype = activeWeapon:GetType():lower()
-	if wtype ~= "shield" and wtype ~= "shields" then return end
-	CombatRE:FireServer("BlockStart")
+ if activeTool and activeWeapon and CombatRE and not inputBlocked() then CombatRE:FireServer("Special",buildAimData(activeWeapon:GetRange())) end
 end
-
-local function endBlock()
-	if not CombatRE then return end
-	CombatRE:FireServer("BlockEnd")
-end
+local function endBlock() end
 
 local function bindTool(tool)
 	if not tool:IsA("Tool") then return end
@@ -160,6 +156,7 @@ local function bindTool(tool)
 			activeTool = nil
 			activeWeapon = nil
 			bowCharging = false
+	player:SetAttribute("BowChargeStarted",nil)
 			holdingPrimary = false
 			holdingSecondary = false
 			endBlock()
@@ -181,6 +178,7 @@ local function bindTool(tool)
 		if tool:GetAttribute("CancelMobileRelease") then
 			if bowCharging and CombatRE then CombatRE:FireServer("ChargeCancel") end
 			bowCharging = false
+	player:SetAttribute("BowChargeStarted",nil)
 			return
 		end
 		releaseBowCharge()
@@ -192,6 +190,7 @@ local function onCharacter(char)
 	activeTool = nil
 	activeWeapon = nil
 	bowCharging = false
+	player:SetAttribute("BowChargeStarted",nil)
 	holdingPrimary = false
 	holdingSecondary = false
 	local backpack = player:WaitForChild("Backpack")
@@ -255,6 +254,7 @@ game:GetService("RunService").RenderStepped:Connect(function()
 		if holdingSecondary then holdingSecondary = false; endBlock() end
 		if bowCharging then
 			bowCharging = false
+	player:SetAttribute("BowChargeStarted",nil)
 			if CombatRE then CombatRE:FireServer("ChargeCancel") end
 		end
 		return

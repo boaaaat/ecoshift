@@ -5,16 +5,17 @@ local Survival = require(Shared.SurvivalConfig)
 local Items = require(Shared.Items.ItemDatabase)
 local Recipes = require(Shared.WorkbenchConfig)
 local Guide = {}
-Guide.Biomes = {
-	Forest = { Summary = "Verdant Reach is your gathering window. Collect supplies and prepare heat protection before an early Desert shift.", Armor = { "ReedSunwrap" }, Tools = { "StoneHatchet", "StonePickaxe", "FieldClock" } },
-	Desert = { Summary = "Sunscar Dunes steadily raises body temperature. A Reed Sunwrap blocks 75% of heat; drink Spring Water to lower built-up heat exposure.", Armor = { "ReedSunwrap", "DesertCloak" }, Tools = { "SpringWater", "HeatTonic", "Bandage" } },
-	Swamp = { Summary = "Mirefen is toxic and wet even under overcast skies. Toxins deal ongoing damage; resistance reduces it but does not make you immune.", Armor = { "SwampWaders" }, Tools = { "AntitoxinTonic", "Bandage" } },
-	FrozenTundra = { Summary = "Frostfall rapidly lowers body temperature. Wetness makes cold worse; snowfall and whiteouts add both cold and wetness.", Armor = { "FrostParka" }, Tools = { "ColdTonic", "Bandage" } },
-	Volcanic = { Summary = "Cinder Rift has severe baseline heat. Ashfall and emberstorms add toxins as well as heat; bring protection and healing.", Armor = { "VolcanicPlate" }, Tools = { "HeatTonic", "AntitoxinTonic", "Bandage" } },
-	CrystalWastes = { Summary = "Prism Barrens is mild in calm weather, but haze and static storms introduce toxin exposure. Prepare for changing conditions.", Armor = { "CrystalWeave" }, Tools = { "AntitoxinTonic", "Bandage" } },
-	AuroraVale = { Summary = "Aurora Vale switches between warm dawn surges and cold polar nights. Balanced heat and cold protection helps through both.", Armor = { "AuroraMantle" }, Tools = { "HeatTonic", "ColdTonic" } },
-	StarfallCrater = { Summary = "Starfall Crater combines temperature shifts with toxic conditions. Strong all-round protection and healing are useful here.", Armor = { "StarforgedPlate", "AdaptiveSurvivalSuit" }, Tools = { "HeatTonic", "AntitoxinTonic", "Bandage" } },
-}
+local Catalog=require(Shared.OverhaulCatalog)
+local World=require(Shared.OverhaulBiomes)
+Guide.Biomes={}
+local families={Forest="Trail",Desert="Dune",Swamp="Marsh",FrozenTundra="Frost",Volcanic="Ash",CrystalWastes="Crystal",AuroraVale="Aurora",StarfallCrater="Meteor",SaltglassCoast="Coast",StormspireHighlands="Storm",MyceliumHollow="Garden",IronrootBadlands="Iron",CanopySea="Canopy",SunkenArchive="Diver",UmbralDepths="Lantern",ShattermoonExpanse="Moon"}
+for id,biome in pairs(World.Biomes) do
+ local armors={}
+ for item,gear in pairs(Catalog.Gear) do if gear.Kind=="Armor" and gear.Set==families[id] and gear.Slot=="Chest" then table.insert(armors,item) end end
+ table.sort(armors)
+ local advice=biome.Temp>5 and "Carry Water and Cooling Drinks. Shade slows heat buildup; return to safe shelter to recover." or biome.Temp< -5 and "Carry Warming Drinks and dry clothing. Cold gets more severe on later visits and in deeper regions." or "Watch local conditions, carry food and medical supplies, and prepare before entering deeper regions."
+ Guide.Biomes[id]={Summary=biome.DisplayName..": "..advice,Armor=armors,Tools={"Water","Bandage","FieldClock","WeatherScanner"}}
+end
 function Guide.Name(id)
 	local item = Items:Get(id)
 	return item and item.Name or (tostring(id):gsub("(%l)(%u)", "%1 %2"))
@@ -60,10 +61,10 @@ function Guide.Recommendations(biome, weatherId, conditions)
 	if conditions then
 		local exposure = Guide.Exposure(biome, weatherId)
 		local function add(list, id) if not table.find(list, id) then table.insert(list, id) end end
-		if exposure.Temp > 0 then add(tools, "HeatTonic") end
-		if exposure.Temp < 0 then add(tools, "ColdTonic"); add(armor, "FrostParka") end
-		if exposure.Toxin > 0 then add(tools, "AntitoxinTonic"); add(armor, "SwampWaders") end
-		if exposure.Wet > 0 then add(armor, "SwampWaders") end
+		if exposure.Temp > 0 then add(tools, "CoolingDrink") end
+		if exposure.Temp < 0 then add(tools, "WarmingDrink"); add(armor, "FrostCoat") end
+		if exposure.Toxin > 0 then add(tools, "Antidote"); add(armor, "MarshCoat") end
+		if exposure.Wet > 0 then add(armor, "MarshCoat") end
 	end
 	return armor, tools
 end

@@ -42,7 +42,13 @@ local function getAmbientTemp(position)
 	local mods = (_G.Ecoshift and _G.Ecoshift.Mods) or {}
 	ambient += tonumber(mods.Temp) or 0
 	ambient += tonumber((BiomeService:GetWeather() or {}).Temp) or 0
-	return ambient
+	local metadata=require(script.Parent.OverhaulWorldService):MetadataAt(position)
+	local depth=metadata and metadata.Depth or 1
+	local rate=({.6,.6,.9,1.2,1.5})[tonumber(depth) or 1] or .6
+	local timing=BiomeService:GetTiming()
+	local ramp=math.clamp(((timing.Duration or 300)-(timing.Remaining or 300))/60,0,1)
+	local maturity=BiomeService:GetMaturity()
+	return math.sign(ambient)*rate*math.min(1.25,math.abs(ambient)/24)*maturity*ramp
 end
 
 local function campfireRecovery(position)
@@ -56,17 +62,23 @@ local function campfireRecovery(position)
 end
 
 local function applySprintModifier(plr, enabled)
-	if enabled then
-		if not SurvivalService._sprintApplied[plr] then
-			StatsService:AddModifier(plr, "Speed", 0.5 * (1 + (plr:GetAttribute("Class_SpeedBonus") or 0)), "Mult", nil, "Sprint")
-			SurvivalService._sprintApplied[plr] = true
-		end
-	else
-		if SurvivalService._sprintApplied[plr] then
-			StatsService:RemoveModifier(plr, "Speed", "Sprint")
-			SurvivalService._sprintApplied[plr] = nil
-		end
-	end
+		local root=plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+		local center=workspace:GetAttribute("CampCenter") or ReplicatedStorage:GetAttribute("CampCenter") or Vector3.zero
+		local camp=root and Vector2.new(root.Position.X-center.X,root.Position.Z-center.Z).Magnitude<=200
+		local gear=require(script.Parent.GearService):GetModifiers(plr)
+		StatsService:RemoveModifier(plr,"Speed","Sprint")
+		local base=(enabled and 30 or 20)*(camp and 2 or 1)
+		StatsService:SetBase(plr,"Speed",base)
+		local movement=gear.WalkSpeedBonus or 0
+		local hum=plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+		if hum and hum:GetState()==Enum.HumanoidStateType.Swimming then movement+=(gear.SwimSpeedBonus or 0)+(plr:GetAttribute("Food_SwimSpeedBonus") or 0) end
+		StatsService:AddModifier(plr,"Speed",movement,"Mult",nil,"GearMovement")
+		local penalty=hum and hum.FloorMaterial==Enum.Material.Mud and .2*(1-(gear.MudPenaltyReduction or 0)) or hum and hum.FloorMaterial==Enum.Material.Snow and .15*(1-(gear.SnowPenaltyReduction or 0)) or 0
+		StatsService:AddModifier(plr,"Speed",-penalty,"Mult",nil,"GroundMovement")
+		StatsService:AddModifier(plr,"Speed",plr:GetAttribute("GearLandingSlow") and -.25 or 0,"Mult",nil,"LandingRecovery")
+		StatsService:AddModifier(plr,"Speed",(plr:GetAttribute("MonsterSnaredUntil") or 0)>workspace:GetServerTimeNow() and -.4 or 0,"Mult",nil,"MonsterSnare")
+		plr:SetAttribute("InCamp",camp==true)
+		SurvivalService._sprintApplied[plr]=enabled or nil
 end
 
 function SurvivalService:_stopSprint(plr)
@@ -78,7 +90,7 @@ function SurvivalService:_tickSprint(plr, dt)
 	local char = plr.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	if ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring") or plr:GetAttribute("WorldPlayerLoading")
+	if (ReplicatedStorage:GetAttribute("WorldShifting") and not plr:GetAttribute("InteriorId")) or ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring") or plr:GetAttribute("WorldPlayerLoading")
 		or plr:GetAttribute("IsDead") or not hum or not hrp or hum.Health <= 0 then
 		self:_stopSprint(plr)
 		return
@@ -96,9 +108,9 @@ function SurvivalService:_tickSprint(plr, dt)
 	-- characters. Horizontal assembly velocity also detects actual movement.
 	local velocity = hrp.AssemblyLinearVelocity
 	local moving = hum.MoveDirection.Magnitude > 0.1 or Vector3.new(velocity.X, 0, velocity.Z).Magnitude > 0.75
-	local sprinting = self._sprintWanted[plr] == true and not self._sprintExhausted[plr] and moving and stamina > 0
-	local drain = STAMINA_DRAIN * (1 - (plr:GetAttribute("Class_SprintReduction") or 0)) * (1 - (plr:GetAttribute("Food_SprintDrainReduction") or 0))
-	local nextStamina = clamp(stamina + (sprinting and -drain or STAMINA_REGEN) * dt, 0, maxStamina)
+	local sprinting = hum:GetState()~=Enum.HumanoidStateType.Swimming and not plr:GetAttribute("GearTraversalStaminaActive") and self._sprintWanted[plr] == true and not self._sprintExhausted[plr] and moving and stamina > 0
+	local drain = STAMINA_DRAIN * (1-(plr:GetAttribute("Gear_SprintDrainReduction") or 0)) * (1 - (plr:GetAttribute("Class_SprintReduction") or 0)) * (1 - (plr:GetAttribute("Food_SprintDrainReduction") or 0))
+	local nextStamina = clamp(stamina + (sprinting and -drain or (plr:GetAttribute("GearTraversalStaminaActive") and 0 or STAMINA_REGEN)*(1+(plr:GetAttribute("Food_StaminaRecoveryBonus") or 0))) * dt, 0, maxStamina)
 	if protected then nextStamina = maxStamina end
 	if nextStamina <= 0 and self._sprintWanted[plr] then
 		self._sprintExhausted[plr] = true
@@ -126,7 +138,7 @@ function SurvivalService:_setSprint(plr, enabled)
 end
 
 function SurvivalService:_tickPlayer(plr, dt)
-	if ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring") or plr:GetAttribute("WorldPlayerLoading") or plr:GetAttribute("IsDead") then return end
+	if (ReplicatedStorage:GetAttribute("WorldShifting") and not plr:GetAttribute("InteriorId")) or ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring") or plr:GetAttribute("WorldPlayerLoading") or plr:GetAttribute("IsDead") then return end
 	if workspace:GetAttribute("WorldType") == "Creative" and plr:GetAttribute("CreativeMode") and plr:GetAttribute("CreativeInvincible") then return end
 	local char = plr.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -136,20 +148,24 @@ function SurvivalService:_tickPlayer(plr, dt)
 	local temp = StatsService:GetBase(plr, "Temperature") or StatsService:GetStat(plr, "Temperature") or 0
 	local tempRes = StatsService:GetStat(plr, "TemperatureResistance") or 0
 
-	local ambient = getAmbientTemp(hrp.Position)
+	local ambient = plr:GetAttribute("InteriorId") and 0 or getAmbientTemp(hrp.Position)+(plr:GetAttribute("EventExposureRate") or 0)
+	if ambient>0 and plr:GetAttribute("GearRoofShelter") then ambient*=.8 end
 	local kind = ambient >= 0 and "Heat" or "Cold"
+	local equipment = require(script.Parent.GearService)
+	local modifiers=equipment:GetModifiers(plr)
 	local gear = math.clamp(tonumber(char:GetAttribute("GearRes_" .. kind)) or 0, 0, 0.95)
-	local tonic = math.clamp(tonumber(char:GetAttribute("Res_" .. kind)) or 0, 0, 0.95)
+	local tonic = math.clamp(math.max(tonumber(char:GetAttribute("Res_" .. kind)) or 0, plr:GetAttribute("Gear_"..kind.."Tonic") or 0), 0, 0.95)
 	local foodProtection = math.max(plr:GetAttribute("FoodThermal_" .. kind) or 0, plr:GetAttribute("Food_" .. kind .. "Reduction") or 0)
 	local fieldReduction, fieldRecovery = require(script.Parent.ClassAbilityService):GetShelterEffect(plr)
-	ambient *= (1 - gear) * (1 - math.max(tonic, foodProtection)) * (1 - (plr:GetAttribute("Class_ExposureReduction") or 0)) * (1 - fieldReduction)
+	ambient *= (1-(plr:GetAttribute("Gear_SharedCover") or 0)) * (1 - gear) * (1 - math.max(tonic, foodProtection)) * (1 - (plr:GetAttribute("Class_ExposureReduction") or 0)) * (1 - fieldReduction)
 	if ambient < 0 then ambient *= 1 + (tonumber(char:GetAttribute("WetStacks")) or 0) * 0.1 end
 	if ambient ~= 0 then
-		temp += ambient * dt
+		temp += equipment:AdjustExposure(plr,ambient * dt)
 	end
 	-- Safe conditions and suitable gear allow body temperature to recover.
-	tempRes = (math.max(0, tempRes) + 0.3) * (1 + (plr:GetAttribute("Class_ExposureRecovery") or 0)) * (1 + (plr:GetAttribute("Food_ExposureRecoveryBonus") or 0)) + fieldRecovery
-	if temp < 0 then tempRes += campfireRecovery(hrp.Position) end
+	tempRes = (math.max(0, tempRes) + 0.3) * (1 + (plr:GetAttribute("Class_ExposureRecovery") or 0)) * (1 + (plr:GetAttribute("Food_ExposureRecoveryBonus") or 0)) + fieldRecovery + (plr:GetAttribute("Gear_TonicRecovery") or 0)
+	tempRes *= 1+(modifiers.ExposureRecovery or 0)+(kind=="Heat" and (modifiers.HeatRecoveryBonus or 0) or (modifiers.ColdRecoveryBonus or 0))
+	if temp < 0 then tempRes += campfireRecovery(hrp.Position)*(1+(modifiers.HeatSourceRecoveryBonus or 0)) end
 	if tempRes > 0 then
 		if temp > 0 then
 			temp = math.max(0, temp - (tempRes * dt))
@@ -159,14 +175,15 @@ function SurvivalService:_tickPlayer(plr, dt)
 	end
 	temp = clamp(temp, TEMP_MIN, TEMP_MAX)
 
-	local over = math.max(0, (math.abs(temp) - 50) / 10)
+	local over = math.max(0, (math.abs(temp) - 75) / 10)
 	if over > 0 then
 		hum:TakeDamage(over * dt)
 	end
 
 	local maxHunger = StatsService:GetStat(plr, "MaxHunger") or 100
 	local hunger = StatsService:GetBase(plr, "Hunger") or StatsService:GetStat(plr, "Hunger") or maxHunger
-	hunger = math.max(0, hunger - (HUNGER_DRAIN * (1 - (plr:GetAttribute("Class_HungerReduction") or 0)) * (1 - (plr:GetAttribute("Food_HungerDrainReduction") or 0)) * dt))
+ local drain=HUNGER_DRAIN*(1-(modifiers.HungerDrainReduction or 0))*(1-(plr:GetAttribute("Class_HungerReduction") or 0))*(1-(plr:GetAttribute("Food_HungerDrainReduction") or 0))
+ hunger=math.max(0,hunger-drain*dt)
 	if hunger <= 0 then
 		hum:TakeDamage(HUNGER_DAMAGE * dt)
 	end

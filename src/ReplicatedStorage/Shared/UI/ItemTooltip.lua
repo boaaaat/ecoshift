@@ -16,7 +16,7 @@ function ItemTooltip.new(owner)
 	screen.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	local frame = Instance.new("Frame")
 	frame.Name = "Tooltip"
-	frame.Size = UDim2.fromOffset(270, 0)
+	frame.Size = UDim2.fromOffset(360, 0)
 	frame.AutomaticSize = Enum.AutomaticSize.Y
 	frame.BackgroundColor3 = Theme.Colors.Background
 	frame.BackgroundTransparency = 0.04
@@ -77,7 +77,34 @@ function ItemTooltip.new(owner)
 		tags.Text = table.concat(itemTags, " • ")
 		tags.Visible = #itemTags > 0
 		description.Text = item and item.Description or ""
-		description.Visible = description.Text ~= ""
+		local instances=require(script.Parent.Parent.ItemInstance)
+		local gear=instances.Definition(data.Id)
+		if gear then
+			local catalog=require(script.Parent.Parent.OverhaulCatalog)
+			local grade=data.Grade or gear.Grade
+   local lines={description.Text,"Grade "..tostring(grade)}
+   if gear.Kind=="Weapon" then
+    table.insert(lines,string.format("Damage %.1f / range %.1f studs / %.2fs attack",gear.Damage or 0,gear.Reach or 0,gear.AttackCycle or 1))
+    table.insert(lines,"Special: "..(gear.Special or "None").." / 20 stamina / 8s cooldown")
+   elseif gear.Kind=="Tool" then
+    table.insert(lines,string.format("Breaking power %.0f / combat damage %.0f",(gear.Power or 0)*2^(grade-gear.Grade),gear.Damage or 6))
+   elseif gear.Kind=="Armor" then
+    local defense=(gear.Defense or 0)*(catalog.PhysicalByTier[grade]/catalog.PhysicalByTier[gear.Grade])
+    table.insert(lines,string.format("Physical reduction %.1f%% / %s",defense*100,gear.Slot))
+    local protection={};for _,channel in ipairs({"Heat","Cold","Toxin","Wet"}) do local amount=(gear.Resistance or {})[channel] or 0;if amount>0 then table.insert(protection,channel.." "..math.floor(amount*100).."%") end end
+    table.insert(lines,table.concat(protection," / "))
+    local set=gear.Set and catalog.ArmorFamilies[gear.Set]
+    if set then table.insert(lines,"2 pieces: "..set.TwoDescription);table.insert(lines,"4 pieces: "..set.FourDescription) end
+   end
+			if data.MaxDurability then table.insert(lines,string.format("Durability: %d / %d%s",math.ceil(data.Durability or 0),data.MaxDurability,(data.Durability or 0)<=0 and " · BROKEN" or "")) end
+			for id,level in pairs(data.Enchantments or {}) do local def=catalog.Enchantments[id];table.insert(lines,(def and def.Name or id).." "..tostring(type(level)=="table" and level.Level or level)) end
+			description.Text=table.concat(lines,"\n")
+		end
+		if data.Id=="FieldJournal" then
+   local installed={};for id in pairs(data.InstalledModules or {}) do local def=ItemDatabase:Get(id);table.insert(installed,def and def.Name or id) end;table.sort(installed)
+   description.Text=description.Text.."\nInstalled: "..(#installed>0 and table.concat(installed,", ") or "No modules")
+  end
+  description.Visible = description.Text ~= ""
 		quantity.Text = "Quantity: " .. tostring(data.N or 1)
 		hint.Text = controls or ""
 		hint.Visible = hint.Text ~= ""
@@ -91,7 +118,7 @@ function ItemTooltip.new(owner)
 	frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() if frame.Visible then self:Move() end end)
 	owner.Destroying:Connect(function() moveConnection:Disconnect(); screen:Destroy() end)
 	Theme.BindResponsive(screen, function(_, bounds)
-		frame.Size = UDim2.fromOffset(math.min(270, math.max(100, bounds.X - 16)), 0)
+		frame.Size = UDim2.fromOffset(math.min(360, math.max(100, bounds.X - 16)), 0)
 		if frame.Visible then self:Move() end
 	end)
 	Theme.TrackRoot(screen)

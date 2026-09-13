@@ -106,15 +106,15 @@ local stepTitle = label(tutorial, "", 50, 60, 23, true)
 local stepBody = label(tutorial, "", 114, 130, 14)
 local stepCount = label(tutorial, "", 256, 24, 11)
 local back = button(tutorial, "PreviousStep", "Back", 22, 291, 90, 34)
-local recipe = button(tutorial, "SunwrapRecipe", "Sunwrap recipe", 122, 291, 174, 34)
+local recipe = button(tutorial, "StarterArmorRecipe", "Dune Coat recipe", 122, 291, 174, 34)
 local nextStep = button(tutorial, "NextStep", "Next", 306, 291, 212, 34)
 local dismiss = button(tutorial, "SkipTutorial", "Skip", 442, 14, 76, 28)
 local disable = button(tutorial, "DisableStartingTutorial", "Don't show at start again", 22, 338, 300, 26)
 local step = 1
 local function renderTutorial()
 	local entries = {
-		{ "1. Gather while the Forest is mild", "Hold F to pluck loose plants. Use the Harvester to break trees, stone and Sap Resin nodes. Collect Reed Fiber, Moss Bloom and Sap Resin for your first heat armor. Keep food and Bandages ready." },
-		{ "2. Make a Reed Sunwrap", Guide.RecipeText("ReedSunwrap") .. ".\n" .. (Theme.IsMobile() and "Tap Craft, craft by hand, then tap Pack and equip it in the armor slot." or "Open Craft (" .. Settings.Key("Craft").Name .. "), craft by hand, then open Pack (" .. Settings.Key("Pack").Name .. ") and equip it in the armor slot.") .. " It reduces heat exposure by 75%. Carry Spring Water to cool built-up heat. Desert is an early possible shift; prepare before it arrives." },
+		{ "1. Gather while Woodlands are mild", "Hold F to pluck loose plants. Break wood and stone with the Harvester, then craft proper gathering tools. Collect Fiber and Resin for clothing, keep food and Bandages ready, and visit the campaign desk in camp." },
+		{ "2. Prepare for changing weather", Guide.RecipeText("DuneCoat") .. ".\n" .. (Theme.IsMobile() and "Tap Craft to inspect ingredients and the required station, then tap Pack and equip your armor." or "Open Craft (" .. Settings.Key("Craft").Name .. ") to inspect ingredients and the required station, then open Pack (" .. Settings.Key("Pack").Name .. ") and equip your armor.") .. " Each equipped piece adds protection. Carry Water and Cooling Drinks to reduce heat exposure, and use shelter to recover." },
 		{ "3. Watch food and exposure", "Eat before Hunger reaches zero. Extreme hot or cold exposure damages health. Sprint uses energy; stop to recover. Click the biome or conditions on your HUD for protection advice. A Field Clock reveals shift timing; stronger weather may need better gear." },
 	}
 	stepTitle.Text, stepBody.Text = entries[step][1], entries[step][2]
@@ -135,7 +135,7 @@ back.Activated:Connect(function() step = math.max(1, step - 1); renderTutorial()
 nextStep.Activated:Connect(function() if step == 3 then tutorial.Visible = false else step += 1; renderTutorial() end end)
 dismiss.Activated:Connect(function() tutorial.Visible = false end)
 disable.Activated:Connect(function() Settings.Set("StartingTutorial", false); Settings.Save(); tutorial.Visible = false end)
-recipe.Activated:Connect(function() tutorial.Visible = false; openRecipe("ReedSunwrap") end)
+recipe.Activated:Connect(function() tutorial.Visible = false; openRecipe("DuneCoat") end)
 player:GetAttributeChangedSignal("FieldGuideBiome"):Connect(function() showGuide("Biome") end)
 player:GetAttributeChangedSignal("FieldGuideConditions"):Connect(function() showGuide("Conditions") end)
 player:GetAttributeChangedSignal("ReplaySurvivalTutorial"):Connect(showTutorial)

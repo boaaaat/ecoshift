@@ -3,10 +3,10 @@
 local DSS = game:GetService("DataStoreService")
 local Http = game:GetService("HttpService")
 local Util = require(game:GetService("ReplicatedStorage").Shared.Util)
-local records = DSS:GetDataStore("EcoshiftWorldSessions_v1")
-local chunks = DSS:GetDataStore("EcoshiftWorldSnapshots_v1")
-local reservations = DSS:GetDataStore("EcoshiftReservedWorlds_v1")
-local assignments = DSS:GetDataStore("EcoshiftRunAssignments_v1")
+local records = DSS:GetDataStore("EcoshiftWorldSessions_Overhaul_20260912")
+local chunks = DSS:GetDataStore("EcoshiftWorldSnapshots_Overhaul_20260912")
+local reservations = DSS:GetDataStore("EcoshiftReservedWorlds_Overhaul_20260912")
+local assignments = DSS:GetDataStore("EcoshiftRunAssignments_Overhaul_20260912")
 local Service = { LeaseSeconds = 120 }
 local fresh = Instance.new("DataStoreGetOptions")
 fresh.UseCache = false
@@ -29,7 +29,7 @@ function Service:Get(id)
 	local ok, record = call(function() return records:GetAsync(id, fresh) end)
 	if not ok then return nil, record end
 	if not record then return nil, "WorldNotFound" end
-	if record.SchemaVersion ~= 1 or record.Id ~= id then return nil, "UnsupportedWorldVersion" end
+	if record.SchemaVersion ~= 1 or record.Id ~= id or record.GameplayRulesVersion ~= 2 or record.ContentRelease ~= 2 then return nil, "UnsupportedWorldVersion" end
 	return record
 end
 function Service:Mutate(id, transform)
@@ -37,7 +37,7 @@ function Service:Mutate(id, transform)
 	local reason
 	local ok, result = call(function() return records:UpdateAsync(id, function(raw)
 		reason = nil
-		if raw and (raw.SchemaVersion ~= 1 or raw.Id ~= id) then reason = "UnsupportedWorldVersion"; return nil end
+		if raw and (raw.SchemaVersion ~= 1 or raw.Id ~= id or raw.GameplayRulesVersion ~= 2 or raw.ContentRelease ~= 2) then reason = "UnsupportedWorldVersion"; return nil end
 		local nextValue, failure = transform(raw and Util.DeepCopy(raw))
 		if not nextValue then reason = failure or "WorldChanged"; return nil end
 		nextValue.Revision = (raw and raw.Revision or 0) + 1
@@ -65,6 +65,7 @@ end
 function Service:RegisterReservation(record)
 	local ok = call(function() return reservations:SetAsync(record.PrivateServerId, {
 		WorldId = record.Id, Generation = record.Generation,
+		GameplayRulesVersion = record.GameplayRulesVersion, ContentRelease = record.ContentRelease,
 	}) end)
 	return ok
 end
@@ -75,6 +76,7 @@ function Service:ResolveReservation(privateServerId)
 	local record, reason = self:Get(link.WorldId)
 	if not record then return nil, reason end
 	if record.Generation ~= link.Generation or record.PrivateServerId ~= privateServerId then return nil, "ReservationExpired" end
+	if (record.GameplayRulesVersion) ~= (link.GameplayRulesVersion) then return nil, "WorldRulesMismatch" end
 	return record
 end
 function Service:AcquireServer(record, jobId, nativeType)

@@ -15,6 +15,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local WorkbenchConfig = require(ReplicatedStorage.Shared.WorkbenchConfig)
+local IngredientResolver=require(ReplicatedStorage.Shared.IngredientResolver)
 local ResultMessages = require(ReplicatedStorage.Shared.ResultMessages)
 
 local player = Players.LocalPlayer
@@ -346,7 +347,7 @@ inlineStatusLabel.Parent = mainPanel
 
 local function messageForReason(reason)
 	local key = tostring(reason or "Unknown")
-	return CRAFT_MESSAGES[key] or CRAFT_MESSAGES.Unknown or "Crafting failed."
+	return CRAFT_MESSAGES[key] or key
 end
 
 local function showInlineStatus(text, color, duration)
@@ -389,17 +390,10 @@ local function ingredientCost(ingredient)
 end
 
 local function maxAffordable(recipeId)
-	local recipe = recipeId and WorkbenchConfig.RECIPES[recipeId]
-	if not recipe or not inventorySnapshot then return 0 end
-	local costs = {}
-	for _, ingredient in ipairs(recipe.Ingredients or {}) do
-		costs[ingredient.Id] = (costs[ingredient.Id] or 0) + ingredientCost(ingredient)
-	end
-	local maximum = MAX_CRAFT_QUANTITY
-	for id, cost in pairs(costs) do
-		maximum = math.min(maximum, math.floor(getItemCount(id) / cost))
-	end
-	return maximum
+ local recipe=recipeId and WorkbenchConfig.RECIPES[recipeId]
+ if not recipe or not inventorySnapshot then return 0 end
+ if WorkbenchConfig:GetCampaignLock(recipeId) then return 0 end
+ return IngredientResolver.Max(recipe.Ingredients,inventorySnapshot,player,MAX_CRAFT_QUANTITY)
 end
 
 local function canCraftRecipe(recipeId, quantity)
@@ -716,7 +710,7 @@ function updateCraftButton()
 	local affordable = canCraftRecipe(selectedRecipe, craftQuantity)
 	craftBtn.Active = affordable
 	craftBtn.Selectable = affordable
-	craftBtn.Text = affordable and ("Craft " .. output) or "Missing Materials"
+	craftBtn.Text = WorkbenchConfig:GetCampaignLock(selectedRecipe) or (affordable and ("Craft " .. output) or "Missing Materials")
 	craftBtn.TextColor3 = COLORS.Paper
 	craftBtn.BackgroundColor3 = affordable and COLORS.SuccessFill or COLORS.DangerFill
 	craftBtnStroke.Color = affordable and COLORS.Success or COLORS.Danger
@@ -745,6 +739,8 @@ quantityBox.FocusLost:Connect(function()
 	if craftQuantity then quantityBox.Text = tostring(craftQuantity) end
 end)
 player:GetAttributeChangedSignal("Class_CraftBonus"):Connect(updateCraftButton)
+workspace:GetAttributeChangedSignal("CampaignTier"):Connect(updateCraftButton)
+ReplicatedStorage.AttributeChanged:Connect(function(name) if name:sub(1,18)=="CampaignCompleted_" then updateCraftButton() end end)
 local progressTick = 0
 game:GetService("RunService").Heartbeat:Connect(function(delta)
 	progressTick += delta

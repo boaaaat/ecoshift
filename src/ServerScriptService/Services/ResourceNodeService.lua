@@ -18,7 +18,7 @@ local lastContactDamage = setmetatable({}, { __mode = "k" })
 local function attachContactDamage(instance)
 	local damage = tonumber(instance:GetAttribute("ContactDamage"))
 	local itemId = ResourceItemMap.Normalize(instance:GetAttribute("DropItemId") or instance.Name)
-	if itemId == "CactusStem" and (not damage or damage <= 0) then damage = 4 end
+	if itemId == "Cactus" and (not damage or damage <= 0) then damage = 4 end
 	if not damage or damage <= 0 then return end
 	local parts = {}
 	if instance:IsA("BasePart") then
@@ -221,6 +221,7 @@ local function attachDurationPrompt(instance)
 		if not canHarvest(plr) then return end
 		local hold = { StartedAt = os.clock(), Character = plr.Character, Duration = require(script.Parent.ClassEffects).Duration(plr, instance, duration) }
 		holds[plr] = hold
+		require(script.Parent.GearService):OnGatherStarted(plr, require(script.Parent.ClassEffects).Kind(instance)=="Plant")
 		-- A client cannot bank a hold while dead or away from the resource.
 		task.spawn(function()
 			while holds[plr] == hold and not hold.EndedAt do
@@ -268,9 +269,12 @@ local function attachDurationPrompt(instance)
 		itemId = ResourceItemMap.Normalize(itemId)
 		local count = parseDropCount(instance)
 		count += require(script.Parent.ClassEffects).Extra(plr, instance)
-		local added = InventoryService:Give(plr, itemId, count, true)
+		local stored=itemId=="Water" and require(script.Parent.GearService):StoreWater(plr,count) or 0
+		local added=stored+InventoryService:Give(plr,itemId,count-stored,true)
+		if added>0 and added<count then require(script.Parent.ItemDropService):SpawnDrop(itemId,count-added,instance:GetPivot().Position+Vector3.new(0,2,0)) end
 		if added > 0 then
 			require(script.Parent.ExpeditionRewardsService):RecordActivity(plr)
+			require(script.Parent.GearService):OnHarvestComplete(plr,instance)
 			instance:Destroy()
 		else
 			claimed = false

@@ -57,7 +57,7 @@ function Art.CreateDrop(item)
 		m:SetAttribute("ArtFamily","FieldInstrument")
 		part(m,"InstrumentCase",V(1.4,.45,1.6),CF(0,.225,0),C.Ink)
 		part(m,"BrassFaceplate",V(1.22,.08,1.42),CF(0,.48,0),C.Brass)
-		if id=="BiomeSelector" then
+		if id=="WorldDial" then
 			dial(m,CF(0,.55,0),.38,C.Moss,1.3)
 			local i=0
 			for _,hex in ipairs({"8EA96E","D4AC69","78AD99","A8D7E1","DDA477","B6A2D8","B3E0CE","D8BF9C"}) do
@@ -67,7 +67,7 @@ function Art.CreateDrop(item)
 		elseif id=="ShiftStabilizer" or id=="ShiftTrigger" then
 			for i=-1,1 do cylinder(m,"Coil",.16,.85,CF(i*.35,.91,0),i==0 and color or C.Brass) end
 			part(m,"ControlLever",V(.1,.65,.1),CF(.48,.88,-.5)*A(.35,0,0),C.Paper)
-		elseif id=="EventSeismograph" then
+		elseif id=="EventDetector" then
 			part(m,"PaperChart",V(.9,.04,1.1),CF(0,.56,0),C.Paper)
 			for i=-2,2 do part(m,"Trace",V(.27,.035,.045),CF(i*.17,.6,i%2*.18)*A(0,i%2==0 and .65 or -.65,0),C.Ink) end
 		else
@@ -76,20 +76,20 @@ function Art.CreateDrop(item)
 			elseif id=="ResourceCompass" then part(m,"NorthPointer",V(.2,.06,.4),CF(0,.77,-.12),color,"WedgePart")
 			else part(m,"SensorAerial",V(.08,1.1,.08),CF(.53,1.03,.52),C.Brass); part(m,"SensorTip",V(.19,.19,.19),CF(.53,1.64,.52),color) end
 		end
-	elseif id=="ReviveKit" or id=="Bandage" or id=="ThermalPatch" or id=="ToxinFilter" then
+	elseif id=="RevivalKit" or id=="Bandage" or id=="Medkit" or id=="ArmorPatch" then
 		m:SetAttribute("ArtFamily","MedicalKit")
-		part(m,"CanvasKit",V(1.3,.65,.95),CF(0,.325,0),id=="ReviveKit" and C.Moss or C.Paper)
+		part(m,"CanvasKit",V(1.3,.65,.95),CF(0,.325,0),id=="RevivalKit" and C.Moss or C.Paper)
 		strap(m,CF(0,.325,0),1.3,.65,.95)
 		part(m,"MedicalEmblem",V(.4,.04,.12),CF(0,.675,0),C.Brass)
 		part(m,"MedicalEmblem",V(.12,.04,.4),CF(0,.68,0),C.Brass)
-		if id=="ReviveKit" then vial(m,CF(.72,0,0),C.Glass) end
+		if id=="RevivalKit" then vial(m,CF(.72,0,0),C.Glass) end
 	elseif item:HasTag("Food") then
 		m:SetAttribute("ArtFamily","WrappedRations")
 		for i=0,1 do part(m,"WaxedPacket",V(1,.22,.65),CF(i*.08,.12+i*.23,0)*A(0,i*.1,0),i==0 and C.Moss or C.Paper) end
 		strap(m,CF(0,.24,0),1,.46,.67)
 	elseif id:find("Tonic") or id:find("Gel") or id:find("Paste") or id:find("Water") or id:find("Essence") or id:find("Sap") then
 		m:SetAttribute("ArtFamily","SealedSample"); vial(m,CF(),color)
-	elseif id:find("Ingot") or id:find("Alloy") then
+	elseif id:find("Bar") or id=="DeepMetal" then
 		m:SetAttribute("ArtFamily","StampedIngots")
 		for i=0,1 do
 			part(m,"Ingot",V(1,.22,.52),CF(0,.12+i*.23,0)*A(0,i*.15,0),color)

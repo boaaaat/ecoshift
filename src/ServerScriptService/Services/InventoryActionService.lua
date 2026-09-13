@@ -1,158 +1,33 @@
--- InventoryActionService.lua
--- Handles client requests to move/swap inventory slots.
+-- Server-owned inventory movement and overhaul consumable dispatch.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local HttpService = game:GetService("HttpService")
-
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
+local Catalog = require(ReplicatedStorage.Shared.OverhaulCatalog)
 local InventoryService = require(script.Parent.InventoryService)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
-local StatsService = require(script.Parent.StatsService)
 local ToolService = require(script.Parent.ToolService)
 local FoodService = require(script.Parent.FoodService)
-
 local InventoryActionService = {}
-local resistEffects = setmetatable({}, { __mode = "k" })
-
-local FOOD_RESTORE = {
-	BrownMushroom = 6,
-	CactusStem = 8,
-	StaminaRation = 24,
-	ReinforcedRation = 40,
-}
-local RESIST_EFFECTS = {
-	AntitoxinTonic = {Key = "Res_Toxin", Amount = 0.35, Duration = 120},
-	HeatTonic = {Key = "Res_Heat", Amount = 0.35, Duration = 120},
-	ColdTonic = {Key = "Res_Cold", Amount = 0.35, Duration = 120},
-	ToxinFilter = {Key = "Res_Toxin", Amount = 0.25, Duration = 90},
-}
-
 local function canConsume(item)
-	if not item then return false end
-	if FoodService:CanConsume(item.Id) then return true end
-	return (item:HasTag("Food") or item:HasTag("Consumable"))
-		and (FOOD_RESTORE[item.Id] ~= nil or RESIST_EFFECTS[item.Id] ~= nil or item.Id == "Bandage"
-			or item.Id == "ThermalPatch" or item.Id == "SpringWater")
+ return item and (item.Id=="WaterFlask" or FoodService:CanConsume(item.Id)
+  or (Catalog.Consumables[item.Id] and item.Id~="RevivalKit"))
 end
-
 local function canAct(plr)
-	if ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring")
-		or plr:GetAttribute("WorldPlayerLoading") or plr:GetAttribute("IsDead") then return nil end
-	local char = plr.Character
-	local hum = char and char:FindFirstChildOfClass("Humanoid")
-	if not hum or hum.Health <= 0 then return nil end
-	return char, hum
+ if ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring")
+  or plr:GetAttribute("WorldPlayerLoading") or plr:GetAttribute("IsDead") then return nil end
+ local char=plr.Character
+ local hum=char and char:FindFirstChildOfClass("Humanoid")
+ if not hum or hum.Health<=0 then return nil end
+ return char,hum
 end
-
-local function hasUsefulEffect(plr, char, hum, itemId)
-	if FOOD_RESTORE[itemId] then
-		local maximum = StatsService:GetStat(plr, "MaxHunger") or 100
-		local hungry=(StatsService:GetBase(plr,"Hunger") or StatsService:GetStat(plr,"Hunger") or 0)<maximum
-		local tired=(itemId=="StaminaRation" or itemId=="ReinforcedRation") and (StatsService:GetBase(plr,"Stamina") or 0)<(StatsService:GetStat(plr,"MaxStamina") or 100)
-		return hungry or tired, "Hunger and relevant stamina are already full."
-	end
-	if itemId == "Bandage" then return hum.Health < hum.MaxHealth, "Health is already full." end
-	if itemId == "SpringWater" then
-		return (StatsService:GetBase(plr, "Temperature") or 0) > 0, "You have no heat exposure to cool."
-	end
-	local effect = RESIST_EFFECTS[itemId]
-	if effect then return (tonumber(char:GetAttribute(effect.Key)) or 0) < 0.9, "This resistance is already at its limit." end
-	return itemId == "ThermalPatch"
-end
-
-local function applyFood(plr, itemId)
-	local restore = (FOOD_RESTORE[itemId] or 0) * (1 + (plr:GetAttribute("Class_FoodBonus") or 0))
-	if restore <= 0 then return false end
-	if not StatsService then return false end
-	local maxHunger = StatsService:GetStat(plr, "MaxHunger") or 100
-	local curHunger = StatsService:GetBase(plr, "Hunger") or StatsService:GetStat(plr, "Hunger") or 0
-	local newHunger = math.min(maxHunger, curHunger + restore)
-	StatsService:SetBase(plr, "Hunger", newHunger)
-	if itemId == "StaminaRation" or itemId == "ReinforcedRation" then
-		local energy = itemId == "StaminaRation" and 20 or 35
-		StatsService:SetBase(plr, "Stamina", math.min(StatsService:GetStat(plr,"MaxStamina") or 100, (StatsService:GetBase(plr,"Stamina") or 0) + energy * (1 + (plr:GetAttribute("Class_FoodBonus") or 0))))
-	end
-	return true
-end
-
-local function applyTimedCharacterResist(char, key, delta, duration)
-	if not char or type(key) ~= "string" then return end
-	local cur = tonumber(char:GetAttribute(key)) or 0
-	local nextValue = math.clamp(cur + (tonumber(delta) or 0), -0.9, 0.9)
-	local applied = nextValue - cur
-	if applied == 0 then return end
-	char:SetAttribute(key, nextValue)
-	local entries = resistEffects[char] or {}
-	resistEffects[char] = entries
-	local effect = { Key = key, Applied = applied, ExpiresAt = os.clock() + duration }
-	entries[effect] = true
-	task.delay(duration, function()
-		if not entries[effect] then return end
-		entries[effect] = nil
-		if not char.Parent then return end
-		local now = tonumber(char:GetAttribute(key)) or 0
-		char:SetAttribute(key, math.clamp(now - applied, -0.9, 0.9))
-	end)
-end
-
-local function applyTimedStatModifier(plr, stat, delta, duration, idPrefix)
-	if not StatsService or not StatsService.AddModifier then return end
-	local id = string.format("%s_%s_%s", idPrefix or "Consumable", stat, HttpService:GenerateGUID(false))
-	StatsService:AddModifier(plr, stat, delta, "Add", duration, id)
-end
-
-local function applyConsumableEffects(plr, char, hum, itemId)
-	if itemId == "Bandage" then
-		if hum then
-			hum.Health = math.min(hum.MaxHealth, hum.Health + 25 * (1 + (plr:GetAttribute("Class_HealBonus") or 0)))
-		end
-		return
-	end
-	if itemId == "SpringWater" then
-		local current = StatsService:GetBase(plr, "Temperature") or 0
-		StatsService:SetBase(plr, "Temperature", math.max(0, current - 30))
-		return
-	end
-	local effect = RESIST_EFFECTS[itemId]
-	if effect then
-		applyTimedCharacterResist(char, effect.Key, effect.Amount, effect.Duration)
-		return
-	end
-	if itemId == "ThermalPatch" then
-		applyTimedStatModifier(plr, "TemperatureResistance", 3.0, 90, "ThermalPatch")
-		applyTimedCharacterResist(char, "Res_Wet", 0.2, 90)
-	end
-end
-
-function InventoryActionService:_consumeFromSlot(plr, slotType, slotIndex, callback)
-	local char, hum = canAct(plr)
-	if not char then return false, "You cannot use items right now." end
-	local slot = InventoryService:PeekSlot(plr, slotType, slotIndex)
-	local item = slot and ItemDatabase:Get(slot.Id)
-	if item and FoodService:CanConsume(item.Id) then return FoodService:Consume(plr, slotType, slotIndex, callback) end
-	if not canConsume(item) then return false, "This item cannot be consumed." end
-	local useful, reason = hasUsefulEffect(plr, char, hum, slot.Id)
-	if not useful then return false, reason end
-	-- Debit and effect finish before inventory callbacks can change the slot or
-	-- character. ExpectedId also prevents consuming a replacement item.
-	local removed = InventoryService:TakeFromSlot(plr, slotType, slotIndex, 1, {ExpectedId = slot.Id, DeferSync = true})
-	if not removed then return false, "That inventory slot changed. Try again." end
-	local oldHunger = StatsService:GetBase(plr, "Hunger") or 0
-	local oldTemperature = StatsService:GetBase(plr, "Temperature") or 0
-	require(script.Parent.ExpeditionRewardsService):RecordActivity(plr)
-	local oldHealth = hum.Health
-	applyFood(plr, removed)
-	applyConsumableEffects(plr, char, hum, removed)
-	InventoryService:Sync(plr)
-	if FOOD_RESTORE[removed] then
-		return true, string.format("%s: +%d hunger", item.Name, math.floor((StatsService:GetBase(plr, "Hunger") or oldHunger) - oldHunger + 0.5))
-	elseif removed == "Bandage" then
-		return true, string.format("Bandage: +%d health", math.floor(hum.Health - oldHealth + 0.5))
-	elseif removed == "SpringWater" then
-		return true, string.format("Spring Water: -%d heat exposure", math.floor(oldTemperature - (StatsService:GetBase(plr, "Temperature") or 0) + 0.5))
-	end
-	local effect = RESIST_EFFECTS[removed]
-	return true, effect and string.format("%s active for %ds", item.Name, effect.Duration) or "Thermal Patch active for 90s"
+function InventoryActionService:_consumeFromSlot(plr,slotType,slotIndex,callback)
+ if not canAct(plr) then return false,"You cannot use items right now." end
+ local slot=InventoryService:PeekSlot(plr,slotType,slotIndex)
+ local item=slot and ItemDatabase:Get(slot.Id)
+ if not canConsume(item) then return false,"This item cannot be consumed." end
+ if item.Id=="WaterFlask" then return require(script.Parent.GearService):DrinkFlask(plr) end
+ if Catalog.Consumables[item.Id] then return require(script.Parent.GearService):UseMedical(plr,slotType,slotIndex,callback) end
+ return FoodService:Consume(plr,slotType,slotIndex,callback)
 end
 
 function InventoryActionService:Init()
@@ -178,7 +53,8 @@ function InventoryActionService:Init()
 		end
 		if action == "Move" and type(payload) == "table" then
 			print(string.format("[InventoryAction] Move %s: %s[%s] -> %s[%s]", plr.Name, tostring(payload.FromType), tostring(payload.FromIndex), tostring(payload.ToType), tostring(payload.ToIndex)))
-			InventoryService:Move(plr, payload.FromType, payload.FromIndex, payload.ToType, payload.ToIndex)
+			local moved=InventoryService:Move(plr, payload.FromType, payload.FromIndex, payload.ToType, payload.ToIndex)
+			if not moved then InventoryService:Sync(plr);remote:FireClient(plr,"UseResult",{Success=false,Message="That equipment does not fit. Empty extra pack slots before removing a pack; duplicate accessory families cannot stack."}) end
 			return
 		end
 		if action == "Split" and type(payload) == "table" then
@@ -231,6 +107,10 @@ function InventoryActionService:Init()
 				backpack = plr:FindFirstChildOfClass("Backpack")
 				tool = (char and char:FindFirstChild(slot.Id)) or (backpack and backpack:FindFirstChild(slot.Id))
 			end
+			if slot.Uid then
+				tool=nil
+				for _,container in ipairs({char,backpack}) do if container then for _,candidate in ipairs(container:GetChildren()) do if candidate:IsA("Tool") and candidate:GetAttribute("GearUid")==slot.Uid then tool=candidate;break end end end end
+			end
 			if tool and tool:IsA("Tool") then
 				hum:EquipTool(tool)
 				print(string.format("[InventoryAction] Equipped %s for %s", slot.Id, plr.Name))
@@ -240,26 +120,6 @@ function InventoryActionService:Init()
 			return
 		end
 	end)
-end
-
-function InventoryActionService:CaptureCharacterState(char)
-	local effects = {}
-	for effect in pairs(resistEffects[char] or {}) do
-		local remaining = effect.ExpiresAt - os.clock()
-		if remaining > 0 then table.insert(effects, { Key = effect.Key, Applied = effect.Applied, Remaining = remaining }) end
-	end
-	return effects
-end
-
-function InventoryActionService:RestoreCharacterState(char, effects)
-	local codec = require(script.Parent.WorldSnapshotCodec)
-	codec.BoundedCount(effects, 128)
-	for effect in pairs(resistEffects[char] or {}) do resistEffects[char][effect] = nil end
-	for _, key in ipairs({ "Res_Heat", "Res_Cold", "Res_Toxin", "Res_Wet" }) do char:SetAttribute(key, 0) end
-	for _, effect in ipairs(effects) do
-		assert(effect.Key == "Res_Heat" or effect.Key == "Res_Cold" or effect.Key == "Res_Toxin" or effect.Key == "Res_Wet", "Unknown saved resistance")
-		applyTimedCharacterResist(char, effect.Key, codec.Number(effect.Applied, -0.9, 0.9), codec.Number(effect.Remaining, 0, 86400))
-	end
 end
 
 return InventoryActionService

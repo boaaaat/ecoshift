@@ -163,15 +163,18 @@ end)
 
 -- Prompts display the requesting player's own harvest duration; the server validates it independently.
 local watched=setmetatable({},{__mode="k"})
+local holding=setmetatable({},{__mode="k"})
 local function updatePrompt(prompt)
+ if holding[prompt] then return end
 	local revive=prompt:GetAttribute("BaseReviveDuration")
 	if type(revive)=="number" then
-		prompt.HoldDuration=revive*math.max(.25,(1-(player:GetAttribute("Class_ReviveReduction") or 0))*(1-(player:GetAttribute("ClassReviveReduction") or 0)));return
+		prompt.HoldDuration=revive*math.max(.25,(1-(player:GetAttribute("Class_ReviveReduction") or 0))*(1-(player:GetAttribute("ClassReviveReduction") or 0))*(1-(player:GetAttribute("Gear_ReviveDurationReduction") or 0)));return
 	end
 	local base=prompt:GetAttribute("BaseHarvestDuration");if type(base)~="number" then return end
 	local kind=prompt:GetAttribute("ResourceKind") or (prompt.Parent and prompt.Parent:GetAttribute("ResourceKind"))
 	local reduction=(player:GetAttribute("Class_GatherTimeReduction") or 0)+(player:GetAttribute("ClassHarvestReduction") or 0)
-	if kind=="Plant" then reduction+=player:GetAttribute("Class_PlantTimeReduction") or 0 end
+	if kind=="Plant" then reduction+=(player:GetAttribute("Class_PlantTimeReduction") or 0)+(player:GetAttribute("Gear_GatherTimeReduction") or 0) end
+ reduction+=player:GetAttribute("Food_GatherDurationReduction") or 0
 	prompt.HoldDuration=base*(1-math.clamp(reduction,0,.5))
 end
 local function watch(instance)
@@ -181,4 +184,8 @@ local function watch(instance)
 end
 for _,instance in ipairs(workspace:GetDescendants()) do watch(instance) end
 workspace.DescendantAdded:Connect(watch)
-for _,attr in ipairs({"Class_GatherTimeReduction","Class_PlantTimeReduction","ClassHarvestReduction","Class_ReviveReduction","ClassReviveReduction"}) do player:GetAttributeChangedSignal(attr):Connect(function() for prompt in pairs(watched) do updatePrompt(prompt) end end) end
+for _,attr in ipairs({"Class_GatherTimeReduction","Class_PlantTimeReduction","ClassHarvestReduction","Class_ReviveReduction","ClassReviveReduction","Gear_GatherTimeReduction","Food_GatherDurationReduction","Gear_ReviveDurationReduction"}) do player:GetAttributeChangedSignal(attr):Connect(function() for prompt in pairs(watched) do updatePrompt(prompt) end end) end
+
+local promptService=game:GetService("ProximityPromptService")
+promptService.PromptButtonHoldBegan:Connect(function(prompt) updatePrompt(prompt);holding[prompt]=prompt.HoldDuration end)
+promptService.PromptButtonHoldEnded:Connect(function(prompt) holding[prompt]=nil;updatePrompt(prompt) end)

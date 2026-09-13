@@ -46,8 +46,8 @@ local function levelForXP(xp)
 end
 local function decode(raw)
 	if raw ~= nil and type(raw) ~= "table" then return nil, "InvalidStoredProfile" end
-	if raw and (tonumber(raw.SchemaVersion) or 0) > Economy.SchemaVersion then return nil, "UnsupportedProfileVersion" end
-	-- Missing fields migrate, but damaged money/receipt fields never become defaults.
+	if raw and raw.SchemaVersion ~= Economy.SchemaVersion then return nil, "UnsupportedProfileVersion" end
+	-- Reject foreign schema data; no legacy profile migration.
 	if raw and raw.Currency ~= nil and (type(raw.Currency) ~= "number" or raw.Currency % 1 ~= 0 or raw.Currency < 0 or raw.Currency > Economy.MaxCurrency) then
 		return nil, "InvalidStoredBalance"
 	end
@@ -57,7 +57,7 @@ local function decode(raw)
 	data.XP = integer(data.XP, 0)
 	data.Level = math.max(1, integer(data.Level, 1), levelForXP(data.XP))
 	data.Currency = integer(data.Currency, 0)
-	-- Legacy arrays and sets are both preserved. Never unlock every definition.
+	-- Stored ownership arrays are normalized to the in-memory set representation.
 	for _, field in ipairs({ "UnlockedRoles", "Perks", "Cosmetics", "Blueprints" }) do data[field] = asSet(data[field]) end
 	data.UnlockedRoles[Config.ROLES.Default] = true
 	if type(data.Role) ~= "string" or not Config.ROLES.Definitions[data.Role] or not data.UnlockedRoles[data.Role] then data.Role = Config.ROLES.Default end

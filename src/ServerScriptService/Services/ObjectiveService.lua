@@ -1,234 +1,54 @@
--- ObjectiveService.lua (updated with _G hooks)
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local HttpService = game:GetService("HttpService")
-
-local Config = require(ReplicatedStorage.Shared.Config)
-local Util = require(ReplicatedStorage.Shared.Util)
-local BiomeService = require(script.Parent.BiomeService)
-local ThreatService = require(script.Parent.ThreatService)
-local GameStateService = require(script.Parent.GameStateService)
-
-local ObjectiveService = {}
-ObjectiveService._remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
-ObjectiveService._remote = Util.GetRemote(ObjectiveService._remotesFolder, Config.RemoteNames.ObjectiveUpdate)
-ObjectiveService._active = {} -- [id] = {StartedAt, EndsAt, State, Biome, Data}
-ObjectiveService._tickInterval = 0.25
-ObjectiveService._started = false
-ObjectiveService._requestConn = nil
-
-local function now() return os.clock() end
-local function paused() return ReplicatedStorage:GetAttribute("WorldRestoring") == true end
-local function nonnegative(value)
-	return type(value) == "number" and value == value and value >= 0 and value < math.huge
+-- Shared receipt-backed optional objectives; physical interactions live in ObjectiveRuntimeService.
+local RS=game:GetService("ReplicatedStorage")
+local Codec=require(script.Parent.WorldSnapshotCodec)
+local Service={_active={},_claimed={}}
+local function hook(kind,...)
+ for _,callback in ipairs(((_G.Ecoshift or {}).ObjectiveCallbacks or {})[kind] or {}) do local ok,err=pcall(callback,...);if not ok then warn("[Objectives]",err) end end
 end
-local function plain(value, depth, budget)
-	local kind = type(value)
-	if kind == "number" then return value == value and math.abs(value) < math.huge end
-	if kind == "string" or kind == "boolean" or kind == "nil" then return true end
-	if kind ~= "table" or depth > 10 then return false end
-	for key, child in pairs(value) do
-		budget[1] += 1
-		if budget[1] > 5000 or (type(key) ~= "string" and type(key) ~= "number") or not plain(key, depth + 1, budget) or not plain(child, depth + 1, budget) then return false end
-	end
-	return true
+function Service:Start(id,entry)
+ if self._claimed[entry.InstanceId] then return false end
+ self._active[id]=entry;entry.State="Active";entry.Data=entry.Data or {Progress=0}
+ if self._remote then self._remote:FireAllClients("Start",id,entry) end
+ hook("Start",id,entry);return true
 end
-local function withinWindow(range)
-	local min = tonumber(range and range[1]) or 60
-	local max = tonumber(range and range[2]) or min
-	if max < min then max = min end
-	return math.random(min, max)
+function Service:Advance(id,delta)
+ local entry=self._active[id]
+ if not entry or type(delta)~="number" or delta~=delta or delta<=0 or RS:GetAttribute("WorldRestoring") or RS:GetAttribute("WorldShifting") then return false end
+ entry.Data.Progress=math.clamp((entry.Data.Progress or 0)+delta,0,1)
+ if self._remote then self._remote:FireAllClients("Progress",id,entry.Data.Progress) end
+ if entry.Data.Progress>=1 then return self:Complete(id) end
+ return true
 end
-local function hook(kind, ...)
-	local list = _G.Ecoshift and _G.Ecoshift.ObjectiveCallbacks and _G.Ecoshift.ObjectiveCallbacks[kind]
-	if type(list) == "table" then
-		for _, cb in ipairs(list) do
-			if type(cb) == "function" then
-				pcall(cb, ...)
-			end
-		end
-	end
+function Service:Complete(id)
+ local entry=self._active[id]
+ if not entry or self._claimed[entry.InstanceId] then return false end
+ self._claimed[entry.InstanceId]=true;entry.State="Completed";entry.Data.Progress=1;self._active[id]=nil
+ require(script.Parent.ExpeditionRewardsService):OnObjective(id,entry,entry.Rewards or {})
+ if self._remote then self._remote:FireAllClients("End",id,entry) end
+ hook("End",id,entry)
+ if entry.Schematic then require(script.Parent.EnchantingService):GrantChoice("event:"..entry.InstanceId,entry.Schematic) end
+ return true
 end
-
-function ObjectiveService:_eligiblePool(minute)
-	local pool = {}
-	for _,entry in ipairs(Config.OBJECTIVES.Pool) do
-		if (entry.MinMinute or 0) <= minute then table.insert(pool, entry.Id) end
-	end
-	return pool
+function Service:End(id,state)
+ local entry=self._active[id];if not entry then return end
+ entry.State=state or "Expired";self._active[id]=nil
+ if self._remote then self._remote:FireAllClients("End",id,entry) end;hook("End",id,entry)
 end
-
-function ObjectiveService:_start(id)
-	if GameStateService:IsGameOver() or paused() or self._active[id] then
-		return
-	end
-	local dur = withinWindow(Config.OBJECTIVES.DurationSeconds)
-	self._active[id] = {
-		InstanceId = HttpService:GenerateGUID(false),
-		State = "Active",
-		StartedAt = now(),
-		EndsAt = now() + dur,
-		Biome = BiomeService:GetCurrent(),
-		Data = {Progress=0}
-	}
-	if self._remote and self._remote.FireAllClients then self._remote:FireAllClients("Start", id, self._active[id]) end
-	hook("Start", id, self._active[id])
+function Service:EndAll(state) local ids={};for id in pairs(self._active) do table.insert(ids,id) end;for _,id in ipairs(ids) do self:End(id,state) end end
+function Service:GetActiveSnapshot() return Codec.Copy(self._active) end
+function Service:SendActiveToPlayer(player) if self._remote then for id,entry in pairs(self._active) do self._remote:FireClient(player,"Start",id,entry) end end end
+function Service:CaptureState() return {SchemaVersion=2,Active=Codec.Copy(self._active),Claimed=Codec.Copy(self._claimed)} end
+function Service:RestoreState(state)
+ if type(state)~="table" or state.SchemaVersion~=2 then return false,"InvalidObjectiveSnapshot" end
+ Codec.BoundedCount(state.Active,2);Codec.BoundedCount(state.Claimed,10000)
+ self._active=Codec.Copy(state.Active);self._claimed=Codec.Copy(state.Claimed);return true
 end
-
-function ObjectiveService:_end(id, state, opts)
-	local entry = self._active[id]
-	if not entry or entry.State ~= "Active" then return end
-	entry.State = state
-	-- Claim completion before callbacks can yield or re-enter this objective.
-	self._active[id] = nil
-	if self._remote and self._remote.FireAllClients then self._remote:FireAllClients("End", id, entry) end
-	if state == "Failed" and not (opts and opts.SuppressThreat) then
-		ThreatService:OnObjectiveFailed()
-	end
-	hook("End", id, entry)
+function Service:CompleteWorldRestore() return true end
+function Service:Init()
+ if self._started then return end;self._started=true
+ self._remote=RS.Remotes:FindFirstChild("ObjectiveUpdate")
+ _G.Ecoshift=_G.Ecoshift or {};_G.Ecoshift.ObjectiveCallbacks={Start={},End={},Progress={}}
+ for _,kind in ipairs({"Start","End","Progress"}) do _G.Ecoshift["OnObjective"..kind.."Add"]=function(cb) table.insert(_G.Ecoshift.ObjectiveCallbacks[kind],cb) end end
+ if self._remote then self._remote.OnServerEvent:Connect(function(player,action)if action=="RequestActive" then self:SendActiveToPlayer(player) end end) end
 end
-
-function ObjectiveService:Advance(id, progressDelta)
-	if GameStateService:IsGameOver() or paused() then
-		return false, "GameOver"
-	end
-	if not nonnegative(progressDelta) then return false, "InvalidProgress" end
-	local entry = self._active[id]; if not entry or entry.State ~= "Active" then return end
-	entry.Data.Progress = math.clamp((entry.Data.Progress or 0) + (progressDelta or 0), 0, 1)
-	if self._remote and self._remote.FireAllClients then self._remote:FireAllClients("Progress", id, entry.Data.Progress) end
-	hook("Progress", id, entry.Data.Progress)
-	if self._active[id] == entry and entry.Data.Progress >= 1 then self:_end(id, "Completed") end
-end
-
-function ObjectiveService:EndAll(state, opts)
-	local ids = {}
-	for id in pairs(self._active) do
-		ids[#ids + 1] = id
-	end
-	for _, id in ipairs(ids) do
-		self:_end(id, state or "Failed", opts)
-	end
-end
-
-function ObjectiveService:GetActiveSnapshot()
-	return Util.DeepCopy(self._active)
-end
-
-function ObjectiveService:CaptureState()
-	if self._pendingRestore then return Util.DeepCopy(self._pendingRestore) end
-	local stamp, active = now(), {}
-	for id, entry in pairs(self._active) do
-		if entry.State == "Active" then
-			active[id] = {
-				InstanceId = entry.InstanceId, Biome = entry.Biome, Data = Util.DeepCopy(entry.Data),
-				Elapsed = math.max(0, stamp - entry.StartedAt), Remaining = math.max(0, entry.EndsAt - stamp),
-			}
-		end
-	end
-	return { SchemaVersion = 1, Elapsed = math.max(0, stamp - (self._t0 or stamp)), Active = active }
-end
-
-function ObjectiveService:RestoreState(state)
-	if type(state) ~= "table" or state.SchemaVersion ~= 1 or not nonnegative(state.Elapsed) or type(state.Active) ~= "table" then return false, "InvalidObjectiveSnapshot" end
-	local known, count, instances, active = {}, 0, {}, {}
-	for _, definition in ipairs(Config.OBJECTIVES.Pool) do known[definition.Id] = true end
-	for id, entry in pairs(state.Active) do
-		count += 1
-		if type(id) ~= "string" or not known[id] or count > Config.OBJECTIVES.MaxConcurrent or type(entry) ~= "table"
-			or type(entry.InstanceId) ~= "string" or #entry.InstanceId < 1 or #entry.InstanceId > 80 or instances[entry.InstanceId]
-			or type(entry.Biome) ~= "string" or not nonnegative(entry.Elapsed) or not nonnegative(entry.Remaining)
-			or type(entry.Data) ~= "table" or not nonnegative(entry.Data.Progress) or entry.Data.Progress > 1
-			or not plain(entry.Data, 0, { 0 }) then return false, "InvalidObjectiveSnapshot" end
-		instances[entry.InstanceId] = true
-		active[id] = { InstanceId = entry.InstanceId, Biome = entry.Biome, Elapsed = entry.Elapsed, Remaining = entry.Remaining, Data = Util.DeepCopy(entry.Data) }
-	end
-	self._pendingRestore = { SchemaVersion = 1, Elapsed = state.Elapsed, Active = active }
-	if not paused() then return self:CompleteWorldRestore() end
-	return true
-end
-
-function ObjectiveService:CompleteWorldRestore()
-	local saved = self._pendingRestore
-	if not saved then return true end
-	self._pendingRestore = nil
-	-- This terminal state only cleans prompts/UI; it cannot trigger completion rewards.
-	self:EndAll("Restored", { SuppressThreat = true })
-	local stamp = now()
-	self._t0 = stamp - saved.Elapsed
-	for id, entry in pairs(saved.Active) do
-		local active = {
-			State = "Active", InstanceId = entry.InstanceId, Biome = entry.Biome,
-			StartedAt = stamp - entry.Elapsed, EndsAt = stamp + entry.Remaining,
-			Data = Util.DeepCopy(entry.Data), Restored = true,
-		}
-		self._active[id] = active
-		if self._remote then
-			self._remote:FireAllClients("Start", id, active)
-			self._remote:FireAllClients("Progress", id, active.Data.Progress)
-		end
-		hook("Start", id, active)
-		active.Restored = nil
-	end
-	return true
-end
-
-function ObjectiveService:SendActiveToPlayer(plr)
-	if not plr or not self._remote then return end
-	for id, entry in pairs(self._active) do
-		self._remote:FireClient(plr, "Start", id, entry)
-		self._remote:FireClient(plr, "Progress", id, entry.Data and entry.Data.Progress or 0)
-	end
-end
-
-function ObjectiveService:_tick()
-	if GameStateService:IsGameOver() or paused() then
-		return
-	end
-	local minute = math.floor((now() - (self._t0 or now())) / 60)
-	local need = Config.OBJECTIVES.MaxConcurrent - (function() local c=0 for _ in pairs(self._active) do c+=1 end return c end)()
-	if need > 0 then
-		local pool = self:_eligiblePool(minute)
-		for _=1,need do
-			if #pool == 0 then break end
-			local pickIdx = math.random(1, #pool)
-			local id = table.remove(pool, pickIdx)
-			if not self._active[id] then self:_start(id) end
-		end
-	end
-	for id,entry in pairs(self._active) do
-		if entry.State == "Active" then
-			if (entry.Data.Progress or 0) >= 1 then
-				self:_end(id, "Completed")
-			elseif now() >= entry.EndsAt or entry.Biome ~= BiomeService:GetCurrent() then
-				self:_end(id, "Failed")
-			end
-		end
-	end
-end
-
-function ObjectiveService:Init()
-	if self._started then return end
-	self._started = true
-	self._t0 = now()
-	if self._remote and not self._requestConn then
-		self._requestConn = self._remote.OnServerEvent:Connect(function(plr, action)
-			if action == "RequestActive" then
-				self:SendActiveToPlayer(plr)
-			end
-		end)
-	end
-	_G.Ecoshift = _G.Ecoshift or {}
-	_G.Ecoshift.ObjectiveCallbacks = _G.Ecoshift.ObjectiveCallbacks or { Start = {}, End = {}, Progress = {} }
-	_G.Ecoshift.OnObjectiveStartAdd = function(cb) if type(cb) == "function" then table.insert(_G.Ecoshift.ObjectiveCallbacks.Start, cb) end end
-	_G.Ecoshift.OnObjectiveEndAdd = function(cb) if type(cb) == "function" then table.insert(_G.Ecoshift.ObjectiveCallbacks.End, cb) end end
-	_G.Ecoshift.OnObjectiveProgressAdd = function(cb) if type(cb) == "function" then table.insert(_G.Ecoshift.ObjectiveCallbacks.Progress, cb) end end
-	task.spawn(function()
-		while self._started do
-			pcall(function()
-				self:_tick()
-			end)
-			task.wait(self._tickInterval)
-		end
-	end)
-end
-
-return ObjectiveService
+return Service

@@ -6,26 +6,12 @@ local CollectionService = game:GetService("CollectionService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
-local WeaponFactory = require(ReplicatedStorage.Shared.Weapons.WeaponFactory)
-local WeaponUtil = require(ReplicatedStorage.Shared.Weapons.WeaponUtil)
 local StatsService = require(script.Parent.StatsService)
 local GameStateService = require(script.Parent.GameStateService)
 
--- Lazy-loaded to avoid circular dependency
-local DeathService = nil
-local function getDeathService()
-	if not DeathService then
-		local success, result = pcall(function()
-			return require(script.Parent.DeathService)
-		end)
-		if success then
-			DeathService = result
-		end
-	end
-	return DeathService
-end
-
+local Instances=require(ReplicatedStorage.Shared.ItemInstance)
 local CombatService = {}
+local acceptedCast=setmetatable({}, {__mode="k"})
 -- OPTIMIZED: Lazy-load remotes instead of blocking at module load
 CombatService._remotesFolder = nil
 CombatService._remoteDamage = nil
@@ -34,7 +20,6 @@ CombatService._remoteFeedback = nil
 
 CombatService._lastUse = setmetatable({}, { __mode = "k" }) -- [tool] = time
 CombatService._chargeStart = setmetatable({}, { __mode = "k" }) -- [player] = { Tool, Started }
-CombatService._blocking = setmetatable({}, { __mode = "k" }) -- [player] = tool
 local COMBAT_FEEDBACK_RANGE = 180
 local TOOL_ORIGIN_NAMES = { "MuzzleAttachment", "Muzzle", "Barrel", "Tip" }
 
@@ -142,12 +127,19 @@ local function getMaxHealthFromTarget(target, fallback)
 	return fallback
 end
 
+local function interiorOf(actor)
+ if typeof(actor)~="Instance" then return nil end
+ local player=actor:IsA("Player") and actor or actor:IsA("Model") and Players:GetPlayerFromCharacter(actor)
+ return player and player:GetAttribute("InteriorId") or actor:GetAttribute("InteriorId")
+end
 function CombatService:ApplyDamage(attacker, target, amount, dmgType)
-	if GameStateService:IsGameOver() then
+ local attackerInterior,targetInterior=interiorOf(attacker),interiorOf(target)
+ if attackerInterior~=targetInterior then return end
+ if GameStateService:IsGameOver() or (ReplicatedStorage:GetAttribute("WorldShifting") and not attackerInterior) then
 		return
 	end
 	amount = tonumber(amount) or 0
-	if amount ~= amount or amount <= 0 or amount > 2000 then return end
+	if amount ~= amount or amount <= 0 or amount > 100000 then return end
 	if typeof(target) ~= "Instance" or not target:IsA("Model") or not target:IsDescendantOf(Workspace) then return end
 
 	-- attacker can be Player or Model
@@ -158,9 +150,9 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 	if attackerPlayer then
 		local hum = attackerPlayer.Character and attackerPlayer.Character:FindFirstChildOfClass("Humanoid")
 		if not hum or hum.Health <= 0 or attackerPlayer:GetAttribute("IsDead") then return end
-		if dmgType ~= "ClassTurret" and not canHit(attackerPlayer) then return end
+		if dmgType ~= "ClassTurret" and not acceptedCast[attackerPlayer] and not canHit(attackerPlayer) then return end
 		if dmgType ~= "ClassTurret" and not distanceOK(attackerPlayer, target, 175) then return end
-		local combatMult = tonumber(attackerPlayer:GetAttribute("Role_Combat")) or 1.0
+		local combatMult = (tonumber(attackerPlayer:GetAttribute("Role_Combat")) or 1.0) * (1+(attackerPlayer:GetAttribute("Gear_MonsterDamageBonus") or 0))
 		amount = amount * combatMult
 	end
 
@@ -174,6 +166,12 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 	end
 
 	if attackerPlayer and not tgtPlr then
+		local targetRoot=target.PrimaryPart or target:FindFirstChild("HumanoidRootPart")
+		local attackerRoot=attackerPlayer.Character and attackerPlayer.Character:FindFirstChild("HumanoidRootPart")
+		if targetRoot and attackerRoot then
+			local approach=attackerRoot.Position-targetRoot.Position
+			if approach.Magnitude>0 and approach.Unit:Dot(targetRoot.CFrame.LookVector)>.2 then amount*=target:GetAttribute("BossArmored") and .25 or 1-(target:GetAttribute("FrontalReduction") or 0) end
+		end
 		if dmgType == "Melee" or dmgType == "Gun" or dmgType == "Bow" or dmgType == "Throwable" then
 			amount *= 1 + (attackerPlayer:GetAttribute("Food_MonsterDamageBonus") or 0)
 		end
@@ -182,6 +180,8 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 		target:SetAttribute("LastAttackerUserId", attackerPlayer.UserId)
 		if dmgType~="ClassTurret" then require(script.Parent.ExpeditionRewardsService):RecordActivity(attackerPlayer) end
 	elseif tgtPlr and typeof(attacker)=="Instance" and attacker:IsA("Model") and game:GetService("CollectionService"):HasTag(attacker,"Monster") then
+		amount=require(script.Parent.GearService):BeforeMonsterDamage(tgtPlr,attacker,amount)
+		if amount<=0 then return end
 		amount *= 1 - require(script.Parent.ClassAbilityService):GetMonsterReduction(tgtPlr)
 	end
 
@@ -197,36 +197,6 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 		oldHealth = healthValue.Value
 	end
 	if typeof(oldHealth) ~= "number" then return end
-
-	-- Shield block check for player targets
-	if tgtPlr and self._blocking[tgtPlr] then
-		local shieldTool = self._blocking[tgtPlr]
-		if shieldTool and tgtPlr.Character and shieldTool.Parent == tgtPlr.Character then
-			local blockPercent = WeaponUtil.GetNumber(shieldTool, "BlockPercent", 0)
-			local durability = WeaponUtil.GetNumber(shieldTool, "Durability", 0)
-			blockPercent = math.clamp(blockPercent, 0, 0.95)
-			if blockPercent > 0 and durability > 0 then
-				local blocked = amount * blockPercent
-				amount = math.max(0, amount - blocked)
-				-- reduce durability by blocked amount
-				local remaining = math.max(0, durability - blocked)
-				if shieldTool:GetAttribute("Durability") ~= nil then
-					shieldTool:SetAttribute("Durability", remaining)
-				end
-				local child = shieldTool:FindFirstChild("Durability")
-				if child and (child:IsA("NumberValue") or child:IsA("IntValue")) then
-					child.Value = remaining
-				elseif child and child:IsA("StringValue") then
-					child.Value = tostring(remaining)
-				end
-				if remaining <= 0 then
-					self._blocking[tgtPlr] = nil
-				end
-			end
-		else
-			self._blocking[tgtPlr] = nil
-		end
-	end
 
 	-- Armor reduction (percent) for player targets
 	if tgtPlr then
@@ -257,6 +227,7 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 		return
 	end
 
+	if tgtPlr then require(script.Parent.GearService):AfterMonsterDamage(tgtPlr) end
 	-- Combat feedback (damage numbers + health bar) for non-player targets
 	if not tgtPlr then
 		ensureRemotes(self)
@@ -292,71 +263,9 @@ function CombatService:OnDamageRequest(attacker, target, amount, dmgType)
 	self:ApplyDamage(attacker, target, amount, dmgType)
 end
 
-local function getEquippedTool(plr)
-	if not plr or not plr.Character then return nil end
-	for _, child in ipairs(plr.Character:GetChildren()) do
-		if child:IsA("Tool") then return child end
-	end
-	return nil
-end
-
-local function hasToolType(tool)
-	if not tool or not tool:IsA("Tool") then return false end
-	local weaponType = WeaponUtil.GetType(tool)
-	if weaponType and weaponType ~= "" then
-		return false
-	end
-	local attr = tool:GetAttribute("ToolType")
-	if typeof(attr) == "string" and attr ~= "" then
-		return true
-	end
-	local child = tool:FindFirstChild("ToolType")
-	if child and child:IsA("ValueBase") then
-		if typeof(child.Value) == "string" then
-			return child.Value ~= ""
-		end
-		return tostring(child.Value) ~= ""
-	end
-	return false
-end
-
 local function getRoot(model)
-	if not model then return nil end
-	return model.PrimaryPart or model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart")
+ return model and (model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart"))
 end
-
-local function getToolOrigin(plr, tool)
-	local char = plr and plr.Character
-	if tool then
-		for _, name in ipairs(TOOL_ORIGIN_NAMES) do
-			local node = tool:FindFirstChild(name, true)
-			if node then
-				if node:IsA("Attachment") then
-					return node.WorldPosition
-				end
-				if node:IsA("BasePart") then
-					return node.Position
-				end
-			end
-		end
-		local handle = tool:FindFirstChild("Handle")
-		if handle and handle:IsA("BasePart") then
-			return handle.Position
-		end
-	end
-	if char then
-		local head = char:FindFirstChild("Head")
-		if head and head:IsA("BasePart") then
-			return head.Position
-		end
-		local root = getRoot(char)
-		if root then
-			return root.Position
-		end
-	end
-	return nil
-end
-
 local function getValidatedAimDirection(data)
 	local dir = data and data.Dir
 	if typeof(dir) ~= "Vector3" then
@@ -367,41 +276,6 @@ local function getValidatedAimDirection(data)
 		return nil
 	end
 	return dir.Unit
-end
-
-local function setToolAmmo(tool, value)
-	if not tool or not tool:IsA("Tool") then return end
-	local clamped = math.max(0, math.floor(tonumber(value) or 0))
-
-	if tool:GetAttribute("Ammo") ~= nil then
-		tool:SetAttribute("Ammo", clamped)
-	end
-
-	local ammoObj = tool:FindFirstChild("Ammo")
-	if ammoObj and ammoObj:IsA("ValueBase") then
-		if typeof(ammoObj.Value) == "number" then
-			ammoObj.Value = clamped
-		elseif ammoObj:IsA("StringValue") then
-			ammoObj.Value = tostring(clamped)
-		end
-	end
-end
-
-local function consumeToolAmmo(tool, amount)
-	local current = WeaponUtil.GetNumber(tool, "Ammo", 0)
-	local delta = tonumber(amount) or 0
-	setToolAmmo(tool, current - delta)
-end
-
-local function raycastFromPlayer(plr, origin, dir, maxRange)
-	local char = plr.Character
-	if not char or typeof(origin) ~= "Vector3" or typeof(dir) ~= "Vector3" then return nil end
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { char }
-	local direction = dir * maxRange
-	local res = Workspace:Raycast(origin, direction, params)
-	return res
 end
 
 function CombatService:_canUseTool(tool, cooldown, tolerateJitter)
@@ -416,131 +290,130 @@ function CombatService:_canUseTool(tool, cooldown, tolerateJitter)
 	return true
 end
 
-function CombatService:_handleSword(plr, tool, weapon, data)
-	if not self:_canUseTool(tool, weapon:GetCooldown(), true) then return end
-	local body = getRoot(plr.Character)
-	if not body then return end
-	-- Touch is an untrusted aim-assist hint, never a client-selected radius.
-	-- Even a spoofed hint is restricted to these same small server bounds.
-	local touch = data and data.Touch == true
-	local reach = math.clamp(weapon:GetRange() + 3.5 + (touch and 0.75 or 0), 4, 14)
-	local halfWidth = touch and 3.25 or 2.5
-	local aim = getValidatedAimDirection(data) or body.CFrame.LookVector
-	local flatAim = Vector3.new(aim.X, 0, aim.Z)
-	if flatAim.Magnitude < 0.1 then
-		local facing = body.CFrame.LookVector
-		flatAim = Vector3.new(facing.X, 0, facing.Z)
-	end
-	if flatAim.Magnitude < 0.001 then return end
-	local swing = CFrame.lookAt(body.Position, body.Position + flatAim.Unit)
-	local params = OverlapParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { plr.Character }
-	local parts = Workspace:GetPartBoundsInBox(swing * CFrame.new(0, 0, -reach * 0.5), Vector3.new(halfWidth * 2, 9, reach), params)
-	local seen, bestTarget, bestScore = {}, nil, math.huge
-	local obstructionParams = RaycastParams.new()
-	obstructionParams.FilterType = Enum.RaycastFilterType.Exclude
-	obstructionParams.FilterDescendantsInstances = { plr.Character }
-	-- Decorative leaves and noncolliding weapon art are not physical cover.
-	obstructionParams.RespectCanCollide = true
-	for _, part in ipairs(parts) do
-		local target = part
-		while target and target ~= Workspace do
-			if target:IsA("Model") and isTaggedCombatTarget(target) then break end
-			target = target.Parent
-		end
-		if not target or target == Workspace or seen[target] then continue end
-		seen[target] = true
-		local health = getHumanoidOrHealth(target, false)
-		local targetRoot = getRoot(target)
-		if not health or not targetRoot then continue end
-		local hp = health:IsA("Humanoid") and health.Health or health.Value
-		if hp <= 0 then continue end
-		local relative = swing:PointToObjectSpace(targetRoot.Position)
-		local forward = -relative.Z
-		local flatDistance = Vector2.new(relative.X, relative.Z).Magnitude
-		if forward < 0 or flatDistance > reach or math.abs(relative.X) > halfWidth or math.abs(relative.Y) > 4.5 then continue end
-		local delta = targetRoot.Position - body.Position
-		local obstruction = delta.Magnitude > 0 and Workspace:Raycast(body.Position, delta, obstructionParams)
-		if obstruction and not obstruction.Instance:IsDescendantOf(target) then continue end
-		-- Prefer a directly aimed target, otherwise the nearest target in the swing.
-		local score = flatDistance + math.abs(relative.X) * 0.5
-		if data and data.Target == target then score -= 2 end
-		if score < bestScore then bestTarget, bestScore = target, score end
-	end
-	if bestTarget then self:ApplyDamage(plr, bestTarget, weapon:GetDamage(), "Melee") end
+local function viableTargets(player,direction,range,width,radial,origin,piercing)
+ local root=getRoot(player.Character)
+ if not root then return {} end
+ local basis=CFrame.lookAt(origin or root.Position,(origin or root.Position)+direction)
+ local overlap=OverlapParams.new();overlap.FilterType=Enum.RaycastFilterType.Exclude;overlap.FilterDescendantsInstances={player.Character}
+ local parts=radial and Workspace:GetPartBoundsInRadius(origin,radial,overlap) or Workspace:GetPartBoundsInBox(basis*CFrame.new(0,0,-range/2),Vector3.new(width*2,8,range),overlap)
+ local results,seen={},{}
+ local ray=RaycastParams.new();ray.FilterType=Enum.RaycastFilterType.Exclude;local ignored={player.Character}
+ if piercing then for _,monster in ipairs(CollectionService:GetTagged("Monster")) do ignored[#ignored+1]=monster end end
+ ray.FilterDescendantsInstances=ignored;ray.RespectCanCollide=true
+ for _,part in ipairs(parts) do
+  local model=part
+  while model and model~=Workspace and not (model:IsA("Model") and isTaggedCombatTarget(model)) do model=model.Parent end
+  if not model or model==Workspace or seen[model] then continue end
+  seen[model]=true
+  local targetRoot=getRoot(model);local health=getHumanoidOrHealth(model,false)
+  if not targetRoot or not health or (health:IsA("Humanoid") and health.Health or health.Value)<=0 then continue end
+  local localPoint=basis:PointToObjectSpace(targetRoot.Position)
+  if not radial and (-localPoint.Z<0 or -localPoint.Z>range or math.abs(localPoint.X)>width or math.abs(localPoint.Y)>4) then continue end
+  if radial and (targetRoot.Position-origin).Magnitude>radial then continue end
+  local delta=targetRoot.Position-root.Position
+  local obstruction=Workspace:Raycast(root.Position,delta,ray)
+  if obstruction and not obstruction.Instance:IsDescendantOf(model) then continue end
+  results[#results+1]={Model=model,Distance=delta.Magnitude}
+ end
+ table.sort(results,function(a,b)return a.Distance<b.Distance end)
+ return results
 end
-
-function CombatService:_handleGun(plr, tool, weapon, data)
-	local cooldown = weapon:GetCooldown()
-	if not self:_canUseTool(tool, cooldown) then return end
-	local ammo = weapon:GetAmmo()
-	if ammo <= 0 then return end
-	local origin = getToolOrigin(plr, tool)
-	local dir = getValidatedAimDirection(data)
-	if not origin or not dir then return end
-	consumeToolAmmo(tool, 1)
-	local maxRange = weapon:GetNumber("Range", 200)
-	local hit = raycastFromPlayer(plr, origin, dir, maxRange)
-	if hit and hit.Instance then
-		local model = hit.Instance:FindFirstAncestorOfClass("Model")
-		if model then
-			self:ApplyDamage(plr, model, weapon:GetDamage(), "Gun")
-		end
-	end
+function CombatService:_overhaul(player,action,data)
+ local gear=require(script.Parent.GearService)
+ local entry,def,tool=gear:GetHeld(player)
+ if not entry or not def or not tool or (entry.Durability or 1)<=0 then return end
+ if player:GetAttribute("WorldPlayerLoading") or player:GetAttribute("WorldPlayerRestoring") or ReplicatedStorage:GetAttribute("WorldRestoring") then return end
+ local root=getRoot(player.Character);if not root then return end
+ local family=def.WeaponFamily
+ if def.Kind=="Tool" and entry.Id~="Harvester" then return end
+ local special=action=="Special"
+ if action=="ChargeStart" and family=="Bow" then self._chargeStart[player]={Tool=tool,Started=os.clock()};return end
+ if not special and action~="Attack" and action~="Fire" and action~="ChargeRelease" then return end
+ local direction=getValidatedAimDirection(data) or root.CFrame.LookVector
+ if direction.Magnitude<.01 then return end
+ local touch=data and data.Touch==true
+ local width=2.5*(touch and 1.15 or 1)
+ local reach=def.Reach or 8
+ if family~="Bow" and family~="Staff" then reach+=touch and .75 or 0;direction=Vector3.new(direction.X,0,direction.Z);if direction.Magnitude<.01 then return end;direction=direction.Unit end
+ local now=os.clock()
+ local modifiers=gear:GetModifiers(player)
+ if special and (def.Kind~="Weapon" or gear:GetSpecialRemaining(player)>0) then return end
+ local damage=def.Damage or 6
+ local base=def.StandardDamage or damage
+ if family=="Bow" and not special then
+  local charge=self._chargeStart[player];self._chargeStart[player]=nil
+  if not charge or charge.Tool~=tool or now-charge.Started<.15 then return end
+  damage=base*1.2*math.clamp((now-charge.Started)/1.3,.25,1)
+ end
+ local targets
+ if family=="Staff" then
+  local rayParams=RaycastParams.new();rayParams.FilterType=Enum.RaycastFilterType.Exclude;rayParams.FilterDescendantsInstances={player.Character}
+  local ray=Workspace:Raycast(root.Position,direction*reach,rayParams)
+  local at=ray and ray.Position or root.Position+direction*reach
+  targets=special and viableTargets(player,direction,reach,width,7,at) or viableTargets(player,direction,reach,touch and 1.15 or 1)
+ else targets=viableTargets(player,direction,special and family=="Hammer" and 10 or reach,special and family=="Hammer" and 10 or width,nil,nil,special and family=="Bow") end
+ if special and #targets==0 then if self._remoteFeedback then self._remoteFeedback:FireClient(player,{Type="Message",Message="No visible target in special range."}) end;return end
+ if not special and not self:_canUseTool(tool,def.AttackCycle or .6,true) then return end
+ local cost=special and 20*(1-(modifiers.SpecialCostReduction or 0))*(1-(player:GetAttribute("Food_SpecialDrainReduction") or 0)) or family=="Staff" and 3 or 0
+ local stamina=StatsService:GetBase(player,"Stamina") or 0
+ if stamina<cost then return end
+ if family=="Bow" and not require(script.Parent.InventoryService):Consume(player,"Arrow",1) then return end
+ if cost>0 then StatsService:SetBase(player,"Stamina",stamina-cost) end
+ if special then gear:StartSpecialCooldown(player,8*(1-(modifiers.SpecialCooldownReduction or 0)));damage=def.SpecialDamage or base*(def.SpecialFactor or 1.5) end
+ local maximum=special and (def.SpecialTargets or 1) or 1
+ if special and entry.Id=="StormBow" then maximum=1 end
+ if special and family=="Staff" then maximum=8 end
+ acceptedCast[player]=true
+ local extra=special and gear:OnSpecialHit(player,targets[1].Model,base) or 0
+ for i,target in ipairs(targets) do
+  if i>maximum then break end
+  local amount=damage+(i==1 and extra or 0)
+  if special and entry.Id=="EmberAxe" then amount=base*1.2+(i==1 and extra or 0)
+  elseif special and entry.Id=="ThornBlade" then amount=base*.8+(i==1 and extra or 0)
+  elseif special and entry.Id=="StormBow" then amount=base*1.2+extra end
+  if not special then amount+=gear:BasicHitBonus(player,target.Model,base) end
+  self:ApplyDamage(player,target.Model,amount,family=="Bow" and "Bow" or family=="Staff" and "Gun" or "Melee")
+  if special then
+   local monster=target.Model
+   if entry.Id=="EmberAxe" or entry.Id=="ThornBlade" then
+    local seconds=entry.Id=="EmberAxe" and 4 or 3
+    local generation=(monster:GetAttribute("GearDotSerial") or 0)+1;monster:SetAttribute("GearDotSerial",generation)
+    task.spawn(function()
+     for _=1,seconds do
+      task.wait(1)
+      if not monster.Parent or monster:GetAttribute("GearDotSerial")~=generation then return end
+      acceptedCast[player]=true;self:ApplyDamage(player,monster,base*.1,"GearDamageOverTime");acceptedCast[player]=nil
+     end
+    end)
+   elseif entry.Id=="LanternStaff" then
+    local point=Instance.new("Part");point.Name="LanternBurst";point.Anchored=true;point.CanCollide=false;point.CanQuery=false;point.Transparency=1;point.Position=monster:GetPivot().Position;point.Parent=workspace
+    local light=Instance.new("PointLight");light.Range=20;light.Brightness=2;light.Color=Color3.fromRGB(220,239,167);light.Parent=point;game:GetService("Debris"):AddItem(point,8)
+   elseif entry.Id=="GravityHammer" and not monster:GetAttribute("IsBoss") then
+    local targetRoot=getRoot(monster);local toward=targetRoot and root.Position-targetRoot.Position
+    if toward and toward.Magnitude>2 then
+     local params=RaycastParams.new();params.FilterType=Enum.RaycastFilterType.Exclude;params.FilterDescendantsInstances={monster,player.Character};params.RespectCanCollide=true
+     local movement=Vector3.new(toward.X,0,toward.Z).Unit*2
+     if not workspace:Blockcast(targetRoot.CFrame,Vector3.new(2,3,2),movement,params) then monster:PivotTo(monster:GetPivot()+movement) end
+    end
+   end
+   if family=="Dagger" or entry.Id=="FrostSpear" or entry.Id=="RootStaff" then monster:SetAttribute("GearSlowFactor",.8);monster:SetAttribute("GearSlowUntil",Workspace:GetServerTimeNow()+3) end
+   if (family=="Axe" or family=="Hammer") and not monster:GetAttribute("IsBoss") then monster:SetAttribute("GearStaggerUntil",Workspace:GetServerTimeNow()+(family=="Hammer" and .7 or .5)) end
+  end
+ end
+ if special and entry.Id=="StormBow" and targets[1] then
+  local center=targets[1].Model:GetPivot().Position
+  for _,neighbor in ipairs(viableTargets(player,direction,reach,width,10,center)) do
+   if neighbor.Model~=targets[1].Model then self:ApplyDamage(player,neighbor.Model,base*.4,"Bow");break end
+  end
+ end
+ acceptedCast[player]=nil
+ if #targets>0 or family=="Bow" or family=="Staff" then gear:WearHeld(player,1) end
+ if special and family=="Spear" and entry.Id~="FrostSpear" then
+  local params=RaycastParams.new();params.FilterType=Enum.RaycastFilterType.Exclude;params.FilterDescendantsInstances={player.Character};params.RespectCanCollide=true
+  local hit=Workspace:Blockcast(root.CFrame,Vector3.new(2,3,2),direction*3,params)
+  root.CFrame+=direction*(hit and math.max(0,hit.Distance-.5) or 3)
+ end
 end
-
-function CombatService:_handleBow(plr, tool, weapon, data)
-	local now = os.clock()
-	local charge = self._chargeStart[plr]
-	self._chargeStart[plr] = nil
-	if not charge or charge.Tool ~= tool then return end
-	local chargeTime = weapon:GetChargeTime()
-	local ratio = math.clamp((now - charge.Started) / math.max(chargeTime, 0.1), 0, 1)
-	local cooldown = math.max(chargeTime * 0.2, 0.2)
-	if not self:_canUseTool(tool, cooldown) then return end
-
-	local maxRange = weapon:GetRange()
-	local origin = getToolOrigin(plr, tool)
-	local dir = getValidatedAimDirection(data)
-	if not origin or not dir then return end
-	local hit = raycastFromPlayer(plr, origin, dir, maxRange)
-	if hit and hit.Instance then
-		local model = hit.Instance:FindFirstAncestorOfClass("Model")
-		if model then
-			self:ApplyDamage(plr, model, weapon:ComputeDamage(ratio), "Bow")
-		end
-	end
-end
-
-function CombatService:_handleThrowable(plr, tool, weapon, data)
-	local cooldown = math.max(weapon:GetThrowTime(), 0.2)
-	if not self:_canUseTool(tool, cooldown) then return end
-	local origin = getToolOrigin(plr, tool)
-	local dir = getValidatedAimDirection(data)
-	if not origin or not dir then return end
-	local maxRange = weapon:GetRange()
-	local damage = weapon:GetDamage()
-	local throwTime = weapon:GetThrowTime()
-	task.delay(throwTime, function()
-		local hit = raycastFromPlayer(plr, origin, dir, maxRange)
-		if hit and hit.Instance then
-			local model = hit.Instance:FindFirstAncestorOfClass("Model")
-			if model then
-				self:ApplyDamage(plr, model, damage, "Throwable")
-			end
-		end
-	end)
-end
-
-function CombatService:_handleBlock(plr, tool, weapon, isBlocking)
-	if isBlocking then
-		self._blocking[plr] = tool
-	else
-		self._blocking[plr] = nil
-	end
-end
-
 function CombatService:Bind()
 	if self._bound then return end
 	ensureRemotes(self)
@@ -555,63 +428,12 @@ function CombatService:Bind()
 				self._chargeStart[plr] = nil
 				return
 			end
-			if GameStateService:IsGameOver() then
+			if GameStateService:IsGameOver() or (ReplicatedStorage:GetAttribute("WorldShifting") and not plr:GetAttribute("InteriorId")) then
 				return
 			end
 			local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
 			if not hum or hum.Health <= 0 or plr:GetAttribute("IsDead") then return end
-			if action == "BlockEnd" then
-				self._blocking[plr] = nil
-				return
-			end
-			local tool = getEquippedTool(plr)
-			if not tool then return end
-			if hasToolType(tool) then
-				-- Harvesting damage must never become combat damage. Only tools with
-				-- an explicit server-authored combat profile can use this melee path.
-				local damage = WeaponUtil.GetNumber(tool, "CombatDamage", 0)
-				if action ~= "Attack" or damage <= 0 then return end
-				if ReplicatedStorage:GetAttribute("WorldRestoring") or plr:GetAttribute("WorldPlayerRestoring")
-					or plr:GetAttribute("WorldPlayerLoading") then return end
-				local harvestWeapon = {
-					GetDamage = function() return damage end,
-					GetRange = function() return WeaponUtil.GetNumber(tool, "CombatRange", 6) end,
-					GetCooldown = function() return math.max(0.1, WeaponUtil.GetNumber(tool, "CombatCooldown", 0.6)) end,
-				}
-				self:_handleSword(plr, tool, harvestWeapon, data)
-				return
-			end
-			local weapon = WeaponFactory.Create(tool, plr)
-			if not weapon then return end
-			local wtype = weapon:GetType():lower()
-			if wtype == "sword" or wtype == "swords" then
-				if action == "Attack" then
-					self:_handleSword(plr, tool, weapon, data)
-				end
-			elseif wtype == "gun" or wtype == "guns" then
-				if action == "Fire" then
-					self:_handleGun(plr, tool, weapon, data)
-				end
-			elseif wtype == "bow" or wtype == "bows" then
-				if action == "ChargeStart" then
-					local charge = self._chargeStart[plr]
-					if not charge or charge.Tool ~= tool then
-						self._chargeStart[plr] = { Tool = tool, Started = os.clock() }
-					end
-				elseif action == "ChargeRelease" then
-					self:_handleBow(plr, tool, weapon, data)
-				end
-			elseif wtype == "throwable" or wtype == "throwables" then
-				if action == "Throw" then
-					self:_handleThrowable(plr, tool, weapon, data)
-				end
-			elseif wtype == "shield" or wtype == "shields" then
-				if action == "BlockStart" then
-					self:_handleBlock(plr, tool, weapon, true)
-				elseif action == "BlockEnd" then
-					self:_handleBlock(plr, tool, weapon, false)
-				end
-			end
+			self:_overhaul(plr,action,data)
 		end)
 	end
 

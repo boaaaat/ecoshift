@@ -403,12 +403,12 @@ monsterButton=button(monsterRow,"Choose monster",UDim2.new(1,0,0,44),UDim2.fromO
 	selectFrom(state.Monsters,function(entry) selectedMonster=entry.Id;monsterButton.Text=entry.Name or entry.Id end)
 end)
 local monsterCount=box(monsterRow,"Count 1–10","1",UDim2.new(.25,-4,0,44),UDim2.fromOffset(0,84))
-local monsterLevel=box(monsterRow,"Level 1–25","1",UDim2.new(.25,-4,0,44),UDim2.new(.25,4,0,84))
+local monsterLevel=box(monsterRow,"Level 1–40","1",UDim2.new(.25,-4,0,44),UDim2.new(.25,4,0,84))
 local spawnButton
 spawnButton=button(monsterRow,"SPAWN",UDim2.new(.5,-12,0,44),UDim2.new(.5,12,0,84),function()
 	if not selectedMonster then message("Choose a monster first.",false);return end
 	local count,level=tonumber(monsterCount.Text),tonumber(monsterLevel.Text)
-	if not count or not level or count%1~=0 or level%1~=0 or count<1 or count>10 or level<1 or level>25 then message("Use a count of 1–10 and a level of 1–25.",false);return end
+	if not count or not level or count%1~=0 or level%1~=0 or count<1 or count>10 or level<1 or level>40 then message("Use a count of 1–10 and a level of 1–40.",false);return end
 	request("SpawnMonster",{Id=selectedMonster,Count=count,Level=level},spawnButton)
 end,true)
 local travelRow=worldRow("WORLD UTILITIES")

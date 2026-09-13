@@ -211,6 +211,7 @@ end
 -- Called before every hostile AI class, including Wolf's independent Step override.
 function Service:StepEnemy(controller)
 	if not controller.Root or not controller:IsAlive() then return false end
+ if game:GetService("ReplicatedStorage"):GetAttribute("WorldShifting") or game:GetService("ReplicatedStorage"):GetAttribute("WorldRestoring") then return true end
 	if controller.Config.EntityType ~= "Monster" then return false end
 	local now = os.clock()
 	local model = controller.Model
@@ -252,6 +253,7 @@ function Service:StepEnemy(controller)
 		end
 	end
 	if not targetPart then return false end
+ if controller.StepDeployment then return controller:StepDeployment(targetPart,targetRecord,self) end
 	local point = nearestPoint(targetPart, controller.Root.Position)
 	local distance = (point - controller.Root.Position).Magnitude
 	controller:SetSpeed(controller:GetMoveSpeed())

@@ -1,8 +1,9 @@
 # EcoShift — complete gameplay overhaul, first draft
 
+> Implementation override (2026-09-12): the user requested deleting all old worlds/player data and removing legacy compatibility. The overhaul is now the sole supported ruleset. Retain persistence for new overhaul worlds; earlier legacy-save requirements below are superseded.
 **Revision:** 0.4 — September 12, 2026
 
-**Status:** The wider gameplay overhaul remains a design for discussion. The cooking section was separately approved for implementation; see [the cooking checkpoint](cooking-implementation.md) for delivered behavior and adaptations to the current eight-biome game. Other sections are not implemented by that checkpoint. No tests were authorized.
+**Status:** The user has approved implementation of the entire revision 0.4. The cooking-only checkpoint was an incomplete scope interpretation. Track full implementation and remaining integration in [the delivery ledger](overhaul-implementation-status.md). No tests or smoke tests are authorized; Roblox publishing remains with the user.
 
 This is the consolidated first draft for the new campaign, equipment, resources, enchanting, encounters, events, and terrain. It supersedes earlier *proposals* in this conversation where they conflict. Existing game behavior is not evidence that a proposed feature already works.
 
@@ -31,7 +32,7 @@ This is the consolidated first draft for the new campaign, equipment, resources,
 17. [Monsters, bosses, and expedition areas](#17-monsters-bosses-and-expedition-areas)
 18. [Events and objectives](#18-events-and-objectives)
 19. [Classes, rewards, and player experience](#19-classes-rewards-and-player-experience)
-20. [Saves, legacy worlds, and technical integration](#20-saves-legacy-worlds-and-technical-integration)
+20. [Overhaul saves and technical integration](#20-overhaul-saves-and-technical-integration)
 21. [Staged delivery and later acceptance scenarios](#21-staged-delivery-and-later-acceptance-scenarios)
 22. [Refinement checklist](#22-refinement-checklist)
 
@@ -1159,15 +1160,15 @@ Events need a visible activity or terrain interaction, not just an unexplained g
 - Touch inventory/chest transfer stays a tap action; dragging supports placement/drop/trash as appropriate. UI interaction never triggers a combat action behind the menu.
 - Results show campaign tier/milestone, time, visited biomes, class XP earned, and rewards. Existing saved-world names/party readiness/class display behavior remains.
 
-## 20. Saves, legacy worlds, and technical integration
+## 20. Overhaul saves and technical integration
 
-### Rules and content versioning
+### Overhaul-only storage (approved reset)
 
-- Add **GameplayRulesVersion** to the durable world record, manifest, matchmaking reservation, and snapshot. Missing means legacy version 1. New-overhaul worlds use version 2.
-- Freeze version-1 configuration and behavior behind a version-selected rules/service boundary. Sharing only the new numeric tables would not preserve old crafting, equipment slots, combat, or terrain behavior. Legacy clients receive the correct inventory/recipe/rules presentation for their world.
-- Version-2 worlds have a separate **ContentRelease** capability field. First release has the current eight main biomes and campaign through tier 4. Later content enables the additional eight and tiers 5–8 on a safe resume or shift boundary, preserving world progress and visit history. New biomes start with zero visits.
-- Existing version-1 saves are not converted or silently renamed. There is no cross-world import of items, schematics, durability, or trophies. Permanent class ownership/XP/currency remains account-wide.
-- This document is the new-world catalog. Historical redundant IDs remain supported in legacy data, not shown as unexplained duplicate items in new-world crafting or creative catalogs.
+- The user explicitly superseded legacy preservation: delete all old worlds/player data and remove their compatibility code.
+- The only supported rules and content versions are **GameplayRulesVersion 2 / ContentRelease 2**, including all sixteen biomes and all eight campaign tiers.
+- Retire the seven `_v1` data stores and the old session namespace. All new profile, archive, manifest, session, snapshot, assignment, and reservation writes use the isolated `_Overhaul_20260912` namespace.
+- Old active entries were explicitly removed once; this is not a reset on every server startup. New overhaul worlds and new permanent class progression persist normally.
+- Do not import old inventory, class time, currency, schematics, or world progress. Unknown rules are rejected rather than migrated or silently converted.
 
 ### Persistent gameplay state
 
@@ -1187,7 +1188,7 @@ All inventory paths must preserve item-instance data: equip/swap, split, chest t
 ### Service/data boundaries
 
 - Introduce shared catalog definitions for equipment families, resource classes, recipes, enchantments, biome depths, terrain features, and milestone eligibility. UI and server validation consume the same definitions.
-- A rules adapter chooses version-appropriate configurations/services once when an expedition initializes. Do not scatter fragile `if newWorld` checks through every render function.
+- One overhaul catalog and service set serves every new world. Reject retired rules at storage/admission boundaries.
 - Biome schedule commits one visit identity. Generation, weather maturity, discoveries, and visit credit use that identity, with idempotent retry behavior.
 - Terrain returns authoritative ground/slope/water/region metadata to placement, creature spawning, survival, harvesting, scanning, and maps. No independent guessed ground-height formulas in those services.
 - Upgrade, enchant, extract, repair, and batch-start actions atomically validate source item identity, materials, station reach/grade, life state, cooldown where relevant, and world rules before committing. Replayed requests cannot duplicate output.
@@ -1197,7 +1198,7 @@ All inventory paths must preserve item-instance data: equip/swap, split, chest t
 
 ## 21. Staged delivery and later acceptance scenarios
 
-### Proposed implementation sequence — requires later approval
+### Approved implementation sequence
 
 1. **Refine this document.** Agree on the catalog, campaign gates, difficulty/repair burden, dungeon access, and class-scaling exceptions. Freeze a numbered design revision.
 2. **Versioning and item foundation.** Rules selection, individual gear data, four armor/four accessory slots, safe inventory/chest/drop/save handling. Keep existing worlds functional.
@@ -1226,14 +1227,14 @@ All inventory paths must preserve item-instance data: equip/swap, split, chest t
 - Station batches preserve fuel/work/input/output through shutdown and salvage; ordinary player crafts cancel/refund on departure as approved. Cooking is an explicitly separate shared-station job.
 - All 16 food/drink recipes have fixed inputs and only Campfire/Stove/Oven requirements; no ingredient substitutions or removed-station dependency. Seasoning consumes one charge per eligible serving, preserves stack identity, obeys refresh/replacement/caps, and cannot reset across saves. Cancellation, full output, fuel exhaustion, owner departure, and queue retries cannot lose or duplicate ingredients/output. Mobile cooking requires neither nested scrolling nor timing actions.
 - Required milestones have accessible entrances, guaranteed progression rewards, and solo-compatible mechanics. Missing an optional event never permanently raises campaign difficulty.
-- Version-1 worlds keep old behavior; version-2 worlds expand without losing progress; class kits are granted once and contain no late-game gear; creative never earns rewards.
+- Retired world/profile records are absent from active storage and cannot enter the new rules. New overhaul worlds resume without losing progress; class kits are granted once and contain no late-game gear; creative never earns rewards.
 - All menu/input interactions work on phone and PC; camera unlock, map layers, tooltip size, scrolling, inventory transfers, item drop/split/trash, and button feedback remain usable.
 - Measure organic solo and crew campaign completion, resource visit variance, durability consumption, enchantment grind, and performance. The 10–15-hour and 300 Marks/hour goals are targets until measured.
 - Keep already deferred real-player cross-lobby merging/travel/resume checks explicitly pending until a crew session is arranged.
 
 ### Delivery policy
 
-This document authorizes no implementation, model purchase, test creation, test execution, or Roblox publishing. After implementation is separately requested, edit source through the repository, deliver via Rojo to both places, and push completed implementation checkpoints. The user publishes Roblox places.
+This document authorizes no implementation, model purchase, test creation, test execution, or Roblox publishing. Implementation is now authorized: edit source through the repository, deliver via Rojo to both places, and push completed implementation checkpoints. The user publishes Roblox places.
 
 ## 22. Refinement checklist
 

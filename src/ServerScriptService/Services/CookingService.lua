@@ -46,7 +46,7 @@ end
 local function newState()
 	local output = {}
 	for i = 1, OUTPUT_SLOTS do output[i] = false end
-	return { Version = 1, Jobs = {}, Output = output, FuelSeconds = 0, KeepWarm = false, Enabled = true }
+	return { Version = 2, Jobs = {}, Output = output, FuelSeconds = 0, KeepWarm = false, Enabled = true }
 end
 local function outputSlot(state, itemId)
 	local recipe = Cooking.GetMeal(itemId)
@@ -126,6 +126,7 @@ function Service:Queue(player, station, payload)
 	local state = self:_get(station)
 	if #state.Jobs >= MAX_JOBS then return false, "This station already has three queued jobs." end
 	local recipe = type(payload.RecipeId) == "string" and Cooking.Recipes[payload.RecipeId]
+	if recipe and (require(script.Parent.CampaignService):GetTier() < recipe.Tier or (station:GetAttribute("StationGrade") or 1) < recipe.Tier) then return false, "Upgrade this station and campaign to grade "..recipe.Tier.."." end
 	local seasoning = payload.SeasoningId
 	if seasoning == "" or seasoning == false then seasoning = nil end
 	if not recipe or recipe.Future or recipe.StationType ~= stationType(station) then return false, "Choose a recipe for this station." end
@@ -136,7 +137,7 @@ function Service:Queue(player, station, payload)
 	if not outputId or not Items:Get(outputId) then return false, "This meal is not available." end
 	local cost = ingredients(recipe, seasoning, payload.Quantity)
 	local job = { Id = HttpService:GenerateGUID(false), RecipeId = recipe.Id, SeasoningId = seasoning,
-		RecipeVersion = 1, Quantity = payload.Quantity, Remaining = payload.Quantity,
+		RecipeVersion = 2, Quantity = payload.Quantity, Remaining = payload.Quantity,
 		Work = 0, WorkRequired = recipe.WorkSeconds, OutputId = outputId,
 		UnitCost = ingredients(recipe, seasoning, 1), OwnerUserId = player.UserId }
 	if not Inventory:PayCost(player, cost, true) then return false, "Missing ingredients or seasoning." end
@@ -204,7 +205,7 @@ end
 function Service:RestoreStation(station, saved)
 	if not Cooking.Stations[station:GetAttribute("BuildType")] then return end
 	local state = saved and Codec.Copy(saved) or newState()
-	assert(state.Version == 1, "Unsupported cooking station snapshot")
+	assert(state.Version == 2, "Unsupported cooking station snapshot")
 	Codec.BoundedCount(state.Jobs, MAX_JOBS)
 	assert(#state.Output == OUTPUT_SLOTS, "Invalid cooking output snapshot")
 	Codec.Number(state.FuelSeconds, 0, MAX_FUEL)
@@ -215,7 +216,7 @@ function Service:RestoreStation(station, saved)
 		assert(not ids[job.Id], "Duplicate saved cooking job")
 		ids[job.Id] = true
 		local recipe = Cooking.Recipes[job.RecipeId]
-		assert(recipe and recipe.StationType == station:GetAttribute("BuildType") and job.RecipeVersion == 1, "Saved cooking recipe unavailable")
+		assert(recipe and recipe.StationType == station:GetAttribute("BuildType") and job.RecipeVersion == 2, "Saved cooking recipe unavailable")
 		assert(integer(job.Quantity, 1, MAX_QUANTITY) and integer(job.Remaining, 1, job.Quantity), "Invalid saved servings")
 		Codec.Number(job.WorkRequired, 0.05, 3600)
 		Codec.Number(job.Work, 0, job.WorkRequired)

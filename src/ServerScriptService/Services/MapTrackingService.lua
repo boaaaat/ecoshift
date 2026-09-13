@@ -28,7 +28,14 @@ function Service:UpdatePlayer(player)
 			TeamExplorationService:RevealFromPlayer(player, position)
 		end
 	end
-	if player:GetAttribute("MapPosition") ~= position then player:SetAttribute("MapPosition", position) end
+	if position and not player:GetAttribute("InteriorId") then
+  local world=require(script.Parent.OverhaulWorldService)
+  player:SetAttribute("MapLayer",world:GetMapLayer(position))
+  local region=world:MetadataAt(position)
+  player:SetAttribute("MapRegionName",region and region.Name or "Camp")
+  player:SetAttribute("MapRegionDepth",region and region.Depth or 1)
+ end
+ if player:GetAttribute("MapPosition") ~= position then player:SetAttribute("MapPosition", position) end
 	if player:GetAttribute("MapLookVector") ~= look then player:SetAttribute("MapLookVector", look) end
 end
 

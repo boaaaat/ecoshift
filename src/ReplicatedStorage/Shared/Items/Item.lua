@@ -4,6 +4,8 @@ Item.__index = Item
 
 function Item.new(def)
 	local self = setmetatable({}, Item)
+	-- Preserve shared definition and item-instance metadata through UI adapters.
+	for key, value in pairs(def) do self[key] = value end
 	self.Id = def.Id
 	self.Name = def.Name or def.Id
 	self.Description = def.Description

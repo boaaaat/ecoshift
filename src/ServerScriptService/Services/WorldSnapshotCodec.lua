@@ -37,9 +37,11 @@ end
 function Codec.Actor(model)
 	local hum = model:FindFirstChildWhichIsA("Humanoid", true)
 	if not hum or hum.Health <= 0 then return nil end
+ local goal=model:GetAttribute("ProjectGoal")
 	return { Prefab = model:GetAttribute("SnapshotPrefab") or model:GetAttribute("EntityId") or model:GetAttribute("ConfigId") or model.Name,
 		Transform = Codec.CFrame(model:GetPivot()), Health = hum.Health, MaxHealth = hum.MaxHealth,
-		Level = model:GetAttribute("Level") or 1, EntityType = model:GetAttribute("EntityType") or "Monster" }
+		Level = model:GetAttribute("Level") or 1, EntityType = model:GetAttribute("EntityType") or "Monster",
+  CampaignTier=model:GetAttribute("CampaignTier"),SpawnPressure=model:GetAttribute("SpawnPressure"),Damage=model:GetAttribute("Damage"),RegionDepth=model:GetAttribute("RegionDepth"),EncounterMemberId=model:GetAttribute("EncounterMemberId"),InteriorId=model:GetAttribute("InteriorId"),CreatureRole=model:GetAttribute("CreatureRole"),OverhaulCreature=model:GetAttribute("OverhaulCreature"),Elite=model:GetAttribute("Elite"),ProjectDefense=model:GetAttribute("ProjectDefense"),ProjectGoal=typeof(goal)=="Vector3" and {goal.X,goal.Y,goal.Z} or nil }
 end
 function Codec.ApplyActor(model, state)
 	local hum = model:FindFirstChildWhichIsA("Humanoid", true)
@@ -47,6 +49,10 @@ function Codec.ApplyActor(model, state)
 	model:SetAttribute("Level", Codec.Number(state.Level, 1, 100))
 	model:SetAttribute("LevelHealthApplied", true)
 	model:SetAttribute("EntityType", state.EntityType)
+ for _,name in ipairs({"CampaignTier","SpawnPressure","Damage","RegionDepth","EncounterMemberId","InteriorId","CreatureRole","OverhaulCreature","Elite","ProjectDefense"}) do
+  if state[name]~=nil then model:SetAttribute(name,Codec.Copy(state[name])) end
+ end
+ if type(state.ProjectGoal)=="table" then model:SetAttribute("ProjectGoal",Vector3.new(Codec.Number(state.ProjectGoal[1],-1e6,1e6),Codec.Number(state.ProjectGoal[2],-1e6,1e6),Codec.Number(state.ProjectGoal[3],-1e6,1e6))) end
 	hum.MaxHealth = Codec.Number(state.MaxHealth, 1, 1e8)
 	hum.Health = Codec.Number(state.Health, 0.001, hum.MaxHealth)
 	model:PivotTo(Codec.ReadCFrame(state.Transform))

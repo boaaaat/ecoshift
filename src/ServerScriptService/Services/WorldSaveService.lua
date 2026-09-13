@@ -64,6 +64,7 @@ local function archiveData(raw)
 end
 local function manifestData(raw)
 	if type(raw) ~= "table" or raw.SchemaVersion ~= Config.SchemaVersion or not validId(raw.WorldId)
+		or raw.GameplayRulesVersion ~= 2 or raw.ContentRelease ~= 2
 		or not validId(raw.Token) or type(raw.OwnerIds) ~= "table" or type(raw.SlotIds) ~= "table"
 		or not nonnegativeInteger(raw.Revision) or not nonnegativeInteger(raw.SnapshotRevision)
 		or not nonnegativeInteger(raw.CreatedAt) then return nil end
@@ -126,10 +127,13 @@ function Service:GetManifest(worldId)
 	return data
 end
 
-function Service:ReserveRoster(worldId, roster)
+function Service:ReserveRoster(worldId, roster, rulesVersion, contentRelease)
 	local owners = rosterIds(roster)
 	if not validId(worldId) or not owners then return false, "InvalidRoster" end
+	rulesVersion, contentRelease = rulesVersion or 2, contentRelease or 2
+	if (rulesVersion ~= 2) or (contentRelease ~= 2) then return false, "UnsupportedWorldRules" end
 	local proposed = {
+		GameplayRulesVersion = rulesVersion, ContentRelease = contentRelease,
 		SchemaVersion = Config.SchemaVersion, WorldId = worldId, Token = HttpService:GenerateGUID(false),
 		OwnerIds = owners, SlotIds = {}, State = "Reserving", Revision = 1,
 		CreatedAt = os.time(), SnapshotRevision = 0,
@@ -539,6 +543,8 @@ function Service:UpdateManifest(record)
 		if (data.WorldGeneration or 0) > generation or data.SnapshotRevision > revision then return true end
 		if data.WorldStatus == "Ended" and record.Phase ~= "Ended" and not record.Ended then return false, "ExpeditionEnded" end
 		data.SnapshotRevision, data.WorldGeneration = revision, generation
+		if data.GameplayRulesVersion ~= 2 or record.GameplayRulesVersion ~= 2 or record.ContentRelease ~= 2 then return false, "WorldRulesMismatch" end
+		data.GameplayRulesVersion, data.ContentRelease = 2, 2
 		data.WorldType = record.WorldType == "Creative" and "Creative" or "Survival"
 		data.WorldStatus, data.SavedAt = record.Ended and "Ended" or record.Phase, record.SavedAt or data.SavedAt or data.CommittedAt
 		return true

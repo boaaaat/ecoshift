@@ -1,420 +1,126 @@
--- EventService.lua
--- Data-driven event engine with per-biome pools and override system.
--- Public API:
---   EventService:TriggerEvent(eventId, biomeName, overrides?)
---   EventService:SelectEvent(biomeName, poolType) -> id, overrides
---   EventService:ResolveEvent(eventId, biomeName, overrides?) -> resolved
---   EventService:EndEvent(evType)
---   EventService:GetActive(evType) -> active data or nil
-
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local HttpService = game:GetService("HttpService")
-
-local Config = require(ReplicatedStorage.Shared.Config)
-local Util = require(ReplicatedStorage.Shared.Util)
-local EventsConfig = require(ReplicatedStorage.Shared.EventsConfig)
-local ThreatService = require(script.Parent.ThreatService)
-local BiomeService = require(script.Parent.BiomeService)
-local GameStateService = require(script.Parent.GameStateService)
-
-local ItemDropService = nil
-local function getItemDropService()
-	if not ItemDropService then
-		ItemDropService = require(script.Parent.ItemDropService)
-	end
-	return ItemDropService
+-- Active-time scheduler. Offline/loading never burns a warning or an opportunity.
+local RS=game:GetService("ReplicatedStorage")
+local Players=game:GetService("Players")
+local Http=game:GetService("HttpService")
+local Codec=require(script.Parent.WorldSnapshotCodec)
+local Definitions=require(RS.Shared.EventsConfig)
+local Service={_active={},_nextMinor=210,_nextMajor=720,_opportunities=0,_harmful=0,_time=0}
+local function participating()
+ local surface,all=0,0
+ for _,p in ipairs(Players:GetPlayers()) do
+  local h=p.Character and p.Character:FindFirstChildOfClass("Humanoid")
+  if h and h.Health>0 and not p:GetAttribute("IsDead") and not p:GetAttribute("WorldPlayerLoading") and not p:GetAttribute("WorldPlayerRestoring") then all+=1;if not p:GetAttribute("InteriorId") then surface+=1 end end
+ end
+ return surface,all
 end
-
-local EventService = {}
-EventService._remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
-EventService._remote = Util.GetRemote(EventService._remotesFolder, Config.RemoteNames.EventBroadcast)
-
-EventService._active = { Minor = nil, Major = nil }
-EventService._nextMinor = 0
-EventService._nextMajor = 0
-EventService._tickInterval = 0.25
-EventService._started = false
-EventService._requestConn = nil
-
----------------------------------------------------------------------------
--- _G callback registry (backward compat)
----------------------------------------------------------------------------
-_G.Ecoshift = _G.Ecoshift or {}
-_G.Ecoshift.EventCallbacks = _G.Ecoshift.EventCallbacks or { Start = {}, End = {} }
-_G.Ecoshift.OnEventStartAdd = function(cb)
-	if type(cb) == "function" then table.insert(_G.Ecoshift.EventCallbacks.Start, cb) end
+local function paused()
+ local _,all=participating()
+ return all==0 or RS:GetAttribute("WorldRestoring") or RS:GetAttribute("WorldShifting") or require(script.Parent.GameStateService):IsGameOver()
 end
-_G.Ecoshift.OnEventEndAdd = function(cb)
-	if type(cb) == "function" then table.insert(_G.Ecoshift.EventCallbacks.End, cb) end
+local depths={FallingStars=2,HeatSurge=3,AuroraShift=3,Thunderfront=2,RootOutbreak=3,BrokenCrossing=3,ArchiveAlarm=2,DeepRumbling=3,GravityDrift=4}
+function Service:ResolveEvent(id) return Definitions.Definitions[id] end
+function Service:_sites(id)
+ local sites={};local world=require(script.Parent.OverhaulWorldService)
+ for _,region in ipairs(world:GetRegions()) do if region.Depth>=(depths[id] or 1) then table.insert(sites,region) end end
+ return sites
 end
-
----------------------------------------------------------------------------
--- Helpers
----------------------------------------------------------------------------
-local function scheduleWindow(range)
-	return os.clock() + math.random(range[1], range[2])
+function Service:SelectEvent(biome,kind)
+ local pool={};local tier=RS:GetAttribute("CampaignTier") or 1
+ local prior=require(script.Parent.BiomeService):GetVisitSerial()
+ local ratio=tier<3 and 2 or 1
+ for id,d in pairs(Definitions.Definitions) do
+  if d.Type==kind and tier>=d.Tier and (not d.Biomes or d.Biomes[biome]) and #self:_sites(id)>0
+   and (not d.Harmful or prior>=2 and self._opportunities>=ratio*(self._harmful+1)) then table.insert(pool,id) end
+ end
+ table.sort(pool);return #pool>0 and pool[math.random(#pool)] or nil
 end
-local function paused() return ReplicatedStorage:GetAttribute("WorldRestoring") == true end
-local function nonnegative(value)
-	return type(value) == "number" and value == value and value >= 0 and value < math.huge
+function Service:_send(kind,id,data,player,force)
+ if not self._remote then return end
+ local ending=kind=="Minor_End" or kind=="Major_End"
+ local publicAt=math.max(0,(data.Warning or 0)-((Definitions.Definitions[id] or {}).Warning or 0))
+ self._sent=self._sent or {};local sent=self._sent[data.InstanceId] or {};self._sent[data.InstanceId]=sent
+ for _,recipient in ipairs(player and {player} or Players:GetPlayers()) do
+  local detector=require(script.Parent.InstrumentService):GetCapabilities(recipient).EventDetector
+  if ending or (force or not sent[recipient.UserId]) and (data.Elapsed>=publicAt or detector) then
+   local payload={InstanceId=data.InstanceId,Name=data.Name,Position=data.Position,Duration=data.Duration,Elapsed=data.Elapsed,Warning=data.Warning,StartedAt=workspace:GetServerTimeNow()-data.Elapsed,WarningRemaining=math.max(0,(data.Warning or 0)-data.Elapsed)}
+   self._remote:FireClient(recipient,kind,id,payload);sent[recipient.UserId]=true
+  end
+ end
+ if ending then self._sent[data.InstanceId]=nil end
 end
-local function plain(value, depth, budget)
-	local kind = type(value)
-	if kind == "number" then return value == value and math.abs(value) < math.huge end
-	if kind == "string" or kind == "boolean" or kind == "nil" then return true end
-	if kind ~= "table" or depth > 10 then return false end
-	for key, child in pairs(value) do
-		budget[1] += 1
-		if budget[1] > 5000 or (type(key) ~= "string" and type(key) ~= "number") or not plain(key, depth + 1, budget) or not plain(child, depth + 1, budget) then return false end
-	end
-	return true
+function Service:TriggerEvent(id,biome)
+ if paused() then return nil end
+ local d=self:ResolveEvent(id);if not d then return nil end
+ local kind=d.Type;if self._active[kind] then return nil end
+ local surface=participating();if d.Harmful and surface==0 then return nil end
+ local sites=self:_sites(id);if #sites==0 then return nil end
+ local world=require(script.Parent.OverhaulWorldService);local site=sites[math.random(#sites)]
+ local origin=world:SafePosition(id=="CampWarning" and Vector3.new(250,0,0) or site.Center)-Vector3.new(0,5,0)
+ local warning=d.Harmful and 45 or 0
+ local data={InstanceId=Http:GenerateGUID(false),Type=kind,EventId=id,Biome=biome or require(script.Parent.BiomeService):GetCurrent(),Visit=require(script.Parent.BiomeService):GetVisitSerial(),Elapsed=0,Duration=d.Duration+warning,Warning=warning,Name=d.Name,Position={origin.X,origin.Y,origin.Z},Depth=site.Depth,State={Claims={},Progress=0},Resolved={Name=d.Name,Type=kind,EndOnBiomeChange=true}}
+ local entry={Id=id,Data=data};self._active[kind]=entry
+ local ok,err=pcall(function() require(script.Parent.ObjectiveRuntimeService):Start(entry) end)
+ if not ok then self:EndEvent(kind);warn("[Events] Event initialization failed",id,err);return nil end
+ if d.Harmful then self._harmful+=1 else self._opportunities+=1 end
+ self:_send(kind.."_Start",id,data)
+ return d
 end
-
-local function safeFire(remote, evType, id, payload)
-	if remote and remote.FireAllClients then
-		remote:FireAllClients(evType, id, payload or {})
-	end
+function Service:EndEvent(kind)
+ local entry=self._active[kind];if not entry then return end
+ self._active[kind]=nil
+ require(script.Parent.ObjectiveRuntimeService):End(entry.Data.InstanceId)
+ require(script.Parent.ObjectiveService):End(entry.Id)
+ self:_send(kind.."_End",entry.Id,entry.Data)
 end
-
-local function hook(kind, ...)
-	local list = _G.Ecoshift and _G.Ecoshift.EventCallbacks and _G.Ecoshift.EventCallbacks[kind]
-	if type(list) == "table" then
-		for _, cb in ipairs(list) do
-			if type(cb) == "function" then pcall(cb, ...) end
-		end
-	end
+function Service:EndAll() self:EndEvent("Minor");self:EndEvent("Major") end
+function Service:GetActive(kind) return self._active[kind] end
+function Service:SendActiveToPlayer(player) for kind,entry in pairs(self._active) do self:_send(kind.."_Start",entry.Id,entry.Data,player,true) end end
+function Service:_tick(dt)
+ if paused() then return end
+ self._time+=dt;self._nextMinor-=dt;self._nextMajor-=dt
+ local biome=require(script.Parent.BiomeService):GetCurrent();local serial=require(script.Parent.BiomeService):GetVisitSerial()
+ for kind,entry in pairs(self._active) do
+  entry.Data.Elapsed+=dt
+  self:_send(kind.."_Start",entry.Id,entry.Data)
+  if entry.Data.Elapsed>=entry.Data.Duration or entry.Data.Visit~=serial then self:EndEvent(kind)
+  else require(script.Parent.ObjectiveRuntimeService):Step(entry,dt) end
+ end
+ local surface=participating()
+ if self._nextMinor<=0 and not self._active.Minor and surface>0 then
+  local id=self:SelectEvent(biome,"Minor");if id then self:TriggerEvent(id,biome) end;self._nextMinor=math.random(180,300)
+ end
+ if self._nextMajor<=0 and not self._active.Major and surface>0 then
+  local id=self:SelectEvent(biome,"Major");if id then self:TriggerEvent(id,biome) end;self._nextMajor=math.random(600,900)
+ end
 end
-
-local function resolveCount(countDef)
-	if type(countDef) == "table" then
-		return math.random(countDef.min or 1, countDef.max or 1)
-	end
-	return tonumber(countDef) or 1
+function Service:CaptureState()
+ require(script.Parent.ObjectiveRuntimeService):CaptureActors()
+ return {SchemaVersion=2,Time=self._time,NextMinor=self._nextMinor,NextMajor=self._nextMajor,Opportunities=self._opportunities,Harmful=self._harmful,Active=Codec.Copy(self._active)}
 end
-
-local function getRandomPlayerPosition()
-	local players = Players:GetPlayers()
-	if #players == 0 then return nil end
-	local plr = players[math.random(1, #players)]
-	local char = plr.Character
-	local root = char and char:FindFirstChild("HumanoidRootPart")
-	if not root then return nil end
-	local offset = Vector3.new(math.random(-20, 20), 3, math.random(-20, 20))
-	return root.Position + offset
+function Service:RestoreState(state)
+ if type(state)~="table" or state.SchemaVersion~=2 then return false,"InvalidEventSnapshot" end
+ Codec.BoundedCount(state.Active,2)
+ self._time=Codec.Number(state.Time,0,1e9);self._nextMinor=Codec.Number(state.NextMinor,-86400,86400);self._nextMajor=Codec.Number(state.NextMajor,-86400,86400)
+ self._opportunities=Codec.Number(state.Opportunities,0,1e8);self._harmful=Codec.Number(state.Harmful,0,1e8);self._active=Codec.Copy(state.Active);self._restore=true
+ for kind,entry in pairs(self._active) do
+  assert((kind=="Minor" or kind=="Major") and Definitions.Definitions[entry.Id],"Unknown saved event")
+  Codec.Number(entry.Data.Elapsed,0,86400);Codec.Number(entry.Data.Duration,0,86400)
+ end
+ return true
 end
-
----------------------------------------------------------------------------
--- Core API
----------------------------------------------------------------------------
-
-function EventService:ResolveEvent(eventId, biomeName, overrides)
-	local baseDef = EventsConfig.Definitions[eventId]
-	if not baseDef then
-		warn("[EventService] Unknown event definition: " .. tostring(eventId))
-		return nil
-	end
-
-	local resolved = Util.DeepCopy(baseDef)
-
-	-- Apply biome pool overrides (if this event appears in the biome pool with Overrides)
-	if biomeName then
-		local biomePool = EventsConfig.BiomePools[biomeName]
-		if biomePool then
-			for _, poolType in ipairs({"Minor", "Major"}) do
-				local pool = biomePool[poolType]
-				if pool then
-					for _, entry in ipairs(pool) do
-						if entry.Id == eventId and entry.Overrides then
-							resolved = Util.DeepMerge(resolved, entry.Overrides)
-							break
-						end
-					end
-				end
-			end
-		end
-	end
-
-	-- Apply caller overrides on top
-	if overrides then
-		resolved = Util.DeepMerge(resolved, overrides)
-	end
-
-	return resolved
+function Service:CompleteWorldRestore()
+ if self._restore then self._restore=nil;for kind,entry in pairs(self._active) do require(script.Parent.ObjectiveRuntimeService):Start(entry,true);self:_send(kind.."_Start",entry.Id,entry.Data) end end
+ return true
 end
-
-function EventService:SelectEvent(biomeName, poolType)
-	-- Build combined pool: Global + biome-specific, biome entries override Global by Id
-	local globalPool = EventsConfig.BiomePools.Global and EventsConfig.BiomePools.Global[poolType] or {}
-	local biomePool = biomeName and EventsConfig.BiomePools[biomeName] and EventsConfig.BiomePools[biomeName][poolType] or {}
-
-	-- Index biome entries by Id for dedup
-	local biomeIds = {}
-	for _, entry in ipairs(biomePool) do
-		biomeIds[entry.Id] = true
-	end
-
-	-- Combined: biome entries first, then Global entries not overridden
-	local combined = {}
-	local elapsed = BiomeService:GetElapsed()
-	local function addIfEligible(entry)
-		local definition = EventsConfig.Definitions[entry.Id] or {}
-		if elapsed >= (entry.MinElapsed or definition.MinElapsed or 0) then
-			table.insert(combined, entry)
-		end
-	end
-	for _, entry in ipairs(biomePool) do
-		addIfEligible(entry)
-	end
-	for _, entry in ipairs(globalPool) do
-		if not biomeIds[entry.Id] then
-			addIfEligible(entry)
-		end
-	end
-
-	if #combined == 0 then return nil, nil end
-
-	local chosen = Util.ChooseWeighted(combined, "Weight")
-	return chosen.Id, chosen.Overrides
+function Service:Init()
+ if self._started then return end;self._started=true
+ self._remote=RS.Remotes:FindFirstChild("EventBroadcast")
+ if self._remote then self._remote.OnServerEvent:Connect(function(player,action)if action=="RequestActive" then self:SendActiveToPlayer(player) end end) end
+ task.spawn(function()
+  while true do
+   local ok,err=pcall(self._tick,self,1);if not ok then warn("[Events]",err) end
+   task.wait(1)
+  end
+ end)
 end
-
-function EventService:TriggerEvent(eventId, biomeName, optionalOverrides)
-	if GameStateService:IsGameOver() or paused() then
-		return nil
-	end
-	local resolved = self:ResolveEvent(eventId, biomeName, optionalOverrides)
-	if not resolved then return nil end
-
-	local evType = resolved.Type or "Minor"
-	if evType ~= "Minor" and evType ~= "Major" then return nil end
-	if self._active[evType] then self:EndEvent(evType) end
-
-	-- Compute duration
-	local dur = resolved.Duration
-	local duration = (type(dur) == "table") and math.random(dur.min or 45, dur.max or 75) or (tonumber(dur) or 60)
-
-	-- Build payload
-	local payload = {
-		InstanceId = HttpService:GenerateGUID(false),
-		Biome = biomeName or BiomeService:GetCurrent(),
-		Threat = ThreatService:Get(),
-		Duration = duration,
-		StartedAt = os.clock(),
-		Type = evType,
-		EventId = eventId,
-		Resolved = resolved,
-	}
-
-	-- Store active
-	local active = { Id = eventId, Data = payload, OneShotConsumed = false }
-	local dropInterval = tonumber(resolved.DropInterval) or 0
-	if resolved.Drops and #resolved.Drops > 0 and dropInterval > 0 then active.NextDropAt = os.clock() end
-	self._active[evType] = active
-
-	-- Fire remote to clients
-	safeFire(self._remote, evType .. "_Start", eventId, payload)
-
-	-- Fire _G hooks (backward compat)
-	hook("Start", evType, eventId, payload)
-
-	return resolved
-end
-
-function EventService:EndEvent(evType)
-	local active = self._active[evType]
-	if not active then return end
-
-	self._active[evType] = nil
-	safeFire(self._remote, evType .. "_End", active.Id, active.Data)
-	hook("End", evType, active.Id, active.Data)
-end
-
-function EventService:EndAll()
-	self:EndEvent("Minor")
-	self:EndEvent("Major")
-end
-
-function EventService:GetActive(evType)
-	return self._active[evType]
-end
-
-function EventService:CaptureState()
-	if self._pendingRestore then return Util.DeepCopy(self._pendingRestore) end
-	local stamp, active = os.clock(), {}
-	for evType, entry in pairs(self._active) do
-		local elapsed = math.max(0, stamp - entry.Data.StartedAt)
-		local payload = Util.DeepCopy(entry.Data)
-		payload.StartedAt = nil
-		active[evType] = {
-			Id = entry.Id, Data = payload, Elapsed = elapsed,
-			Remaining = math.max(0, entry.Data.Duration - elapsed), OneShotConsumed = entry.OneShotConsumed == true,
-			NextDropRemaining = entry.NextDropAt and math.max(0, entry.NextDropAt - stamp) or nil,
-		}
-	end
-	return { SchemaVersion = 1, NextMinorRemaining = math.max(0, self._nextMinor - stamp), NextMajorRemaining = math.max(0, self._nextMajor - stamp), Active = active }
-end
-
-function EventService:RestoreState(state)
-	if type(state) ~= "table" or state.SchemaVersion ~= 1 or type(state.Active) ~= "table"
-		or not nonnegative(state.NextMinorRemaining) or not nonnegative(state.NextMajorRemaining) then return false, "InvalidEventSnapshot" end
-	local active = {}
-	for evType, entry in pairs(state.Active) do
-		if (evType ~= "Minor" and evType ~= "Major") or type(entry) ~= "table" or type(entry.Id) ~= "string" or not EventsConfig.Definitions[entry.Id]
-			or not nonnegative(entry.Elapsed) or not nonnegative(entry.Remaining) or not nonnegative(entry.Elapsed + entry.Remaining)
-			or (entry.NextDropRemaining ~= nil and not nonnegative(entry.NextDropRemaining)) or type(entry.OneShotConsumed) ~= "boolean"
-			or type(entry.Data) ~= "table" or not plain(entry.Data, 0, { 0 }) then return false, "InvalidEventSnapshot" end
-		local payload = entry.Data
-		if type(payload.InstanceId) ~= "string" or #payload.InstanceId < 1 or #payload.InstanceId > 80
-			or payload.Type ~= evType or payload.EventId ~= entry.Id or type(payload.Biome) ~= "string" or not nonnegative(payload.Duration)
-			or type(payload.Resolved) ~= "table" then return false, "InvalidEventSnapshot" end
-		local interval = payload.Resolved.DropInterval or 0
-		if not nonnegative(interval) or (interval > 0 and type(payload.Resolved.Drops) == "table" and #payload.Resolved.Drops > 0 and entry.NextDropRemaining == nil) then return false, "InvalidEventSnapshot" end
-		if entry.NextDropRemaining ~= nil and (interval <= 0 or type(payload.Resolved.Drops) ~= "table" or #payload.Resolved.Drops == 0) then return false, "InvalidEventSnapshot" end
-		if payload.Resolved.Drops ~= nil and type(payload.Resolved.Drops) ~= "table" then return false, "InvalidEventSnapshot" end
-		for _, drop in ipairs(payload.Resolved.Drops or {}) do
-			if type(drop) ~= "table" or type(drop.ItemId) ~= "string" or not nonnegative(drop.Chance or 0) or (drop.Chance or 0) > 1 then return false, "InvalidEventSnapshot" end
-			local count = drop.Count or 1
-			local minimum = type(count) == "table" and (count.min or 1) or count
-			local maximum = type(count) == "table" and (count.max or 1) or count
-			if not nonnegative(minimum) or not nonnegative(maximum) or minimum % 1 ~= 0 or maximum % 1 ~= 0 or minimum > maximum then return false, "InvalidEventSnapshot" end
-		end
-		active[evType] = {
-			Id = entry.Id, Data = Util.DeepCopy(payload), Elapsed = entry.Elapsed, Remaining = entry.Remaining,
-			OneShotConsumed = entry.OneShotConsumed, NextDropRemaining = entry.NextDropRemaining,
-		}
-	end
-	self._pendingRestore = { SchemaVersion = 1, NextMinorRemaining = state.NextMinorRemaining, NextMajorRemaining = state.NextMajorRemaining, Active = active }
-	if not paused() then return self:CompleteWorldRestore() end
-	return true
-end
-
-function EventService:CompleteWorldRestore()
-	local saved = self._pendingRestore
-	if not saved then return true end
-	self._pendingRestore = nil
-	for _, active in pairs(self._active) do active.Data.CancelledForRestore = true end
-	self:EndAll()
-	local stamp = os.clock()
-	self._nextMinor, self._nextMajor = stamp + saved.NextMinorRemaining, stamp + saved.NextMajorRemaining
-	for evType, entry in pairs(saved.Active) do
-		local payload = Util.DeepCopy(entry.Data)
-		payload.StartedAt, payload.Duration, payload.Restored = stamp - entry.Elapsed, entry.Elapsed + entry.Remaining, true
-		self._active[evType] = {
-			Id = entry.Id, Data = payload, OneShotConsumed = entry.OneShotConsumed,
-			NextDropAt = entry.NextDropRemaining and stamp + entry.NextDropRemaining or nil,
-		}
-		-- Reapply modifiers; the saved consumed flag prevents replaying one-shot loot.
-		safeFire(self._remote, evType .. "_Start", entry.Id, payload)
-		hook("Start", evType, entry.Id, payload)
-		payload.Restored = nil
-	end
-	return true
-end
-
-function EventService:SendActiveToPlayer(plr)
-	if not plr or not self._remote then return end
-	for _, evType in ipairs({ "Minor", "Major" }) do
-		local active = self._active[evType]
-		if active and active.Id then
-			self._remote:FireClient(plr, evType .. "_Start", active.Id, active.Data)
-		end
-	end
-end
-
----------------------------------------------------------------------------
--- Drop spawning
----------------------------------------------------------------------------
-function EventService:_spawnEventDrops(drops, active)
-	local service = getItemDropService()
-	if paused() or GameStateService:IsGameOver() or (active and self._active[active.Data.Type] ~= active) then return end
-	for _, entry in ipairs(drops) do
-		if math.random() <= (entry.Chance or 0) then
-			local pos = getRandomPlayerPosition()
-			if pos then
-				local count = resolveCount(entry.Count)
-				pcall(function()
-					if paused() or (active and self._active[active.Data.Type] ~= active) then return end
-					service:SpawnDrop(entry.ItemId, count, pos)
-				end)
-			end
-		end
-	end
-end
-
----------------------------------------------------------------------------
--- Tick loop
----------------------------------------------------------------------------
-function EventService:_tick()
-	if GameStateService:IsGameOver() or paused() then
-		return
-	end
-	local cadence = EventsConfig.Cadence
-	local currentBiome = BiomeService:GetCurrent()
-
-	-- Check active events for expiry / biome change
-	for evType, active in pairs(self._active) do
-		if active then
-			local expired = os.clock() - active.Data.StartedAt >= active.Data.Duration
-			local biomeChanged = active.Data.Resolved
-				and active.Data.Resolved.EndOnBiomeChange
-				and active.Data.Biome ~= currentBiome
-			if expired or biomeChanged then
-				self:EndEvent(evType)
-			elseif active.NextDropAt and os.clock() >= active.NextDropAt then
-				active.NextDropAt = os.clock() + active.Data.Resolved.DropInterval
-				self:_spawnEventDrops(active.Data.Resolved.Drops, active)
-			elseif not active.NextDropAt and not active.OneShotConsumed then
-				active.OneShotConsumed = true
-				if active.Data.Resolved.Drops and #active.Data.Resolved.Drops > 0 then self:_spawnEventDrops(active.Data.Resolved.Drops, active) end
-			end
-		end
-	end
-
-	-- Schedule minor events
-	if os.clock() >= (self._nextMinor or 0) and not self._active.Minor then
-		local id, overrides = self:SelectEvent(currentBiome, "Minor")
-		if id then
-			self:TriggerEvent(id, currentBiome, overrides)
-		end
-		self._nextMinor = scheduleWindow(cadence.MinorCadence)
-	end
-
-	-- Schedule major events
-	if os.clock() >= (self._nextMajor or 0) and not self._active.Major then
-		local id, overrides = self:SelectEvent(currentBiome, "Major")
-		if id then
-			self:TriggerEvent(id, currentBiome, overrides)
-		end
-		self._nextMajor = scheduleWindow(cadence.MajorCadence)
-	end
-end
-
----------------------------------------------------------------------------
--- Initialization
----------------------------------------------------------------------------
-function EventService:Init()
-	if self._started then return end
-	self._started = true
-	if self._remote and not self._requestConn then
-		self._requestConn = self._remote.OnServerEvent:Connect(function(plr, action)
-			if action == "RequestActive" then
-				self:SendActiveToPlayer(plr)
-			end
-		end)
-	end
-
-	local cadence = EventsConfig.Cadence
-	self._nextMinor = scheduleWindow(cadence.MinorCadence)
-	self._nextMajor = scheduleWindow(cadence.MajorCadence)
-
-	task.spawn(function()
-		while self._started do
-			pcall(function()
-				self:_tick()
-			end)
-			task.wait(self._tickInterval)
-		end
-	end)
-end
-
-return EventService
+return Service

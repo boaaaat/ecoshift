@@ -4,16 +4,12 @@ local CollectionService = game:GetService("CollectionService")
 local Shared = script.Parent
 local Workbench = require(Shared.WorkbenchConfig)
 local Items = require(Shared.Items.ItemDatabase)
-local Biomes = require(Shared.BiomeConfig)
-local ResourceMap = require(Shared.ResourceItemMap)
-local Loot = require(Shared.ExpeditionLootConfig)
-local MonsterDrops = require(Shared.MonsterDropConfig)
 local Config = require(Shared.Config)
 local Cooking = require(Shared.CookingConfig)
 
 local Guide = {}
+local Catalog=require(Shared.OverhaulCatalog)
 local recipesByOutput, sourcesByItem, stationIds = {}, {}, {}
-local monsterBiomes = {}
 
 local function readable(id)
 	return (id:gsub("(%l)(%u)", "%1 %2"))
@@ -29,17 +25,6 @@ local function addSource(id, text)
 	local sources = sourcesByItem[id] or {}
 	if not table.find(sources, text) then table.insert(sources, text) end
 	sourcesByItem[id] = sources
-end
-
-local function weightedEntries(entries, visit)
-	for key, value in pairs(entries or {}) do
-		local name = type(key) == "string" and key
-			or (type(value) == "string" and value)
-			or (type(value) == "table" and (value.Name or value.name))
-		local weight = type(value) == "number" and value
-			or (type(value) == "table" and (value.Weight or value.weight)) or 1
-		if name and weight > 0 then visit(name) end
-	end
 end
 
 local function refreshRecipes()
@@ -60,44 +45,18 @@ table.sort(stationIds, function(a, b)
 	return aTier == bTier and a < b or aTier < bTier
 end)
 
-for biomeId, biome in pairs(Biomes.biomes) do
-	local metadata = Biomes.biome_metadata[biomeId]
-	local biomeName = metadata and metadata.DisplayName or readable(biomeId)
-	for _, region in pairs(biome.regions or {}) do
-		weightedEntries(region.resources, function(name)
-			local id = ResourceMap.Normalize(name)
-			addSource(id, "Gather " .. itemName(id) .. " in " .. biomeName .. ".")
-		end)
-		weightedEntries(region.enemies, function(name)
-			local locations = monsterBiomes[name] or {}
-			if not table.find(locations, biomeName) then table.insert(locations, biomeName) end
-			monsterBiomes[name] = locations
-		end)
-	end
-	if Loot.CacheMaterials[biomeId] then
-		for _, rarity in pairs(Loot.CacheTable(biomeId).Rarities) do
-			for _, drop in ipairs(rarity.Items or {}) do
-				if (drop.Weight or 1) > 0 and (drop.Chance or 1) > 0 then
-					addSource(drop.Id, "Can be found in supply caches in " .. biomeName .. ".")
-				end
-			end
-			for _, drop in ipairs(rarity.Guaranteed or {}) do
-				if (drop.Chance or 1) > 0 then
-					addSource(drop.Id, "Can be found in supply caches in " .. biomeName .. ".")
-				end
-			end
-		end
-	end
+for id,resource in pairs(Catalog.Resources) do
+ local method=resource.Duration and "Gather" or resource.Kind=="Animal" and "Hunt for" or "Break nodes for"
+ addSource(id,method.." "..itemName(id).." in "..resource.Biome.." · region "..resource.Depth..".")
+ if not resource.Duration and resource.Kind~="Animal" then addSource(id,"Mining/tool grade "..(resource.MiningGrade or 1).." required.") end
 end
-for monsterId, monster in pairs(MonsterDrops.Monsters) do
-	local locations = monsterBiomes[monsterId] or {}
-	table.sort(locations)
-	local locationHint = #locations > 0 and (" in " .. table.concat(locations, " or ")) or ""
-	for _, drop in ipairs(monster.Drops or {}) do
-		if (drop.Chance or 1) > 0 then
-			addSource(drop.ItemId, "Defeat " .. readable(monsterId) .. locationHint .. " for a chance to collect this material.")
-		end
-	end
+for _,id in ipairs(Catalog.Trophies) do addSource(id,"Complete the matching deep-region elite site (region E).") end
+for id,def in pairs(Catalog.Items) do
+ if def.Schematic then addSource(id,Catalog.Enchantments[def.Schematic.Id].Source) end
+ if def.Scroll then addSource(id,"Extract this enchantment from owned gear at an Enchanting Table.") end
+end
+for _,id in ipairs({"AnyTrophy","DifferentTrophies"}) do
+ for _,trophy in ipairs(Catalog.Trophies) do addSource(id,"Eligible: "..itemName(trophy)) end
 end
 for _, sources in pairs(sourcesByItem) do table.sort(sources) end
 
@@ -140,7 +99,7 @@ function Guide.GetStations(recipeId, player)
 			local buildItem = buildType and Config.BUILD.PlaceableItems[buildType] and Items:Get(buildType)
 			local recipes = buildItem and recipesByOutput[buildItem.Id]
 			local record = {
-				Id = stationId, Name = station.Name, Nearby = stationId == "Hand",
+				Id = stationId, Name = station.Name, Nearby = stationId == "Hand", RequiredGrade=Workbench:GetRequiredGrade(recipeId), Grade=stationId=="Hand" and 1 or nil,
 				BuildItemId = buildItem and buildItem.Id or nil,
 				RecipeId = recipes and recipes[1] or nil,
 			}
@@ -153,8 +112,13 @@ function Guide.GetStations(recipeId, player)
 						elseif structure:IsA("BasePart") then position = structure.Position end
 						if position then
 							local distance = (root.Position - position).Magnitude
-							if distance <= (station.InteractRadius or 8) and (not record.Distance or distance < record.Distance) then
-								record.Nearby, record.Distance = true, distance
+							local candidateGrade=structure:GetAttribute("StationGrade") or station.Grade or 1
+       local candidateQualified=candidateGrade>=record.RequiredGrade
+       if distance <= (station.InteractRadius or 8) and (not record.Distance or (candidateQualified and not record.Nearby) or (candidateQualified==record.Nearby and distance<record.Distance)) then
+								record.Grade=structure:GetAttribute("StationGrade") or station.Grade or 1
+        record.Nearby, record.Distance = record.Grade>=record.RequiredGrade, distance
+        record.UpgradeNeeded=record.Grade<record.RequiredGrade
+        record.Instance=structure
 							end
 						end
 					end
@@ -169,7 +133,7 @@ end
 function Guide.GetUsableStation(recipeId, player, preferredStationType)
 	local fallback
 	for _, station in ipairs(Guide.GetStations(recipeId, player)) do
-		if station.Nearby then
+		if station.Nearby and not Workbench:GetCampaignLock(recipeId) then
 			if station.Id == preferredStationType then return station.Id end
 			fallback = fallback or station.Id
 		end

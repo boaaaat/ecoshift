@@ -61,6 +61,13 @@ kitchenTab.Position=UDim2.new(.5,4,0,0);kitchenTab.Size=UDim2.new(.5,-4,1,0)
 local content=make("ScrollingFrame",panel,{Name="Content",BackgroundTransparency=1,BorderSizePixel=0,Position=UDim2.fromOffset(16,112),Size=UDim2.new(1,-32,1,-210),CanvasSize=UDim2.new(),AutomaticCanvasSize=Enum.AutomaticSize.Y,ScrollBarThickness=5,ScrollingDirection=Enum.ScrollingDirection.Y,ElasticBehavior=Enum.ElasticBehavior.WhenScrollable})
 make("UIListLayout",content,{Padding=UDim.new(0,8),SortOrder=Enum.SortOrder.LayoutOrder})
 make("UIPadding",content,{PaddingRight=UDim.new(0,8),PaddingBottom=UDim.new(0,8)})
+local upgrade=button(panel,"Upgrade",function()
+ if not state then return end
+ local stationRemote=remotes:FindFirstChild("Station")
+ if stationRemote then stationRemote:FireServer("Open",{Station=state.Station,RequestId=HttpService:GenerateGUID(false)}) end
+end,36)
+upgrade.Position=UDim2.new(1,-160,0,12);upgrade.Size=UDim2.fromOffset(90,36)
+title.Size=UDim2.new(1,-188,0,40)
 local jobLabel=text(panel,"No meals queued",30,14);jobLabel.Position=UDim2.new(0,16,1,-90);jobLabel.Size=UDim2.new(1,-32,0,30)
 local track=make("Frame",panel,{Position=UDim2.new(0,16,1,-55),Size=UDim2.new(1,-32,0,7),BackgroundColor3=colors.SlotEmpty,BorderSizePixel=0})
 Theme.Corner(track,4)
@@ -190,7 +197,7 @@ render=function(resetScroll)
   local fuel=addText("Fuel: "..seconds(state.FuelSeconds).." · "..tostring(state.Status or "Idle"),38)
   table.insert(rowCallbacks,function() fuel.Text="Fuel: "..seconds(state.FuelSeconds).." · "..tostring(state.Status or "Idle") end)
   addButton(state.Enabled==false and "Resume cooking" or "Pause cooking",function() request("SetEnabled",{Enabled=state.Enabled==false}) end)
-  for _,id in ipairs({"ForestWood","PeatClump","Coal"}) do
+  for _,id in ipairs({"Wood","Peat","Coal"}) do
    local itemId=id
    addButton("Add 1 "..name(id).." · +"..seconds(Catalog.Fuels[id]).." · "..count(id).." owned",function() request("Fuel",{ItemId=itemId,Quantity=1}) end,44)
   end

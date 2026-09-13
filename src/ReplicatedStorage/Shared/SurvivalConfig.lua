@@ -2,17 +2,14 @@
 -- Weather adds to the biome's Temp/Toxin/Wet; it does not replace that baseline.
 local SurvivalConfig = {}
 
-SurvivalConfig.ARMOR = {
-	ReedSunwrap = { Armor = 4, HeatResistance = 0.75, ColdResistance = 0, ToxinResistance = 0, WetResistance = 0 },
-	DesertCloak = { Armor = 12, HeatResistance = 0.85, ColdResistance = 0.10, ToxinResistance = 0.10, WetResistance = 0.20 },
-	SwampWaders = { Armor = 16, HeatResistance = 0.15, ColdResistance = 0.20, ToxinResistance = 0.70, WetResistance = 0.85 },
-	FrostParka = { Armor = 20, HeatResistance = 0.10, ColdResistance = 0.80, ToxinResistance = 0.10, WetResistance = 0.45 },
-	VolcanicPlate = { Armor = 26, HeatResistance = 0.85, ColdResistance = 0.20, ToxinResistance = 0.45, WetResistance = 0.25 },
-	CrystalWeave = { Armor = 24, HeatResistance = 0.40, ColdResistance = 0.40, ToxinResistance = 0.55, WetResistance = 0.55 },
-	AdaptiveSurvivalSuit = { Armor = 34, HeatResistance = 0.75, ColdResistance = 0.75, ToxinResistance = 0.75, WetResistance = 0.75 },
-	AuroraMantle = { Armor = 28, HeatResistance = 0.70, ColdResistance = 0.70, ToxinResistance = 0, WetResistance = 0.50 },
-	StarforgedPlate = { Armor = 38, HeatResistance = 0.80, ColdResistance = 0.70, ToxinResistance = 0.70, WetResistance = 0.60 },
-}
+SurvivalConfig.ARMOR = {}
+for id,gear in pairs(require(script.Parent.OverhaulCatalog).Gear) do
+ if gear.Kind=="Armor" then
+  local armor={Armor=gear.Defense*100}
+  for channel,value in pairs(gear.Resistance or {}) do armor[channel.."Resistance"]=value end
+  SurvivalConfig.ARMOR[id]=armor
+ end
+end
 
 SurvivalConfig.WEATHER_BY_BIOME = {
 	Forest = {
@@ -56,5 +53,28 @@ SurvivalConfig.WEATHER_BY_BIOME = {
 		{ Id = "CosmicHaze", Name = "Cosmic haze", Weight = 1, MinElapsed = 75 * 60, Temp = -0.3, Toxin = 0.3, Wet = 0 },
 	},
 }
+
+local extra={
+ SaltglassCoast={{"Clear","Sea breeze",0,0,0},{"Rain","Coastal rain",-.15,0,.7},{"SeaFog","Salt fog",-.1,0,.3}},
+ StormspireHighlands={{"Clear","Highland winds",-.1,0,0},{"Rain","Mountain rain",-.3,0,.8},{"Thunderstorm","Thunderstorm",-.2,0,.9}},
+ MyceliumHollow={{"Clear","Spore glimmer",0,0,0},{"Rain","Forest drizzle",0,0,.4},{"SporeFog","Spore cloud",0,.4,.2}},
+ IronrootBadlands={{"Clear","Dry winds",.1,0,0},{"DustWind","Rust dust",.2,.2,0},{"DryStorm","Dust storm",.3,.3,0}},
+ CanopySea={{"Clear","Canopy light",.1,0,0},{"Rain","Tropical rain",.1,0,.8},{"Monsoon","Monsoon",0,0,1}},
+ SunkenArchive={{"Clear","Still water",-.1,0,.1},{"Rain","River rain",-.2,0,.6},{"FloodMist","Cold mist",-.3,0,.5}},
+ UmbralDepths={{"Clear","Cave stillness",-.1,0,0},{"CaveDrip","Cave condensation",-.2,0,.4},{"DeepMist","Deep mist",-.2,.3,.3}},
+ ShattermoonExpanse={{"Clear","Moonlight",-.1,0,0},{"MoonDust","Moon dust",-.2,.15,0},{"SilverHaze","Silver haze",-.3,.25,0}},
+}
+for id,rows in pairs(extra) do
+ SurvivalConfig.WEATHER_BY_BIOME[id]={}
+ for i,row in ipairs(rows) do
+  table.insert(SurvivalConfig.WEATHER_BY_BIOME[id],{Id=row[1],Name=row[2],Temp=row[3],Toxin=row[4],Wet=row[5],Weight=({4,2,1})[i],MinTier=i==3 and 3 or 1,MinVisits=i==3 and 2 or 0})
+ end
+end
+-- Severe weather follows campaign progression, rather than minutes spent in a safe early tier.
+for _,pool in pairs(SurvivalConfig.WEATHER_BY_BIOME) do
+ for _,weather in ipairs(pool) do
+  if weather.MinElapsed then weather.MinElapsed=nil;weather.MinTier=weather.Weight==1 and 3 or 2;weather.MinVisits=weather.Weight==1 and 2 or 0 end
+ end
+end
 
 return SurvivalConfig

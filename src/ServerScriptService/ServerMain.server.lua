@@ -34,6 +34,7 @@ end
 -- TIER 1: Critical services needed immediately (parallel load)
 local tier1Services = {
 	"BiomeService",
+	"CampaignService",
 	"GameStateService",
 	"RoleService",
 	"ProfileService",
@@ -60,9 +61,17 @@ local tier2Services = {
 	{ name = "InventoryActionService", method = "Init" },
 	{ name = "ToolService", method = "Init" },
 	{ name = "ArmorService", method = "Init" },
+	{ name = "GearService", method = "Init" },
+	{ name = "InstrumentService", method = "Init" },
 	{ name = "DayNightService", method = "Init" },
 	{ name = "CraftingService", method = "Init" },
 	{ name = "CookingService", method = "Init" },
+	{ name = "StationService", method = "Init" },
+	{ name = "UtilityBuildService", method = "Init" },
+	{ name = "InteriorService", method = "Init" },
+	{ name = "EnchantingService", method = "Init" },
+	{ name = "LandmarkCacheService", method = "Init" },
+	{ name = "EliteEncounterService", method = "Init" },
 	{ name = "FoodService", method = "Init" },
 	{ name = "WorldControlService", method = "Init" },
 	{ name = "LootService", method = "Init" },
@@ -164,7 +173,6 @@ local function boot()
 	_G.Ecoshift = _G.Ecoshift or {}
 	_G.Ecoshift.ComputeEnemyWave = function() return getService("SpawnService"):ComputeEnemyWave() end
 	_G.Ecoshift.GetActiveResourceTags = function() return getService("SpawnService"):GetActiveResourceTags() end
-	_G.Ecoshift.AIService = setmetatable({}, { __index = function(_, k) return getService("AIService")[k] end })
 	if type(_G.Ecoshift.OnBiomeChangedAdd) == "function" then
 		_G.Ecoshift.OnBiomeChangedAdd(function(cur)
 			local builds = getService("BuildService")

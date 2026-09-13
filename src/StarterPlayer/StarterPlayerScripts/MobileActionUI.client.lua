@@ -88,7 +88,7 @@ local function update()
 	local tool = equippedTool()
 	local available = tool ~= nil and not blocked()
 	if heldInput and (not available or tool ~= heldTool) then release(true) end
-	action.Visible, reticle.Visible = available and not isHarvester(tool), available
+	action.Visible, reticle.Visible = false, available
 	if available and not heldInput then
 		local kind = string.lower(toolValue(tool, "WeaponType"))
 		local icon = (kind == "shield" or kind == "shields") and "Shield"
@@ -117,7 +117,10 @@ end)
 UserInputService.TouchTapInWorld:Connect(function(_, processedByUI)
 	if processedByUI or heldInput or blocked() then return end
 	local tool = equippedTool()
-	if not isHarvester(tool) or not tool.Enabled then return end
+	if not tool or not tool.Enabled then return end
+	if string.lower(toolValue(tool,"WeaponType"))=="bow" then
+		tool:Activate();task.delay(1.3,function() if tool and tool.Parent then if blocked() then tool:SetAttribute("CancelMobileRelease",true) end;tool:Deactivate() end end);return
+	end
 	tool:SetAttribute("CancelMobileRelease", nil)
 	tool:Activate()
 	tool:Deactivate()

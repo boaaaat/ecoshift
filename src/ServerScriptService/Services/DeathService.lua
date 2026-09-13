@@ -23,7 +23,7 @@ DeathService._spectating = {} -- [player] = targetPlayer
 DeathService._reviveHolds = {}
 DeathService._runStats = {}
 DeathService._returnAt = {}
-local REVIVE_ITEM = "ReviveKit"
+local REVIVE_ITEM = "RevivalKit"
 
 -- Remotes (created on init)
 local Remotes = nil
@@ -193,6 +193,16 @@ function DeathService:Init()
 			if prompt then prompt.Enabled = false end
 		end
 		local results = { Elapsed = state.FinalElapsed or state.Elapsed or 0, Players = {} }
+		local campaign = require(script.Parent.CampaignService)
+		results.CampaignTier = campaign:GetTier()
+		results.Milestone = campaign:GetMilestone().Name
+		results.CampaignComplete = ReplicatedStorage:GetAttribute("CampaignComplete") == true
+		results.VisitedBiomes = {}
+		local biomes = require(ReplicatedStorage.Shared.OverhaulBiomes)
+		for id, visits in pairs(require(script.Parent.BiomeService):GetVisits()) do
+			if visits > 0 and biomes.Biomes[id] then table.insert(results.VisitedBiomes, biomes.Biomes[id].DisplayName) end
+		end
+		table.sort(results.VisitedBiomes)
 		for userId, stats in pairs(self._runStats) do
 			table.insert(results.Players, { UserId = userId, Name = stats.Name, DisplayName = stats.DisplayName, Deaths = stats.Deaths, Revives = stats.Revives })
 		end
@@ -249,6 +259,7 @@ function DeathService:CreativeRespawn(player)
 	player.ReplicationFocus = nil
 	if data.ragdoll then data.ragdoll:Destroy() end
 	self._deadPlayers[player], self._spectating[player] = nil, nil
+	require(script.Parent.GearService):OnRevive(reviver)
 	DeathRemote:FireClient(player, "Revived", { reviver = "Creative mode" })
 	DeathRemote:FireAllClients("PlayerRevived", { player = player })
 	self:_refreshSpectators()
@@ -298,6 +309,7 @@ function DeathService:_dropPlayerInventory(player, deathPosition)
 		)
 		ItemDropService:SpawnDrop(entry.Id, entry.N, spawnPos, {
 			InitialVelocity = velocity,
+			Entry = entry,
 		})
 	end
 end
@@ -449,6 +461,7 @@ function DeathService:RevivePlayer(player, reviver)
 		local rewarded, rewardError = pcall(function() require(rewardsModule):OnRevive(reviver, player, data.DeathId) end)
 		if not rewarded then warn("[DeathService] Revival reward failed:", rewardError) end
 	end
+	require(script.Parent.GearService):OnRevive(reviver)
 	DeathRemote:FireClient(player, "Revived", { reviver = reviver.DisplayName })
 	DeathRemote:FireAllClients("PlayerRevived", { player = player })
 	return true

@@ -110,8 +110,8 @@ function CreativeService:_act(player, action, payload)
 			inventory:Clear(player)
 			return true, "Inventory cleared, including hotbar and equipped armor."
 		end
-		if (payload.SlotType ~= "Hotbar" and payload.SlotType ~= "Storage" and payload.SlotType ~= "Armor")
-			or not number(payload.SlotIndex, 1, payload.SlotType == "Hotbar" and 6 or payload.SlotType == "Storage" and 18 or 1, true)
+		if (payload.SlotType ~= "Hotbar" and payload.SlotType ~= "Storage" and payload.SlotType ~= "Armor" and payload.SlotType ~= "Equipment" and payload.SlotType ~= "Accessory")
+			or not number(payload.SlotIndex, 1, payload.SlotType == "Hotbar" and 6 or payload.SlotType == "Storage" and 36 or (payload.SlotType == "Equipment" or payload.SlotType == "Accessory") and 4 or 1, true)
 			or type(payload.ExpectedId) ~= "string" or not number(payload.Amount, 1, 999, true) then
 			return false, "Choose an inventory stack to delete."
 		end
@@ -157,8 +157,8 @@ function CreativeService:_act(player, action, payload)
 		return true, "World changed to " .. BiomeConfig.BIOMES[payload.Id].DisplayName .. "."
 	elseif action == "SpawnMonster" then
 		local def = type(payload.Id) == "string" and EntityConfig.Entities[payload.Id]
-		if not def or def.Type ~= "Monster" or not number(payload.Count, 1, 10, true) or not number(payload.Level, 1, 25, true) then
-			return false, "Choose a monster, 1–10 spawns, and level 1–25."
+		if not def or def.Type ~= "Monster" or not number(payload.Count, 1, 10, true) or not number(payload.Level, 1, 40, true) then
+			return false, "Choose a monster, 1–10 spawns, and level 1–40."
 		end
 		local root = alive(player)
 		local spawner, spawned = require(script.Parent.EnemySpawner), 0

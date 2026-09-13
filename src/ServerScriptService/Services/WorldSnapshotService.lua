@@ -5,9 +5,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 local HttpService = game:GetService("HttpService")
 local Codec = require(script.Parent.WorldSnapshotCodec)
-local Snapshot = { Version = 1, GeneratorVersion = 1, MaxBytes = 3500000, _players = {}, _ready = {}, _errors = {} }
+local Rules = require(ReplicatedStorage.Shared.GameRules)
+local Snapshot = { Version = 2, GeneratorVersion = 2, MaxBytes = 3500000, _players = {}, _ready = {}, _errors = {} }
 local function service(name) return require(script.Parent[name]) end
-local AUXILIARY = { "EventService", "ObjectiveService", "ThreatService", "ExpeditionRewardsService" }
+local AUXILIARY = { "EventService", "ObjectiveService", "ExpeditionRewardsService" }
 
 function Snapshot:CapturePlayer(player)
 	local key = tostring(player.UserId)
@@ -19,6 +20,8 @@ function Snapshot:CapturePlayer(player)
 		ClassAbility = service("ClassAbilityService"):CapturePlayer(player),
 		Creative = service("CreativeService"):CapturePlayer(player),
 		Food = service("FoodService"):CapturePlayer(player),
+		Gear = service("GearService"):CapturePlayer(player),
+		InteriorId = player:GetAttribute("InteriorId"),
 		Inventory = service("InventoryService"):CaptureWorldState(player),
 		Stats = service("StatsService"):CaptureWorldState(player),
 		Death = service("DeathService"):CaptureWorldState(player),
@@ -27,7 +30,6 @@ function Snapshot:CapturePlayer(player)
 	if char and char.Parent then
 		state.Transform = Codec.CFrame(char:GetPivot())
 		state.WetStacks = char:GetAttribute("WetStacks") or 0
-		state.ResistEffects = service("InventoryActionService"):CaptureCharacterState(char)
 	end
 	self._players[key], self._errors[key] = state, nil
 	return state
@@ -54,8 +56,20 @@ Players.PlayerAdded:Connect(markJoiningPlayer)
 function Snapshot:StageWorld(snapshot)
 	assert(not self._staged, "World snapshot already staged")
 	self._staged = true
-	-- Existing saved worlds retain their original recipes and consumption rules.
-	ReplicatedStorage:SetAttribute("CookingEnabled", snapshot == nil or snapshot.CookingVersion == 1)
+	if snapshot then
+		assert(type(snapshot)=="table", "Invalid overhaul snapshot")
+		Rules.Configure(snapshot.GameplayRulesVersion, snapshot.ContentRelease)
+	else
+		Rules.Configure(Rules.GetVersion(), Rules.GetContentRelease())
+	end
+	service("CampaignService"):RestoreWorldState(snapshot and snapshot.Campaign)
+	service("InteriorService"):RestoreWorldState(snapshot and snapshot.Interiors)
+	service("EnchantingService"):RestoreWorldState(snapshot and snapshot.Enchanting)
+	service("LandmarkCacheService"):RestoreWorldState(snapshot and snapshot.LandmarkCaches)
+	service("InstrumentService"):RestoreWorldState(snapshot and snapshot.Instruments)
+	service("EliteEncounterService"):RestoreWorldState(snapshot and snapshot.Elites)
+	-- Only overhaul snapshots are accepted after the requested data reset.
+	ReplicatedStorage:SetAttribute("CookingEnabled", true)
 	ReplicatedStorage:SetAttribute("WorldRestoring", true)
 	if not snapshot then
 		service("TeamExplorationService"):RestoreWorldState(nil)
@@ -97,6 +111,7 @@ function Snapshot:RestoreWorld()
 end
 
 local function restoreEnemies(states)
+	service("EnemySpawner"):EnsurePrefabs()
 	Codec.BoundedCount(states, Codec.MaxEnemies)
 	local root = ServerStorage:FindFirstChild("EnemyPrefabs")
 	local folder = workspace:FindFirstChild("Enemies")
@@ -111,7 +126,7 @@ local function restoreEnemies(states)
 		model:SetAttribute("EntityId", actor.Prefab)
 		Codec.ApplyActor(model, actor)
 		model.Parent = folder
-		service("EntityAIService"):BindEntity(model, actor.EntityType)
+		service("EnemySpawner"):BindRestored(model, actor)
 		service("LootService"):_bindMonster(model)
 	end
 end
@@ -161,14 +176,15 @@ function Snapshot:RestorePlayer(player)
 		char:SetAttribute("WorldStateRestored", true)
 		service("StatsService"):RestoreWorldState(player, state.Stats)
 		service("InventoryService"):RestoreWorldState(player, state.Inventory)
+		service("InteriorService"):RestorePlayer(player, state.InteriorId)
 		if state.Transform then char:PivotTo(Codec.ReadCFrame(state.Transform)) end
 		char:SetAttribute("WetStacks", Codec.Number(state.WetStacks or 0, 0, 5))
-		service("InventoryActionService"):RestoreCharacterState(char, state.ResistEffects or {})
 		service("DeathService"):RestoreWorldState(player, state.Death)
 		service("CraftingService"):RestoreRefund(player, state)
 		service("ClassAbilityService"):RestorePlayer(player, state.ClassAbility)
 		service("CreativeService"):RestorePlayer(player, state.Creative)
 		service("FoodService"):RestorePlayer(player, not player:GetAttribute("IsDead") and state.Food or nil)
+		service("GearService"):RestorePlayer(player, state.Gear)
 	else
 		-- New expeditions start at their class-adjusted maximum; restores and revives never heal here.
 		local stats = service("StatsService")
@@ -196,7 +212,7 @@ function Snapshot:Capture()
 	assert(next(self._errors) == nil, "Player departure capture failed; refusing stale save")
 	local enemies, folder = {}, workspace:FindFirstChild("Enemies")
 	for _, model in ipairs(folder and folder:GetChildren() or {}) do
-		if model:IsA("Model") then
+		if model:IsA("Model") and not model:GetAttribute("EventInstanceId") and not model:GetAttribute("InteriorId") and not model:GetAttribute("EliteEncounterId") then
 			local actor = Codec.Actor(model)
 			if actor then assert(#enemies < Codec.MaxEnemies, "Enemy snapshot capacity exceeded"); table.insert(enemies, actor) end
 		end
@@ -205,7 +221,14 @@ function Snapshot:Capture()
 	for _, name in ipairs(AUXILIARY) do auxiliary[name] = service(name):CaptureState() end
 	local state = {
 		Version = self.Version, GeneratorVersion = self.GeneratorVersion,
-		CookingVersion = ReplicatedStorage:GetAttribute("CookingEnabled") == true and 1 or nil,
+		GameplayRulesVersion = Rules.GetVersion(), ContentRelease = Rules.GetContentRelease(),
+		Campaign = service("CampaignService"):CaptureWorldState(),
+		Interiors = service("InteriorService"):CaptureWorldState(),
+		Enchanting = service("EnchantingService"):CaptureWorldState(),
+		LandmarkCaches = service("LandmarkCacheService"):CaptureWorldState(),
+		Instruments = service("InstrumentService"):CaptureWorldState(),
+		Elites = service("EliteEncounterService"):CaptureWorldState(),
+		CookingVersion = 2,
 		WorldType = workspace:GetAttribute("WorldType") == "Creative" and "Creative" or "Survival",
 		Biome = service("BiomeService"):CaptureWorldState(), Round = service("RoundService"):CaptureWorldState(),
 		DayNight = service("DayNightService"):CaptureWorldState(), Match = service("GameStateService"):CaptureWorldState(),

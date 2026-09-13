@@ -17,6 +17,7 @@ local GameStateService = require(script.Parent.GameStateService)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local MonsterDropConfig = require(ReplicatedStorage.Shared.MonsterDropConfig)
 
+local ItemInstance = require(ReplicatedStorage.Shared.ItemInstance)
 local LootService = {}
 LootService._chests = {} -- [Instance] = { Id, Tier, Table, Slots }
 LootService._chestById = {}
@@ -113,6 +114,8 @@ local function maxStack(itemId)
 end
 
 local function getChestSlotCount(chest)
+	local id=chest and (chest:GetAttribute("BuildType") or chest.Name)
+	if id=="LargeChest" then return 48 elseif id=="Chest" then return 24 end
 	local saved = chest and chest:GetAttribute("SlotCount")
 	return type(saved) == "number" and saved % 1 == 0 and saved >= 1 and saved <= 100 and saved or DEFAULT_CHEST_SLOT_COUNT
 end
@@ -122,7 +125,7 @@ local function normalizeChestSlots(slots, slotCount)
 	for i = 1, slotCount do
 		local slot = slots and slots[i]
 		if slot and type(slot) == "table" and slot.Id and tonumber(slot.N) and tonumber(slot.N) > 0 then
-			out[i] = { Id = slot.Id, N = math.floor(tonumber(slot.N)) }
+			out[i] = ItemInstance.New(slot.Id, math.floor(tonumber(slot.N)), slot)
 		else
 			out[i] = nil
 		end
@@ -134,12 +137,13 @@ local function encodeChestSlotsForClient(slots, slotCount)
 	local encoded = {}
 	for i = 1, slotCount do
 		local slot = slots and slots[i]
-		encoded[i] = (slot and { Id = slot.Id, N = slot.N }) or false
+		encoded[i] = (slot and ItemInstance.Copy(slot)) or false
 	end
 	return encoded
 end
 
 local function getInventorySlot(inv, slotType, slotIndex)
+	if slotType == "Equipment" or slotType == "Accessory" then return inv and (inv[slotType] or {})[slotIndex] end
 	if not inv then return nil end
 	if slotType == "Hotbar" then
 		return inv.Hotbar and inv.Hotbar[slotIndex]
@@ -269,7 +273,7 @@ function LootService:_ensureChestData(chest)
 	local cursor = 1
 	for _, item in ipairs(items) do
 		if cursor > slotCount then break end
-		slots[cursor] = { Id = item.Id, N = item.N }
+		slots[cursor] = ItemInstance.New(item.Id,item.N,item)
 		cursor += 1
 	end
 	data = {
@@ -304,7 +308,7 @@ function LootService:RestoreChestState(chest, state)
 		local slot = state.Slots[i]
 		if slot ~= false then
 			assert(type(slot) == "table" and type(slot.Id) == "string" and ItemDatabase:Get(slot.Id) and positiveInteger(slot.N) and slot.N <= maxStack(slot.Id), "Invalid saved chest item")
-			slots[i] = { Id = slot.Id, N = slot.N }
+			slots[i] = ItemInstance.Copy(slot)
 		end
 	end
 	local old = self._chests[chest]
@@ -510,7 +514,7 @@ function LootService:GetChestContents(chest)
 	for i = 1, data.SlotCount do
 		local slot = data.Slots[i]
 		if slot then
-			slots[#slots + 1] = { Id = slot.Id, N = slot.N }
+			slots[#slots + 1] = ItemInstance.Copy(slot)
 		end
 	end
 	return slots
@@ -546,13 +550,14 @@ function LootService:SpillChestContents(chest, position)
 end
 
 function LootService:_bindMonster(monster, opts)
-	if not monster or not monster.Parent then return end
+	if not monster or not monster.Parent or monster:GetAttribute("NoLoot") then return end
 	local tier = (opts and opts.Tier) or getTierFromTags(monster, MONSTER_TAGS)
 	local requireExplicit = opts and opts.RequireExplicit or false
 	if self._monsterConns[monster] then return end
 	local hum = monster:FindFirstChildOfClass("Humanoid")
 	local health = findHealthValue(monster)
 	local function handleDeath()
+  if monster:GetAttribute("NoLoot") then return end
 		if dropConfiguredMonsterLoot(monster) then
 			if monster and monster.Parent then
 				monster:Destroy()
@@ -626,7 +631,7 @@ function LootService:Init()
 				local toSlot = data.Slots[toIndex]
 				if not fromSlot then return end
 
-				if toSlot and toSlot.Id == fromSlot.Id then
+				if toSlot and ItemInstance.Stackable(toSlot, fromSlot) then
 					local stackMax = maxStack(fromSlot.Id)
 					local space = math.max(0, stackMax - toSlot.N)
 					if space <= 0 then return end
@@ -671,7 +676,7 @@ function LootService:Init()
 				if amount > sourceSlot.N then amount = sourceSlot.N end
 
 				local targetSlot = data.Slots[toIndex]
-				if targetSlot and targetSlot.Id ~= itemId then
+				if targetSlot and not ItemInstance.Stackable(targetSlot, sourceSlot) then
 					return
 				end
 
@@ -683,13 +688,13 @@ function LootService:Init()
 				end
 				if amount <= 0 then return end
 
-				local takenId = InventoryService:TakeFromSlot(plr, fromType, fromIndex, amount)
-				if not takenId or takenId ~= itemId then return end
+				local takenEntry = InventoryService:TakeEntryFromSlot(plr, fromType, fromIndex, amount)
+				if not takenEntry then return end
 
 				if targetSlot then
 					targetSlot.N += amount
 				else
-					data.Slots[toIndex] = { Id = itemId, N = amount }
+					data.Slots[toIndex] = takenEntry
 				end
 				self:_updateChest(data)
 				return
@@ -716,10 +721,11 @@ function LootService:Init()
 				if not slot then return end
 				local take = math.min(slot.N, amount)
 				local added = 0
+				local takenEntry = ItemInstance.Copy(slot); takenEntry.N = take
 				if toType and toIndex then
-					added = InventoryService:TryAddToSlot(plr, toType, toIndex, slot.Id, take)
+					added = InventoryService:TryAddEntryToSlot(plr, toType, toIndex, takenEntry)
 				else
-					added = InventoryService:Give(plr, slot.Id, take, true)
+					added = InventoryService:GiveEntry(plr, takenEntry, true)
 				end
 				if added <= 0 then
 					print("[LootService] Take failed (inventory full or invalid)")
@@ -761,6 +767,8 @@ function LootService:Init()
 	CollectionService:GetInstanceAddedSignal("Monster"):Connect(function(inst)
 		self:_bindMonster(inst, { Tier = 1, RequireExplicit = true })
 	end)
+ for _,inst in ipairs(CollectionService:GetTagged("Animal")) do self:_bindMonster(inst,{Tier=1,RequireExplicit=true}) end
+ CollectionService:GetInstanceAddedSignal("Animal"):Connect(function(inst) self:_bindMonster(inst,{Tier=1,RequireExplicit=true}) end)
 
 	Players.PlayerRemoving:Connect(function(plr)
 		self._openByPlayer[plr] = nil

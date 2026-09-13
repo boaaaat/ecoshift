@@ -9,7 +9,6 @@ local AIFolder = script.Parent.Parent:WaitForChild("AI")
 local MonsterClass = require(AIFolder:WaitForChild("Monster"))
 local AnimalClass = require(AIFolder:WaitForChild("Animal"))
 local EntityConfig = require(AIFolder:WaitForChild("EntityConfig"))
-local Progression = require(ReplicatedStorage.Shared.ProgressionConfig)
 local RoundService = require(script.Parent.RoundService)
 local ClassDeploymentService = require(script.Parent.ClassDeploymentService)
 
@@ -200,30 +199,12 @@ function EntityAIService:BindEntity(model, forcedType)
 	end
 	model:SetAttribute("EntityType", entityType)
 	local cfg = self:_buildConfig(model, entityType)
-	if entityType == "Monster" then
-		-- Prefab JumpPower values used to launch creatures far above the terrain.
-		hum.UseJumpPower = false
-		hum.JumpHeight = 7
-		local balance = def and def.StarterBalance
-		if balance then
-			cfg.Damage = (cfg.Damage or 8) * balance.Damage
-			cfg.AttackRange = (cfg.AttackRange or 4) * balance.AttackRange
-		end
-		local level = tonumber(model:GetAttribute("Level"))
-		if not level or level ~= level then
-			level = 1 + math.floor(RoundService:GetElapsed() / Progression.SecondsPerMonsterLevel)
-		end
-		level = math.clamp(math.floor(level), 1, 100)
-		model:SetAttribute("Level", level)
-		cfg.Damage = (cfg.Damage or 8) * (1 + Progression.DamagePerLevel * (level - 1))
-		if not model:GetAttribute("LevelHealthApplied") then
-			local fraction = hum.MaxHealth > 0 and hum.Health / hum.MaxHealth or 1
-			hum.MaxHealth *= 1 + Progression.HealthPerLevel * (level - 1)
-			if balance then hum.MaxHealth *= balance.Health end
-			hum.Health = hum.MaxHealth * fraction
-			model:SetAttribute("LevelHealthApplied", true)
-		end
-	end
+ if model:GetAttribute("OverhaulCreature") then
+  hum.UseJumpPower=false;hum.JumpHeight=7
+  cfg.AIClass="OverhaulCreature"
+  cfg.Damage=tonumber(model:GetAttribute("Damage")) or 8
+ end
+
 	local class = self:_getClass(model, entityType, cfg)
 	local controller = class.new(model, cfg)
 	self._entities[model] = controller

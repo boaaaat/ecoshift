@@ -475,6 +475,10 @@ updateDeathUI = function(canSpectate)
 			row.Name="ClassProgress";row.LayoutOrder=-1;row.TextWrapped=true
 		end
 		if isGameOver and teamResults then
+			local route = #(teamResults.VisitedBiomes or {}) > 0 and table.concat(teamResults.VisitedBiomes, ", ") or "No qualified biome visits yet"
+			local progress = string.format("CAMPAIGN TIER %d · %s\n%s", teamResults.CampaignTier or 1, teamResults.CampaignComplete and "COMPLETED" or teamResults.Milestone or "Field Relay", route)
+			local campaignRow = Theme.Label(results, progress, UDim2.new(1,-8,0,Theme.IsMobile() and 104 or 86), UDim2.new(), Theme.IsMobile() and 15 or 13, Theme.Colors.Paper)
+			campaignRow.Name="CampaignProgress";campaignRow.LayoutOrder=-2;campaignRow.TextWrapped=true
 			local header = Theme.Label(results, "EXPEDITION CREW  ·  " .. string.upper(currencyName), UDim2.new(1, -8, 0, Theme.IsMobile() and 38 or 24), UDim2.new(), Theme.IsMobile() and 15 or 11, Theme.Colors.Amber, true)
 			header.Name = "CrewHeader"
 			header.LayoutOrder = 0

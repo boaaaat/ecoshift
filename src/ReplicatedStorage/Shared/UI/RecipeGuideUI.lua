@@ -18,6 +18,7 @@ local remoteFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
 local craftRemote = remoteFolder and Util.GetRemote(remoteFolder, Config.RemoteNames.Craft)
 local inventoryRemote = remoteFolder and Util.GetRemote(remoteFolder, Config.RemoteNames.InventoryUpdate)
 local Guide = {}
+local IngredientResolver=require(script.Parent.Parent.IngredientResolver)
 local stack, inventory, materialRows, stationRows = {}, nil, {}, {}
 local preferredStation, activeCraft, render, refresh
 local statusRevision = 0
@@ -137,10 +138,7 @@ local function costMap(recipe)
 	return costs
 end
 local function affordable(recipe)
-	if not inventory then return 0 end
-	local n=99
-	for id,needed in pairs(costMap(recipe)) do n=math.min(n,math.floor(count(id)/needed)) end
-	return n
+ return IngredientResolver.Max(recipe.Ingredients,inventory,player,99)
 end
 local function parsedQuantity()
 	local n=tonumber(current() and current().QuantityText or "")
@@ -209,7 +207,7 @@ refresh=function()
 	for _, row in ipairs(stationRows) do
 		local info=byId[row.Id]
 		if info then
-			row.Button.Text=info.Name.." · "..(info.Id=="Hand" and "ALWAYS AVAILABLE" or (info.Nearby and "NEARBY" or "NOT NEARBY"))
+			row.Button.Text=info.Name.." · "..(info.Id=="Hand" and "ALWAYS AVAILABLE" or (info.UpgradeNeeded and ("GRADE "..info.RequiredGrade.." REQUIRED · NEARBY GRADE "..info.Grade) or info.Nearby and "NEARBY" or "NOT NEARBY"))
 				.."\n"..timeText(duration(recipe,info.Id,n or 1)).." total"
 				..(info.BuildItemId and " · How to craft this station →" or "")
 			row.Button.TextColor3=info.Nearby and colors.Success or colors.Warning
@@ -257,10 +255,14 @@ refresh=function()
 	else
 		timing.Text="Station times: see the allowed stations above"
 	end
-	local canCraft=station~=nil and (recipe.Cooking or n<=max)
+	local furnace=table.find(recipe.AllowedStations or {},"Furnace")~=nil
+ local canCraft=station~=nil and (recipe.Cooking or furnace or n<=max)
 	setEnabled(craft,canCraft); craft.BackgroundColor3=canCraft and colors.SuccessFill or colors.SlotEmpty
 	craft.Text=not station and "Required station not nearby" or (n>max and "Missing materials" or ("Craft "..outputText(recipe,n).." · "..Recipes.STATIONS[station].Name))
 	if recipe.Cooking and station then craft.Text="Open "..Recipes.STATIONS[station].Name.." kitchen" end
+ if furnace and station then craft.Text="Open furnace queue" end
+ local campaignLock=Recipes:GetCampaignLock(recipe.Id)
+ if campaignLock then craft.Text=campaignLock end
 	if canCraft then craft.TextColor3=colors.Paper end
 end
 
@@ -425,9 +427,13 @@ craft.Activated:Connect(function()
 		else feedback("Move closer to the required cooking station.",false) end
 		return
 	end
-	if n>affordable(recipe) then return end
+	if not table.find(recipe.AllowedStations or {},"Furnace") and n>affordable(recipe) then return end
 	local station=Resolver.GetUsableStation(node.RecipeId,player,preferredStation)
 	if not station then refresh(); feedback("Move closer to one of the listed stations.",false); return end
+ if table.find(recipe.AllowedStations or {},"Furnace") then
+  local remote=remoteFolder and remoteFolder:FindFirstChild("Station")
+  for _,record in ipairs(Resolver.GetStations(node.RecipeId,player)) do if record.Id==station and record.Instance and remote then remote:FireServer("Open",{Station=record.Instance,RequestId=game:GetService("HttpService"):GenerateGUID(false)});gui.Enabled=false;return end end
+ end
 	activeCraft={RecipeId=node.RecipeId,StationType=station,Quantity=n,Duration=duration(recipe,station,n),StartedAt=os.clock(),Confirmed=false}
 	local request=activeCraft
 	refresh(); feedback("Preparing craft…",true)
@@ -452,7 +458,7 @@ if craftRemote then
 			local extra=payload.Extra
 			if payload.Success and type(extra)=="table" and extra.OutputCount then
 				feedback("Crafted "..extra.OutputCount.." × "..itemName(extra.OutputId),true)
-			else feedback(Messages[payload.Reason] or "Crafting could not complete.",payload.Success==true) end
+			else feedback(Messages[payload.Reason] or payload.Reason or "Crafting could not complete.",payload.Success==true) end
 		else return end
 		if gui.Enabled then refresh() end
 	end)

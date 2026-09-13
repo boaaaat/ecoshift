@@ -1,67 +1,51 @@
--- EventEffectsService.lua
--- Applies gameplay modifiers when events begin/end.
--- Reads Effects and Modifiers from the resolved event config (data-driven).
-local EventEffectsService = {}
-EventEffectsService._initialized = false
-
-local function resetMods()
-	_G.Ecoshift = _G.Ecoshift or {}
-	_G.Ecoshift.Mods = {
-		Temp = 0,
-		Toxin = 0,
-		Wet = 0,
-		ResourceMultiplier = 1.0,
-		EnemyMultiplier = 1.0,
-	}
+-- Event consequences are local and begin only after the visible warning.
+local Players=game:GetService("Players")
+local RS=game:GetService("ReplicatedStorage")
+local Service={}
+local function sheltered(root)
+ local params=RaycastParams.new();params.FilterType=Enum.RaycastFilterType.Exclude;params.FilterDescendantsInstances={root.Parent};params.RespectCanCollide=true
+ return workspace:Raycast(root.Position,Vector3.new(0,18,0),params)~=nil
 end
-
-resetMods()
-
-local function applyResolved(resolved, isStart)
-	local mods = _G.Ecoshift.Mods
-	local delta = isStart and 1 or -1
-
-	-- Effects: additive deltas to gameplay multipliers (ResourceMultiplier, EnemyMultiplier, etc.)
-	if type(resolved.Effects) == "table" then
-		for key, value in pairs(resolved.Effects) do
-			if mods[key] ~= nil then
-				mods[key] += (tonumber(value) or 0) * delta
-			end
-		end
-	end
-
-	-- Modifiers: additive deltas to environment (Temp, Toxin, Wet, etc.)
-	if type(resolved.Modifiers) == "table" then
-		for key, value in pairs(resolved.Modifiers) do
-			if mods[key] ~= nil then
-				mods[key] += (tonumber(value) or 0) * delta
-			end
-		end
-	end
+function Service:_tick()
+ local scenes=require(script.Parent.ObjectiveRuntimeService)._scenes
+ for _,player in ipairs(Players:GetPlayers()) do
+  local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+  local heat,cold,toxin,lowGravity,wet=0,0,0,false,false
+  if root and not player:GetAttribute("IsDead") and not player:GetAttribute("InteriorId") and not RS:GetAttribute("WorldShifting") and not RS:GetAttribute("WorldRestoring") then
+   for _,scene in pairs(scenes) do
+    local data=scene.Entry.Data
+    if not scene.Closed and not scene.State.Completed and data.Elapsed>=data.Warning and (root.Position-scene.Origin).Magnitude<60 then
+     local safe=sheltered(root)
+     local exposure=scene.Def.Exposure or 0
+     if scene.Def.Template=="Thermal" then
+      -- A clearly signposted neutral center lane remains safe through each phase.
+      if math.abs(root.Position.X-scene.Origin.X)<8 then exposure=0 else exposure*=math.floor((data.Elapsed-data.Warning)/12)%2==0 and 1 or -1 end
+     end
+     if not safe then if exposure>0 then heat=math.max(heat,exposure) else cold=math.min(cold,exposure) end;toxin=math.max(toxin,scene.Def.Toxin or 0) end
+     lowGravity=lowGravity or scene.Def.Gravity==true
+     wet=wet or scene.Def.Wet and root.Position.Y<scene.Origin.Y+3
+    end
+   end
+  end
+  player:SetAttribute("EventExposureRate",heat+cold);player:SetAttribute("EventToxinRate",toxin)
+  player:SetAttribute("EventWet",wet==true)
+  if root then
+   local force=root:FindFirstChild("WorldEventLift")
+   if lowGravity then
+    if not force then
+     local attachment=Instance.new("Attachment");attachment.Name="WorldEventLiftAttachment";attachment.Parent=root
+     force=Instance.new("VectorForce");force.Name="WorldEventLift";force.Attachment0=attachment;force.RelativeTo=Enum.ActuatorRelativeTo.World;force.ApplyAtCenterOfMass=true;force.Parent=root
+    end
+    force.Force=Vector3.new(0,root.AssemblyMass*workspace.Gravity*.35,0)
+   elseif force then
+    local attachment=force.Attachment0;force:Destroy();if attachment then attachment:Destroy() end
+   end
+  end
+ end
 end
-
-function EventEffectsService:Init()
-	if self._initialized then return end
-	self._initialized = true
-	_G.Ecoshift = _G.Ecoshift or {}
-	task.spawn(function()
-		for _ = 1, 200 do
-			if type(_G.Ecoshift.OnEventStartAdd) == "function" and type(_G.Ecoshift.OnEventEndAdd) == "function" then
-				_G.Ecoshift.OnEventStartAdd(function(_, _, payload)
-					if payload and payload.Resolved then
-						applyResolved(payload.Resolved, true)
-					end
-				end)
-				_G.Ecoshift.OnEventEndAdd(function(_, _, payload)
-					if payload and payload.Resolved then
-						applyResolved(payload.Resolved, false)
-					end
-				end)
-				return
-			end
-			task.wait(0.1)
-		end
-	end)
+function Service:Init()
+ if self._started then return end;self._started=true
+ _G.Ecoshift=_G.Ecoshift or {};_G.Ecoshift.Mods={Temp=0,Toxin=0,Wet=0,ResourceMultiplier=1,EnemyMultiplier=1}
+ task.spawn(function()while true do local ok,err=pcall(self._tick,self);if not ok then warn("[EventEffects]",err) end;task.wait(.5) end end)
 end
-
-return EventEffectsService
+return Service
