@@ -27,16 +27,16 @@ function WorldGenController:_generateOverhaul(biomeName)
    for _,player in ipairs(Players:GetPlayers()) do
     local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
     if frozen[player] then continue end
-    if root and not player:GetAttribute("InteriorId") then
-     frozen[player]={Root=root,Anchored=root.Anchored,Position=root.Position}
+    if root then
+     frozen[player]={Root=root,Anchored=root.Anchored,Position=root.Position,WasInterior=player:GetAttribute("InteriorId")~=nil}
      root.Anchored=true;root.AssemblyLinearVelocity=Vector3.zero
      player:SetAttribute("WorldPlayerLoading",true)
-    elseif player:GetAttribute("IsDead") and not player:GetAttribute("InteriorId") then
+    elseif player:GetAttribute("IsDead") then
      local record=death._deadPlayers[player]
      if record and record.ragdoll and record.ragdoll.Parent then
       local parts={}
       for _,p in ipairs(record.ragdoll:GetDescendants()) do if p:IsA("BasePart") then parts[p]=p.Anchored;p.Anchored=true end end
-      frozen[player]={Corpse=record.ragdoll,Record=record,Parts=parts,Position=record.ragdoll:GetPivot().Position}
+      frozen[player]={Corpse=record.ragdoll,Record=record,Parts=parts,Position=record.ragdoll:GetPivot().Position,WasInterior=player:GetAttribute("InteriorId")~=nil}
       death._reviveHolds[player]=nil
      end
     end
@@ -46,13 +46,24 @@ function WorldGenController:_generateOverhaul(biomeName)
     local enemies=workspace:FindFirstChild("Enemies")
     if enemies then for _,model in ipairs(enemies:GetChildren()) do if not model:GetAttribute("InteriorId") then model:Destroy() end end end
     local world=require(script.Parent.OverhaulWorldService);world:Generate(name)
-    for player,entry in pairs(frozen) do
-     if entry.Root and entry.Root.Parent and not player:GetAttribute("InteriorId") then
-      local safe=world:SafePosition(entry.Position);world:EnsureArea(safe);safe=world:SafePosition(safe)
+    local ordered={};for player,entry in pairs(frozen) do table.insert(ordered,{Player=player,Entry=entry}) end
+    table.sort(ordered,function(a,b)return a.Player.UserId<b.Player.UserId end)
+    local ignored={};for _,record in ipairs(ordered) do if record.Entry.Corpse then table.insert(ignored,record.Entry.Corpse) end end
+    local arrivals=self._hasGenerated and world:GetCampArrivalPositions(#ordered,ignored) or nil
+    for index,record in ipairs(ordered) do
+     local player,entry=record.Player,record.Entry
+     if entry.WasInterior then
+      local root=entry.Root;local force=root and root:FindFirstChild("MoonGravity");if force then force:Destroy() end
+      player:SetAttribute("InteriorId",nil);player:SetAttribute("MapLayer","Surface")
+     end
+     if entry.Root and entry.Root.Parent then
+      local safe=arrivals and arrivals[index] or world:SafePosition(entry.Position);world:EnsureArea(safe)
+      if not arrivals then safe=world:SafePosition(safe) end
       player.Character:PivotTo(CFrame.new(safe)*player.Character:GetPivot().Rotation)
       entry.Root.AssemblyLinearVelocity=Vector3.zero
      elseif entry.Corpse and entry.Corpse.Parent then
-      local safe=world:SafePosition(entry.Position);world:EnsureArea(safe);safe=world:SafePosition(safe)
+      local safe=arrivals and arrivals[index] or world:SafePosition(entry.Position);world:EnsureArea(safe)
+      if not arrivals then safe=world:SafePosition(safe) end
       entry.Corpse:PivotTo(CFrame.new(safe)*entry.Corpse:GetPivot().Rotation)
       entry.Record.deathPosition=safe
      end

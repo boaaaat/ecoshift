@@ -2,6 +2,7 @@
 local RS = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local Http = game:GetService("HttpService")
+local Collection = game:GetService("CollectionService")
 local Biomes = require(RS.Shared.OverhaulBiomes)
 local Rules = require(RS.Shared.GameRules)
 local TreeAssets = require(RS.Shared.TreeAssets)
@@ -221,6 +222,62 @@ function Service:SafePosition(position,terrainOnly)
   end
  end
  return terrainOnly and Vector3.new(position.X,self:GetHeight(position.X,position.Z)+5,position.Z) or Vector3.new(math.random(-30,30),CAMP_HEIGHT+5,math.random(-30,30))
+end
+local function bounds(instance)
+ if instance:IsA("Model") then return instance:GetBoundingBox() end
+ return instance.CFrame,instance.Size
+end
+local function arrivalExclusions()
+ local result={}
+ for _,player in ipairs(Players:GetPlayers()) do if player.Character then table.insert(result,player.Character) end end
+ for _,name in ipairs({"GeneratedWorld","Enemies","ClassDeployments"}) do local item=workspace:FindFirstChild(name);if item then table.insert(result,item) end end
+ return result
+end
+local function clearArrival(position,floorPart,excluded,reserved)
+ for _,used in ipairs(reserved) do if (Vector2.new(position.X,position.Z)-Vector2.new(used.X,used.Z)).Magnitude<7 then return false end end
+ local overlap=OverlapParams.new();overlap.FilterType=Enum.RaycastFilterType.Exclude;overlap.FilterDescendantsInstances=excluded
+ for _,hit in ipairs(workspace:GetPartBoundsInBox(CFrame.new(position+Vector3.new(0,.25,0)),Vector3.new(4.5,6,4.5),overlap)) do
+  if hit.CanCollide and hit~=floorPart and not hit:IsA("SpawnLocation") then return false end
+ end
+ return true
+end
+function Service:GetCampArrivalPositions(count,ignoreInstances)
+ count=math.max(0,math.floor(tonumber(count) or 0));local result={};if count==0 then return result end
+ local excluded=arrivalExclusions();for _,instance in ipairs(ignoreInstances or {}) do if typeof(instance)=="Instance" then table.insert(excluded,instance) end end;local candidates={}
+ -- A roof gives us an authored interior. Cast from its underside to find the
+ -- highest floor below it, then verify full character clearance around that spot.
+ for _,roof in ipairs(Collection:GetTagged("Structure")) do
+  if roof:IsDescendantOf(workspace) and roof:GetAttribute("BuildType")=="Roof" then
+   local cf,size=bounds(roof);local center=cf.Position
+   if Vector2.new(center.X,center.Z).Magnitude<=CAMP-8 then
+    for _,offset in ipairs({Vector3.zero,Vector3.new(1.6,0,1.6),Vector3.new(-1.6,0,-1.6)}) do
+     local point=(cf*CFrame.new(offset)).Position
+     local ray=RaycastParams.new();ray.FilterType=Enum.RaycastFilterType.Exclude;ray.FilterDescendantsInstances={roof,table.unpack(excluded)};ray.RespectCanCollide=true
+     local floor=workspace:Raycast(Vector3.new(point.X,center.Y-size.Y*.5-.2,point.Z),Vector3.new(0,-24,0),ray)
+     local floorType=floor and floor.Instance:GetAttribute("BuildType")
+     if floor and floor.Normal.Y>.65 and (floor.Instance==workspace.Terrain or floorType=="Floor") then
+      local height=(center.Y-size.Y*.5)-floor.Position.Y
+      local arrival=Vector3.new(point.X,floor.Position.Y+3.2,point.Z)
+      if height>=6.5 and height<=18 and clearArrival(arrival,floor.Instance,excluded,result) then table.insert(candidates,{Position=arrival,Floor=floor.Instance}) end
+     end
+    end
+   end
+  end
+ end
+ table.sort(candidates,function(a,b)return Vector2.new(a.Position.X,a.Position.Z).Magnitude<Vector2.new(b.Position.X,b.Position.Z).Magnitude end)
+ for _,candidate in ipairs(candidates) do if #result>=count then break end;if clearArrival(candidate.Position,candidate.Floor,excluded,result) then table.insert(result,candidate.Position) end end
+ -- Fill remaining slots in a compact spiral on the permanent camp plateau.
+ for radius=6,156,6 do
+  local slots=math.max(6,math.floor(radius*.75))
+  for i=1,slots do
+   if #result>=count then return result end
+   local angle=(i-1)*math.pi*2/slots+radius*.17
+   local arrival=Vector3.new(math.cos(angle)*radius,CAMP_HEIGHT+3.2,math.sin(angle)*radius)
+   if clearArrival(arrival,nil,excluded,result) then table.insert(result,arrival) end
+  end
+ end
+ while #result<count do table.insert(result,Vector3.new((#result-count*.5)*8,CAMP_HEIGHT+10,0)) end
+ return result
 end
 function Service:_plan()
  local rng=Random.new(self._visitSeed);self._regions={};self._landmarks={};self._roadAngle=rng:NextNumber(0,math.pi)
