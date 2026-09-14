@@ -665,6 +665,9 @@ function Gear:Init()
    self:_tickTraversal(player,dt)
   end
  end)
- Players.PlayerRemoving:Connect(function(player) runtime[player]=nil end)
+ Players.PlayerRemoving:Connect(function(player)
+  -- Preserve timers and gear runtime until the departure snapshot completes.
+  task.defer(function() runtime[player]=nil end)
+ end)
 end
 return Gear

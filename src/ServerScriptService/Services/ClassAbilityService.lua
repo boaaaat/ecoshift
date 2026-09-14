@@ -233,7 +233,12 @@ function Service:Init()
 		player:GetAttributeChangedSignal("IsDead"):Connect(function() if player:GetAttribute("IsDead") then self:_clearOwner(player) end end)
 	end
 	Players.PlayerAdded:Connect(bind); for _,player in ipairs(Players:GetPlayers()) do bind(player) end
-	Players.PlayerRemoving:Connect(function(player) self:_clearOwner(player); self._states[player]=nil end)
+	Players.PlayerRemoving:Connect(function(player)
+		self:_clearOwner(player)
+		-- The cooldown is part of the player snapshot; clear it after all
+		-- PlayerRemoving observers have had a chance to capture it.
+		task.defer(function() self._states[player]=nil end)
+	end)
 	local epoch=require(script.Parent.BiomeService):GetTiming().ShiftCount
 	local elapsed=0
 	RunService.Heartbeat:Connect(function(dt)

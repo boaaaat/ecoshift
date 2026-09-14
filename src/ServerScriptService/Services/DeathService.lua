@@ -93,7 +93,9 @@ function DeathService:Init()
 	
 	-- Clean up on player leave
 	Players.PlayerRemoving:Connect(function(player)
-		self:_cleanupPlayer(player)
+		-- A downed body and its transform are durable world state. Defer removal
+		-- until the world snapshot listener has read them.
+		task.defer(function() self:_cleanupPlayer(player) end)
 	end)
 	
 	-- Hook into Humanoid.Died for all players (catches all death sources)

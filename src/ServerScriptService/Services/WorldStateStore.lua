@@ -148,8 +148,7 @@ function Service:WriteSnapshot(record, jobId, snapshot, finalPhase)
 	end
 	return updated, reason
 end
-function Service:ReadSnapshot(record)
-	local ref = record.Snapshot
+local function readReference(ref)
 	if not ref then return nil, nil end
 	if not validId(ref.Id) or type(ref.Count) ~= "number" or ref.Count < 1 or ref.Count > 17 then return nil, "InvalidSnapshot" end
 	local pieces = {}
@@ -163,5 +162,22 @@ function Service:ReadSnapshot(record)
 	local ok, snapshot = pcall(function() return Http:JSONDecode(encoded) end)
 	if not ok or type(snapshot) ~= "table" then return nil, "InvalidSnapshot" end
 	return snapshot
+end
+function Service:ReadSnapshot(record, validator)
+	local snapshot, reason = readReference(record.Snapshot)
+	if snapshot and validator then
+		local called, valid = pcall(validator, snapshot)
+		if not called or valid ~= true then snapshot, reason = nil, "InvalidSnapshot" end
+	end
+	if snapshot then return snapshot, nil, false end
+	-- The previous immutable checkpoint is retained specifically so a corrupt or
+	-- incomplete latest publication cannot destroy a resumable world.
+	local previous, previousReason = readReference(record.PreviousSnapshot)
+	if previous and validator then
+		local called, valid = pcall(validator, previous)
+		if not called or valid ~= true then previous, previousReason = nil, "InvalidPreviousSnapshot" end
+	end
+	if previous then return previous, nil, true end
+	return nil, reason or previousReason
 end
 return Service

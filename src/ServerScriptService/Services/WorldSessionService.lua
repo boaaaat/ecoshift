@@ -10,6 +10,7 @@ local Rules = require(RS.Shared.GameRules)
 local Util = require(RS.Shared.Util)
 local Policy = require(RS.Shared.MatchmakingPolicy)
 local Store = require(script.Parent.WorldStateStore)
+local SnapshotValidator = require(script.Parent.WorldSnapshotValidator)
 local Saves = require(script.Parent.WorldSaveService)
 local Parties = require(script.Parent.PartyService)
 local Profiles = require(script.Parent.ProfileService)
@@ -397,6 +398,13 @@ function Service:ReturnToLobby(player, requestId)
 		end
 		return false, "Another trip is still being arranged. Please try again shortly."
 	end
+	if not self._ending and self._snapshots then
+		-- Take an in-memory checkpoint while the character and every gameplay
+		-- service are still present. The final durable save can safely use this
+		-- even if Roblox removes Character before PlayerRemoving during teleport.
+		local captured, state = pcall(self._snapshots.CapturePlayer, self._snapshots, player)
+		if not captured or not state then return false, "Your expedition is still synchronizing. Try returning again in a moment." end
+	end
 	self:_initTravel()
 	local state = { Kind = "Lobby", Attempts = 0, ReturnRequestId = requestId }
 	self._travel[player] = state
@@ -566,8 +574,14 @@ function Service:PrepareExpedition()
 		task.wait(0.25)
 	end
 	if self._stopped then return false, "WorldLeaseLost" end
-	local snapshot, readError = Store:ReadSnapshot(self._record)
+	local snapshot, readError, recovered = Store:ReadSnapshot(self._record, function(candidate)
+		return SnapshotValidator.Validate(candidate, acquired.Roster)
+	end)
 	if readError then self:_stop("SnapshotUnavailable"); return false, readError end
+	if recovered then
+		RS:SetAttribute("WorldSaveStatus", "RecoveredPreviousCheckpoint")
+		warn("[WorldSession] Latest snapshot was incomplete; restored the previous checkpoint.")
+	end
 	if snapshot and snapshot.Match and snapshot.Match.MatchState == "GameOver" then self:_stop("ExpeditionEnded"); return false, "ExpeditionEnded" end
 	if snapshot and (snapshot.GameplayRulesVersion) ~= (record.GameplayRulesVersion) then self:_stop("WorldRulesMismatch"); return false, "WorldRulesMismatch" end
 	self._loadedSnapshot = snapshot

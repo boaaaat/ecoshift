@@ -5,15 +5,17 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 local HttpService = game:GetService("HttpService")
 local Codec = require(script.Parent.WorldSnapshotCodec)
+local Validator = require(script.Parent.WorldSnapshotValidator)
 local Rules = require(ReplicatedStorage.Shared.GameRules)
 local Snapshot = { Version = 2, GeneratorVersion = 2, MaxBytes = 3500000, _players = {}, _ready = {}, _errors = {} }
 local function service(name) return require(script.Parent[name]) end
 local AUXILIARY = { "EventService", "ObjectiveService", "ExpeditionRewardsService" }
 
-function Snapshot:CapturePlayer(player)
+function Snapshot:CapturePlayer(player, departingCharacter)
 	local key = tostring(player.UserId)
 	if not self._ready[player] or player:GetAttribute("WorldPlayerRestoring") then return self._players[key] end
-	local char = player.Character
+	local previous = self._players[key]
+	local char = departingCharacter or player.Character
 	local state = {
 		Role = player:GetAttribute("Role"),
 		ClassLevel = player:GetAttribute("ClassLevel") or 1,
@@ -30,6 +32,13 @@ function Snapshot:CapturePlayer(player)
 	if char and char.Parent then
 		state.Transform = Codec.CFrame(char:GetPivot())
 		state.WetStacks = char:GetAttribute("WetStacks") or 0
+	elseif previous and state.Death.Downed ~= true then
+		-- Teleport can remove Character before PlayerRemoving. CharacterRemoving
+		-- normally refreshes this cache first; preserve that last authoritative
+		-- pose and health if the platform delivers the final signals differently.
+		state.Transform = Codec.Copy(previous.Transform)
+		state.WetStacks = previous.WetStacks
+		state.Stats.Health = state.Stats.Health or (previous.Stats and previous.Stats.Health)
 	end
 	self._players[key], self._errors[key] = state, nil
 	return state
@@ -40,6 +49,16 @@ Players.PlayerRemoving:Connect(function(player)
 	if not ok then Snapshot._errors[tostring(player.UserId)] = tostring(err); warn("[WorldSnapshot] Departure capture failed:", err) end
 	Snapshot._ready[player] = nil
 end)
+
+local function bindCharacterCapture(player)
+	player.CharacterRemoving:Connect(function(character)
+		if not Snapshot._ready[player] or player:GetAttribute("WorldPlayerRestoring") then return end
+		local ok, err = pcall(Snapshot.CapturePlayer, Snapshot, player, character)
+		if not ok then Snapshot._errors[tostring(player.UserId)] = tostring(err); warn("[WorldSnapshot] Character departure capture failed:", err) end
+	end)
+end
+Players.PlayerAdded:Connect(bindCharacterCapture)
+for _, player in ipairs(Players:GetPlayers()) do bindCharacterCapture(player) end
 
 local function markJoiningPlayer(player)
 	player:SetAttribute("WorldPlayerLoading", true)
@@ -77,6 +96,8 @@ function Snapshot:StageWorld(snapshot)
 		return true
 	end
 	assert(type(snapshot) == "table" and snapshot.Version == self.Version and snapshot.GeneratorVersion == self.GeneratorVersion, "Unsupported world snapshot/generator version")
+	local structurallyValid, structuralError = Validator.Validate(snapshot, ReplicatedStorage:GetAttribute("OriginalCrewSize"))
+	assert(structurallyValid, "Invalid world snapshot: " .. tostring(structuralError))
 	local worldType = snapshot.WorldType or "Survival"
 	assert(worldType == "Survival" or worldType == "Creative", "Unsupported world type")
 	assert(worldType == (workspace:GetAttribute("WorldType") or "Survival"), "Saved world type does not match its reservation")
@@ -239,6 +260,8 @@ function Snapshot:Capture()
 	}
 	Codec.BoundedCount(state.Players, 100)
 	state = Codec.Copy(state)
+	local valid, reason = Validator.Validate(state, ReplicatedStorage:GetAttribute("OriginalCrewSize"))
+	assert(valid, "Refusing incomplete world snapshot: " .. tostring(reason))
 	assert(#HttpService:JSONEncode(state) <= self.MaxBytes, "World snapshot capacity exceeded; refusing partial save")
 	return state
 end

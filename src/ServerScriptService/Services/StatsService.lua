@@ -340,7 +340,9 @@ function StatsService:Init()
 		self:_bindPlayer(plr)
 	end)
 	Players.PlayerRemoving:Connect(function(plr)
-		self._data[plr] = nil
+		-- Departure snapshots share this signal. Cleanup on the next scheduler
+		-- turn so CaptureWorldState cannot recreate default stats.
+		task.defer(function() self._data[plr] = nil end)
 	end)
 
 	RunService.Heartbeat:Connect(function(dt)
@@ -368,7 +370,8 @@ function StatsService:Init()
 end
 
 function StatsService:CaptureWorldState(plr)
-	local data = getData(self, plr)
+	local data = self._data[plr]
+	assert(data, "Stats unavailable during world snapshot")
 	local state = { Base = table.clone(data.Base), Modifiers = {} }
 	local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
 	if hum then state.Health = hum.Health end

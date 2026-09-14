@@ -343,7 +343,8 @@ function CraftingService:Init()
 	end
 
 	Players.PlayerRemoving:Connect(function(plr)
-		self._activeCrafts[plr] = nil
+		-- CaptureRefund must see paid escrow before departure cleanup.
+		task.defer(function() self._activeCrafts[plr] = nil end)
 	end)
 end
 

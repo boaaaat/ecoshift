@@ -202,7 +202,14 @@ function InventoryService:GetAll(plr)
 end
 
 function InventoryService:CaptureWorldState(plr)
-	return snapshot(getInv(plr))
+	-- Never manufacture an empty inventory while a player is departing. Roblox
+	-- dispatches PlayerRemoving listeners independently, so another service's
+	-- cleanup can run before the world snapshot listener even when it connected
+	-- later. Refusing an uninitialized capture keeps the previous durable
+	-- checkpoint instead of silently replacing it with an empty pack.
+	local inv = self._inventories[plr]
+	assert(self._worldInitialized[plr] and inv, "Inventory unavailable during world snapshot")
+	return snapshot(inv)
 end
 
 local function readSnapshot(state)
@@ -794,8 +801,12 @@ Players.PlayerAdded:Connect(function(plr)
 end)
 
 Players.PlayerRemoving:Connect(function(plr)
-	InventoryService._inventories[plr] = nil
-	InventoryService._worldInitialized[plr] = nil
+	-- WorldSnapshotService captures departure state from another
+	-- PlayerRemoving listener. Keep server-owned data alive through that event.
+	task.defer(function()
+		InventoryService._inventories[plr] = nil
+		InventoryService._worldInitialized[plr] = nil
+	end)
 end)
 
 return InventoryService
