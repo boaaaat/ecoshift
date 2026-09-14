@@ -85,11 +85,16 @@ function Service:_baseHeight(x,z)
  elseif f=="Cavern" then h=-30+n*55+detail*3
  elseif f=="Canopy" then h=30+n*100+detail*8
  elseif f=="Mushroom" then h=8+n*65+detail*5 end
- -- Broad spokes are connected walking approaches, even through steep formations.
- local angle=math.atan2(z,x);local road=math.abs(math.sin(angle*4+self._roadAngle))*math.sqrt(x*x+z*z)
- local routeHeight=math.clamp(n*35,-18,55)
- h=routeHeight+(h-routeHeight)*smooth((road-12)/45)
+ -- Paths follow the land. Forcing radial spokes to a separate low elevation
+ -- cuts long, empty trenches through hills in every biome.
  return math.clamp(h,-120,240)
+end
+function Service:_routeDistance(x,z)
+ -- Actual perpendicular distance to the nearest of eight camp routes.
+ -- sin(angle*4)*radius made their transition four times narrower than intended.
+ local phase=math.atan2(z,x)*4+(self._roadAngle or 0)
+ local angle=((phase+math.pi*.5)%math.pi-math.pi*.5)/4
+ return math.abs(math.sin(angle))*math.sqrt(x*x+z*z)
 end
 local riverBiomes={Forest=true,Swamp=true,FrozenTundra=true,AuroraVale=true,CanopySea=true,StormspireHighlands=true,MyceliumHollow=true,SunkenArchive=true}
 function Service:_riverLine(z)
@@ -141,6 +146,7 @@ function Service:_rawHeight(x,z)
  if pool and poolDistance<140 then h=(pool-6)+(h-(pool-6))*smooth((poolDistance-76)/64) end
  local water,distance=self:_flow(x,z)
  if water then
+  local landHeight=h
   if distance<34 then
    -- A submerged, curved bed instead of terrain ending at the water surface.
    local t=distance/34
@@ -153,11 +159,13 @@ function Service:_rawHeight(x,z)
    local t=smooth((distance-44)/38)
    h=(water+4)+(h-(water+4))*t
   end
+  if distance<82 then
+   -- Preserve the local land at crossings, with broad banks into the river.
+   -- Do not impose a route elevation on unrelated hills or regional features.
+   local crossingHeight=landHeight+math.max(0,water+3-landHeight)*(1-smooth((distance-44)/38))
+   h=crossingHeight+(h-crossingHeight)*smooth((self:_routeDistance(x,z)-12)/60)
+  end
  end
- -- River crossings retain a broad, gently graded dry route.
- local radius=math.sqrt(x*x+z*z);local road=math.abs(math.sin(math.atan2(z,x)*4+self._roadAngle))*radius
- if road<57 then local approach=self:_baseHeight(x,z);h=approach+(h-approach)*smooth((road-12)/45) end
- if road<22 and water and distance<60 then h=math.max(h,water+3) end
  return math.clamp(h,-120,240)
 end
 function Service:GetMapLayer(position)
@@ -183,8 +191,9 @@ function Service:GetWaterLevel(x,z)
  for _,landmark in ipairs(self._landmarks) do if Vector2.new(x-landmark.Position.X,z-landmark.Position.Z).Magnitude<(landmark.FoundationRadius or 40) then return nil end end
  local river,distance=self:_flow(x,z)
 	if river and distance<34 then
-	 local road=math.abs(math.sin(math.atan2(z,x)*4+self._roadAngle))*math.sqrt(x*x+z*z)
-	 if road>=24 then return river end
+	 -- Raised crossing terrain blocks water itself; retain water in the sloped
+	 -- channel beside it instead of leaving an artificial dry strip.
+	 if self:_routeDistance(x,z)>12 then return river end
  end
  local pool,poolDistance=self:_pool(x,z)
  if pool and poolDistance<80 then return pool end
