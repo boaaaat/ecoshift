@@ -3,6 +3,7 @@ local RS=game:GetService("ReplicatedStorage")
 local Players=game:GetService("Players")
 local Collection=game:GetService("CollectionService")
 local RunService=game:GetService("RunService")
+local HttpService=game:GetService("HttpService")
 local Catalog=require(RS.Shared.OverhaulCatalog)
 local Ingredients=require(RS.Shared.IngredientResolver)
 local Inventory=require(script.Parent.InventoryService)
@@ -19,6 +20,17 @@ local function kind(model)
  if typeof(model)~="Instance" or not model:IsDescendantOf(workspace) or not Collection:HasTag(model,"Structure") or not (model:IsA("Model") or model:IsA("BasePart")) then return nil end
  local id=model:GetAttribute("BuildType") or model:GetAttribute("StationType")
  return Catalog.Stations[id] and id or nil
+end
+local function normalizeState(state)
+ -- Saved slot maps may have string indices. Always keep twelve explicit slots.
+ local output={}
+ for i=1,12 do output[i]=state.Output and (state.Output[i] or state.Output[tostring(i)]) or false end
+ state.Output=output
+ state.Jobs=state.Jobs or {}
+ state.Enabled=state.Enabled~=false
+ state.FuelWork=math.clamp(tonumber(state.FuelWork) or 0,0,3600)
+ for _,job in ipairs(state.Jobs) do job.Id=job.Id or HttpService:GenerateGUID(false) end
+ return state
 end
 function S:Validate(p,model,grade)
  local id=kind(model);local root=p.Character and p.Character:FindFirstChild("HumanoidRootPart")
@@ -43,7 +55,7 @@ function S:Restore(model,state)
  if not state then return end
  assert(type(state)=="table" and state.Version==1,"Invalid furnace snapshot")
  self:Bind(model,model:GetAttribute("BuildType"),model:GetAttribute("StationGrade"))
- self._states[model]=Codec.Copy(state)
+ self._states[model]=normalizeState(Codec.Copy(state))
 end
 function S:CanSalvage(player,model)
  local state=self._states[model];if not state then return true end
@@ -53,14 +65,24 @@ function S:CanSalvage(player,model)
 end
 function S:Remove(model) self._states[model]=nil end
 local function fitOutput(output,id,n)
- local result=Codec.Copy(output);local limit=Items:Get(id).StackSize
- for i,entry in ipairs(result) do if entry and entry.Id==id then local add=math.min(n,limit-entry.N);entry.N+=add;n-=add end end
- for i,entry in ipairs(result) do if not entry and n>0 then local add=math.min(n,limit);result[i]={Id=id,N=add};n-=add end end
+ local item=Items:Get(id);if not item then return nil end
+ local result=Codec.Copy(output);local limit=item.StackSize
+ for i=1,12 do local entry=result[i];if entry and entry.Id==id then local add=math.min(n,math.max(0,limit-entry.N));entry.N+=add;n-=add end end
+ for i=1,12 do if not result[i] and n>0 then local add=math.min(n,limit);result[i]={Id=id,N=add};n-=add end end
  return n==0 and result or nil
+end
+function S:_status(state)
+ if not state.Enabled then return "Paused" end
+ local job=state.Jobs[1]
+ if not job then return "Ready" end
+ if not Items:Get(job.Output.Id) then return "Invalid recipe — cancel for refund" end
+ if not fitOutput(state.Output,job.Output.Id,job.Output.N) then return "Output full — collect items" end
+ if state.FuelWork<=0 then return "Needs fuel" end
+ return "Smelting"
 end
 function S:_view(model)
  local state=self._states[model];local grade=model:GetAttribute("StationGrade") or 1
- return {Station=model,StationType=kind(model),Grade=grade,CampaignTier=workspace:GetAttribute("CampaignTier") or 1,UpgradeCost=Catalog.GetStationUpgradeCost(grade+1),State=state and Codec.Copy(state)}
+ return {Station=model,StationType=kind(model),Grade=grade,CampaignTier=workspace:GetAttribute("CampaignTier") or 1,UpgradeCost=Catalog.GetStationUpgradeCost(grade+1),State=state and Codec.Copy(state),Status=state and self:_status(state)}
 end
 function S:_send(p,model,message)
  if self._remote and model and model.Parent then local view=self:_view(model);view.Message=message;self._remote:FireClient(p,"Snapshot",view) end
@@ -95,21 +117,30 @@ function S:Handle(p,action,payload)
   local valid,why=self:Validate(p,model,recipe.RequiredGrade);if not valid then return false,why end
   local paid,missing=Ingredients.Resolve(recipe.Ingredients,quantity,function(itemId)return Inventory:TotalCount(p,itemId) end,p)
   if not paid then return false,missing end
+  -- Prepare the complete job before taking anything from inventory.
+  if not recipe.Output or not Items:Get(recipe.Output.Id) or not integer(recipe.Output.N,1,999) or not integer(recipe.BaseCraftTime,1,3600) then return false,"Recipe unavailable; materials kept" end
+  local job={Id=HttpService:GenerateGUID(false),RecipeId=payload.RecipeId,RecipeVersion=2,OwnerUserId=p.UserId,Remaining=quantity,Total=quantity,Work=0,WorkRequired=recipe.BaseCraftTime,Inputs=Codec.Copy(recipe.Ingredients),Output=Codec.Copy(recipe.Output),Paid=paid}
   if not Inventory:PayCost(p,paid,true) then return false,"Ingredients changed; try again" end
-  table.insert(state.Jobs,{RecipeId=payload.RecipeId,RecipeVersion=2,OwnerUserId=p.UserId,Remaining=quantity,Total=quantity,Work=0,WorkRequired=recipe.BaseCraftTime,Inputs=Codec.Copy(recipe.Ingredients),Output=Codec.Copy(recipe.Output),Paid=paid})
-  Inventory:Sync(p);return true,"Queued "..quantity.." batches"
+  table.insert(state.Jobs,job)
+  Inventory:Sync(p);return true,"Queued "..quantity.." batches · "..self:_status(state)
  elseif action=="Fuel" then
   local value=Catalog.FurnaceFuels[payload.ItemId];local n=payload.Quantity or 1
   if not value or not integer(n,1,50) then return false,"Choose Wood, Peat, or Coal" end
   if state.FuelWork+value*n>3600 then return false,"Fuel storage is full" end
   if not Inventory:PayCost(p,{{Id=payload.ItemId,N=n}},true) then return false,"Missing fuel" end
-  state.FuelWork+=value*n;Inventory:Sync(p);return true,"Fuel added"
+  state.FuelWork+=value*n;Inventory:Sync(p);return true,"Fuel added · "..math.floor(state.FuelWork).."s stored · "..self:_status(state)
  elseif action=="Toggle" then state.Enabled=not state.Enabled;return true,state.Enabled and "Furnace enabled" or "Furnace paused"
  elseif action=="Cancel" then
   local index=payload.Index
+  if type(payload.JobId)=="string" then
+   index=nil;for i,job in ipairs(state.Jobs) do if job.Id==payload.JobId then index=i;break end end
+  end
   if not integer(index,1,#state.Jobs) then return false,"That job no longer exists" end
   local job=state.Jobs[index];local refund={}
-  for _,entry in ipairs(job.Inputs) do table.insert(refund,{Id=entry.Id,N=entry.N*job.Remaining}) end
+  for _,entry in ipairs(job.Paid or job.Inputs) do
+   local amount=job.Paid and math.floor(entry.N*job.Remaining/job.Total+.00001) or entry.N*job.Remaining
+   if amount>0 then table.insert(refund,{Id=entry.Id,N=amount}) end
+  end
   local projected,overflow=Inventory:ProjectRefund(Inventory:CaptureWorldState(p),refund,false)
   if #overflow>0 then return false,"Make room for the refunded materials" end
   table.remove(state.Jobs,index);Inventory:RestoreWorldState(p,projected,true);Inventory:Sync(p);return true,"Unfinished ingredients refunded; used fuel stays spent"
@@ -117,6 +148,7 @@ function S:Handle(p,action,payload)
   local index=payload.Index
   if not integer(index,1,12) or not state.Output[index] then return false,"That output was already collected" end
   local output=state.Output[index]
+  if payload.ExpectedId and payload.ExpectedId~=output.Id then return false,"Output changed; choose the item again" end
   if not Inventory:CanFit(p,output.Id,output.N) then return false,"Inventory is full" end
   if Inventory:Give(p,output.Id,output.N,true,true)~=output.N then return false,"Inventory is full" end
   state.Output[index]=false;Inventory:Sync(p);return true,"Output collected"
@@ -128,16 +160,24 @@ function S:Init()
  local folder=RS:WaitForChild("Remotes")
  local remote=folder:FindFirstChild("Station") or Instance.new("RemoteEvent");remote.Name="Station";remote.Parent=folder;self._remote=remote
  remote.OnServerEvent:Connect(function(p,action,payload)
-  local now=os.clock();if now-(self._rateLimits[p] or 0)<.08 then return end;self._rateLimits[p]=now
   if type(payload)~="table" then return end
   local request=payload.RequestId
   if type(request)~="string" or #request>80 then return end
+  if action=="Close" then self._viewers[p]=nil;remote:FireClient(p,"Close",{});return end
+  local now=os.clock()
   self._requests[p]=self._requests[p] or {}
-  if self._requests[p][request] then return end
-  self._requests[p][request]=now
-  for key,time in pairs(self._requests[p]) do if now-time>120 then self._requests[p][key]=nil end end
+  local previous=self._requests[p][request]
+  if previous then remote:FireClient(p,"Result",previous.Result);return end
+  if now-(self._rateLimits[p] or 0)<.08 then
+   remote:FireClient(p,"Result",{RequestId=request,Success=false,Message="Please wait a moment before the next action"});return
+  end
+  self._rateLimits[p]=now
+  for key,record in pairs(self._requests[p]) do if now-record.Time>120 then self._requests[p][key]=nil end end
   local ok,reason=self:Handle(p,action,payload)
-  if self._viewers[p] then self:_send(p,self._viewers[p],reason) else remote:FireClient(p,"Result",{Success=ok==true,Message=reason}) end
+  local result={RequestId=request,Station=payload.Station,Success=ok==true,Message=reason}
+  self._requests[p][request]={Time=now,Result=result}
+  if self._viewers[p] then self:_send(p,self._viewers[p]) end
+  remote:FireClient(p,"Result",result)
  end)
  local function bind(model)local id=model:GetAttribute("BuildType") or model:GetAttribute("StationType");if Catalog.Stations[id] then self:Bind(model,id) end end
  Collection:GetInstanceAddedSignal("Structure"):Connect(bind)
