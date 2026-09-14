@@ -9,7 +9,6 @@ local ProximityPromptService = game:GetService("ProximityPromptService")
 local CollectionService = game:GetService("CollectionService")
 
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
-local ItemDescriptionUI = require(ReplicatedStorage.Shared.UI.ItemDescriptionUI)
 local RecipeGuideUI = require(ReplicatedStorage.Shared.UI:WaitForChild("RecipeGuideUI"))
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
@@ -56,6 +55,7 @@ local pendingConfirmed = false
 local pendingRecipeId = nil
 local pendingStationType = nil
 local recipeSearch = ""
+local layoutWorkbench
 
 -- Create main GUI
 local gui = Instance.new("ScreenGui")
@@ -142,6 +142,7 @@ titleLabel.Size = UDim2.new(1, -242, 0, 24)
 titleLabel.Position = UDim2.new(0, MARGIN + 48, 0, 10)
 titleLabel.BackgroundTransparency = 1
 titleLabel.Text = "Workbench"
+titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
 titleLabel.TextColor3 = COLORS.Text
 titleLabel.TextSize = 20
 titleLabel.Font = Enum.Font.GothamBold
@@ -220,6 +221,7 @@ categoryLayout.Parent = categoryBar
 
 local selectedCategory = "All"
 local categoryButtons = {}
+local categoryIcons = {All="Queue",Tools="Harvest",Weapons="Attack",Armor="Armor",Materials="Mineral",Consumables="Bottle",Structures="Build",Cooking="Pot",Equipment="Pack",Special="Survey",Utility="Survey",Accessories="Shield",Storage="Pack",Stations="Craft",Intel="Survey",Enchantments="Seasoning",Repair="Craft"}
 
 local recipeSearchBox = Instance.new("TextBox")
 recipeSearchBox.Name = "RecipeSearch"
@@ -601,8 +603,8 @@ local function createRecipeCard(recipeId, recipe)
 	-- Output item name
 	local nameLabel = Instance.new("TextLabel")
 	nameLabel.Name = "Name"
-	nameLabel.Size = UDim2.new(0.6, 0, 0, 22)
-	nameLabel.Position = UDim2.new(0, 12, 0, 8)
+	nameLabel.Size = UDim2.new(1, -144, 0, 22)
+	nameLabel.Position = UDim2.new(0, 48, 0, 8)
 	nameLabel.BackgroundTransparency = 1
 	nameLabel.Text = outputCount > 1 and string.format("%s x%d", name, outputCount) or name
 	nameLabel.TextColor3 = COLORS.Text
@@ -617,15 +619,18 @@ local function createRecipeCard(recipeId, recipe)
 	local categoryTag = Instance.new("TextLabel")
 	categoryTag.Name = "Category"
 	categoryTag.Size = UDim2.new(0, 80, 0, 16)
-	categoryTag.Position = UDim2.new(0, 12, 0, 28)
+	categoryTag.Position = UDim2.new(0, 48, 0, 28)
 	categoryTag.BackgroundTransparency = 1
-	categoryTag.Text = recipe.Category or "Misc"
+	categoryTag.Text = "Grade " .. (recipe.RequiredGrade or 1)
 	categoryTag.TextColor3 = getTierColor(recipe)
 	categoryTag.TextSize = 10
 	categoryTag.Font = Enum.Font.Gotham
 	categoryTag.TextXAlignment = Enum.TextXAlignment.Left
 	categoryTag.ZIndex = 13
 	categoryTag.Parent = card
+	local iconHost=Instance.new("Frame");iconHost.Size=UDim2.fromOffset(28,28);iconHost.Position=UDim2.fromOffset(12,10);iconHost.BackgroundTransparency=1;iconHost.ZIndex=13;iconHost.Parent=card
+	local icon=Theme.Icon(iconHost,categoryIcons[recipe.Category] or "Craft",24)
+	for _,line in ipairs(icon:GetChildren()) do if line:IsA("Frame") then Theme.Bind(line,"BackgroundColor3","Amber") end end
 	
 	-- Status indicator
 	local statusLabel = Instance.new("TextLabel")
@@ -651,7 +656,6 @@ local function createRecipeCard(recipeId, recipe)
 	ingredientsFrame.ClipsDescendants = true
 	ingredientsFrame.ZIndex = 13
 	ingredientsFrame.Parent = card
-	ItemDescriptionUI.Mount(card, item, ingredientsFrame, 48, 12)
 	
 	local ingredientLayout = Instance.new("UIGridLayout")
 	ingredientLayout.FillDirection = Enum.FillDirection.Horizontal
@@ -708,7 +712,7 @@ local function createCategoryButton(category, layoutOrder)
 	
 	local btn = Instance.new("TextButton")
 	btn.Name = category
-	btn.Size = UDim2.new(0, isAll and 50 or 70, 1, 0)
+	btn.Size = UDim2.new(0, 44, 1, 0)
 	btn.LayoutOrder = layoutOrder
 	btn.BackgroundColor3 = isSelected and COLORS.Accent or COLORS.SlotEmpty
 	btn.BorderSizePixel = 0
@@ -719,6 +723,11 @@ local function createCategoryButton(category, layoutOrder)
 	btn.AutoButtonColor = false
 	btn.ZIndex = 12
 	btn.Parent = categoryBar
+	btn:SetAttribute("ActionLabel", category)
+	btn.Text=""
+	Theme.StationStyle(btn,categoryIcons[category] or "Craft",isSelected and "Craft" or "Neutral",true)
+	btn.MouseEnter:Connect(function() subtitleLabel.Text=category.." recipes" end)
+	btn.MouseLeave:Connect(function() subtitleLabel.Text=selectedCategory.." recipes" end)
 	
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 6)
@@ -769,6 +778,8 @@ local function updateRecipeCard(card, recipeId)
 		end
 	end
 	local selected = selectedRecipe == recipeId
+	card.Ingredients.Visible = selected
+	card.Size = UDim2.new(1,-12,0,selected and (52 + card.Ingredients.Size.Y.Offset) or 52)
 	card.Stroke.Color = selected and COLORS.SlotSelected or COLORS.Border
 	card.Stroke.Thickness = selected and 2 or 1
 	card.BackgroundColor3 = selected and COLORS.SlotSelected or COLORS.SlotFilled
@@ -799,6 +810,7 @@ local function updateCraftProgress()
 end
 
 function updateCraftButton()
+	if layoutWorkbench then layoutWorkbench() end
 	local available = maxAffordable(selectedRecipe)
 	local editable = selectedRecipe ~= nil and not isCraftPending
 	quantityBox.TextEditable = editable
@@ -891,6 +903,7 @@ game:GetService("RunService").Heartbeat:Connect(function(delta)
 end)
 
 function refreshRecipes(preserveScroll)
+	subtitleLabel.Text = selectedCategory .. " recipes"
 	local previousScroll = preserveScroll == false and 0 or recipeContainer.CanvasPosition.Y
 	-- Clear existing cards
 	for _, card in pairs(recipeCards) do
@@ -907,10 +920,10 @@ function refreshRecipes(preserveScroll)
 	for recipeId, recipe in pairs(recipes) do
 		local matchesCategory = selectedCategory == "All" or recipe.Category == selectedCategory
 		local outputId = recipe.Output and recipe.Output.Id or recipeId
-		local searchable = { recipeId, outputId, recipe.Category, (ItemDatabase:Get(outputId) or {}).Name }
+		local searchable = { recipeId, outputId, recipe.Category or "", (ItemDatabase:Get(outputId) or {}).Name or "" }
 		for _, ingredient in ipairs(recipe.Ingredients or {}) do
 			table.insert(searchable, ingredient.Id)
-			table.insert(searchable, (ItemDatabase:Get(ingredient.Id) or {}).Name)
+			table.insert(searchable, (ItemDatabase:Get(ingredient.Id) or {}).Name or "")
 		end
 		local matchesSearch = recipeSearch == ""
 		if not matchesSearch then
@@ -1199,35 +1212,52 @@ end
 print("[WorkbenchUI] Ready - interact with placed workbenches to craft")
 
 Theme.CaptureCursor(mainPanel); Theme.Panel(mainPanel)
-Theme.FitMenu(mainPanel, 500, 630, {OnClose = closeWorkbench, MobileWidth = 360, MobileHeight = 630, OnResize = function(width, _, mobile)
-	closeBtn.Visible = not mobile
-	if not mobile then
-		stationIcon.Visible = true
-		recipeSearchBox.Position = UDim2.new(0, MARGIN, 0, 103)
-		recipeSearchBox.Size = UDim2.new(1, -MARGIN * 2, 0, 36)
-		recipeContainer.Position = UDim2.new(0, MARGIN, 0, 147)
-		recipeContainer.Size = UDim2.new(1, -MARGIN * 2, 1, -322)
-		return
-	end
-	closeBtn.Size = UDim2.fromOffset(44, 44)
-	recipeBookBtn.Size = UDim2.fromOffset(104, 44)
-	recipeBookBtn.Position = UDim2.new(1, -172, 0, 4)
-	titleLabel.TextSize = 17
-	stationIcon.Visible = false
-	titleLabel.Position = UDim2.fromOffset(16, 8); titleLabel.Size = UDim2.new(1, -200, 0, 24)
-	subtitleLabel.Position = UDim2.fromOffset(16, 34); subtitleLabel.Size = UDim2.new(1, -32, 0, 20)
-	categoryBar.Size = UDim2.new(1, -32, 0, 44)
-	recipeSearchBox.Position = UDim2.fromOffset(16, 117); recipeSearchBox.Size = UDim2.new(1, -32, 0, 40)
-	recipeContainer.Position = UDim2.fromOffset(16, 165); recipeContainer.Size = UDim2.new(1, -32, 1, -340)
-	quantityLabel.Size = UDim2.fromOffset(58, 44)
-	quantityLabel.TextSize = 14
-	decreaseBtn.Position = UDim2.fromOffset(58, 0); decreaseBtn.Size = UDim2.fromOffset(44, 44)
-	quantityBox.Position = UDim2.fromOffset(108, 0); quantityBox.Size = UDim2.fromOffset(54, 44)
-	increaseBtn.Position = UDim2.fromOffset(168, 0); increaseBtn.Size = UDim2.fromOffset(44, 44)
-	maxBtn.Position = UDim2.fromOffset(218, 0); maxBtn.Size = UDim2.new(1, -218, 0, 44)
-	batchSummary.TextSize = 14; batchTime.TextSize = 14
-	recipeContainer.ScrollBarThickness = 6
-end})
+local menuScale=Instance.new("UIScale");menuScale.Parent=mainPanel
+layoutWorkbench=function()
+ local chosen=selectedRecipe~=nil
+ local compact=mainPanel.Size.Y.Offset<460
+ quantityBar.Visible=chosen;craftBtn.Visible=chosen;batchTime.Visible=chosen;batchSummary.Visible=false
+ quantityBar.Position=UDim2.fromOffset(16,58);quantityBar.Size=UDim2.new(1,-32,0,40)
+ craftBtn.Position=UDim2.fromOffset(16,106);craftBtn.Size=UDim2.new(1,-32,0,44)
+ batchTime.Position=UDim2.fromOffset(16,154);batchTime.Size=UDim2.new(1,-32,0,22)
+ if compact then
+  quantityLabel.Visible=false
+  quantityBar.Size=UDim2.fromOffset(160,40)
+  decreaseBtn.Position=UDim2.fromOffset(0,0);decreaseBtn.Size=UDim2.fromOffset(30,40)
+  quantityBox.Position=UDim2.fromOffset(34,0);quantityBox.Size=UDim2.fromOffset(40,40)
+  increaseBtn.Position=UDim2.fromOffset(78,0);increaseBtn.Size=UDim2.fromOffset(30,40)
+  maxBtn.Position=UDim2.fromOffset(112,0);maxBtn.Size=UDim2.fromOffset(48,40);maxBtn.TextSize=11
+  craftBtn.Position=UDim2.fromOffset(184,58);craftBtn.Size=UDim2.new(1,-200,0,40)
+  batchTime.Position=UDim2.fromOffset(16,104)
+ end
+ craftBtn.TextWrapped=not compact;craftBtn.TextTruncate=compact and Enum.TextTruncate.AtEnd or Enum.TextTruncate.None
+ local categoryY=chosen and (compact and 132 or 182) or 58
+ categoryBar.Position=UDim2.fromOffset(16,categoryY);categoryBar.Size=UDim2.new(1,-32,0,36)
+ recipeSearchBox.Position=UDim2.fromOffset(16,categoryY+44);recipeSearchBox.Size=UDim2.new(1,-32,0,36)
+ recipeContainer.Position=UDim2.fromOffset(16,categoryY+88);recipeContainer.Size=UDim2.new(1,-32,1,-categoryY-116)
+end
+Theme.BindResponsive(gui,function(mobile,available)
+ local scale=mobile and 1 or math.clamp(math.min(available.X/1440,available.Y/900),1,2)
+ menuScale.Scale=scale
+ mainPanel.Size=UDim2.fromOffset(math.max(280,math.min(720,(available.X-20)/scale)),math.max(320,math.min(760,(available.Y-16)/scale)))
+ stationIcon.Visible=false
+ closeBtn.Visible=true;closeBtn.Size=UDim2.fromOffset(44,44);closeBtn.Position=UDim2.new(1,-16,.5,0)
+ recipeBookBtn.Size=UDim2.fromOffset(44,44);recipeBookBtn.Position=UDim2.new(1,-112,0,8)
+ titleLabel.Position=UDim2.fromOffset(16,6);titleLabel.Size=UDim2.new(1,-144,0,26);titleLabel.TextSize=20
+ subtitleLabel.Position=UDim2.fromOffset(16,34);subtitleLabel.Size=UDim2.new(1,-144,0,18)
+ quantityLabel.Text="";quantityLabel.Size=UDim2.fromOffset(38,40)
+ quantityLabel.Visible=true;maxBtn.TextSize=14
+ Theme.Icon(quantityLabel,"Queue",22)
+ decreaseBtn.Position=UDim2.fromOffset(40,0);decreaseBtn.Size=UDim2.fromOffset(40,40)
+ quantityBox.Position=UDim2.fromOffset(86,0);quantityBox.Size=UDim2.fromOffset(50,40)
+ increaseBtn.Position=UDim2.fromOffset(142,0);increaseBtn.Size=UDim2.fromOffset(40,40)
+ maxBtn.Position=UDim2.fromOffset(188,0);maxBtn.Size=UDim2.new(1,-188,0,40)
+ recipeContainer.ScrollBarThickness=6
+ layoutWorkbench()
+end)
+recipeBookBtn.Text="";Theme.StationStyle(recipeBookBtn);Theme.Icon(recipeBookBtn,"Upgrade",22)
+closeBtn.Text="";Theme.StationStyle(closeBtn);Theme.Icon(closeBtn,"Close",22)
+Theme.StationStyle(craftBtn,"Craft","Craft")
 Theme.Button(closeBtn)
 Theme.Button(craftBtn)
 updateCraftButton()

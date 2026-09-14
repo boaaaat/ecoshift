@@ -252,7 +252,7 @@ function InventoryService:Has(plr, itemId, amount)
 	return self:TotalCount(plr, itemId) >= amount
 end
 
-local function addToSlots(slots, slotCount, itemId, amount)
+local function addToSlots(slots, slotCount, itemId, amount, existingOnly)
 	local remaining = amount
 	local stackMax = maxStack(itemId)
 	-- fill existing stacks
@@ -265,6 +265,7 @@ local function addToSlots(slots, slotCount, itemId, amount)
 			if remaining <= 0 then return 0 end
 		end
 	end
+	if existingOnly then return remaining end
 	-- use empty slots
 	for i = 1, slotCount do
 		if not slots[i] then
@@ -277,7 +278,7 @@ local function addToSlots(slots, slotCount, itemId, amount)
 	return remaining
 end
 
-local function addEntryToSlots(slots, count, entry)
+local function addEntryToSlots(slots, count, entry, existingOnly)
  local remaining=entry.N
  local stackLimit=maxStack(entry.Id)
  for i=1,count do
@@ -287,6 +288,7 @@ local function addEntryToSlots(slots, count, entry)
    if remaining<=0 then return 0 end
   end
  end
+ if existingOnly then return remaining end
  for i=1,count do
   if not slots[i] then local copy=cloneSlot(entry);copy.N=math.min(remaining,stackLimit);slots[i]=copy;remaining-=copy.N;if remaining<=0 then return 0 end end
  end
@@ -310,8 +312,14 @@ function InventoryService:ProjectRefund(state, ingredients, dropOnly)
 		local remaining = entry.N
 		if not dropOnly then
 			local refund=cloneSlot(entry);refund.N=remaining
-			remaining = addEntryToSlots(inv.Hotbar, HOTBAR_SLOTS, refund)
-			if remaining > 0 then refund.N=remaining;remaining = addEntryToSlots(inv.Storage, inv.StorageCapacity or STORAGE_SLOTS, refund) end
+			for _, existingOnly in ipairs({true, false}) do
+				for _, kind in ipairs({"Hotbar", "Storage"}) do
+					if remaining > 0 then
+						refund.N = remaining
+						remaining = addEntryToSlots(inv[kind], kind == "Hotbar" and HOTBAR_SLOTS or (inv.StorageCapacity or STORAGE_SLOTS), refund, existingOnly)
+					end
+				end
+			end
 		end
 		if remaining > 0 then local copy=cloneSlot(entry);copy.N=remaining;table.insert(overflow, copy) end
 	end
@@ -349,9 +357,14 @@ function InventoryService:Give(plr, itemId, amount, requireFit, deferSync)
 	if requireFit and not self:CanFit(plr, itemId, amount) then
 		return 0
 	end
-	local remaining = addToSlots(inv.Hotbar, HOTBAR_SLOTS, itemId, amount)
-	if remaining > 0 then
-		remaining = addToSlots(inv.Storage, inv.StorageCapacity or STORAGE_SLOTS, itemId, remaining)
+	local remaining = amount
+	-- Fill matching stacks in both sections before claiming any empty hotbar slot.
+	for _, existingOnly in ipairs({true, false}) do
+		for _, kind in ipairs({"Hotbar", "Storage"}) do
+			if remaining > 0 then
+				remaining = addToSlots(inv[kind], kind == "Hotbar" and HOTBAR_SLOTS or (inv.StorageCapacity or STORAGE_SLOTS), itemId, remaining, existingOnly)
+			end
+		end
 	end
 	local added = amount - remaining
 	if added > 0 and not deferSync then

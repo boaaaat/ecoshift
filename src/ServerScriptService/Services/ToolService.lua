@@ -93,10 +93,17 @@ end
 local function bindActivation(tool)
 	if tool:GetAttribute("InventoryActivationBound") then return end
 	tool:SetAttribute("InventoryActivationBound", true)
+	local consumedThisPress = false
+	tool.Deactivated:Connect(function() consumedThisPress = false end)
+	tool.Unequipped:Connect(function() consumedThisPress = false end)
 	tool.Activated:Connect(function()
 		local character = tool.Parent
 		local player = character and Players:GetPlayerFromCharacter(character)
 		if not player then return end
+		if tool:GetAttribute("HeldConsumable") then
+			if consumedThisPress then return end
+			consumedThisPress = true
+		end
 		-- Required lazily to avoid a module-load cycle with InventoryActionService.
 		require(script.Parent.InventoryActionService):UseHeld(player, tool)
 	end)

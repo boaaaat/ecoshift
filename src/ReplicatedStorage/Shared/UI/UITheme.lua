@@ -373,6 +373,18 @@ function Theme.Icon(parent, kind, size)
 		Trash={{{4,6},{20,6}},{{9,6},{9,3},{15,3},{15,6}},{{6,7},{7,21},{17,21},{18,7}},{{10,10},{10,17}},{{14,10},{14,17}}},
 		Rotate={{{5,8},{9,3},{17,4},{21,10},{19,17},{12,21},{5,18}},{{5,3},{5,8},{10,8}}},
 		Place={{{3,12},{9,19},{21,5}}},
+		Flame={{{12,2},{13,8},{17,6},{21,13},{20,18},{16,22},{8,22},{4,18},{3,13},{8,7},{8,12},{12,2}},{{12,13},{16,18},{12,21},{9,18},{12,13}}},
+		Pot={{{4,10},{20,10},{19,19},{16,22},{8,22},{5,19},{4,10}},{{2,10},{22,10}},{{6,7},{18,7}},{{9,4},{9,2}},{{15,4},{15,2}}},
+		Clock={{{12,2},{19,5},{22,12},{19,19},{12,22},{5,19},{2,12},{5,5},{12,2}},{{12,6},{12,12},{16,15}}},
+		Collect={{{3,15},{3,21},{21,21},{21,15}},{{12,2},{12,16}},{{7,11},{12,16},{17,11}}},
+		Queue={{{4,5},{6,5}},{{10,5},{21,5}},{{4,12},{6,12}},{{10,12},{21,12}},{{4,19},{6,19}},{{10,19},{21,19}}},
+		Pause={{{6,3},{9,3},{9,21},{6,21},{6,3}},{{15,3},{18,3},{18,21},{15,21},{15,3}}},
+		Play={{{6,3},{21,12},{6,21},{6,3}}},
+		Upgrade={{{5,11},{12,4},{19,11}},{{12,4},{12,21}},{{4,21},{20,21}}},
+		Search={{{10,3},{15,5},{17,10},{15,15},{10,17},{5,15},{3,10},{5,5},{10,3}},{{15,15},{22,22}}},
+		Back={{{14,4},{6,12},{14,20}},{{6,12},{22,12}}},
+		Bottle={{{9,2},{15,2},{15,7},{19,12},{19,22},{5,22},{5,12},{9,7},{9,2}},{{5,15},{19,15}}},
+		Seasoning={{{8,3},{16,3},{17,7},{7,7},{8,3}},{{7,7},{4,20},{8,22},{16,22},{20,20},{17,7}},{{9,12},{9,14}},{{15,16},{15,18}}},
 	}
 	local root=Instance.new("Frame");root.Name="Glyph";root.BackgroundTransparency=1
 	root.Size=UDim2.fromOffset(size or 24,size or 24);root.AnchorPoint=Vector2.new(.5,.5);root.Position=UDim2.fromScale(.5,.5)
@@ -388,6 +400,47 @@ function Theme.Icon(parent, kind, size)
 		end
 	end
 	return root
+end
+
+-- Station controls share readable paper glyphs and distinct action colors.
+function Theme.StationStyle(button, icon, role, iconOnly)
+	local tones = {Craft=Color3.fromRGB(61,100,66), Fuel=Color3.fromRGB(112,76,39), Collect=Color3.fromRGB(40,89,98), Special=Color3.fromRGB(88,67,110), Danger=Color3.fromRGB(126,59,48), Neutral=Color3.fromRGB(48,61,57)}
+	button:SetAttribute("ThemeFixed", true)
+	button.BackgroundColor3 = tones[role] or tones.Neutral
+	button.TextColor3 = Theme.Colors.Paper
+	button.Font = Enum.Font.GothamMedium
+	Theme.Button(button)
+	local padding = button:FindFirstChild("ActionPadding") or Instance.new("UIPadding")
+	padding.Name = "ActionPadding"
+	padding.PaddingLeft = UDim.new(0, iconOnly and 0 or icon and 44 or 10)
+	padding.PaddingRight = UDim.new(0, iconOnly and 0 or 10)
+	padding.PaddingTop = UDim.new(0, 0)
+	padding.Parent = button
+	button.TextXAlignment = icon and Enum.TextXAlignment.Left or Enum.TextXAlignment.Center
+	local old = button:FindFirstChild("ActionIcon")
+	if icon then
+		if not old then
+			old = Instance.new("Frame"); old.Name = "ActionIcon"; old.BackgroundTransparency = 1
+			old.Size = UDim2.fromOffset(28,28); old.AnchorPoint = Vector2.new(0,.5)
+			old.Position = UDim2.new(0,-36,.5,0); old.Parent = button
+		end
+		old.AnchorPoint = iconOnly and Vector2.new(.5,.5) or Vector2.new(0,.5)
+		old.ZIndex = button.ZIndex+1
+		old.Position = iconOnly and UDim2.fromScale(.5,.5) or UDim2.new(0,-36,.5,0)
+		local glyph = old:FindFirstChild("Glyph")
+		if not glyph or glyph:GetAttribute("IconKind") ~= icon then Theme.Icon(old,icon,24) end
+	elseif old then old:Destroy() end
+	return button
+end
+
+function Theme.StationTile(button,icon,role)
+	Theme.StationStyle(button,nil,role)
+	local padding=button.ActionPadding
+	padding.PaddingLeft=UDim.new(0,4);padding.PaddingRight=UDim.new(0,4);padding.PaddingTop=UDim.new(0,32)
+	local glyph=Theme.Icon(button,icon,22)
+	glyph.Position=UDim2.new(.5,0,0,-16)
+	button.TextSize=14
+	return button
 end
 
 function Theme.TouchIcon(button,kind,size)

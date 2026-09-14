@@ -1,4 +1,4 @@
--- Meals debit only after eating completes. Persist remaining active time, never wall time.
+-- Each activation consumes one meal immediately. Buffs persist as remaining active time.
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -50,9 +50,7 @@ function Food:Consume(player, slotType, slotIndex, callback)
 	local recipe, seasoning = meal(slot and slot.Id)
 	if not recipe or not self:CanConsume(slot.Id) or not ready(player) then return false, "You cannot eat this right now." end
 	local entry = state(player)
-	local channel = recipe.Drink and "DrinkCooldown" or "FoodCooldown"
 	if entry.Pending then return false, "Finish eating first." end
-	if entry[channel] > 0 then return false, "Wait " .. math.ceil(entry[channel]) .. "s before " .. (recipe.Drink and "drinking." or "eating.") end
 	local itemId, character = slot.Id, player.Character
 	local token = {}
 	entry.Pending = token
@@ -61,7 +59,7 @@ function Food:Consume(player, slotType, slotIndex, callback)
 		if entry.Pending == token then entry.Pending = nil; player:SetAttribute("FoodEating", false) end
 		if player.Parent == Players and callback then callback(success, message) end
 	end
-	task.delay(recipe.Drink and 0 or 2, function()
+	task.defer(function()
 		if entry.Pending ~= token then return end
 		local Stats = require(script.Parent.StatsService)
 		local Rewards = require(script.Parent.ExpeditionRewardsService)
@@ -91,13 +89,12 @@ function Food:Consume(player, slotType, slotIndex, callback)
 		if thermal and (thermal.Channel == "Heat" or thermal.Channel == "Cold") then
 			entry.Thermal = {[thermal.Channel] = {Reduction = thermal.Reduction, Remaining = thermal.Duration}}
 		end
-		entry[channel] = recipe.Drink and 3 or 5
 		publish(player, entry)
 		Inventory:Sync(player)
 		Rewards:RecordActivity(player)
 		finish(true, (recipe.Name or itemId) .. (seasoning and (" · " .. seasoning.Name .. " active for 4 minutes") or " consumed."))
 	end)
-	return true, recipe.Drink and "Drinking…" or "Eating… (2s)"
+	return true, recipe.Drink and "Drinking…" or "Eating…"
 end
 
 function Food:CapturePlayer(player)
@@ -118,8 +115,6 @@ function Food:RestorePlayer(player, saved)
 	states[player] = entry
 	player:SetAttribute("FoodEating", false)
 	if type(saved) == "table" then
-		entry.FoodCooldown = bounded(saved.FoodCooldown, 5)
-		entry.DrinkCooldown = bounded(saved.DrinkCooldown, 3)
 		local s = saved.Seasoning
 		local definition = type(s) == "table" and Cooking.Seasonings[s.Id]
 		if definition and bounded(s.Remaining, 240) > 0 then entry.Seasoning = {Id = s.Id, Remaining = bounded(s.Remaining, 240)} end
