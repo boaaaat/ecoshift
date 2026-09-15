@@ -11,6 +11,7 @@ local Items=require(Shared.Items.ItemDatabase)
 local Ingredients=require(Shared.IngredientResolver)
 local Workbench=require(Shared.WorkbenchConfig)
 local Guide=require(Shared.UI.RecipeGuideUI)
+local SearchRank=require(Shared.UI.SearchRank)
 local player=Players.LocalPlayer
 local remote=RS:WaitForChild("Remotes"):WaitForChild("Station")
 local inventoryRemote=RS.Remotes:WaitForChild("InventoryUpdate")
@@ -99,12 +100,11 @@ local function updateWork()
  fuelQuick.Text=math.ceil(state.State.FuelWork).."s"
  if fuelLabel then fuelLabel.Text="Fuel: "..math.ceil(state.State.FuelWork).."s stored" end
 end
-local function recipeMatches(id,r)
- if searchQuery=="" then return true end
- local values={id,(r.Output and r.Output.Id) or "",(r.Output and name(r.Output.Id)) or "",r.Category or ""}
- for _,ingredient in ipairs(r.Ingredients or {}) do table.insert(values,ingredient.Id);table.insert(values,name(ingredient.Id)) end
- for _,value in ipairs(values) do if string.find(string.lower(tostring(value or "")),searchQuery,1,true) then return true end end
- return false
+local function recipeSearchScore(id,r)
+ local outputId=(r.Output and r.Output.Id) or id
+ local secondary={r.Category or ""}
+ for _,ingredient in ipairs(r.Ingredients or {}) do table.insert(secondary,ingredient.Id);table.insert(secondary,name(ingredient.Id)) end
+ return SearchRank.Score(searchQuery,{name(outputId),outputId,id},secondary)
 end
 render=function(reset)
  if not state then return end
@@ -131,15 +131,18 @@ render=function(reset)
  end
  if page=="Recipes" then
   local recipes={};for id,r in pairs(Catalog.Recipes) do
-   if table.find(r.AllowedStations or {},"Furnace") and recipeMatches(id,r) then
+   local searchScore=recipeSearchScore(id,r)
+   if table.find(r.AllowedStations or {},"Furnace") and searchScore~=nil then
     local maximum=affordable(r);local locked=lockReason(r)
-    table.insert(recipes,{Id=id,Recipe=r,Maximum=maximum,Locked=locked,Group=locked and 3 or maximum>0 and 1 or 2})
+    table.insert(recipes,{Id=id,Recipe=r,Maximum=maximum,Locked=locked,Group=locked and 3 or maximum>0 and 1 or 2,SearchScore=searchScore})
    end
   end
   table.sort(recipes,function(a,b)
-   if a.Group~=b.Group then return a.Group<b.Group end
-   if a.Recipe.RequiredGrade~=b.Recipe.RequiredGrade then return a.Recipe.RequiredGrade<b.Recipe.RequiredGrade end
-   return name(a.Recipe.Output.Id)<name(b.Recipe.Output.Id)
+   return SearchRank.Less(a,b,searchQuery,function(entry)return name(entry.Recipe.Output.Id)end,function(left,right)
+    if left.Group~=right.Group then return left.Group<right.Group end
+    if left.Recipe.RequiredGrade~=right.Recipe.RequiredGrade then return left.Recipe.RequiredGrade<right.Recipe.RequiredGrade end
+    return nil
+   end)
   end)
   local group
   for _,entry in ipairs(recipes) do

@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
 local TextService = game:GetService("TextService")
 local Theme = require(script.Parent.UITheme)
+local SearchRank = require(script.Parent.SearchRank)
 local Resolver = require(script.Parent.Parent:WaitForChild("RecipeGuide"))
 local Recipes = require(script.Parent.Parent.WorkbenchConfig)
 local Cooking = require(script.Parent.Parent.CookingConfig)
@@ -294,28 +295,39 @@ render=function()
 	syncingInput=false
 	if node.Library then
 		title.Text="Recipe book"
-		local ids={}; for id in pairs(Recipes.RECIPES) do table.insert(ids,id) end
-		table.sort(ids,function(a,b) local an=itemName(Recipes.RECIPES[a].Output.Id); local bn=itemName(Recipes.RECIPES[b].Output.Id); return an==bn and a<b or an<bn end)
-		local query=string.lower(node.Query or ""); local shown=0
-		for _,id in ipairs(ids) do
-			local recipe=Recipes.RECIPES[id]
+		local query=node.Query or ""
+		local entries={}
+		for id,recipe in pairs(Recipes.RECIPES) do
 			local item=Items:Get(recipe.Output.Id)
 			local description=item and item.Description or ""
 			local stationNames={}; for _,s in ipairs(Resolver.GetStations(id,player)) do table.insert(stationNames,s.Name) end
-			local text=itemName(recipe.Output.Id).."\n"..table.concat(stationNames," / ")
-			if query=="" or string.find(string.lower(text.." "..description.." "..id),query,1,true) then
-				local b=button(content,id,"",0); b.LayoutOrder=shown; shown+=1
-				b.AutomaticSize=Enum.AutomaticSize.Y
-				create("UIPadding",b,{PaddingTop=UDim.new(0,10),PaddingBottom=UDim.new(0,10),PaddingLeft=UDim.new(0,12),PaddingRight=UDim.new(0,12)})
-				create("UIListLayout",b,{Padding=UDim.new(0,4),SortOrder=Enum.SortOrder.LayoutOrder})
-				local name=label(b,itemName(recipe.Output.Id),0,15)
-				name.Name="ItemName"; name.AutomaticSize=Enum.AutomaticSize.Y; name.Font=Enum.Font.GothamBold; name.LayoutOrder=0
-				local detail=label(b,description,0,12)
-				detail.Name="ItemDescription"; detail.AutomaticSize=Enum.AutomaticSize.Y; detail.TextColor3=colors.TextMuted; detail.LayoutOrder=1
-				local stations=label(b,table.concat(stationNames," / "),0,11)
-				stations.AutomaticSize=Enum.AutomaticSize.Y; stations.TextColor3=colors.TextMuted; stations.LayoutOrder=2
-				b.Activated:Connect(function() push(recipe.Output.Id,id) end)
+			local secondary={description,id}
+			for _,stationName in ipairs(stationNames) do table.insert(secondary,stationName) end
+			for _,ingredient in ipairs(recipe.Ingredients or {}) do
+				table.insert(secondary,ingredient.Id)
+				table.insert(secondary,itemName(ingredient.Id))
 			end
+			local score=SearchRank.Score(query,{itemName(recipe.Output.Id),recipe.Output.Id},secondary)
+			if score~=nil then table.insert(entries,{Id=id,Recipe=recipe,Item=item,Stations=stationNames,SearchScore=score}) end
+		end
+		table.sort(entries,function(a,b)
+			return SearchRank.Less(a,b,query,function(entry)return itemName(entry.Recipe.Output.Id) end)
+		end)
+		local shown=0
+		for _,entry in ipairs(entries) do
+			local id,recipe,item,stationNames=entry.Id,entry.Recipe,entry.Item,entry.Stations
+			local description=item and item.Description or ""
+			local b=button(content,id,"",0); b.LayoutOrder=shown; shown+=1
+			b.AutomaticSize=Enum.AutomaticSize.Y
+			create("UIPadding",b,{PaddingTop=UDim.new(0,10),PaddingBottom=UDim.new(0,10),PaddingLeft=UDim.new(0,12),PaddingRight=UDim.new(0,12)})
+			create("UIListLayout",b,{Padding=UDim.new(0,4),SortOrder=Enum.SortOrder.LayoutOrder})
+			local name=label(b,itemName(recipe.Output.Id),0,15)
+			name.Name="ItemName"; name.AutomaticSize=Enum.AutomaticSize.Y; name.Font=Enum.Font.GothamBold; name.LayoutOrder=0
+			local detail=label(b,description,0,12)
+			detail.Name="ItemDescription"; detail.AutomaticSize=Enum.AutomaticSize.Y; detail.TextColor3=colors.TextMuted; detail.LayoutOrder=1
+			local stations=label(b,table.concat(stationNames," / "),0,11)
+			stations.AutomaticSize=Enum.AutomaticSize.Y; stations.TextColor3=colors.TextMuted; stations.LayoutOrder=2
+			b.Activated:Connect(function() push(recipe.Output.Id,id) end)
 		end
 		if shown==0 then label(content,"No recipes match this search.",44) end
 	else

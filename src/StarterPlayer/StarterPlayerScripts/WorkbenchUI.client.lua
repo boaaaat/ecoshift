@@ -16,6 +16,7 @@ local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local WorkbenchConfig = require(ReplicatedStorage.Shared.WorkbenchConfig)
 local IngredientResolver=require(ReplicatedStorage.Shared.IngredientResolver)
 local ResultMessages = require(ReplicatedStorage.Shared.ResultMessages)
+local SearchRank = require(ReplicatedStorage.Shared.UI.SearchRank)
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -266,7 +267,7 @@ recipeCorner.CornerRadius = UDim.new(0, 8)
 recipeCorner.Parent = recipeContainer
 
 local recipeLayout = Instance.new("UIListLayout")
-recipeLayout.SortOrder = Enum.SortOrder.Name
+recipeLayout.SortOrder = Enum.SortOrder.LayoutOrder
 recipeLayout.Padding = UDim.new(0, 6)
 recipeLayout.Parent = recipeContainer
 
@@ -571,7 +572,7 @@ end
 
 local recipeCards = {}
 
-local function createRecipeCard(recipeId, recipe)
+local function createRecipeCard(recipeId, recipe, layoutOrder)
 	local output = recipe.Output or { Id = recipeId, N = 1 }
 	local item = ItemDatabase:Get(output.Id)
 	local name = item and item.Name or output.Id
@@ -585,6 +586,7 @@ local function createRecipeCard(recipeId, recipe)
 	card.BorderSizePixel = 0
 	card.Text = ""
 	card.AutoButtonColor = false
+	card.LayoutOrder = layoutOrder or 0
 	card.ZIndex = 12
 	card.Parent = recipeContainer
 	Theme.Button(card)
@@ -916,28 +918,27 @@ function refreshRecipes(preserveScroll)
 	-- Get recipes for this station
 	local recipes = WorkbenchConfig:GetRecipesForStation(currentStationType)
 	
-	-- Filter by category
+	-- Filter and rank by the output first. Ingredient matches remain useful but
+	-- cannot bury an exact output-name match such as "Plank".
+	local visible = {}
 	for recipeId, recipe in pairs(recipes) do
 		local matchesCategory = selectedCategory == "All" or recipe.Category == selectedCategory
 		local outputId = recipe.Output and recipe.Output.Id or recipeId
-		local searchable = { recipeId, outputId, recipe.Category or "", (ItemDatabase:Get(outputId) or {}).Name or "" }
+		local outputName = (ItemDatabase:Get(outputId) or {}).Name or outputId
+		local secondary = { recipe.Category or "" }
 		for _, ingredient in ipairs(recipe.Ingredients or {}) do
-			table.insert(searchable, ingredient.Id)
-			table.insert(searchable, (ItemDatabase:Get(ingredient.Id) or {}).Name or "")
+			table.insert(secondary, ingredient.Id)
+			table.insert(secondary, (ItemDatabase:Get(ingredient.Id) or {}).Name or "")
 		end
-		local matchesSearch = recipeSearch == ""
-		if not matchesSearch then
-			for _, value in ipairs(searchable) do
-				if string.find(string.lower(tostring(value or "")), recipeSearch, 1, true) then
-					matchesSearch = true
-					break
-				end
-			end
-		end
-		if matchesCategory and matchesSearch then
-			createRecipeCard(recipeId, recipe)
+		local score = SearchRank.Score(recipeSearch, {outputName, outputId, recipeId}, secondary)
+		if matchesCategory and score ~= nil then
+			table.insert(visible, {Id=recipeId, Recipe=recipe, Name=outputName, SearchScore=score})
 		end
 	end
+	table.sort(visible, function(a, b)
+		return SearchRank.Less(a, b, recipeSearch, function(entry) return entry.Name end)
+	end)
+	for index, entry in ipairs(visible) do createRecipeCard(entry.Id, entry.Recipe, index) end
 	
 	updateCraftButton()
 	task.defer(function()

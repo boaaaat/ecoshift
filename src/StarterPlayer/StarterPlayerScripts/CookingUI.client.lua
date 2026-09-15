@@ -12,6 +12,7 @@ local Catalog = require(Shared:WaitForChild("CookingConfig"))
 local Biomes = require(Shared.BiomeConfig)
 local Items = require(Shared.Items.ItemDatabase)
 local Guide = require(Shared.UI.RecipeGuideUI)
+local SearchRank = require(Shared.UI.SearchRank)
 local Config = require(Shared.Config)
 local Util = require(Shared.Util)
 local player = Players.LocalPlayer
@@ -140,19 +141,12 @@ local function chosenRecipe() return recipeId and Catalog.Recipes[recipeId] end
 local function seasoningDescription(seasoning)
  return tostring(seasoning.Effect or seasoning.Description or "").." · 4 min"
 end
-local function matchesSearch(...)
- if searchQuery=="" then return true end
- for index=1,select("#",...) do
-  if string.find(string.lower(tostring(select(index,...) or "")),searchQuery,1,true) then return true end
- end
- return false
-end
-local function recipeMatches(id,recipe)
- if matchesSearch(id,recipe.Name,recipe.Category) then return true end
+local function recipeSearchScore(id,recipe)
+ local secondary={recipe.Category or ""}
  for _,ingredient in ipairs(recipe.Ingredients or {}) do
-  if matchesSearch(ingredient.Id,name(ingredient.Id)) then return true end
+  table.insert(secondary,ingredient.Id);table.insert(secondary,name(ingredient.Id))
  end
- return false
+ return SearchRank.Score(searchQuery,{recipe.Name,id},secondary)
 end
 local function enoughForMeal(recipe)
  if not recipe or not state or #(state.Jobs or {})>=3 then return false end
@@ -240,8 +234,16 @@ render=function(resetScroll)
  end
  if page=="Meals" then
   local recipes={}
-  for id,recipe in pairs(Catalog.Recipes) do if recipe.StationType==state.StationType and not recipe.Future and recipeMatches(id,recipe) then table.insert(recipes,{Id=id,Recipe=recipe}) end end
-  table.sort(recipes,function(a,b) if a.Recipe.Tier~=b.Recipe.Tier then return (a.Recipe.Tier or 1)<(b.Recipe.Tier or 1) end return a.Recipe.Name<b.Recipe.Name end)
+  for id,recipe in pairs(Catalog.Recipes) do
+   local searchScore=recipeSearchScore(id,recipe)
+   if recipe.StationType==state.StationType and not recipe.Future and searchScore~=nil then table.insert(recipes,{Id=id,Recipe=recipe,SearchScore=searchScore}) end
+  end
+  table.sort(recipes,function(a,b)
+   return SearchRank.Less(a,b,searchQuery,function(entry)return entry.Recipe.Name end,function(left,right)
+    if left.Recipe.Tier~=right.Recipe.Tier then return (left.Recipe.Tier or 1)<(right.Recipe.Tier or 1) end
+    return nil
+   end)
+  end)
   for _,entry in ipairs(recipes) do
    addButton(entry.Recipe.Name..string.format("\n+%d food · +%d energy · %ss",entry.Recipe.Hunger or 0,entry.Recipe.Stamina or 0,recipeWork(entry.Recipe)),function()
     recipeId=entry.Id;seasoningId=nil;quantity=1;go("Detail")
@@ -252,9 +254,13 @@ render=function(resetScroll)
   addButton("Back to meal",function() go("Detail") end,44,"Back")
   addButton("No seasoning",function() seasoningId=nil;go("Detail") end,44,"Close")
   local spices={}
-  for _,spice in pairs(Catalog.Seasonings) do if not spice.Future and matchesSearch(spice.Id,spice.Name,spice.Effect,spice.Description,biomeName(spice.Biome)) then table.insert(spices,spice) end end
-  table.sort(spices,function(a,b) return a.Name<b.Name end)
-  for _,spice in ipairs(spices) do
+  for _,spice in pairs(Catalog.Seasonings) do
+   local searchScore=SearchRank.Score(searchQuery,{spice.Name,spice.Id},{spice.Effect,spice.Description,biomeName(spice.Biome)})
+   if not spice.Future and searchScore~=nil then table.insert(spices,{Definition=spice,Id=spice.Id,SearchScore=searchScore}) end
+  end
+  table.sort(spices,function(a,b)return SearchRank.Less(a,b,searchQuery,function(entry)return entry.Definition.Name end)end)
+  for _,entry in ipairs(spices) do
+   local spice=entry.Definition
    local itemId=spice.Id
    badge(addButton(spice.Name.." · "..count(itemId).."\n"..seasoningDescription(spice),function() seasoningId=itemId;go("Detail") end,68,"Seasoning","Special"),spice)
    addButton("Found in "..biomeName(spice.Biome).."  ›",function() source(itemId) end,44)

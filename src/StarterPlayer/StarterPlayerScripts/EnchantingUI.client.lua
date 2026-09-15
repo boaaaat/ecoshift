@@ -4,6 +4,7 @@ local Http=game:GetService("HttpService")
 local Shared=RS:WaitForChild("Shared")
 if require(Shared.SessionConfig).GetMode()~="Expedition" then return end
 local Theme=require(Shared.UI.UITheme)
+local SearchRank=require(Shared.UI.SearchRank)
 local Catalog=require(Shared.OverhaulCatalog)
 local Items=require(Shared.Items.ItemDatabase)
 local player=Players.LocalPlayer
@@ -28,13 +29,7 @@ local searchQuery=""
 local pageSearch={}
 local render
 local function name(id)local item=Items:Get(id);return item and item.Name or id end
-local function matchesSearch(...)
- if searchQuery=="" then return true end
- for index=1,select("#",...) do
-  if string.find(string.lower(tostring(select(index,...) or "")),searchQuery,1,true) then return true end
- end
- return false
-end
+local function searchScore(primary,secondary)return SearchRank.Score(searchQuery,primary,secondary) end
 local function text(value,height,size)return make("TextLabel",list,{Size=UDim2.new(1,-12,0,height or 40),Text=value,TextSize=size or 17,TextWrapped=true,TextColor3=colors.Text,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left,BackgroundTransparency=1}) end
 local function button(value,fn,icon,role)
  local b=make("TextButton",list,{Size=UDim2.new(1,-12,0,46),Text=value,TextSize=16,TextWrapped=true,Font=Enum.Font.GothamMedium});Theme.StationStyle(b,icon or "Survey",role or "Special");b.Activated:Connect(fn);return b
@@ -67,20 +62,46 @@ render=function(reset)
   title.Text=workshop and "Gear maintenance" or "Enchanting workshop"
   if not workshop then
    button("Craft Enchanting Dust",function()gui.Enabled=false;require(Shared.UI.RecipeGuideUI).Open("EnchantingDust",{PreferredStationType="EnchantingTable"}) end)
+   local choiceGroups={}
    for source,options in pairs(state.Choices or {}) do
     local filtered={}
     for _,id in ipairs(options) do
      local def=Catalog.Enchantments[id]
-     if def and matchesSearch(id,def.Name,def.Description,source) then table.insert(filtered,id) end
+     local score=def and searchScore({def.Name,id},{def.Description,source})
+     if score~=nil then table.insert(filtered,{Id=id,SearchScore=score}) end
     end
-    if #filtered>0 then text("Choose a crew schematic · "..source,44,20) end
-    for _,id in ipairs(filtered) do button(Catalog.Enchantments[id].Name..((state.ChoiceRanks or {})[source]=="Maximum" and " · final rank" or ""),function()send("Choose",{Source=source,Enchantment=id}) end) end
+    table.sort(filtered,function(a,b)return SearchRank.Less(a,b,searchQuery,function(entry)return Catalog.Enchantments[entry.Id].Name end) end)
+    if #filtered>0 then table.insert(choiceGroups,{Source=source,Entries=filtered,SearchScore=filtered[1].SearchScore}) end
    end
-   for _,id in ipairs(state.Pages or {}) do if matchesSearch(id,name(id)) then button("Read "..name(id),function()send("Read",{ItemId=id}) end) end end
+   table.sort(choiceGroups,function(a,b)
+    if searchQuery~="" and a.SearchScore~=b.SearchScore then return a.SearchScore<b.SearchScore end
+    return tostring(a.Source)<tostring(b.Source)
+   end)
+   for _,group in ipairs(choiceGroups) do
+    text("Choose a crew schematic · "..group.Source,44,20)
+    for _,choice in ipairs(group.Entries) do
+     local id=choice.Id
+     button(Catalog.Enchantments[id].Name..((state.ChoiceRanks or {})[group.Source]=="Maximum" and " · final rank" or ""),function()send("Choose",{Source=group.Source,Enchantment=id}) end)
+    end
+   end
+   local pages={}
+   for _,id in ipairs(state.Pages or {}) do
+    local score=searchScore({name(id),id},{"schematic","page"})
+    if score~=nil then table.insert(pages,{Id=id,SearchScore=score}) end
+   end
+   table.sort(pages,function(a,b)return SearchRank.Less(a,b,searchQuery,function(entry)return name(entry.Id) end) end)
+   for _,entry in ipairs(pages) do local id=entry.Id;button("Read "..name(id),function()send("Read",{ItemId=id}) end) end
   end
   text("Select a piece of gear",38,20)
+  local gear={}
   for _,e in ipairs(state.Gear or {}) do
-   if matchesSearch(e.Id,name(e.Id),e.Grade,e.Uid) then button(name(e.Id).." · grade "..e.Grade..(e.Durability and string.format(" · %d / %d durability",e.Durability,e.MaxDurability) or ""),function()selected=e.Uid;go(workshop and "Maintenance" or "Enchantments") end) end
+   local score=searchScore({name(e.Id),e.Id},{e.Grade,e.Uid})
+   if score~=nil then table.insert(gear,{Entry=e,Id=e.Id,SearchScore=score}) end
+  end
+  table.sort(gear,function(a,b)return SearchRank.Less(a,b,searchQuery,function(record)return name(record.Entry.Id) end) end)
+  for _,record in ipairs(gear) do
+   local e=record.Entry
+   button(name(e.Id).." · grade "..e.Grade..(e.Durability and string.format(" · %d / %d durability",e.Durability,e.MaxDurability) or ""),function()selected=e.Uid;go(workshop and "Maintenance" or "Enchantments") end)
   end
  else
   local e=entry();if not e then page="Gear";render(true);return end
@@ -100,14 +121,21 @@ render=function(reset)
   elseif page=="Enchantments" then
    local count=0;for _ in pairs(e.Enchantments or {}) do count+=1 end
    text(count.." / "..Catalog.EnchantmentSlots(Catalog.Gear[e.Id].Kind,e.Grade).." enchantment slots",38)
-   local ids={};for id in pairs(Catalog.Enchantments) do table.insert(ids,id) end;table.sort(ids)
-   for _,id in ipairs(ids) do
-    local def=Catalog.Enchantments[id]
+   local entries={}
+   for id,def in pairs(Catalog.Enchantments) do
     local current=rank(e,id)
     local gear=table.clone(Catalog.Gear[e.Id]);gear.Grade=e.Grade
-    if (current>0 or Catalog.CanEnchant(gear,def,math.max(1,current))) and matchesSearch(id,def.Name,def.Description,def.Source) then
-     button(def.Name..(current>0 and " · rank "..current.." / "..def.MaxLevel or " · "..def.MaxLevel.." ranks"),function()enchantment=id;go("Detail") end)
+    local score=searchScore({def.Name,id},{def.Description,def.Source})
+    if score~=nil and (current>0 or Catalog.CanEnchant(gear,def,math.max(1,current))) then
+     table.insert(entries,{Id=id,SearchScore=score})
     end
+   end
+   table.sort(entries,function(a,b)return SearchRank.Less(a,b,searchQuery,function(record)return Catalog.Enchantments[record.Id].Name end) end)
+   for _,record in ipairs(entries) do
+     local id=record.Id
+     local def=Catalog.Enchantments[id]
+     local current=rank(e,id)
+     button(def.Name..(current>0 and " · rank "..current.." / "..def.MaxLevel or " · "..def.MaxLevel.." ranks"),function()enchantment=id;go("Detail") end)
    end
   elseif page=="Detail" then
    local def=Catalog.Enchantments[enchantment];local current=rank(e,enchantment);local nextRank=current+1
