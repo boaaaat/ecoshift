@@ -8,6 +8,14 @@ local Theme = require(RS:WaitForChild("Shared"):WaitForChild("UI"):WaitForChild(
 local ClassOutfitter = require(RS.Shared.UI.ClassOutfitter)
 local Biomes = require(RS.Shared.OverhaulBiomes)
 local WorldSaveConfig = require(RS.Shared.WorldSaveConfig)
+local totalSubBiomes = 0
+local subBiomeNames = {}
+for _, biomeId in ipairs(Biomes.Order) do
+	for _, region in ipairs(Biomes.Biomes[biomeId].Regions or {}) do
+		totalSubBiomes += 1
+		subBiomeNames[biomeId .. "/" .. region.Id] = Biomes.Biomes[biomeId].DisplayName .. " — " .. region.Name
+	end
+end
 local Mode = require(RS.Shared.SessionConfig).GetMode()
 local player = Players.LocalPlayer
 local remote = RS:WaitForChild("Remotes"):WaitForChild("Lobby", 60)
@@ -544,11 +552,11 @@ local function renderWorldInfo()
 	local rows = math.max(1, math.ceil(#crew / columns))
 	local stats = type(world.Stats) == "table" and world.Stats or nil
 	local statColumns = width >= 520 and 3 or 2
-	local statRows = math.ceil(9 / statColumns)
+	local statRows = math.ceil(10 / statColumns)
 	local crewTop, crewHeight = 104, 78
 	local statsTop = crewTop + rows * (crewHeight + 8) + 36
 	local recordsBottom = statsTop + statRows * 68
-	local contentHeight = recordsBottom + 100
+	local contentHeight = recordsBottom + 128
 	local height = math.min(panel.AbsoluteSize.Y - 16, math.max(510, contentHeight))
 	local menu
 	if contentHeight > height then
@@ -594,6 +602,7 @@ local function renderWorldInfo()
 		{"PLAY TIME", formatPlaytime(stats and stats.PlaySeconds or world.Elapsed, false), "Amber"},
 		{"NIGHTS SURVIVED", stats and tostring(stats.NightsSurvived) or unknown, "Text"},
 		{"BIOMES VISITED", stats and string.format("%d / %d", stats.UniqueBiomes or 0, #Biomes.Order) or unknown, "Success"},
+		{"SUB-BIOMES VISITED", stats and string.format("%d / %d", stats.UniqueSubBiomes or 0, totalSubBiomes) or unknown, "Success"},
 		{"BIOME SHIFTS", stats and tostring(stats.BiomeShifts) or unknown, "Text"},
 		{"CREATURES DEFEATED", stats and tostring(stats.MonsterDefeats) or unknown, "Text"},
 		{"OBJECTIVES FINISHED", stats and tostring(stats.ObjectivesCompleted) or unknown, "Text"},
@@ -617,9 +626,15 @@ local function renderWorldInfo()
 	end
 	local visitedText = #visited > 0 and table.concat(visited, "  ·  ") or (biome and biome.DisplayName or "No biome visits recorded yet")
 	label(menu, "VISITED  " .. visitedText, 22, recordsBottom + 7, width - 44, 28, 12, "TextMuted", true).TextTruncate = Enum.TextTruncate.AtEnd
+	local visitedSubBiomes = {}
+	for _, key in ipairs(stats and stats.VisitedSubBiomes or {}) do
+		if subBiomeNames[key] then table.insert(visitedSubBiomes, subBiomeNames[key]) end
+	end
+	local subBiomeText = #visitedSubBiomes > 0 and table.concat(visitedSubBiomes, "  ·  ") or "No sub-biomes visited yet"
+	label(menu, "SUB-BIOMES  " .. subBiomeText, 22, recordsBottom + 35, width - 44, 28, 12, "TextMuted", true).TextTruncate = Enum.TextTruncate.AtEnd
 	local created = os.date("!%Y-%m-%d", tonumber(world.CreatedAt) or 0)
 	local updated = os.date("!%Y-%m-%d %H:%M UTC", tonumber(world.UpdatedAt) or 0)
-	label(menu, string.format("CREATED %s  ·  UPDATED %s", created, updated), 22, recordsBottom + 40, width - 44, 22, 11, "TextMuted")
+	label(menu, string.format("CREATED %s  ·  UPDATED %s", created, updated), 22, recordsBottom + 68, width - 44, 22, 11, "TextMuted")
 	Theme.CaptureCursor(menu); Theme.AnimatePanel(menu)
 end
 

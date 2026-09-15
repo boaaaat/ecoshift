@@ -2,6 +2,9 @@
 -- This deliberately avoids requiring gameplay services so it is safe in the
 -- lobby and before the expedition service graph has initialized.
 local Validator = {}
+local OverhaulBiomes = require(game:GetService("ReplicatedStorage").Shared.OverhaulBiomes)
+local maxSubBiomes = 0
+for _, biome in pairs(OverhaulBiomes.Biomes) do maxSubBiomes += #(biome.Regions or {}) end
 
 local function arrayShape(value, minimum, maximum)
 	assert(type(value) == "table", "Saved array missing")
@@ -75,6 +78,21 @@ function Validator.Validate(snapshot, expectedRoster)
 				encounters += 1
 			end
 			assert(encounters <= 16, "Saved biome encounter count is invalid")
+		end
+		if snapshot.Biome.SubBiomeVisits ~= nil then
+			assert(type(snapshot.Biome.SubBiomeVisits) == "table", "Saved sub-biome visits are invalid")
+			local total = 0
+			for biomeId, regions in pairs(snapshot.Biome.SubBiomeVisits) do
+				local biome = OverhaulBiomes.Biomes[biomeId]
+				assert(biome and type(regions) == "table", "Saved sub-biome group is invalid")
+				local known = {}
+				for _, region in ipairs(biome.Regions or {}) do known[region.Id] = true end
+				for regionId, visited in pairs(regions) do
+					assert(known[regionId] and visited == true, "Saved sub-biome visit is invalid")
+					total += 1
+				end
+			end
+			assert(total <= maxSubBiomes, "Saved sub-biome visit count is invalid")
 		end
 		for userId, record in pairs(snapshot.RunStats) do
 			assert(type(userId) == "string" and tonumber(userId) and type(record) == "table", "Saved crew record is invalid")

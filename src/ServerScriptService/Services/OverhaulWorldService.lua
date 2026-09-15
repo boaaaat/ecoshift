@@ -681,7 +681,14 @@ function Service:Generate(biome)
        if token~=self._generation or self._busy then break end
        if not ok then warn("[SurfaceStreaming]",err) else exploration:RevealFromPlayer(player,root.Position) end
        local region=self:MetadataAt(root.Position)
-       if region then player:SetAttribute("RegionId",region.TypeId);player:SetAttribute("RegionDepth",region.Depth);player:SetAttribute("RegionName",region.Name) end
+       if region then
+        player:SetAttribute("RegionId",region.TypeId);player:SetAttribute("RegionDepth",region.Depth);player:SetAttribute("RegionName",region.Name)
+        local humanoid=player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+        if Vector2.new(root.Position.X,root.Position.Z).Magnitude>CAMP and humanoid and humanoid.Health>0
+         and not player:GetAttribute("IsDead") and not player:GetAttribute("WorldPlayerLoading") and not player:GetAttribute("WorldPlayerRestoring") then
+         BiomeService:RecordSubBiome(self._biome,region.TypeId)
+        end
+       end
       end
      end
      for key,c in pairs(self._chunks) do

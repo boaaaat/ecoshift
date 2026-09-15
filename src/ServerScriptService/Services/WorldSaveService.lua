@@ -41,6 +41,13 @@ local function sameRoster(a, b)
 	for i, id in ipairs(a) do if b[i] ~= id then return false end end
 	return true
 end
+local validSubBiomeKeys, totalSubBiomes = {}, 0
+for _, biomeId in ipairs(Biomes.Order) do
+	for _, region in ipairs(Biomes.Biomes[biomeId].Regions or {}) do
+		validSubBiomeKeys[biomeId .. "/" .. region.Id] = true
+		totalSubBiomes += 1
+	end
+end
 local function crewSummary(ownerIds)
 	local crew = {}
 	for _, userId in ipairs(ownerIds) do
@@ -85,31 +92,43 @@ end
 
 local function archiveStats(raw)
 	if raw == nil then return nil, true end
-	if type(raw) ~= "table" or raw.SchemaVersion ~= 1 then return nil, false end
+	if type(raw) ~= "table" or (raw.SchemaVersion ~= 1 and raw.SchemaVersion ~= 2) then return nil, false end
+	local normalized = Util.DeepCopy(raw)
+	if normalized.SchemaVersion == 1 then
+		normalized.SchemaVersion, normalized.UniqueSubBiomes, normalized.VisitedSubBiomes = 2, 0, {}
+	end
 	local fields = { "PlaySeconds", "NightsSurvived", "BiomeShifts", "BiomeVisits", "UniqueBiomes",
-		"MonsterDefeats", "ObjectivesCompleted", "StructuresStanding", "CrewDeaths", "CrewRevives", "CampaignTier" }
-	for _, field in ipairs(fields) do if not nonnegativeInteger(raw[field]) then return nil, false end end
-	if raw.CampaignTier < 1 or raw.CampaignTier > 8 or raw.UniqueBiomes > #Biomes.Order
-		or raw.BiomeVisits < raw.UniqueBiomes then return nil, false end
-	if type(raw.VisitedBiomes) ~= "table" or #raw.VisitedBiomes ~= raw.UniqueBiomes then return nil, false end
+		"UniqueSubBiomes", "MonsterDefeats", "ObjectivesCompleted", "StructuresStanding", "CrewDeaths", "CrewRevives", "CampaignTier" }
+	for _, field in ipairs(fields) do if not nonnegativeInteger(normalized[field]) then return nil, false end end
+	if normalized.CampaignTier < 1 or normalized.CampaignTier > 8 or normalized.UniqueBiomes > #Biomes.Order
+		or normalized.BiomeVisits < normalized.UniqueBiomes or normalized.UniqueSubBiomes > totalSubBiomes then return nil, false end
+	if type(normalized.VisitedBiomes) ~= "table" or #normalized.VisitedBiomes ~= normalized.UniqueBiomes then return nil, false end
 	local seenBiomes, visitedCount = {}, 0
-	for index, biomeId in pairs(raw.VisitedBiomes) do
-		if type(index) ~= "number" or index % 1 ~= 0 or index < 1 or index > #raw.VisitedBiomes
+	for index, biomeId in pairs(normalized.VisitedBiomes) do
+		if type(index) ~= "number" or index % 1 ~= 0 or index < 1 or index > #normalized.VisitedBiomes
 			or type(biomeId) ~= "string" or not Biomes.Biomes[biomeId] or seenBiomes[biomeId] then return nil, false end
 		seenBiomes[biomeId] = true; visitedCount += 1
 	end
-	if visitedCount ~= #raw.VisitedBiomes or type(raw.PlayerRecords) ~= "table" or #raw.PlayerRecords > Config.MaxRosterSize then return nil, false end
+	if visitedCount ~= #normalized.VisitedBiomes or type(normalized.VisitedSubBiomes) ~= "table"
+		or #normalized.VisitedSubBiomes ~= normalized.UniqueSubBiomes then return nil, false end
+	local seenSubBiomes, subBiomeCount = {}, 0
+	for index, key in pairs(normalized.VisitedSubBiomes) do
+		if type(index) ~= "number" or index % 1 ~= 0 or index < 1 or index > #normalized.VisitedSubBiomes
+			or type(key) ~= "string" or not validSubBiomeKeys[key] or seenSubBiomes[key] then return nil, false end
+		seenSubBiomes[key] = true; subBiomeCount += 1
+	end
+	if subBiomeCount ~= #normalized.VisitedSubBiomes or type(normalized.PlayerRecords) ~= "table" or #normalized.PlayerRecords > Config.MaxRosterSize then return nil, false end
 	local seenPlayers, playerCount = {}, 0
-	for index, record in pairs(raw.PlayerRecords) do
-		if type(index) ~= "number" or index % 1 ~= 0 or index < 1 or index > #raw.PlayerRecords or type(record) ~= "table"
+	for index, record in pairs(normalized.PlayerRecords) do
+		if type(index) ~= "number" or index % 1 ~= 0 or index < 1 or index > #normalized.PlayerRecords or type(record) ~= "table"
 			or not validUserId(record.UserId) or seenPlayers[record.UserId] then return nil, false end
 		for _, field in ipairs({ "SurvivedSeconds", "Deaths", "Revives", "MonsterDefeats" }) do
 			if not nonnegativeInteger(record[field]) then return nil, false end
 		end
 		seenPlayers[record.UserId] = true; playerCount += 1
 	end
-	if playerCount ~= #raw.PlayerRecords then return nil, false end
-	return Util.DeepCopy(raw), true
+	if playerCount ~= #normalized.PlayerRecords then return nil, false end
+	return normalized, true
 end
 
 local function manifestData(raw)

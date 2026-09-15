@@ -180,7 +180,7 @@ end
 
 function BiomeService:CaptureWorldState()
 	local timing, now = self:GetTiming(), self._pausedAt or os.clock()
-	return { ArrivalTier=self._arrivalTier or 1, Visits = Util.DeepCopy(self._visits or {}), Encounters = Util.DeepCopy(self._encounters or {}), PreviousVisits = self._previousVisits or 0, VisitActive = self._visitActive or 0, VisitCredited = self._visitCredited == true, Biome = self._current, Weather = Util.DeepCopy(self._weather), Elapsed = self:GetElapsed(), Remaining = timing.Remaining,
+	return { ArrivalTier=self._arrivalTier or 1, Visits = Util.DeepCopy(self._visits or {}), Encounters = Util.DeepCopy(self._encounters or {}), SubBiomeVisits = Util.DeepCopy(self._subBiomeVisits or {}), PreviousVisits = self._previousVisits or 0, VisitActive = self._visitActive or 0, VisitCredited = self._visitCredited == true, Biome = self._current, Weather = Util.DeepCopy(self._weather), Elapsed = self:GetElapsed(), Remaining = timing.Remaining,
 		Duration = self._duration, ShiftCount = self._shiftCount, Version = self._version, UpcomingBiome = self._upcomingBiome,
 		UpcomingWeather = Util.DeepCopy(self._upcomingWeather), Delayed = self._delayed, Selected = self._selected,
 		SinceChange = math.max(0, now - self._lastChangedAt), WeatherRemaining = self._nextWeatherChange and math.max(0, self._nextWeatherChange - now) or false }
@@ -193,6 +193,7 @@ function BiomeService:RestoreWorldState(state)
  self._arrivalTier = Codec.Number(state.ArrivalTier or 1,1,8)
 	self._visits = Codec.Copy(state.Visits or {})
 	self._encounters = Codec.Copy(state.Encounters or state.Visits or {})
+	self._subBiomeVisits = Codec.Copy(state.SubBiomeVisits or {})
 	if (self._encounters[state.Biome] or 0) < 1 then self._encounters[state.Biome] = 1 end
  self._previousVisits = Codec.Number(state.PreviousVisits or 0,0,1e8)
  self._visitActive = Codec.Number(state.VisitActive or 0,0,120)
@@ -219,6 +220,22 @@ function BiomeService:GetPreviousVisits() return self._previousVisits or 0 end
 function BiomeService:GetVisitSerial() return self._shiftCount or 0 end
 function BiomeService:GetVisits() return table.clone(self._visits or {}) end
 function BiomeService:GetEncounters() return table.clone(self._encounters or {}) end
+function BiomeService:GetSubBiomeVisits() return Util.DeepCopy(self._subBiomeVisits or {}) end
+function BiomeService:RecordSubBiome(biomeId, regionId)
+	if biomeId ~= self._current or type(regionId) ~= "string" then return false end
+	local biome = OverhaulBiomes.Biomes[biomeId]
+	if not biome then return false end
+	local known = false
+	for _, region in ipairs(biome.Regions or {}) do
+		if region.Id == regionId then known = true; break end
+	end
+	if not known then return false end
+	self._subBiomeVisits = self._subBiomeVisits or {}
+	self._subBiomeVisits[biomeId] = self._subBiomeVisits[biomeId] or {}
+	if self._subBiomeVisits[biomeId][regionId] then return false end
+	self._subBiomeVisits[biomeId][regionId] = true
+	return true
+end
 function BiomeService:GetMaturity()
  local tier = self._arrivalTier or 1
  local cap = tier <= 2 and .65 or tier <= 4 and .8 or 1

@@ -132,6 +132,13 @@ local function archiveStats(snapshot)
 			totalVisits += math.floor(count)
 		end
 	end
+	local subBiomeVisits, visitedSubBiomes = snapshot.Biome and snapshot.Biome.SubBiomeVisits or {}, {}
+	for _, biomeId in ipairs(Biomes.Order) do
+		local byRegion = type(subBiomeVisits[biomeId]) == "table" and subBiomeVisits[biomeId] or {}
+		for _, region in ipairs(Biomes.Biomes[biomeId].Regions or {}) do
+			if byRegion[region.Id] == true then table.insert(visitedSubBiomes, biomeId .. "/" .. region.Id) end
+		end
+	end
 	local rewards = snapshot.Auxiliary and snapshot.Auxiliary.ExpeditionRewardsService
 	local rewardPlayers = rewards and rewards.Players or {}
 	local playerRecords, deaths, revives, defeats = {}, 0, 0, 0
@@ -152,11 +159,12 @@ local function archiveStats(snapshot)
 	table.sort(playerRecords, function(a, b) return a.UserId < b.UserId end)
 	local objectives = snapshot.Auxiliary and snapshot.Auxiliary.ObjectiveService
 	return {
-		SchemaVersion = 1,
+		SchemaVersion = 2,
 		PlaySeconds = math.max(0, math.floor(tonumber(snapshot.Round and snapshot.Round.Elapsed) or 0)),
 		NightsSurvived = math.max(0, math.floor(tonumber(snapshot.DayNight and snapshot.DayNight.NightsSurvived) or 0)),
 		BiomeShifts = math.max(0, math.floor(tonumber(snapshot.Biome and snapshot.Biome.ShiftCount) or 0)),
 		BiomeVisits = totalVisits, UniqueBiomes = #visited, VisitedBiomes = visited,
+		UniqueSubBiomes = #visitedSubBiomes, VisitedSubBiomes = visitedSubBiomes,
 		MonsterDefeats = defeats, ObjectivesCompleted = mapCount(objectives and objectives.Claimed),
 		StructuresStanding = #(snapshot.Structures or {}), CrewDeaths = deaths, CrewRevives = revives,
 		CampaignTier = math.clamp(math.floor(tonumber(snapshot.Campaign and snapshot.Campaign.Tier) or 1), 1, 8),
