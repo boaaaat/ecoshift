@@ -44,6 +44,39 @@ local function levelForXP(xp)
 	-- Retain the existing cumulative curve: level 2 at 175 XP, then 75/level.
 	return math.max(1, math.floor((xp - 100) / 75) + 1)
 end
+local function formatSurvivalTime(seconds)
+	seconds = math.max(0, math.floor(tonumber(seconds) or 0))
+	local hours = math.floor(seconds / 3600)
+	local minutes = math.floor(seconds / 60) % 60
+	if hours > 0 then return string.format("%d:%02d:%02d", hours, minutes, seconds % 60) end
+	return string.format("%02d:%02d", minutes, seconds % 60)
+end
+local function updateLeaderstats(plr, data)
+	if plr.Parent ~= Players then return end
+	local leaderstats = plr:FindFirstChild("leaderstats")
+	if leaderstats and not leaderstats:IsA("Folder") then leaderstats:Destroy(); leaderstats = nil end
+	if not leaderstats then
+		leaderstats = Instance.new("Folder")
+		leaderstats.Name = "leaderstats"
+		leaderstats.Parent = plr
+	end
+	local level = leaderstats:FindFirstChild("Level")
+	if level and not level:IsA("IntValue") then level:Destroy(); level = nil end
+	if not level then
+		level = Instance.new("IntValue")
+		level.Name = "Level"
+		level.Parent = leaderstats
+	end
+	local maxSurvived = leaderstats:FindFirstChild("Max Time Survived")
+	if maxSurvived and not maxSurvived:IsA("StringValue") then maxSurvived:Destroy(); maxSurvived = nil end
+	if not maxSurvived then
+		maxSurvived = Instance.new("StringValue")
+		maxSurvived.Name = "Max Time Survived"
+		maxSurvived.Parent = leaderstats
+	end
+	level.Value = math.max(1, math.floor(tonumber(data.Level) or 1))
+	maxSurvived.Value = formatSurvivalTime(data.MaxSurvivalSeconds)
+end
 local function decode(raw)
 	if raw ~= nil and type(raw) ~= "table" then return nil, "InvalidStoredProfile" end
 	if raw and raw.SchemaVersion ~= Economy.SchemaVersion then return nil, "UnsupportedProfileVersion" end
@@ -56,6 +89,7 @@ local function decode(raw)
 	data.SchemaVersion = Economy.SchemaVersion
 	data.XP = integer(data.XP, 0)
 	data.Level = math.max(1, integer(data.Level, 1), levelForXP(data.XP))
+	data.MaxSurvivalSeconds = integer(data.MaxSurvivalSeconds, 0, 1000000000)
 	data.Currency = integer(data.Currency, 0)
 	-- Stored ownership arrays are normalized to the in-memory set representation.
 	for _, field in ipairs({ "UnlockedRoles", "Perks", "Cosmetics", "Blueprints" }) do data[field] = asSet(data[field]) end
@@ -85,7 +119,7 @@ local function encode(data)
 end
 local function publicProfile(data)
 	return {
-		XP = data.XP, Level = data.Level, Role = data.Role, Currency = data.Currency,
+		XP = data.XP, Level = data.Level, MaxSurvivalSeconds = data.MaxSurvivalSeconds, Role = data.Role, Currency = data.Currency,
 		ClassProgress = Util.DeepCopy(data.ClassProgress),
 		CurrencyName = Economy.CurrencyName, UnlockedRoles = Util.DeepCopy(data.UnlockedRoles),
 		Perks = Util.DeepCopy(data.Perks), Cosmetics = Util.DeepCopy(data.Cosmetics), Blueprints = Util.DeepCopy(data.Blueprints),
@@ -108,6 +142,7 @@ end
 function ProfileService:_accept(plr, data)
 	self._profiles[plr] = publicProfile(data)
 	if plr.Parent == Players then
+		updateLeaderstats(plr, data)
 		plr:SetAttribute("UITheme", data.Preferences.UITheme)
 		plr:SetAttribute("PersonalSettings", HttpService:JSONEncode(data.Preferences))
 		plr:SetAttribute("FieldMarks", data.Currency)
@@ -215,6 +250,9 @@ local function reduce(data, op)
 		local progress = data.ClassProgress[op.Role]
 		progress.ActiveSeconds = math.min(1e9, progress.ActiveSeconds + op.TotalSeconds - receipt)
 		data.ClassTimeReceipts[op.WorldClassId] = op.TotalSeconds
+	elseif op.Kind == "RecordMaxSurvival" then
+		if op.Seconds <= data.MaxSurvivalSeconds then return true, "AlreadyApplied", false end
+		data.MaxSurvivalSeconds = op.Seconds
 	elseif op.Kind == "UpgradeClass" then
 		if not data.UnlockedRoles[op.Role] then return false, "RoleLocked", false end
 		local progress = data.ClassProgress[op.Role]
@@ -359,6 +397,12 @@ function ProfileService:GrantClassTime(plr, worldId, roleId, totalSeconds)
 		or type(totalSeconds) ~= "number" or totalSeconds ~= totalSeconds or totalSeconds <= 0 or totalSeconds > 1e9 then return false, "InvalidClassTime" end
 	return self:_submit(plr, newOperation("ClassTime", { WorldClassId = worldId .. ":" .. roleId, Role = roleId, TotalSeconds = totalSeconds }))
 end
+function ProfileService:RecordMaxSurvival(plr, seconds)
+	if workspace:GetAttribute("WorldType") == "Creative" then return false, "CreativeRewardsDisabled" end
+	seconds = tonumber(seconds)
+	if not seconds or seconds ~= seconds or math.abs(seconds) == math.huge or seconds < 0 or seconds > 1000000000 then return false, "InvalidSurvivalTime" end
+	return self:_submit(plr, newOperation("RecordMaxSurvival", { Seconds = math.floor(seconds) }))
+end
 function ProfileService:UpgradeClass(plr, roleId, targetLevel)
 	if type(roleId) ~= "string" or not Classes.Definitions[roleId] then return false, "InvalidRole" end
 	if not self:IsLoaded(plr) then return false, "ProfileUnavailable" end
@@ -419,8 +463,14 @@ function ProfileService:Init()
 			self._preferenceRemote:FireClient(plr, "Result", { Success = ok, Reason = reason, RequestedTheme = theme, UITheme = plr:GetAttribute("UITheme") })
 		end
 	end)
-	Players.PlayerAdded:Connect(function(plr) task.spawn(function() self:Load(plr) end) end)
-	for _, plr in ipairs(Players:GetPlayers()) do task.spawn(function() self:Load(plr) end) end
+	Players.PlayerAdded:Connect(function(plr)
+		updateLeaderstats(plr, { Level = 1, MaxSurvivalSeconds = 0 })
+		task.spawn(function() self:Load(plr) end)
+	end)
+	for _, plr in ipairs(Players:GetPlayers()) do
+		updateLeaderstats(plr, { Level = 1, MaxSurvivalSeconds = 0 })
+		task.spawn(function() self:Load(plr) end)
+	end
 	Players.PlayerRemoving:Connect(function(plr)
 		for _, callback in ipairs(self._departureCallbacks) do pcall(callback, plr) end
 		local session = self._sessions[plr]

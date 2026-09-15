@@ -451,6 +451,19 @@ function Service:Init()
 		while self._flushing[player] do task.wait() end
 		self:_flush(player, true)
 	end)
+	GameState:OnStateChanged(function(state)
+		if state.MatchState ~= "GameOver" or not rewardsEnabled() then return end
+		local survived = math.max(0, math.floor(tonumber(state.FinalElapsed or state.Elapsed) or Round:GetElapsed()))
+		for _, player in ipairs(Players:GetPlayers()) do
+			if participant(player) then
+				task.spawn(function()
+					local ok, saved, reason = pcall(Profile.RecordMaxSurvival, Profile, player, survived)
+					if not ok then warn("[ExpeditionRewards] Max survival save failed:", saved)
+					elseif not saved and reason ~= "SavePending" and reason ~= "ProfileUnavailable" then warn("[ExpeditionRewards] Max survival save pending:", reason) end
+				end)
+			end
+		end
+	end)
 	task.spawn(function()
 		local retryAt = 0
 		while self._started do

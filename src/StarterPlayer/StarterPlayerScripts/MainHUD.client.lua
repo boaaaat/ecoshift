@@ -78,16 +78,6 @@ objectiveLabel.TextYAlignment = Enum.TextYAlignment.Top
 objectiveLabel.TextTruncate = Enum.TextTruncate.None
 local eventLabel = Theme.Label(notes, "No active anomalies", UDim2.fromOffset(240, 17), UDim2.fromOffset(16, 73), 10, C.Sage)
 
-local roleButton = Instance.new("TextButton")
-roleButton.Name = "RoleButton"
-roleButton.Size = UDim2.fromOffset(272, 28)
-roleButton.Position = UDim2.fromOffset(0, 308)
-roleButton.Text = "FIELD ROLE  /  Select role"
-roleButton.Font = Enum.Font.GothamBold
-roleButton.TextSize = 10
-roleButton.Parent = card
-Theme.Button(roleButton, true)
-
 local kit = Instance.new("Frame")
 kit.Name = "FieldKitNavigation"
 kit.Size = UDim2.fromOffset(376, 32)
@@ -184,8 +174,6 @@ local function updateHUDPreferences()
 	local placing = mobile and gui.Parent:GetAttribute("BuildPlacementActive") == true
 	card.Visible = not placing
 	notes.Visible = Settings.Get("ShowFieldNotes") and not mobile
-	roleButton.Visible = not mobile
-	roleButton.Position = UDim2.fromOffset(0, mobile and (notes.Visible and 222 or 112) or (notes.Visible and 308 or 200))
 	kit.Visible = Settings.Get("ShowNavigation") and not (mobile and gui.Parent:GetAttribute("MenuCursorOpen"))
 end
 detailsButton.Activated:Connect(function()
@@ -224,7 +212,6 @@ local function layout(_, available)
 		detailsButton.Position = UDim2.fromOffset(198, 74)
 		track.Visible = false
 		notes.Position = UDim2.fromOffset(0, 112)
-		roleButton.Size = UDim2.fromOffset(272, 44)
 	end
 	card.Parent=mobile and vitalsPages or gui
 	card.BackgroundTransparency=mobile and 1 or .04
@@ -271,31 +258,11 @@ updateHUDPreferences()
 
 local remotes = Util.GetDescendant(Config.Paths.Remotes) or Util.WaitForDescendant(Config.Paths.Remotes, 15)
 local function remote(name) return remotes and Util.GetRemote(remotes, Config.RemoteNames[name]) end
-local rProfile, rRole, rRoleSelect = remote("ProfileUpdate"), remote("RoleUpdate"), remote("RoleSelect")
 local rGame, rEvent, rObjective = remote("GameStateUpdate"), remote("EventBroadcast"), remote("ObjectiveUpdate")
-local profile = { Level = 1 }
-local roles, roleIndex = {}, 1
-for roleId in pairs(Config.ROLES.Definitions or {}) do table.insert(roles, roleId) end
-table.sort(roles)
 local function readable(value)
 	-- gsub also returns a replacement count; callers need only the label.
 	return (tostring(value):gsub("_", " "):gsub("(%l)(%u)", "%1 %2"))
 end
-local function updateRole()
-	for index, id in ipairs(roles) do if id == profile.Role then roleIndex = index end end
-	roleButton.Text = string.format("%s  /  LV %d  /  CHANGE", string.upper(readable(profile.Role or "FIELD ROLE")), profile.Level or 1)
-end
-if rProfile then rProfile.OnClientEvent:Connect(function(data)
-	if type(data) == "table" then profile = data; updateRole() end
-end) end
-if rRole then rRole.OnClientEvent:Connect(function(id)
-	if type(id) == "string" then profile.Role = id; updateRole() end
-end) end
-roleButton.Activated:Connect(function()
-	if not rRoleSelect or #roles == 0 then return end
-	roleIndex = roleIndex % #roles + 1
-	rRoleSelect:FireServer(roles[roleIndex])
-end)
 
 local function clock(seconds)
 	seconds = math.max(0, math.floor(seconds))
@@ -361,7 +328,7 @@ if rObjective then rObjective.OnClientEvent:Connect(function(kind, id, data)
 end) end
 
 task.defer(function()
-	for _, request in ipairs({ {rProfile, "RequestProfile"}, {rRole, "RequestRole"}, {rGame, "RequestState"}, {rEvent, "RequestActive"}, {rObjective, "RequestActive"} }) do
+	for _, request in ipairs({ {rGame, "RequestState"}, {rEvent, "RequestActive"}, {rObjective, "RequestActive"} }) do
 		if request[1] then request[1]:FireServer(request[2]) end
 	end
 end)
