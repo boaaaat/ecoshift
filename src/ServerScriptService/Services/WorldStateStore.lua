@@ -2,7 +2,9 @@
 -- fenced pointer update; a stale server can never publish over its successor.
 local DSS = game:GetService("DataStoreService")
 local Http = game:GetService("HttpService")
-local Util = require(game:GetService("ReplicatedStorage").Shared.Util)
+local Shared = game:GetService("ReplicatedStorage").Shared
+local Util = require(Shared.Util)
+local Biomes = require(Shared.OverhaulBiomes)
 local records = DSS:GetDataStore("EcoshiftWorldSessions_Overhaul_20260912")
 local chunks = DSS:GetDataStore("EcoshiftWorldSnapshots_Overhaul_20260912")
 local reservations = DSS:GetDataStore("EcoshiftReservedWorlds_Overhaul_20260912")
@@ -114,6 +116,54 @@ local function split(text)
 	end
 	return result
 end
+
+local function mapCount(value)
+	local total = 0
+	for _ in pairs(type(value) == "table" and value or {}) do total += 1 end
+	return total
+end
+
+local function archiveStats(snapshot)
+	local visits, visited, totalVisits = snapshot.Biome and (snapshot.Biome.Encounters or snapshot.Biome.Visits) or {}, {}, 0
+	for _, biomeId in ipairs(Biomes.Order) do
+		local count = tonumber(visits[biomeId]) or 0
+		if count > 0 then
+			table.insert(visited, biomeId)
+			totalVisits += math.floor(count)
+		end
+	end
+	local rewards = snapshot.Auxiliary and snapshot.Auxiliary.ExpeditionRewardsService
+	local rewardPlayers = rewards and rewards.Players or {}
+	local playerRecords, deaths, revives, defeats = {}, 0, 0, 0
+	for key, record in pairs(snapshot.RunStats or {}) do
+		local userId = tonumber(key)
+		if userId and type(record) == "table" then
+			local playerDeaths = math.max(0, math.floor(tonumber(record.Deaths) or 0))
+			local playerRevives = math.max(0, math.floor(tonumber(record.Revives) or 0))
+			local playerDefeats = math.max(0, math.floor(tonumber(record.MonsterDefeats) or 0))
+			local reward = rewardPlayers[key] or rewardPlayers[tostring(userId)]
+			deaths += playerDeaths; revives += playerRevives; defeats += playerDefeats
+			table.insert(playerRecords, {
+				UserId = userId, SurvivedSeconds = math.max(0, math.floor(tonumber(reward and reward.SurvivedSeconds) or 0)),
+				Deaths = playerDeaths, Revives = playerRevives, MonsterDefeats = playerDefeats,
+			})
+		end
+	end
+	table.sort(playerRecords, function(a, b) return a.UserId < b.UserId end)
+	local objectives = snapshot.Auxiliary and snapshot.Auxiliary.ObjectiveService
+	return {
+		SchemaVersion = 1,
+		PlaySeconds = math.max(0, math.floor(tonumber(snapshot.Round and snapshot.Round.Elapsed) or 0)),
+		NightsSurvived = math.max(0, math.floor(tonumber(snapshot.DayNight and snapshot.DayNight.NightsSurvived) or 0)),
+		BiomeShifts = math.max(0, math.floor(tonumber(snapshot.Biome and snapshot.Biome.ShiftCount) or 0)),
+		BiomeVisits = totalVisits, UniqueBiomes = #visited, VisitedBiomes = visited,
+		MonsterDefeats = defeats, ObjectivesCompleted = mapCount(objectives and objectives.Claimed),
+		StructuresStanding = #(snapshot.Structures or {}), CrewDeaths = deaths, CrewRevives = revives,
+		CampaignTier = math.clamp(math.floor(tonumber(snapshot.Campaign and snapshot.Campaign.Tier) or 1), 1, 8),
+		PlayerRecords = playerRecords,
+	}
+end
+
 function Service:WriteSnapshot(record, jobId, snapshot, finalPhase)
 	local encodedOK, encoded = pcall(function() return Http:JSONEncode(snapshot) end)
 	if not encodedOK or #encoded > 16000000 then return nil, "SnapshotTooLargeOrInvalid" end
@@ -136,6 +186,7 @@ function Service:WriteSnapshot(record, jobId, snapshot, finalPhase)
 		current.SavedAt = os.time()
 		current.ArchiveBiome = snapshot.Biome and snapshot.Biome.Biome or current.ArchiveBiome
 		current.ArchiveElapsed = snapshot.Round and snapshot.Round.Elapsed or current.ArchiveElapsed
+		current.ArchiveStats = archiveStats(snapshot)
 		if finalPhase then
 			current.Phase = finalPhase
 			current.ServerLeaseUntil = 0

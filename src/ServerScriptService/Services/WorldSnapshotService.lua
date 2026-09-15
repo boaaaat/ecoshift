@@ -111,7 +111,7 @@ function Snapshot:StageWorld(snapshot)
 	for _, player in ipairs(Players:GetPlayers()) do markJoiningPlayer(player) end
 	service("BiomeService"):RestoreWorldState(snapshot.Biome)
 	service("RoundService"):RestoreWorldState(snapshot.Round)
-	service("DayNightService"):RestoreWorldState(snapshot.DayNight)
+	service("DayNightService"):RestoreWorldState(snapshot.DayNight, snapshot.Round and snapshot.Round.Elapsed)
 	service("DeathService"):RestoreRunState(snapshot.RunStats)
 	service("GameStateService"):RestoreWorldState(snapshot.Match)
 	service("ChunkStreamingService"):RestoreWorldState(snapshot.Generated)

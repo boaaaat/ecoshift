@@ -7,6 +7,7 @@ local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local Config = require(RS.Shared.WorldSaveConfig)
 local Util = require(RS.Shared.Util)
+local Biomes = require(RS.Shared.OverhaulBiomes)
 local archives = DataStoreService:GetDataStore(Config.ArchiveStore)
 local manifests = DataStoreService:GetDataStore(Config.ManifestStore)
 local Service = {}
@@ -81,6 +82,36 @@ local function archiveData(raw)
 	end
 	return Util.DeepCopy(raw)
 end
+
+local function archiveStats(raw)
+	if raw == nil then return nil, true end
+	if type(raw) ~= "table" or raw.SchemaVersion ~= 1 then return nil, false end
+	local fields = { "PlaySeconds", "NightsSurvived", "BiomeShifts", "BiomeVisits", "UniqueBiomes",
+		"MonsterDefeats", "ObjectivesCompleted", "StructuresStanding", "CrewDeaths", "CrewRevives", "CampaignTier" }
+	for _, field in ipairs(fields) do if not nonnegativeInteger(raw[field]) then return nil, false end end
+	if raw.CampaignTier < 1 or raw.CampaignTier > 8 or raw.UniqueBiomes > #Biomes.Order
+		or raw.BiomeVisits < raw.UniqueBiomes then return nil, false end
+	if type(raw.VisitedBiomes) ~= "table" or #raw.VisitedBiomes ~= raw.UniqueBiomes then return nil, false end
+	local seenBiomes, visitedCount = {}, 0
+	for index, biomeId in pairs(raw.VisitedBiomes) do
+		if type(index) ~= "number" or index % 1 ~= 0 or index < 1 or index > #raw.VisitedBiomes
+			or type(biomeId) ~= "string" or not Biomes.Biomes[biomeId] or seenBiomes[biomeId] then return nil, false end
+		seenBiomes[biomeId] = true; visitedCount += 1
+	end
+	if visitedCount ~= #raw.VisitedBiomes or type(raw.PlayerRecords) ~= "table" or #raw.PlayerRecords > Config.MaxRosterSize then return nil, false end
+	local seenPlayers, playerCount = {}, 0
+	for index, record in pairs(raw.PlayerRecords) do
+		if type(index) ~= "number" or index % 1 ~= 0 or index < 1 or index > #raw.PlayerRecords or type(record) ~= "table"
+			or not validUserId(record.UserId) or seenPlayers[record.UserId] then return nil, false end
+		for _, field in ipairs({ "SurvivedSeconds", "Deaths", "Revives", "MonsterDefeats" }) do
+			if not nonnegativeInteger(record[field]) then return nil, false end
+		end
+		seenPlayers[record.UserId] = true; playerCount += 1
+	end
+	if playerCount ~= #raw.PlayerRecords then return nil, false end
+	return Util.DeepCopy(raw), true
+end
+
 local function manifestData(raw)
 	if type(raw) ~= "table" or raw.SchemaVersion ~= Config.SchemaVersion or not validId(raw.WorldId)
 		or raw.GameplayRulesVersion ~= 2 or raw.ContentRelease ~= 2
@@ -91,10 +122,13 @@ local function manifestData(raw)
 		or (raw.ArchiveElapsed ~= nil and (type(raw.ArchiveElapsed) ~= "number" or raw.ArchiveElapsed ~= raw.ArchiveElapsed or raw.ArchiveElapsed < 0)) then return nil end
 	if raw.State ~= "Reserving" and raw.State ~= "Reserved" and raw.State ~= "Committing"
 		and raw.State ~= "Committed" and raw.State ~= "Aborting" and raw.State ~= "Aborted" then return nil end
+	local stats, statsValid = archiveStats(raw.ArchiveStats)
+	if not statsValid then return nil end
 	local owners = rosterIds(raw.OwnerIds)
 	if not owners or not sameRoster(owners, raw.OwnerIds) then return nil end
 	for _, id in ipairs(owners) do if not validId(raw.SlotIds[tostring(id)]) then return nil end end
-	return Util.DeepCopy(raw)
+	local result = Util.DeepCopy(raw); result.ArchiveStats = stats
+	return result
 end
 local function slotCount(slots)
 	local count = 0
@@ -322,7 +356,7 @@ function Service:List(player)
 				Id = slot.Id, WorldId = slot.WorldId, Name = slot.Name, CreatedAt = slot.CreatedAt,
 				UpdatedAt = math.max(slot.UpdatedAt, manifest.SavedAt or 0), SnapshotRevision = manifest.SnapshotRevision,
 				OwnerCount = #manifest.OwnerIds, Crew = crewSummary(manifest.OwnerIds), WorldType = manifest.WorldType or "Survival",
-				Biome = manifest.ArchiveBiome, Elapsed = manifest.ArchiveElapsed,
+				Biome = manifest.ArchiveBiome, Elapsed = manifest.ArchiveElapsed, Stats = Util.DeepCopy(manifest.ArchiveStats),
 				Status = manifest.WorldStatus or (manifest.SnapshotRevision > 0 and "Saved" or "AwaitingSnapshot"),
 			})
 		elseif slot.State == "Pending" and (manifest.State == "Aborting" or manifest.State == "Aborted") then
@@ -571,6 +605,8 @@ function Service:UpdateManifest(record)
 		data.WorldType = record.WorldType == "Creative" and "Creative" or "Survival"
 		if type(record.ArchiveBiome) == "string" then data.ArchiveBiome = record.ArchiveBiome end
 		if type(record.ArchiveElapsed) == "number" and record.ArchiveElapsed >= 0 then data.ArchiveElapsed = record.ArchiveElapsed end
+		local stats, statsValid = archiveStats(record.ArchiveStats)
+		if statsValid and stats then data.ArchiveStats = stats end
 		data.WorldStatus, data.SavedAt = record.Ended and "Ended" or record.Phase, record.SavedAt or data.SavedAt or data.CommittedAt
 		return true
 	end)

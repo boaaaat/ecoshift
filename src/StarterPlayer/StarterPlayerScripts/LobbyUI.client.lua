@@ -516,6 +516,16 @@ local function renderMemberMenu()
 	menu.Visible = false; Theme.CaptureCursor(menu); Theme.AnimatePanel(menu); menu.Visible = true
 end
 
+local function formatPlaytime(seconds, compact)
+	seconds = math.max(0, math.floor(tonumber(seconds) or 0))
+	local hours, minutes, remaining = math.floor(seconds / 3600), math.floor(seconds / 60) % 60, seconds % 60
+	if compact then
+		if hours > 0 then return string.format("%dh %02dm", hours, minutes) end
+		return string.format("%dm %02ds", minutes, remaining)
+	end
+	return string.format("%d:%02d:%02d", hours, minutes, remaining)
+end
+
 local function renderWorldInfo()
 	if not selectedWorldId or page ~= "Saves" then return end
 	local world
@@ -528,38 +538,88 @@ local function renderWorldInfo()
 	overlay.ZIndex = 20; overlay.Parent = panel
 	Theme.Bind(overlay, "BackgroundColor3", "Night"); Theme.Corner(overlay, 10)
 	overlay.Activated:Connect(closeMenu); worldOverlay = overlay
-	local width = math.min(650, math.max(340, panel.AbsoluteSize.X - 24))
-	local columns = width >= 560 and 3 or 2
+	local width = math.min(780, math.max(408, panel.AbsoluteSize.X - 16))
+	local columns = 2
 	local crew = world.Crew or {}
 	local rows = math.max(1, math.ceil(#crew / columns))
-	local height = math.min(panel.AbsoluteSize.Y - 20, 180 + rows * 76)
-	local menu = box(overlay, "WorldInfo", 0, 0, width, height)
+	local stats = type(world.Stats) == "table" and world.Stats or nil
+	local statColumns = width >= 520 and 3 or 2
+	local statRows = math.ceil(9 / statColumns)
+	local crewTop, crewHeight = 104, 78
+	local statsTop = crewTop + rows * (crewHeight + 8) + 36
+	local recordsBottom = statsTop + statRows * 68
+	local contentHeight = recordsBottom + 100
+	local height = math.min(panel.AbsoluteSize.Y - 16, math.max(510, contentHeight))
+	local menu
+	if contentHeight > height then
+		menu = Instance.new("ScrollingFrame")
+		menu.Name = "WorldInfo"; menu.Position = UDim2.fromOffset(0, 0); menu.Size = UDim2.fromOffset(width, height)
+		menu.CanvasSize = UDim2.fromOffset(0, contentHeight); menu.ScrollBarThickness = 5; menu.BorderSizePixel = 0
+		menu.Parent = overlay; Theme.Panel(menu); Theme.Bind(menu, "ScrollBarImageColor3", "Moss")
+	else
+		menu = box(overlay, "WorldInfo", 0, 0, width, height)
+	end
 	menu.AnchorPoint = Vector2.new(.5, .5); menu.Position = UDim2.fromScale(.5, .5); menu.Active = true
-	label(menu, "WORLD CREW / INFO", 18, 14, width - 82, 30, 21, "Text", true)
+	menu.ClipsDescendants = true
+	label(menu, "WORLD CREW / INFO", 22, 15, width - 88, 32, 23, "Text", true)
 	button(menu, "×", width - 56, 8, 42, 42, closeMenu).TextSize = 25
 	local typeName = world.WorldType == "Creative" and "CREATIVE WORLD" or "SURVIVAL WORLD"
-	label(menu, (world.Name or "Expedition") .. "  ·  " .. typeName, 18, 48, width - 36, 24, 15, "Amber", true)
+	local biome = type(world.Biome) == "string" and Biomes.Biomes[world.Biome] or nil
+	label(menu, (world.Name or "Expedition") .. "  ·  " .. typeName .. (biome and ("  ·  " .. biome.DisplayName) or ""),
+		22, 50, width - 44, 25, 16, "Amber", true)
+	label(menu, "ORIGINAL CREW", 22, 80, width - 44, 20, 12, "TextMuted", true)
+	local playerRecords = {}
+	for _, record in ipairs(stats and stats.PlayerRecords or {}) do playerRecords[record.UserId] = record end
 	local cellWidth = (width - 36 - (columns - 1) * 8) / columns
 	for index, member in ipairs(crew) do
 		local column, row = (index - 1) % columns, math.floor((index - 1) / columns)
-		local card = box(menu, "WorldCrew" .. index, 18 + column * (cellWidth + 8), 80 + row * 76, cellWidth, 68)
-		portrait(card, member.UserId, 6, 6, 56)
-		local display = label(card, member.DisplayName or member.Name or "Explorer", 68, 9, cellWidth - 74, 22, 14, "Text", true)
+		local card = box(menu, "WorldCrew" .. index, 18 + column * (cellWidth + 8), crewTop + row * (crewHeight + 8), cellWidth, crewHeight)
+		Theme.Bind(card, "BackgroundColor3", index % 2 == 0 and "SlotEmpty" or "SlotFilled")
+		portrait(card, member.UserId, 8, 10, 58)
+		local display = label(card, member.DisplayName or member.Name or "Explorer", 74, 7, cellWidth - 82, 22, 14, "Text", true)
 		display.TextTruncate = Enum.TextTruncate.AtEnd
-		local username = label(card, "@" .. (member.Name or tostring(member.UserId)), 68, 34, cellWidth - 74, 20, 12, "TextMuted")
+		local username = label(card, "@" .. (member.Name or tostring(member.UserId)), 74, 28, cellWidth - 82, 18, 11, "TextMuted")
 		username.TextTruncate = Enum.TextTruncate.AtEnd
+		local record = playerRecords[member.UserId]
+		local recordText = record and string.format("%s alive  ·  %d defeated  ·  %d downs  ·  %d revives",
+			formatPlaytime(record.SurvivedSeconds, true), record.MonsterDefeats or 0, record.Deaths or 0, record.Revives or 0)
+			or "EXPEDITION RECORD PENDING"
+		local line = label(card, recordText, 74, 49, cellWidth - 82, 20, 11, record and "Success" or "TextMuted")
+		line.TextTruncate = Enum.TextTruncate.AtEnd
 	end
-	if #crew == 0 then label(menu, tostring(world.OwnerCount or 1) .. " original crew", 18, 94, width - 36, 28, 15, "TextMuted") end
-	local detailsY = 88 + rows * 76
+	if #crew == 0 then label(menu, tostring(world.OwnerCount or 1) .. " explorers", 22, crewTop + 20, width - 44, 28, 15, "TextMuted") end
+	label(menu, "EXPEDITION RECORD", 22, statsTop - 28, width - 44, 20, 12, "TextMuted", true)
+	local unknown = "—"
+	local recordCards = {
+		{"PLAY TIME", formatPlaytime(stats and stats.PlaySeconds or world.Elapsed, false), "Amber"},
+		{"NIGHTS SURVIVED", stats and tostring(stats.NightsSurvived) or unknown, "Text"},
+		{"BIOMES VISITED", stats and string.format("%d / %d", stats.UniqueBiomes or 0, #Biomes.Order) or unknown, "Success"},
+		{"BIOME SHIFTS", stats and tostring(stats.BiomeShifts) or unknown, "Text"},
+		{"CREATURES DEFEATED", stats and tostring(stats.MonsterDefeats) or unknown, "Text"},
+		{"OBJECTIVES FINISHED", stats and tostring(stats.ObjectivesCompleted) or unknown, "Text"},
+		{"CAMPAIGN TIER", stats and string.format("%d / 8", stats.CampaignTier or 1) or unknown, "Amber"},
+		{"STRUCTURES STANDING", stats and tostring(stats.StructuresStanding) or unknown, "Text"},
+		{"DOWNS / REVIVES", stats and string.format("%d / %d", stats.CrewDeaths or 0, stats.CrewRevives or 0) or unknown, "Text"},
+	}
+	local statGap = 8
+	local statWidth = (width - 44 - (statColumns - 1) * statGap) / statColumns
+	for index, entry in ipairs(recordCards) do
+		local column, row = (index - 1) % statColumns, math.floor((index - 1) / statColumns)
+		local card = box(menu, "Record" .. index, 22 + column * (statWidth + statGap), statsTop + row * 68, statWidth, 60)
+		Theme.Bind(card, "BackgroundColor3", "SlotEmpty")
+		label(card, entry[1], 12, 7, statWidth - 24, 17, 10, "TextMuted", true).TextTruncate = Enum.TextTruncate.AtEnd
+		label(card, entry[2], 12, 25, statWidth - 24, 27, 18, entry[3], true).TextTruncate = Enum.TextTruncate.AtEnd
+	end
+	local visited = {}
+	for _, biomeId in ipairs(stats and stats.VisitedBiomes or {}) do
+		local data = Biomes.Biomes[biomeId]
+		if data then table.insert(visited, data.DisplayName) end
+	end
+	local visitedText = #visited > 0 and table.concat(visited, "  ·  ") or (biome and biome.DisplayName or "No biome visits recorded yet")
+	label(menu, "VISITED  " .. visitedText, 22, recordsBottom + 7, width - 44, 28, 12, "TextMuted", true).TextTruncate = Enum.TextTruncate.AtEnd
 	local created = os.date("!%Y-%m-%d", tonumber(world.CreatedAt) or 0)
 	local updated = os.date("!%Y-%m-%d %H:%M UTC", tonumber(world.UpdatedAt) or 0)
-	local status = world.Status == "AwaitingSnapshot" and "Preparing first save" or "World saved"
-	local biome = type(world.Biome) == "string" and Biomes.Biomes[world.Biome] or nil
-	local elapsed = math.max(0, math.floor(tonumber(world.Elapsed) or 0))
-	local duration = string.format("%d:%02d:%02d", math.floor(elapsed / 3600), math.floor(elapsed / 60) % 60, elapsed % 60)
-	local details = label(menu, string.format("%d original crew  ·  %s  ·  %s  ·  %s\nCreated %s  ·  Last saved %s", world.OwnerCount or #crew,
-		status, biome and biome.DisplayName or "World preparing", duration, created, updated), 18, detailsY, width - 36, 54, 14, "TextMuted")
-	details.TextWrapped = true; details.TextTruncate = Enum.TextTruncate.None
+	label(menu, string.format("CREATED %s  ·  UPDATED %s", created, updated), 22, recordsBottom + 40, width - 44, 22, 11, "TextMuted")
 	Theme.CaptureCursor(menu); Theme.AnimatePanel(menu)
 end
 
@@ -676,7 +736,12 @@ local function renderContents()
 					else removalId, removalUntil = world.Id, os.clock() + 12; notify("Remove your named copy? Other crew copies stay. Crew resume can recreate yours in a free slot.", "Amber"); render() end
 				end)
 				table.insert(controls, {Button = remove, Text = remove.Text, Waiting = "REMOVING…", Action = "RemoveWorld", Key = tostring(world.Id)})
-				label(card, (world.WorldType == "Creative" and "CREATIVE · " or "") .. (world.Summary or (tostring(world.OwnerCount or 6) .. " original crew · " .. (world.Status == "AwaitingSnapshot" and "Preparing first save" or "World saved"))), 16, 74, 535, 34, 15, "TextMuted")
+				local summary = {world.WorldType == "Creative" and "CREATIVE" or "SURVIVAL", tostring(world.OwnerCount or 6) .. " EXPLORERS"}
+				local currentBiome = type(world.Biome) == "string" and Biomes.Biomes[world.Biome]
+				if currentBiome then table.insert(summary, string.upper(currentBiome.DisplayName)) end
+				if world.Elapsed ~= nil then table.insert(summary, string.upper(formatPlaytime(world.Elapsed, true))) end
+				if world.Stats then table.insert(summary, "TIER " .. tostring(world.Stats.CampaignTier or 1)) end
+				label(card, table.concat(summary, "  ·  "), 16, 74, 535, 34, 15, "TextMuted")
 				actionButton(card, "RESUME", "PREPARING…", "ResumeWorld", {Id = world.Id}, 586, 72, 194, 38, true)
 			else label(card, "EMPTY SLOT  /  " .. index, 16, 44, 764, 32, 16, "TextMuted", true) end
 		end

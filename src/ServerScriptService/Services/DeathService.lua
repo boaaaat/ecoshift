@@ -184,7 +184,7 @@ function DeathService:Init()
 	
 	local function trackPlayer(player)
 		self._runStats[player.UserId] = self._runStats[player.UserId] or {
-			Name = player.Name, DisplayName = player.DisplayName, Deaths = 0, Revives = 0,
+			Name = player.Name, DisplayName = player.DisplayName, Deaths = 0, Revives = 0, MonsterDefeats = 0,
 		}
 	end
 	Players.PlayerAdded:Connect(trackPlayer)
@@ -215,7 +215,8 @@ function DeathService:Init()
 		end
 		table.sort(results.VisitedBiomes)
 		for userId, stats in pairs(self._runStats) do
-			table.insert(results.Players, { UserId = userId, Name = stats.Name, DisplayName = stats.DisplayName, Deaths = stats.Deaths, Revives = stats.Revives })
+			table.insert(results.Players, { UserId = userId, Name = stats.Name, DisplayName = stats.DisplayName,
+				Deaths = stats.Deaths, Revives = stats.Revives, MonsterDefeats = stats.MonsterDefeats or 0 })
 		end
 		table.sort(results.Players, function(a, b) return a.Name < b.Name end)
 		self._results = results
@@ -899,13 +900,23 @@ function DeathService:CaptureRunState()
 	return state
 end
 
+function DeathService:RecordMonsterDefeat(player)
+	if typeof(player) ~= "Instance" or not player:IsA("Player") then return false end
+	local stats = self._runStats[player.UserId]
+	if not stats then return false end
+	stats.MonsterDefeats = (stats.MonsterDefeats or 0) + 1
+	return true
+end
+
 function DeathService:RestoreRunState(state)
 	local codec, restored = require(script.Parent.WorldSnapshotCodec), {}
 	codec.BoundedCount(state, 100)
 	for userId, stats in pairs(state) do
 		local id = tonumber(userId)
 		assert(id and id % 1 == 0, "Invalid run participant")
-		restored[id] = { Name = codec.Text(stats.Name, 64), DisplayName = codec.Text(stats.DisplayName, 64), Deaths = codec.Number(stats.Deaths, 0, 1e8), Revives = codec.Number(stats.Revives, 0, 1e8) }
+		restored[id] = { Name = codec.Text(stats.Name, 64), DisplayName = codec.Text(stats.DisplayName, 64),
+			Deaths = codec.Number(stats.Deaths, 0, 1e8), Revives = codec.Number(stats.Revives, 0, 1e8),
+			MonsterDefeats = codec.Number(stats.MonsterDefeats or 0, 0, 1e8) }
 	end
 	self._runStats = restored
 end

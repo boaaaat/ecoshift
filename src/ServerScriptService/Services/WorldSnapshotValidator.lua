@@ -63,6 +63,24 @@ function Validator.Validate(snapshot, expectedRoster)
 			"RunStats", "Enemies", "Auxiliary", "Exploration", "Players"}) do
 			assert(type(snapshot[key]) == "table", "World section missing: " .. key)
 		end
+		assert(snapshot.DayNight.NightsSurvived == nil or (type(snapshot.DayNight.NightsSurvived) == "number"
+			and snapshot.DayNight.NightsSurvived == snapshot.DayNight.NightsSurvived and snapshot.DayNight.NightsSurvived >= 0
+			and snapshot.DayNight.NightsSurvived <= 1e8 and snapshot.DayNight.NightsSurvived % 1 == 0), "Saved night count is invalid")
+		if snapshot.Biome.Encounters ~= nil then
+			assert(type(snapshot.Biome.Encounters) == "table", "Saved biome encounters are invalid")
+			local encounters = 0
+			for biomeId, visits in pairs(snapshot.Biome.Encounters) do
+				assert(type(biomeId) == "string" and #biomeId > 0 and type(visits) == "number" and visits == visits
+					and visits > 0 and visits <= 1e8 and visits % 1 == 0, "Saved biome encounter is invalid")
+				encounters += 1
+			end
+			assert(encounters <= 16, "Saved biome encounter count is invalid")
+		end
+		for userId, record in pairs(snapshot.RunStats) do
+			assert(type(userId) == "string" and tonumber(userId) and type(record) == "table", "Saved crew record is invalid")
+			assert(record.MonsterDefeats == nil or (type(record.MonsterDefeats) == "number" and record.MonsterDefeats == record.MonsterDefeats
+				and record.MonsterDefeats >= 0 and record.MonsterDefeats <= 1e8 and record.MonsterDefeats % 1 == 0), "Saved defeat count is invalid")
+		end
 		arrayShape(snapshot.Drops, 0, 3000)
 		for _, drop in ipairs(snapshot.Drops) do
 			assert(type(drop) == "table" and type(drop.Id) == "string" and #drop.Id > 0, "Saved ground item is invalid")

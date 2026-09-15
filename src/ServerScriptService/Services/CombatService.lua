@@ -228,6 +228,14 @@ function CombatService:ApplyDamage(attacker, target, amount, dmgType)
 	end
 
 	if tgtPlr then require(script.Parent.GearService):AfterMonsterDamage(tgtPlr) end
+	if attackerPlayer and not tgtPlr and CollectionService:HasTag(target, "Monster")
+		and not target:GetAttribute("DefeatRecorded") then
+		local remaining = healthValue:IsA("Humanoid") and healthValue.Health or healthValue.Value
+		if remaining <= 0 then
+			target:SetAttribute("DefeatRecorded", true)
+			require(script.Parent.DeathService):RecordMonsterDefeat(attackerPlayer)
+		end
+	end
 	-- Combat feedback (damage numbers + health bar) for non-player targets
 	if not tgtPlr then
 		ensureRemotes(self)

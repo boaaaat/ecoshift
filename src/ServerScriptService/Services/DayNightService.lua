@@ -12,6 +12,7 @@ local DayNightService = {}
 DayNightService._remotesFolder = nil
 DayNightService._remote = nil
 DayNightService._currentTime = 6 -- Start at 6 AM (sunrise)
+DayNightService._nightsSurvived = 0
 DayNightService._paused = false
 DayNightService._callbacks = {}
 
@@ -212,7 +213,13 @@ function DayNightService:_tick(dt)
 	local hoursPerSecond = 24 / cycleDuration
 	local oldPhase = self:GetPhase()
 	
-	self._currentTime = (self._currentTime + hoursPerSecond * dt) % 24
+	local advancedHours = hoursPerSecond * dt
+	-- A night is completed when the clock crosses 5 AM. Counting the boundary
+	-- directly also handles an unusually long server frame without losing nights.
+	local completedNights = math.floor((self._currentTime + advancedHours - PHASES.Night.finish) / 24)
+		- math.floor((self._currentTime - PHASES.Night.finish) / 24)
+	if completedNights > 0 then self._nightsSurvived += completedNights end
+	self._currentTime = (self._currentTime + advancedHours) % 24
 	self:_updateLighting()
 	
 	local newPhase = self:GetPhase()
@@ -273,11 +280,23 @@ function DayNightService:Init()
 end
 
 function DayNightService:CaptureWorldState()
-	return { Time = self._currentTime, Paused = self._paused }
+	return { Time = self._currentTime, Paused = self._paused, NightsSurvived = self._nightsSurvived }
 end
 
-function DayNightService:RestoreWorldState(state)
-	self._currentTime = require(script.Parent.WorldSnapshotCodec).Number(state.Time, 0, 24) % 24
+function DayNightService:RestoreWorldState(state, elapsed)
+	local codec = require(script.Parent.WorldSnapshotCodec)
+	self._currentTime = codec.Number(state.Time, 0, 24) % 24
+	if state.NightsSurvived == nil then
+		-- Saves written before night records existed can recover the ordinary
+		-- cycle count from active expedition time. Creative time jumps were not
+		-- tracked historically, so zero is the only safe fallback for them.
+		local cycle = getConfig().CycleDurationSeconds or 600
+		local active = workspace:GetAttribute("WorldType") == "Creative" and 0 or codec.Number(elapsed or 0, 0, 1e9)
+		local firstNight = cycle * 23 / 24
+		self._nightsSurvived = active >= firstNight and 1 + math.floor((active - firstNight) / cycle) or 0
+	else
+		self._nightsSurvived = codec.Number(state.NightsSurvived, 0, 1e8)
+	end
 	self._paused, self._restored = state.Paused == true, true
 	self:_updateLighting()
 end

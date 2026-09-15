@@ -84,14 +84,16 @@ function BiomeService:SetCurrent(name, reason)
 	local wasStarted = self._current ~= nil
 	local forecast = name == self._upcomingBiome and self._upcomingWeather or nil
 	self._current, self._data = name, BiomeConfig.BIOMES[name]
- do
-  self._visits = self._visits or {}
-  self._previousVisits = self._visits[name] or 0
-  self._arrivalTier = ReplicatedStorage:GetAttribute("CampaignTier") or 1
-  self._visitActive, self._visitCredited = 0, false
-  ReplicatedStorage:SetAttribute("CurrentBiome",name)
-  ReplicatedStorage:SetAttribute("BiomeVisitQualified",false)
- end
+	do
+		self._visits = self._visits or {}
+		self._encounters = self._encounters or {}
+		self._encounters[name] = (self._encounters[name] or 0) + 1
+		self._previousVisits = self._visits[name] or 0
+		self._arrivalTier = ReplicatedStorage:GetAttribute("CampaignTier") or 1
+		self._visitActive, self._visitCredited = 0, false
+		ReplicatedStorage:SetAttribute("CurrentBiome",name)
+		ReplicatedStorage:SetAttribute("BiomeVisitQualified",false)
+	end
 	self._weather = forecast or weatherFor(name, self:GetElapsed())
 	self._lastChangedAt = os.clock()
 	self._nextWeatherChange = self._data.WeatherCycle and (os.clock() + (self._data.WeatherCycleSeconds or 60)) or nil
@@ -178,7 +180,7 @@ end
 
 function BiomeService:CaptureWorldState()
 	local timing, now = self:GetTiming(), self._pausedAt or os.clock()
-	return { ArrivalTier=self._arrivalTier or 1, Visits = Util.DeepCopy(self._visits or {}), PreviousVisits = self._previousVisits or 0, VisitActive = self._visitActive or 0, VisitCredited = self._visitCredited == true, Biome = self._current, Weather = Util.DeepCopy(self._weather), Elapsed = self:GetElapsed(), Remaining = timing.Remaining,
+	return { ArrivalTier=self._arrivalTier or 1, Visits = Util.DeepCopy(self._visits or {}), Encounters = Util.DeepCopy(self._encounters or {}), PreviousVisits = self._previousVisits or 0, VisitActive = self._visitActive or 0, VisitCredited = self._visitCredited == true, Biome = self._current, Weather = Util.DeepCopy(self._weather), Elapsed = self:GetElapsed(), Remaining = timing.Remaining,
 		Duration = self._duration, ShiftCount = self._shiftCount, Version = self._version, UpcomingBiome = self._upcomingBiome,
 		UpcomingWeather = Util.DeepCopy(self._upcomingWeather), Delayed = self._delayed, Selected = self._selected,
 		SinceChange = math.max(0, now - self._lastChangedAt), WeatherRemaining = self._nextWeatherChange and math.max(0, self._nextWeatherChange - now) or false }
@@ -189,7 +191,9 @@ function BiomeService:RestoreWorldState(state)
 	assert(BiomeConfig.BIOMES[state.Biome] and BiomeConfig.BIOMES[state.UpcomingBiome], "Saved biome is unavailable")
 	local now = os.clock()
  self._arrivalTier = Codec.Number(state.ArrivalTier or 1,1,8)
- self._visits = Codec.Copy(state.Visits or {})
+	self._visits = Codec.Copy(state.Visits or {})
+	self._encounters = Codec.Copy(state.Encounters or state.Visits or {})
+	if (self._encounters[state.Biome] or 0) < 1 then self._encounters[state.Biome] = 1 end
  self._previousVisits = Codec.Number(state.PreviousVisits or 0,0,1e8)
  self._visitActive = Codec.Number(state.VisitActive or 0,0,120)
  self._visitCredited = state.VisitCredited == true
@@ -214,6 +218,7 @@ end
 function BiomeService:GetPreviousVisits() return self._previousVisits or 0 end
 function BiomeService:GetVisitSerial() return self._shiftCount or 0 end
 function BiomeService:GetVisits() return table.clone(self._visits or {}) end
+function BiomeService:GetEncounters() return table.clone(self._encounters or {}) end
 function BiomeService:GetMaturity()
  local tier = self._arrivalTier or 1
  local cap = tier <= 2 and .65 or tier <= 4 and .8 or 1
