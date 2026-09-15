@@ -3,12 +3,14 @@
 local DataStoreService = game:GetService("DataStoreService")
 local HttpService = game:GetService("HttpService")
 local TextService = game:GetService("TextService")
+local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local Config = require(RS.Shared.WorldSaveConfig)
 local Util = require(RS.Shared.Util)
 local archives = DataStoreService:GetDataStore(Config.ArchiveStore)
 local manifests = DataStoreService:GetDataStore(Config.ManifestStore)
 local Service = {}
+local identityCache = {}
 local fresh = Instance.new("DataStoreGetOptions")
 fresh.UseCache = false
 
@@ -37,6 +39,23 @@ local function sameRoster(a, b)
 	if #a ~= #b then return false end
 	for i, id in ipairs(a) do if b[i] ~= id then return false end end
 	return true
+end
+local function crewSummary(ownerIds)
+	local crew = {}
+	for _, userId in ipairs(ownerIds) do
+		local online = Players:GetPlayerByUserId(userId)
+		local cached = identityCache[userId]
+		if online then
+			cached = { UserId = userId, Name = online.Name, DisplayName = online.DisplayName }
+			identityCache[userId] = cached
+		elseif not cached then
+			local ok, username = pcall(Players.GetNameFromUserIdAsync, Players, userId)
+			cached = { UserId = userId, Name = ok and username or ("Explorer " .. tostring(userId)), DisplayName = ok and username or nil }
+			identityCache[userId] = cached
+		end
+		table.insert(crew, Util.DeepCopy(cached))
+	end
+	return crew
 end
 local function call(callback)
 	local ok, value
@@ -67,7 +86,9 @@ local function manifestData(raw)
 		or raw.GameplayRulesVersion ~= 2 or raw.ContentRelease ~= 2
 		or not validId(raw.Token) or type(raw.OwnerIds) ~= "table" or type(raw.SlotIds) ~= "table"
 		or not nonnegativeInteger(raw.Revision) or not nonnegativeInteger(raw.SnapshotRevision)
-		or not nonnegativeInteger(raw.CreatedAt) then return nil end
+		or not nonnegativeInteger(raw.CreatedAt)
+		or (raw.ArchiveBiome ~= nil and type(raw.ArchiveBiome) ~= "string")
+		or (raw.ArchiveElapsed ~= nil and (type(raw.ArchiveElapsed) ~= "number" or raw.ArchiveElapsed ~= raw.ArchiveElapsed or raw.ArchiveElapsed < 0)) then return nil end
 	if raw.State ~= "Reserving" and raw.State ~= "Reserved" and raw.State ~= "Committing"
 		and raw.State ~= "Committed" and raw.State ~= "Aborting" and raw.State ~= "Aborted" then return nil end
 	local owners = rosterIds(raw.OwnerIds)
@@ -300,7 +321,9 @@ function Service:List(player)
 			table.insert(result, {
 				Id = slot.Id, WorldId = slot.WorldId, Name = slot.Name, CreatedAt = slot.CreatedAt,
 				UpdatedAt = math.max(slot.UpdatedAt, manifest.SavedAt or 0), SnapshotRevision = manifest.SnapshotRevision,
-				OwnerCount = #manifest.OwnerIds, WorldType = manifest.WorldType or "Survival", Status = manifest.WorldStatus or (manifest.SnapshotRevision > 0 and "Saved" or "AwaitingSnapshot"),
+				OwnerCount = #manifest.OwnerIds, Crew = crewSummary(manifest.OwnerIds), WorldType = manifest.WorldType or "Survival",
+				Biome = manifest.ArchiveBiome, Elapsed = manifest.ArchiveElapsed,
+				Status = manifest.WorldStatus or (manifest.SnapshotRevision > 0 and "Saved" or "AwaitingSnapshot"),
 			})
 		elseif slot.State == "Pending" and (manifest.State == "Aborting" or manifest.State == "Aborted") then
 			-- Recover compensation interrupted by a crash or a late in-flight reservation.
@@ -546,6 +569,8 @@ function Service:UpdateManifest(record)
 		if data.GameplayRulesVersion ~= 2 or record.GameplayRulesVersion ~= 2 or record.ContentRelease ~= 2 then return false, "WorldRulesMismatch" end
 		data.GameplayRulesVersion, data.ContentRelease = 2, 2
 		data.WorldType = record.WorldType == "Creative" and "Creative" or "Survival"
+		if type(record.ArchiveBiome) == "string" then data.ArchiveBiome = record.ArchiveBiome end
+		if type(record.ArchiveElapsed) == "number" and record.ArchiveElapsed >= 0 then data.ArchiveElapsed = record.ArchiveElapsed end
 		data.WorldStatus, data.SavedAt = record.Ended and "Ended" or record.Phase, record.SavedAt or data.SavedAt or data.CommittedAt
 		return true
 	end)

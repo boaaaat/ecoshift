@@ -50,6 +50,11 @@ function WorldGenController:_generateOverhaul(biomeName)
     table.sort(ordered,function(a,b)return a.Player.UserId<b.Player.UserId end)
     local ignored={};for _,record in ipairs(ordered) do if record.Entry.Corpse then table.insert(ignored,record.Entry.Corpse) end end
     local arrivals=self._hasGenerated and world:GetCampArrivalPositions(#ordered,ignored) or nil
+    local function aboveLand(position)
+     local minimumY=world:GetHeight(position.X,position.Z)+3.2
+     if position.Y>=minimumY then return position end
+     return Vector3.new(position.X,minimumY,position.Z)
+    end
     for index,record in ipairs(ordered) do
      local player,entry=record.Player,record.Entry
      if entry.WasInterior then
@@ -59,11 +64,13 @@ function WorldGenController:_generateOverhaul(biomeName)
      if entry.Root and entry.Root.Parent then
       local safe=arrivals and arrivals[index] or world:SafePosition(entry.Position);world:EnsureArea(safe)
       if not arrivals then safe=world:SafePosition(safe) end
+      safe=aboveLand(safe)
       player.Character:PivotTo(CFrame.new(safe)*player.Character:GetPivot().Rotation)
       entry.Root.AssemblyLinearVelocity=Vector3.zero
      elseif entry.Corpse and entry.Corpse.Parent then
       local safe=arrivals and arrivals[index] or world:SafePosition(entry.Position);world:EnsureArea(safe)
       if not arrivals then safe=world:SafePosition(safe) end
+      safe=aboveLand(safe)
       entry.Corpse:PivotTo(CFrame.new(safe)*entry.Corpse:GetPivot().Rotation)
       entry.Record.deathPosition=safe
      end

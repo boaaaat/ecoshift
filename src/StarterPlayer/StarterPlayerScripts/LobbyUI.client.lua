@@ -6,6 +6,7 @@ local HttpService = game:GetService("HttpService")
 local SocialService = game:GetService("SocialService")
 local Theme = require(RS:WaitForChild("Shared"):WaitForChild("UI"):WaitForChild("UITheme"))
 local ClassOutfitter = require(RS.Shared.UI.ClassOutfitter)
+local Biomes = require(RS.Shared.OverhaulBiomes)
 local Mode = require(RS.Shared.SessionConfig).GetMode()
 local player = Players.LocalPlayer
 local remote = RS:WaitForChild("Remotes"):WaitForChild("Lobby", 60)
@@ -68,6 +69,7 @@ local sectionIds, scrollByPage, nameDrafts, nav = {}, {}, {}, {}
 local submittedNames = {}
 local pending, render, openPicker, queueLabel
 local selectedMemberId, memberOverlay
+local selectedWorldId, worldOverlay
 local worldSetupOpen, worldSetup
 local controls, removalId, removalUntil = {}, nil, 0
 local friends, friendsLoading, friendsError, friendsLoadedAt = {}, false, nil, -math.huge
@@ -154,7 +156,7 @@ panel:GetPropertyChangedSignal("Visible"):Connect(function()
 	end
 end)
 local function navigate(nextPage)
-	selectedMemberId = nil; page = nextPage; render()
+	selectedMemberId, selectedWorldId = nil, nil; page = nextPage; render()
 	if page == "Saves" then refresh("Archive") else refresh("Core") end
 end
 for index, entry in ipairs({{"Party", "01  EXPEDITION CREW"}, {"Classes", "02  CLASS OUTFITTER"}, {"Saves", "03  WORLD ARCHIVE"}}) do
@@ -185,8 +187,9 @@ open.Visible = not panel.Visible
 panel:GetPropertyChangedSignal("Visible"):Connect(function()
 	open.Visible = not panel.Visible
 	if not panel.Visible then
-		selectedMemberId = nil
+		selectedMemberId, selectedWorldId = nil, nil
 		if memberOverlay then memberOverlay:Destroy(); memberOverlay = nil end
+		if worldOverlay then worldOverlay:Destroy(); worldOverlay = nil end
 	end
 end)
 
@@ -512,6 +515,53 @@ local function renderMemberMenu()
 	menu.Visible = false; Theme.CaptureCursor(menu); Theme.AnimatePanel(menu); menu.Visible = true
 end
 
+local function renderWorldInfo()
+	if not selectedWorldId or page ~= "Saves" then return end
+	local world
+	for _, candidate in ipairs(snapshot.Worlds or {}) do if candidate.Id == selectedWorldId then world = candidate; break end end
+	if not world then selectedWorldId = nil; return end
+	local function closeMenu() selectedWorldId = nil; render() end
+	local overlay = Instance.new("TextButton")
+	overlay.Name = "WorldInfoOverlay"; overlay.Text = ""; overlay.AutoButtonColor = false
+	overlay.Size = UDim2.fromScale(1, 1); overlay.BackgroundTransparency = .2; overlay.BorderSizePixel = 0
+	overlay.ZIndex = 20; overlay.Parent = panel
+	Theme.Bind(overlay, "BackgroundColor3", "Night"); Theme.Corner(overlay, 10)
+	overlay.Activated:Connect(closeMenu); worldOverlay = overlay
+	local width = math.min(650, math.max(340, panel.AbsoluteSize.X - 24))
+	local columns = width >= 560 and 3 or 2
+	local crew = world.Crew or {}
+	local rows = math.max(1, math.ceil(#crew / columns))
+	local height = math.min(panel.AbsoluteSize.Y - 20, 180 + rows * 76)
+	local menu = box(overlay, "WorldInfo", 0, 0, width, height)
+	menu.AnchorPoint = Vector2.new(.5, .5); menu.Position = UDim2.fromScale(.5, .5); menu.Active = true
+	label(menu, "WORLD CREW / INFO", 18, 14, width - 82, 30, 21, "Text", true)
+	button(menu, "×", width - 56, 8, 42, 42, closeMenu).TextSize = 25
+	local typeName = world.WorldType == "Creative" and "CREATIVE WORLD" or "SURVIVAL WORLD"
+	label(menu, (world.Name or "Expedition") .. "  ·  " .. typeName, 18, 48, width - 36, 24, 15, "Amber", true)
+	local cellWidth = (width - 36 - (columns - 1) * 8) / columns
+	for index, member in ipairs(crew) do
+		local column, row = (index - 1) % columns, math.floor((index - 1) / columns)
+		local card = box(menu, "WorldCrew" .. index, 18 + column * (cellWidth + 8), 80 + row * 76, cellWidth, 68)
+		portrait(card, member.UserId, 6, 6, 56)
+		local display = label(card, member.DisplayName or member.Name or "Explorer", 68, 9, cellWidth - 74, 22, 14, "Text", true)
+		display.TextTruncate = Enum.TextTruncate.AtEnd
+		local username = label(card, "@" .. (member.Name or tostring(member.UserId)), 68, 34, cellWidth - 74, 20, 12, "TextMuted")
+		username.TextTruncate = Enum.TextTruncate.AtEnd
+	end
+	if #crew == 0 then label(menu, tostring(world.OwnerCount or 1) .. " original crew", 18, 94, width - 36, 28, 15, "TextMuted") end
+	local detailsY = 88 + rows * 76
+	local created = os.date("!%Y-%m-%d", tonumber(world.CreatedAt) or 0)
+	local updated = os.date("!%Y-%m-%d %H:%M UTC", tonumber(world.UpdatedAt) or 0)
+	local status = world.Status == "AwaitingSnapshot" and "Preparing first save" or "World saved"
+	local biome = type(world.Biome) == "string" and Biomes.Biomes[world.Biome] or nil
+	local elapsed = math.max(0, math.floor(tonumber(world.Elapsed) or 0))
+	local duration = string.format("%d:%02d:%02d", math.floor(elapsed / 3600), math.floor(elapsed / 60) % 60, elapsed % 60)
+	local details = label(menu, string.format("%d original crew  ·  %s  ·  %s  ·  %s\nCreated %s  ·  Last saved %s", world.OwnerCount or #crew,
+		status, biome and biome.DisplayName or "World preparing", duration, created, updated), 18, detailsY, width - 36, 54, 14, "TextMuted")
+	details.TextWrapped = true; details.TextTruncate = Enum.TextTruncate.None
+	Theme.CaptureCursor(menu); Theme.AnimatePanel(menu)
+end
+
 -- Compare only visible state; heartbeat timestamps should never rebuild buttons.
 local function visualKey()
 	local party = snapshot.Party or {}
@@ -520,10 +570,12 @@ local function visualKey()
 	return HttpService:JSONEncode({page, snapshot.Currency, snapshot.Classes, party.Id, party.LeaderId, party.RunId, party.WorldType or "Survival",
 		party.Queue and party.Queue.Mode or false, party.Queue and party.Queue.Purpose or false, party.ManagementLocked == true, party.MergedCrew == true, selectedMemberId or false,
 		party.Queue ~= nil and party.Queue ~= false, party.QueueStartedAt, crew, liveInvitations(), snapshot.Rejoin, page == "Saves" and snapshot.Worlds or false,
+		selectedWorldId or false,
 		page == "Saves" and snapshot.ArchiveAvailable, page == "Invite" and snapshot.InviteDirectory or false})
 end
 local function renderContents()
 	if memberOverlay then memberOverlay:Destroy(); memberOverlay = nil end
+	if worldOverlay then worldOverlay:Destroy(); worldOverlay = nil end
 	memberNote = nil
 	scrollByPage[lastPage] = content.CanvasPosition
 	for _, child in ipairs(content:GetChildren()) do child:Destroy() end
@@ -612,9 +664,10 @@ local function renderContents()
 			local card = box(content, "Save" .. index, 0, 84 + (index - 1) * 140, 796, 126)
 			if world then
 				local name = textbox(card, world, 16, 16, 352)
-				-- Read the current draft when clicked, rather than the render-time name.
-				local renameButton = button(card, "RENAME", 382, 16, 164, 42, function() send("RenameWorld", {Id = world.Id, Name = name.Text}, "Saving world name…") end)
-				table.insert(controls, {Button = renameButton, Text = "RENAME", Waiting = "SAVING…", Action = "RenameWorld", Key = tostring(world.Id)})
+				name.FocusLost:Connect(function(enterPressed)
+					if enterPressed and name.Text ~= (world.Name or "Expedition") then send("RenameWorld", {Id = world.Id, Name = name.Text}, "Saving world name…") end
+				end)
+				button(card, "CREW / INFO", 382, 16, 164, 42, function() selectedWorldId = world.Id; render() end)
 				local confirming = removalId == world.Id and os.clock() < removalUntil
 				local remove = button(card, confirming and "CONFIRM REMOVE" or "REMOVE MY COPY", 560, 16, 220, 42, function()
 					if pending then notify("Your previous action is still finishing…", "Amber"); return end
@@ -627,7 +680,7 @@ local function renderContents()
 			else label(card, "EMPTY SLOT  /  " .. index, 16, 44, 764, 32, 16, "TextMuted", true) end
 		end
 	end
-	renderMemberMenu(); applyControls()
+	renderMemberMenu(); renderWorldInfo(); applyControls()
 end
 
 
@@ -758,9 +811,9 @@ local function mobileLists()
 				name.Position=UDim2.fromOffset(8,8);name.Size=UDim2.fromOffset(w-108,44)
 				for _,l in ipairs(c:GetChildren()) do
 					if l:IsA("TextButton") then
-						local rename=l.Name=="RENAMEButton";local resume=l.Name=="RESUMEButton"
-						l.Position=rename and UDim2.fromOffset(w-94,8) or UDim2.fromOffset(resume and (w+6)/2 or 8,96)
-						l.Size=UDim2.fromOffset(rename and 86 or (w-22)/2,44);l.TextSize=13
+						local info=l.Name=="CREWINFOButton";local resume=l.Name=="RESUMEButton"
+						l.Position=info and UDim2.fromOffset(w-94,8) or UDim2.fromOffset(resume and (w+6)/2 or 8,96)
+						l.Size=UDim2.fromOffset(info and 86 or (w-22)/2,44);l.TextSize=13
 					elseif l:IsA("TextLabel") then mobileText(l,8,58,w-16,32,13);l.TextWrapped=true end
 				end
 			else c.Size=UDim2.fromOffset(w,58);for _,l in ipairs(c:GetChildren()) do if l:IsA("TextLabel") then mobileText(l,8,14,w-16,30,14) end end end
@@ -919,6 +972,7 @@ remote.OnClientEvent:Connect(function(action, data)
 end)
 UIS.TextBoxFocusReleased:Connect(function() task.defer(function() if not UIS:GetFocusedTextBox() and visualKey() ~= lastVisual then render() end end) end)
 UIS.InputBegan:Connect(function(input, processed)
+	if not processed and input.KeyCode == Enum.KeyCode.Escape and selectedWorldId then selectedWorldId = nil; render(); return end
 	if not processed and input.KeyCode == Enum.KeyCode.Escape and selectedMemberId then selectedMemberId = nil; render(); return end
 	if not processed and input.KeyCode == Enum.KeyCode.F2 then panel.Visible = not panel.Visible; if panel.Visible then refresh("All") end end
 end)

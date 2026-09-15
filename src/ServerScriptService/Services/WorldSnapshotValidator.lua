@@ -35,6 +35,7 @@ end
 
 local function playerState(state)
 	assert(type(state) == "table", "Player snapshot missing")
+	assert(state.TransformIsRoot == nil or type(state.TransformIsRoot) == "boolean", "Player transform mode invalid")
 	inventory(state.Inventory)
 	assert(type(state.Stats) == "table" and type(state.Stats.Base) == "table", "Player stats missing")
 	assert(type(state.Death) == "table" and type(state.Death.Downed) == "boolean", "Player death state missing")

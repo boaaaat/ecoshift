@@ -30,13 +30,16 @@ function Snapshot:CapturePlayer(player, departingCharacter)
 		CraftRefund = service("CraftingService"):CaptureRefund(player),
 	}
 	if char and char.Parent then
-		state.Transform = Codec.CFrame(char:GetPivot())
+		local root = char:FindFirstChild("HumanoidRootPart")
+		state.Transform = Codec.CFrame(root and root.CFrame or char:GetPivot())
+		state.TransformIsRoot = root ~= nil
 		state.WetStacks = char:GetAttribute("WetStacks") or 0
 	elseif previous and state.Death.Downed ~= true then
 		-- Teleport can remove Character before PlayerRemoving. CharacterRemoving
 		-- normally refreshes this cache first; preserve that last authoritative
 		-- pose and health if the platform delivers the final signals differently.
 		state.Transform = Codec.Copy(previous.Transform)
+		state.TransformIsRoot = previous.TransformIsRoot == true
 		state.WetStacks = previous.WetStacks
 		state.Stats.Health = state.Stats.Health or (previous.Stats and previous.Stats.Health)
 	end
@@ -198,7 +201,25 @@ function Snapshot:RestorePlayer(player)
 		service("StatsService"):RestoreWorldState(player, state.Stats)
 		service("InventoryService"):RestoreWorldState(player, state.Inventory)
 		service("InteriorService"):RestorePlayer(player, state.InteriorId)
-		if state.Transform then char:PivotTo(Codec.ReadCFrame(state.Transform)) end
+		if state.Transform then
+			local transform = Codec.ReadCFrame(state.Transform)
+			local root = char:FindFirstChild("HumanoidRootPart")
+			if not state.InteriorId then
+				local ground = service("OverhaulWorldService"):GetHeight(transform.Position.X, transform.Position.Z) + 3.2
+				if transform.Position.Y < ground then
+					transform = CFrame.new(transform.Position.X, ground, transform.Position.Z) * transform.Rotation
+				end
+			end
+			if state.TransformIsRoot and root then
+				-- Terrain is regenerated from the saved biome seed. Preserve the exact
+				-- X/Z pose, lifting only old or clipped saves that ended below its land.
+				root.CFrame = transform
+			else
+				-- Compatibility with snapshots written before root transforms were tagged.
+				char:PivotTo(transform)
+			end
+			if root then root.AssemblyLinearVelocity, root.AssemblyAngularVelocity = Vector3.zero, Vector3.zero end
+		end
 		char:SetAttribute("WetStacks", Codec.Number(state.WetStacks or 0, 0, 5))
 		service("DeathService"):RestoreWorldState(player, state.Death)
 		service("CraftingService"):RestoreRefund(player, state)

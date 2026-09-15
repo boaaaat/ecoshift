@@ -51,7 +51,8 @@ heldGlow = Instance.new("UIStroke")
 heldGlow.Name, heldGlow.Color, heldGlow.Thickness = "HeldGlow", Theme.Colors.Amber, 2
 heldGlow.Enabled, heldGlow.Parent = false, sprintButton
 local function updateTouchVisibility()
-	sprintButton.Visible = Theme.IsMobile() and not player:GetAttribute("IsDead") and not touchGui.Parent:GetAttribute("MenuCursorOpen") and not touchGui.Parent:GetAttribute("BuildPlacementActive")
+	sprintButton.Visible = Theme.IsMobile() and not player:GetAttribute("IsDead") and not player:GetAttribute("CreativeFlying")
+		and not touchGui.Parent:GetAttribute("MenuCursorOpen") and not touchGui.Parent:GetAttribute("BuildPlacementActive")
 end
 sprintButton.InputBegan:Connect(function(input)
 	if input.UserInputType ~= Enum.UserInputType.Touch or touchInput then return end
@@ -78,6 +79,7 @@ updateTouchVisibility()
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed or not Settings.CanInput() then return end
 	if UserInputService:GetFocusedTextBox() or player:GetAttribute("IsDead") then return end
+	if player:GetAttribute("CreativeFlying") then return end
 	if isSprintKey(input.KeyCode) then
 		if Settings.Get("SprintMode") == "Toggle" then request(not requested)
 		else held[input.KeyCode] = true; request(true) end
@@ -99,6 +101,10 @@ Settings.Changed:Connect(function()
 	lastSprintKey, lastSprintMode = nextKey, nextMode
 end)
 player:GetAttributeChangedSignal("IsDead"):Connect(function() if player:GetAttribute("IsDead") then release() end end)
+player:GetAttributeChangedSignal("CreativeFlying"):Connect(function()
+	if player:GetAttribute("CreativeFlying") then release() end
+	updateTouchVisibility()
+end)
 player.CharacterRemoving:Connect(release)
 local function bindCharacter(character)
 	release()

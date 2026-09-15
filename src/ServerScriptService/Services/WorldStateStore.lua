@@ -134,6 +134,8 @@ function Service:WriteSnapshot(record, jobId, snapshot, finalPhase)
 		current.PreviousSnapshot, current.Snapshot = current.Snapshot, reference
 		current.SnapshotRevision = (current.SnapshotRevision or 0) + 1
 		current.SavedAt = os.time()
+		current.ArchiveBiome = snapshot.Biome and snapshot.Biome.Biome or current.ArchiveBiome
+		current.ArchiveElapsed = snapshot.Round and snapshot.Round.Elapsed or current.ArchiveElapsed
 		if finalPhase then
 			current.Phase = finalPhase
 			current.ServerLeaseUntil = 0

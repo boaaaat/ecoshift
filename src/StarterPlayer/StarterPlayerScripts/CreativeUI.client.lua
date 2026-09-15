@@ -307,7 +307,12 @@ task.spawn(function()
  remote:FireServer("RequestSnapshot")
 end)
 renderOwned()
-local allItems=Items:All()
+local allItems={}
+for _,item in ipairs(Items:All()) do
+	-- Seasoned meals are recipe outcomes, not separate creative catalog entries.
+	-- The base meal remains available and avoids dozens of identical food cards.
+	if not item.SeasoningId then table.insert(allItems,item) end
+end
 table.sort(allItems,function(a,b) return a.Name<b.Name end)
 renderItems=function()
  itemTooltip:Hide()
