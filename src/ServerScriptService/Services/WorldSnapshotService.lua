@@ -221,12 +221,15 @@ function Snapshot:RestorePlayer(player)
 			if root then root.AssemblyLinearVelocity, root.AssemblyAngularVelocity = Vector3.zero, Vector3.zero end
 		end
 		char:SetAttribute("WetStacks", Codec.Number(state.WetStacks or 0, 0, 5))
-		service("DeathService"):RestoreWorldState(player, state.Death)
 		service("CraftingService"):RestoreRefund(player, state)
 		service("ClassAbilityService"):RestorePlayer(player, state.ClassAbility)
 		service("CreativeService"):RestorePlayer(player, state.Creative)
-		service("FoodService"):RestorePlayer(player, not player:GetAttribute("IsDead") and state.Food or nil)
+		service("FoodService"):RestorePlayer(player, state.Death.Downed and nil or state.Food)
 		service("GearService"):RestorePlayer(player, state.Gear)
+		-- Reconstruct a saved corpse only after every system that may need the
+		-- temporary character has restored its state. This is the final operation
+		-- that destroys that character and switches the client to spectating.
+		service("DeathService"):RestoreWorldState(player, state.Death)
 	else
 		-- New expeditions start at their class-adjusted maximum; restores and revives never heal here.
 		local stats = service("StatsService")

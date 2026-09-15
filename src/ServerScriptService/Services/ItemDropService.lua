@@ -3,6 +3,7 @@
 local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local InventoryService = require(script.Parent.InventoryService)
 local PromptQueueService = require(script.Parent.PromptQueueService)
@@ -10,8 +11,10 @@ local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local ResourceItemMap = require(ReplicatedStorage.Shared.ResourceItemMap)
 
 local ItemInstance = require(ReplicatedStorage.Shared.ItemInstance)
-local ItemDropService = {}
+local ItemDropService = { _worldActive = false }
 local entries = setmetatable({}, {__mode="k"})
+local lifetimes = setmetatable({}, {__mode="k"})
+local DROP_LIFETIME_SECONDS = 10 * 60
 
 local function finiteVector(value)
 	return typeof(value) == "Vector3" and value.X == value.X and value.Y == value.Y
@@ -231,6 +234,7 @@ function ItemDropService:SpawnDrop(itemId, count, position, options)
 	model:SetAttribute("ItemId", itemId)
 	model:SetAttribute("Count", count)
 	entries[model] = ItemInstance.New(itemId,count,options and options.Entry)
+	lifetimes[model] = math.clamp(tonumber(options and options.LifetimeRemaining) or DROP_LIFETIME_SECONDS, 0, DROP_LIFETIME_SECONDS)
 	if options and options.PendingPickup then model:SetAttribute("PickupPending", true) end
 	model:PivotTo(CFrame.new(position))
 	model.Parent = ensureFolder()
@@ -248,7 +252,11 @@ function ItemDropService:CaptureWorldState()
 	for _, model in ipairs(folder and folder:GetChildren() or {}) do
 		if model:IsA("Model") and model:GetAttribute("ItemId") and not model:GetAttribute("PickupPending") then
 			assert(#result < codec.MaxDrops, "Ground drop snapshot capacity exceeded; refusing partial save")
-			table.insert(result, { Id = model:GetAttribute("ItemId"), N = model:GetAttribute("Count"), Entry = ItemInstance.Copy(entries[model]), Transform = codec.CFrame(model:GetPivot()) })
+			local remaining = math.clamp(tonumber(lifetimes[model]) or DROP_LIFETIME_SECONDS, 0, DROP_LIFETIME_SECONDS)
+			if remaining > 0 then
+				table.insert(result, { Id = model:GetAttribute("ItemId"), N = model:GetAttribute("Count"), Entry = ItemInstance.Copy(entries[model]),
+					Transform = codec.CFrame(model:GetPivot()), LifetimeRemaining = remaining })
+			end
 		end
 	end
 	return result
@@ -262,11 +270,14 @@ function ItemDropService:RestoreWorldState(states)
 		local count = codec.Number(state.N, 1, 1e8)
 		assert(count % 1 == 0, "Invalid saved ground count")
 		codec.ReadCFrame(state.Transform)
+		if state.LifetimeRemaining ~= nil then codec.Number(state.LifetimeRemaining, 0, DROP_LIFETIME_SECONDS) end
 	end
 	ensureFolder():ClearAllChildren()
 	for _, state in ipairs(states) do
+		local remaining = state.LifetimeRemaining == nil and DROP_LIFETIME_SECONDS or state.LifetimeRemaining
+		if remaining <= 0 then continue end
 		local transform = codec.ReadCFrame(state.Transform)
-		local model = assert(self:SpawnDrop(state.Id, state.N, transform.Position, {Entry=state.Entry}), "Could not restore ground drop")
+		local model = assert(self:SpawnDrop(state.Id, state.N, transform.Position, {Entry=state.Entry, LifetimeRemaining=remaining}), "Could not restore ground drop")
 		model:PivotTo(transform)
 		-- Terrain is generated in Tier3; prevent drops falling before it exists.
 		setAnchoredRecursive(model, true)
@@ -281,6 +292,29 @@ function ItemDropService:CompleteWorldRestore()
 			model:SetAttribute("SnapshotDropFrozen", nil)
 		end
 	end
+	self._worldActive = true
 end
+
+local lifetimeAccumulator = 0
+RunService.Heartbeat:Connect(function(delta)
+	if not ItemDropService._worldActive or ReplicatedStorage:GetAttribute("WorldRestoring") then return end
+	lifetimeAccumulator += delta
+	if lifetimeAccumulator < 1 then return end
+	local elapsed = lifetimeAccumulator
+	lifetimeAccumulator = 0
+	for model, remaining in pairs(lifetimes) do
+		if not model.Parent then
+			lifetimes[model] = nil
+		elseif not model:GetAttribute("PickupPending") then
+			remaining -= elapsed
+			if remaining <= 0 then
+				lifetimes[model] = nil
+				model:Destroy()
+			else
+				lifetimes[model] = remaining
+			end
+		end
+	end
+end)
 
 return ItemDropService

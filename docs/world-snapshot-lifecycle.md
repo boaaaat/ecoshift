@@ -16,7 +16,7 @@ All APIs throw on invalid core state; auxiliary service restore methods may retu
 - Biome, current/next weather, current/next biome, seed, shift count, elapsed run time, day/night phase, remaining shift/weather timers, locked destination and used delay allowance.
 - Reusable-device cooldown remaining. Active votes and held inputs are cancelled and never restore consent from a disconnected crew.
 - Placed structures, transforms, owners, durability, station prompts, grid reservations and complete chest slot inventories.
-- Ground item identities, counts and transforms, including death spills.
+- Ground item identities, counts, transforms and remaining ten-minute active-world lifetime, including death spills.
 - Per-player hotbar/storage/armor, run class, base stats, actual HP, persistent/stat modifier durations, tonic resistance durations, wetness, position, downed state and body transform. Team death/revive totals remain available for offline participants. A downed body's DeathId survives for reward deduplication.
 - Current biome generated resource/prop depletion and partial HP, including marked subnodes; generated chest contents; generated enemy levels/HP/transforms. Keys combine shift epoch, chunk, category and deterministic placement ordinal; unload records state before destruction and reload reconstructs it. Static untouched scenery is regenerated from seed.
 - Living enemies in workspace.Enemies with prefab ID, level, HP/max HP, transform and entity type. The current procedural art uses Humanoid-based models.

@@ -41,6 +41,10 @@ local function playerState(state)
 	assert(type(state.Death) == "table" and type(state.Death.Downed) == "boolean", "Player death state missing")
 	if state.Death.Downed then
 		arrayShape(state.Death.Transform, 12, 12)
+		assert(state.Death.DeathId == nil or (type(state.Death.DeathId) == "string" and #state.Death.DeathId > 0
+			and #state.Death.DeathId <= 80), "Saved death id is invalid")
+		assert(state.Death.DownedFor == nil or (type(state.Death.DownedFor) == "number" and state.Death.DownedFor == state.Death.DownedFor
+			and state.Death.DownedFor >= 0 and state.Death.DownedFor <= 1e9), "Saved downed duration is invalid")
 	else
 		-- A living player is always loaded before a snapshot may publish. Missing
 		-- these fields means cleanup won the departure race and produced defaults.
@@ -58,6 +62,14 @@ function Validator.Validate(snapshot, expectedRoster)
 			"Biome", "Round", "DayNight", "Match", "Generated", "Structures", "Drops", "Controls",
 			"RunStats", "Enemies", "Auxiliary", "Exploration", "Players"}) do
 			assert(type(snapshot[key]) == "table", "World section missing: " .. key)
+		end
+		arrayShape(snapshot.Drops, 0, 3000)
+		for _, drop in ipairs(snapshot.Drops) do
+			assert(type(drop) == "table" and type(drop.Id) == "string" and #drop.Id > 0, "Saved ground item is invalid")
+			assert(type(drop.N) == "number" and drop.N == drop.N and drop.N % 1 == 0 and drop.N > 0, "Saved ground item count is invalid")
+			arrayShape(drop.Transform, 12, 12)
+			assert(drop.LifetimeRemaining == nil or (type(drop.LifetimeRemaining) == "number" and drop.LifetimeRemaining == drop.LifetimeRemaining
+				and drop.LifetimeRemaining >= 0 and drop.LifetimeRemaining <= 600), "Saved ground item lifetime is invalid")
 		end
 		local count = 0
 		for userId, state in pairs(snapshot.Players) do

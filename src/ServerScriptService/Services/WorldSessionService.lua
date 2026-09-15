@@ -496,7 +496,7 @@ end
 function Service:_loadPlayer(player)
 	if self._loading[player] or self._stopped or self._closing or self._finalWanted or player.Parent ~= Players then return end
 	self._loading[player] = true
-	local ok = pcall(function()
+	local ok, loadError = xpcall(function()
 		local expires = os.clock() + 60
 		while player.Parent == Players and not Profiles:IsLoaded(player) and not self._stopped do
 			assert(os.clock() < expires, "ProfileUnavailable"); task.wait(0.1)
@@ -511,9 +511,10 @@ function Service:_loadPlayer(player)
 		local char = assert(player.Character, "CharacterUnavailable")
 		assert(char:WaitForChild("Humanoid", 10), "HumanoidUnavailable")
 		self._snapshots:RestorePlayer(player)
-	end)
+	end, debug.traceback)
 	self._loading[player] = nil
 	if not ok and player.Parent == Players then
+		warn("[WorldSession] Character restore failed for " .. tostring(player.UserId) .. ": " .. tostring(loadError))
 		if player.Character then player.Character:Destroy() end
 		player:Kick("Your expedition character could not load safely. Rejoin from the lobby.")
 	end
@@ -624,6 +625,12 @@ function Service:_save(finalPhase)
 	until not self._saveAgain
 	self._saving = false
 	return saved
+end
+
+function Service:RequestCheckpoint()
+	if self._studio or self._stopped or self._closing or not self._snapshots or not ownedLease(self._record) then return false end
+	task.spawn(function() self:_save() end)
+	return true
 end
 
 function Service:StartExpedition(snapshots)

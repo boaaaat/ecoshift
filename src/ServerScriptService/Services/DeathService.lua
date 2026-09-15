@@ -40,6 +40,15 @@ local DROP_HORIZONTAL_SPEED_MAX = 24
 local DROP_VERTICAL_SPEED_MIN = 10
 local DROP_VERTICAL_SPEED_MAX = 20
 
+local function checkpointWorld()
+	local module = script.Parent:FindFirstChild("WorldSessionService")
+	if not module then return end
+	task.defer(function()
+		local ok, session = pcall(require, module)
+		if ok and session.RequestCheckpoint then session:RequestCheckpoint() end
+	end)
+end
+
 function DeathService:Init()
 	if self._initialized then return end
 	self._initialized = true
@@ -261,10 +270,11 @@ function DeathService:CreativeRespawn(player)
 	player.ReplicationFocus = nil
 	if data.ragdoll then data.ragdoll:Destroy() end
 	self._deadPlayers[player], self._spectating[player] = nil, nil
-	require(script.Parent.GearService):OnRevive(reviver)
+	require(script.Parent.GearService):OnRevive(player)
 	DeathRemote:FireClient(player, "Revived", { reviver = "Creative mode" })
 	DeathRemote:FireAllClients("PlayerRevived", { player = player })
 	self:_refreshSpectators()
+	checkpointWorld()
 	return true
 end
 
@@ -396,6 +406,9 @@ function DeathService:KillPlayer(player)
 	end
 	
 	self:_refreshSpectators(player)
+	-- Persist the corpse and the inventory spill together instead of waiting for
+	-- the next scheduled checkpoint.
+	checkpointWorld()
 end
 
 local function liveCharacter(player)
@@ -463,9 +476,10 @@ function DeathService:RevivePlayer(player, reviver)
 		local rewarded, rewardError = pcall(function() require(rewardsModule):OnRevive(reviver, player, data.DeathId) end)
 		if not rewarded then warn("[DeathService] Revival reward failed:", rewardError) end
 	end
-	require(script.Parent.GearService):OnRevive(reviver)
+	require(script.Parent.GearService):OnRevive(player)
 	DeathRemote:FireClient(player, "Revived", { reviver = reviver.DisplayName })
 	DeathRemote:FireAllClients("PlayerRevived", { player = player })
+	checkpointWorld()
 	return true
 end
 function DeathService:_createRagdoll(character)
@@ -575,7 +589,7 @@ function DeathService:_createRagdoll(character)
 	if corpseHumanoid then corpseHumanoid:Destroy() end
 	ragdoll.Parent = workspace
 	for _, part in ipairs(ragdoll:GetDescendants()) do
-		if part:IsA("BasePart") then part:SetNetworkOwner(nil) end
+		if part:IsA("BasePart") then pcall(function() part:SetNetworkOwner(nil) end) end
 	end
 	
 	-- Apply small downward force to make it fall
@@ -868,10 +882,13 @@ end
 
 function DeathService:CaptureWorldState(player)
 	local data = self._deadPlayers[player]
+	local body = data and data.ragdoll
+	local transform = data and body and body.Parent and body:GetPivot()
+		or (data and CFrame.new(data.deathPosition)) or nil
 	return {
 		Downed = data ~= nil,
 		DeathId = data and data.DeathId or nil,
-		Transform = data and require(script.Parent.WorldSnapshotCodec).CFrame(data.ragdoll and data.ragdoll:GetPivot() or CFrame.new(data.deathPosition)) or nil,
+		Transform = transform and require(script.Parent.WorldSnapshotCodec).CFrame(transform) or nil,
 		DownedFor = data and math.max(0, os.clock() - data.deathTime) or 0,
 	}
 end
@@ -895,16 +912,26 @@ end
 
 function DeathService:RestoreWorldState(player, state)
 	assert(self._initialized, "DeathService must initialize before player restore")
+	assert(type(state) == "table" and type(state.Downed) == "boolean", "Invalid saved death state")
 	self:_cleanupPlayer(player)
-	player:SetAttribute("IsDead", state.Downed == true)
-	if not state.Downed then return end
+	if not state.Downed then player:SetAttribute("IsDead", false); return end
 	local codec, character = require(script.Parent.WorldSnapshotCodec), player.Character
 	assert(character, "A loaded character is required to reconstruct the downed body")
 	local transform = codec.ReadCFrame(state.Transform)
+	if not player:GetAttribute("InteriorId") then
+		local ground = require(script.Parent.OverhaulWorldService):GetHeight(transform.Position.X, transform.Position.Z) + 3.2
+		if transform.Position.Y < ground then
+			transform = CFrame.new(transform.Position.X, ground, transform.Position.Z) * transform.Rotation
+		end
+	end
 	character:PivotTo(transform)
 	local ragdoll = assert(self:_createRagdoll(character), "Unable to restore downed body")
 	ragdoll:PivotTo(transform)
-	self._deadPlayers[player] = { DeathId = codec.Text(state.DeathId, 80), ragdoll = ragdoll, deathTime = os.clock() - codec.Number(state.DownedFor, 0, 1e9), deathPosition = transform.Position }
+	local deathId = type(state.DeathId) == "string" and #state.DeathId > 0 and #state.DeathId <= 80
+		and state.DeathId or HttpService:GenerateGUID(false)
+	self._deadPlayers[player] = { DeathId = deathId, ragdoll = ragdoll,
+		deathTime = os.clock() - codec.Number(state.DownedFor or 0, 0, 1e9), deathPosition = transform.Position }
+	player:SetAttribute("IsDead", true)
 	self:_focusCorpse(player)
 	character:Destroy()
 	DeathRemote:FireClient(player, "Died", { canSpectate = #self:_getAlivePlayers(player) > 0, ragdoll = ragdoll, ragdollPosition = transform.Position, DeathId = self._deadPlayers[player].DeathId })
