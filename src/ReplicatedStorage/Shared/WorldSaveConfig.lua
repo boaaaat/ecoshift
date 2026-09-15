@@ -3,7 +3,7 @@ return {
 	SchemaVersion = 1,
 	ArchiveStore = "EcoshiftWorldArchives_Overhaul_20260912",
 	ManifestStore = "EcoshiftWorldManifests_Overhaul_20260912",
-	MaxSlots = 5,
+	MaxSlots = 10,
 	MaxRosterSize = 6,
 	MaxNameCharacters = 32,
 	MaxNameBytes = 128,

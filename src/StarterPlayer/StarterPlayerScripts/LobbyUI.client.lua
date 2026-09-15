@@ -7,6 +7,7 @@ local SocialService = game:GetService("SocialService")
 local Theme = require(RS:WaitForChild("Shared"):WaitForChild("UI"):WaitForChild("UITheme"))
 local ClassOutfitter = require(RS.Shared.UI.ClassOutfitter)
 local Biomes = require(RS.Shared.OverhaulBiomes)
+local WorldSaveConfig = require(RS.Shared.WorldSaveConfig)
 local Mode = require(RS.Shared.SessionConfig).GetMode()
 local player = Players.LocalPlayer
 local remote = RS:WaitForChild("Remotes"):WaitForChild("Lobby", 60)
@@ -654,12 +655,12 @@ local function renderContents()
 		ClassOutfitter.Render(content, snapshot, render, actionButton)
 	else
 		label(content, "WORLD ARCHIVE", 0, 0, 796, 34, 25, "Text", true)
-		label(content, "Five personal save slots · original crew required", 0, 43, 796, 28, 16, "TextMuted")
+		label(content, tostring(WorldSaveConfig.MaxSlots) .. " personal save slots · original crew required", 0, 43, 796, 28, 16, "TextMuted")
 		if snapshot.ArchiveAvailable == nil then label(content, "Opening your saved worlds…", 0, 87, 796, 54, 19, "TextMuted"); return end
 		if snapshot.ArchiveAvailable == false then
 			label(content, "The archive is temporarily unavailable. Your saved worlds are safe; try again shortly.", 0, 87, 796, 70, 18, "Amber").TextWrapped = true; return
 		end
-		for index = 1, 5 do
+		for index = 1, WorldSaveConfig.MaxSlots do
 			local world = (snapshot.Worlds or {})[index]
 			local card = box(content, "Save" .. index, 0, 84 + (index - 1) * 140, 796, 126)
 			if world then
