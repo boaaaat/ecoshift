@@ -343,7 +343,7 @@ local function renderSlot(slot)
 		slot.Icon.Image = ""
 		slot.Icon.Visible = false
 		slot.ItemText.Text = (item and item.Name or data.Id):gsub(" ", "\n", 1)
-		slot.ItemText.TextColor3 = hashColor(data.Id)
+		slot.ItemText.TextColor3 = item and item.IconColor or hashColor(data.Id)
 		slot.ItemText.Visible = true
 	end
 	slot.Frame:SetAttribute("HasItem", true)
@@ -404,7 +404,7 @@ local function createGhost(itemId, count)
 		text.Font = Enum.Font.GothamBold
 		text.TextSize = 10
 		text.TextWrapped = true
-		text.TextColor3 = hashColor(itemId)
+		text.TextColor3 = item and item.IconColor or hashColor(itemId)
 		text.Text = itemId
 		text.Parent = ghost
 	end

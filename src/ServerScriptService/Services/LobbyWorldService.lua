@@ -1,13 +1,11 @@
 -- The expedition observatory: a walkable, original low-poly preparation camp.
 local Lighting=game:GetService("Lighting")
+local ServerUtil=require(script.Parent.ServerUtil)
 local Service={}
 local C={Stone=Color3.fromRGB(42,54,52),Edge=Color3.fromRGB(64,83,71),Wood=Color3.fromRGB(95,72,48),
 	Moss=Color3.fromRGB(59,87,66),Brass=Color3.fromRGB(180,140,69),Glow=Color3.fromRGB(123,212,186),Paper=Color3.fromRGB(232,223,192)}
 local function part(parent,name,size,cf,color,material,shape)
-	local p=Instance.new("Part"); p.Name=name; p.Size=size; p.CFrame=cf; p.Anchored=true
-	p.Color=color; p.Material=material or Enum.Material.SmoothPlastic; p.TopSurface=Enum.SurfaceType.Smooth; p.BottomSurface=Enum.SurfaceType.Smooth
-	if shape then p.Shape=shape end
-	p.Parent=parent; return p
+	return ServerUtil.Part(parent,name,size,cf,{Color=color,Material=material or Enum.Material.SmoothPlastic,TopSurface=Enum.SurfaceType.Smooth,BottomSurface=Enum.SurfaceType.Smooth,Shape=shape or Enum.PartType.Block})
 end
 local function sign(parent,text,position)
 	local p=part(parent,"Sign",Vector3.new(16,4,.6),CFrame.new(position),C.Wood)

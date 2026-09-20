@@ -8,12 +8,15 @@ local UserInputService = game:GetService("UserInputService")
 local ContextActionService = game:GetService("ContextActionService")
 local TweenService = game:GetService("TweenService")
 local GuiService = game:GetService("GuiService")
+local RunService = game:GetService("RunService")
 
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local Instances = require(ReplicatedStorage.Shared.ItemInstance)
+local Catalog = require(ReplicatedStorage.Shared.OverhaulCatalog)
+local ItemCooldown = require(ReplicatedStorage.Shared.UI.ItemCooldown)
 local DEBUG = false
 local storageCapacity=18
 local arrangePack
@@ -44,6 +47,8 @@ local SLOT_GAP = 6
 local HOTBAR_SLOTS = 6
 local STORAGE_COLS = 6
 local STORAGE_ROWS = 3
+local Q_DROP_REPEAT_DELAY = 1
+local Q_DROP_REPEAT_INTERVAL = .15
 local MARGIN = 16
 local HEADER_HEIGHT = 44
 local STORAGE_WIDTH = (SLOT_SIZE * STORAGE_COLS) + (SLOT_GAP * (STORAGE_COLS - 1))
@@ -287,6 +292,46 @@ local function createSlot(parent, x, y, slotType, index, slotSize)
 	icon.ScaleType = Enum.ScaleType.Fit
 	icon.Parent = slot
 
+	-- A restrained item cooldown: keep the item readable and use a faint radial
+	-- sweep. Long cooldowns get a number; short action cooldowns stay text-free.
+	local cooldownVeil = Instance.new("Frame")
+	cooldownVeil.Name = "CooldownVeil"
+	cooldownVeil.Size = UDim2.fromScale(0.82, 0.82)
+	cooldownVeil.Position = UDim2.fromScale(0.5, 0.5)
+	cooldownVeil.AnchorPoint = Vector2.new(0.5, 0.5)
+	cooldownVeil.BackgroundColor3 = Color3.fromRGB(7, 12, 10)
+	cooldownVeil.BackgroundTransparency = 0.72
+	cooldownVeil.BorderSizePixel = 0
+	cooldownVeil.Visible = false
+	cooldownVeil.ZIndex = 6
+	cooldownVeil.Parent = slot
+	local cooldownCorner = Instance.new("UICorner")
+	cooldownCorner.CornerRadius = UDim.new(1, 0)
+	cooldownCorner.Parent = cooldownVeil
+
+	local cooldownSegments = {}
+
+	local cooldownText = Instance.new("TextLabel")
+	cooldownText.Name = "CooldownText"
+	cooldownText.Size = UDim2.fromScale(0.8, 0.48)
+	cooldownText.Position = UDim2.fromScale(0.5, 0.5)
+	cooldownText.AnchorPoint = Vector2.new(0.5, 0.5)
+	cooldownText.BackgroundTransparency = 1
+	cooldownText.Text = ""
+	cooldownText.TextColor3 = Color3.fromRGB(247, 241, 213)
+	cooldownText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	cooldownText.TextTransparency = 0.12
+	cooldownText.TextStrokeTransparency = 0.7
+	cooldownText.Font = Enum.Font.GothamBold
+	cooldownText.TextScaled = true
+	cooldownText.Visible = false
+	cooldownText.ZIndex = 8
+	cooldownText.Parent = slot
+	local cooldownTextLimit = Instance.new("UITextSizeConstraint")
+	cooldownTextLimit.MinTextSize = 10
+	cooldownTextLimit.MaxTextSize = math.max(14, math.floor(slotSize * 0.24))
+	cooldownTextLimit.Parent = cooldownText
+
 	-- Text label for items without icons
 	local itemText = Instance.new("TextLabel")
 	itemText.Name = "ItemText"
@@ -393,6 +438,12 @@ local function createSlot(parent, x, y, slotType, index, slotSize)
 		QtyLabel = qtyLabel,
 		Stroke = stroke,
 		Button = button,
+		CooldownVeil = cooldownVeil,
+		CooldownText = cooldownText,
+		CooldownSegments = cooldownSegments,
+		CooldownActive = false,
+		CooldownVisibleSegments = 0,
+		SizePixels = slotSize,
 		Type = slotType,
 		Index = index,
 	}
@@ -535,6 +586,14 @@ gui:GetAttributeChangedSignal("ForceOpen"):Connect(function()
 	end
 end)
 
+-- Other first-party menus can open or close the pack without simulating its keybind.
+local setOpenBridge = Instance.new("BindableEvent")
+setOpenBridge.Name = "SetInventoryOpen"
+setOpenBridge.Parent = gui
+setOpenBridge.Event:Connect(function(open)
+	setInventoryOpen(open == true, true)
+end)
+
 gui:GetAttributeChangedSignal("ChestOpen"):Connect(function()
 	if gui:GetAttribute("ChestOpen") == true then
 		setInventoryOpen(true, true)
@@ -607,7 +666,7 @@ local function updateCapacity()
 end
 
 local function showTooltip(slot, data)
-	itemTooltip:Show(data, "Drag to move • Equip to hold/use • Right-click to split • Q drops one")
+	itemTooltip:Show(data, "Drag to move • Equip to hold/use • Right-click to split • Hold Q to drop")
 end
 
 local function hideTooltip()
@@ -680,6 +739,9 @@ local function renderSlot(slot)
 	if slot.HarvestGlyph then slot.HarvestGlyph.Visible = false end
 	
 	if not data then
+		slot.CooldownVeil.Visible = false
+		slot.CooldownText.Visible = false
+		for _, segment in ipairs(slot.CooldownSegments) do segment.Visible = false end
 		slot.Icon.Image = ""
 		slot.Icon.Visible = false
 		slot.ItemText.Visible = false
@@ -710,7 +772,7 @@ local function renderSlot(slot)
 		-- Break at a word boundary; long single words truncate instead of wrapping
 		-- their last letters into an unreadable second line on phone hotbars.
 		slot.ItemText.Text = name:gsub(" ", "\n", 1)
-		slot.ItemText.TextColor3 = COLORS.Text
+		slot.ItemText.TextColor3 = iconColor or COLORS.Text
 		slot.ItemText.Visible = true
 		if Theme.IsMobile() and slot.Type == "Hotbar" and not mainContainer.Visible and data.Id == "Harvester" then
 			if not slot.HarvestGlyph then slot.HarvestGlyph = Theme.Icon(slot.Frame, "Harvest", 30) end
@@ -732,13 +794,101 @@ local function renderSlot(slot)
 	slot.Frame:SetAttribute("Count", data.N)
 end
 
+local function updateSlotCooldown(slot)
+	local data = getSlotData(slot.Type, slot.Index)
+	if not data then
+		if slot.CooldownActive then
+			slot.CooldownActive = false
+			slot.CooldownVeil.Visible = false
+			slot.CooldownText.Visible = false
+			for _, segment in ipairs(slot.CooldownSegments) do segment.Visible = false end
+			slot.CooldownVisibleSegments = 0
+		end
+		return
+	end
+
+	local remaining, duration = ItemCooldown.Get(data)
+	local definition = Instances.Definition(data.Id)
+	if definition and definition.Kind == "Weapon" then
+		local specialRemaining = math.max(0, (player:GetAttribute("WeaponSpecialReadyAt") or 0) - workspace:GetServerTimeNow())
+		if specialRemaining > remaining and specialRemaining > 0.12 then
+			remaining = specialRemaining
+			duration = math.max(specialRemaining, (definition.SpecialCooldown or 8) * (1 - math.clamp(player:GetAttribute("Gear_SpecialCooldownReduction") or 0, 0, 0.9)))
+		end
+	end
+	local medical = Catalog.Consumables[data.Id]
+	local medicalRemaining = medical and not medical.Revive and (player:GetAttribute("MedicalItemCooldown") or 0) or 0
+	if medicalRemaining > remaining then
+		remaining, duration = medicalRemaining, math.max(5, medicalRemaining)
+	end
+
+	local active = remaining > 0.02 and duration > 0
+	if not active then
+		if slot.CooldownActive then
+			slot.CooldownActive = false
+			slot.CooldownVeil.Visible = false
+			slot.CooldownText.Visible = false
+			for _, segment in ipairs(slot.CooldownSegments) do segment.Visible = false end
+			slot.CooldownVisibleSegments = 0
+		end
+		return
+	end
+	if #slot.CooldownSegments == 0 then
+		local radius = slot.SizePixels * 0.37
+		for segmentIndex = 1, 24 do
+			local angle = (segmentIndex - 1) / 24 * math.pi * 2 - math.pi / 2
+			local segment = Instance.new("Frame")
+			segment.Name = "Sweep" .. segmentIndex
+			segment.Size = UDim2.fromOffset(math.max(1, math.floor(slot.SizePixels * 0.025)), math.max(4, math.floor(slot.SizePixels * 0.075)))
+			segment.AnchorPoint = Vector2.new(0.5, 0.5)
+			segment.Position = UDim2.new(0.5, math.cos(angle) * radius, 0.5, math.sin(angle) * radius)
+			segment.Rotation = math.deg(angle) + 90
+			segment.BackgroundColor3 = COLORS.Warning
+			segment.BackgroundTransparency = 0.55
+			segment.BorderSizePixel = 0
+			segment.Visible = false
+			segment.ZIndex = 7
+			segment.Parent = slot.Frame
+			local segmentCorner = Instance.new("UICorner")
+			segmentCorner.CornerRadius = UDim.new(1, 0)
+			segmentCorner.Parent = segment
+			slot.CooldownSegments[segmentIndex] = segment
+		end
+	end
+	if not slot.CooldownActive then
+		slot.CooldownActive = true
+		slot.CooldownVeil.Visible = true
+	end
+
+	local fraction = math.clamp(remaining / duration, 0, 1)
+	local visibleSegments = math.ceil(fraction * #slot.CooldownSegments)
+	if visibleSegments ~= slot.CooldownVisibleSegments then
+		for index, segment in ipairs(slot.CooldownSegments) do segment.Visible = index <= visibleSegments end
+		slot.CooldownVisibleSegments = visibleSegments
+	end
+	-- Items whose complete cooldown is shorter than five seconds only need the
+	-- radial feedback. Longer cooldowns retain their number through completion.
+	local showCountdown = duration >= 5
+	slot.CooldownText.Visible = showCountdown
+	slot.CooldownText.Text = showCountdown and (remaining < 1 and string.format("%.1f", remaining) or tostring(math.ceil(remaining))) or ""
+end
+
 local function renderAll()
 	for _, slot in ipairs(slots) do
 		renderSlot(slot)
 		setSlotSelected(slot, selectedSlot == slot)
+		updateSlotCooldown(slot)
 	end
 	updateCapacity()
 end
+
+local cooldownRefresh = 0
+RunService.RenderStepped:Connect(function(dt)
+	cooldownRefresh += dt
+	if cooldownRefresh < 0.04 then return end
+	cooldownRefresh = 0
+	for _, slot in ipairs(slots) do updateSlotCooldown(slot) end
+end)
 
 local function disconnectCharacterConnections()
 	for _, conn in ipairs(characterConnections) do
@@ -1429,7 +1579,16 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
+local qDropHeld = false
+local qDropKeyDown = false
+local qDropGeneration = 0
+
 UserInputService.InputEnded:Connect(function(input)
+	if input.KeyCode == Enum.KeyCode.Q then
+		qDropKeyDown = false
+		qDropHeld = false
+		qDropGeneration += 1
+	end
 	local touch = input.UserInputType == Enum.UserInputType.Touch
 	if ((touch and input == dragging.Input) or (input.UserInputType == Enum.UserInputType.MouseButton1 and dragging.Input and dragging.Input.UserInputType == Enum.UserInputType.MouseButton1)) and (dragging.Active or dragging.Pending) then
 		local mouseLocation = touch and Vector2.new(input.Position.X, input.Position.Y) or UserInputService:GetMouseLocation()
@@ -1489,17 +1648,47 @@ UserInputService.InputEnded:Connect(function(input)
 	end
 end)
 
+local function qDropSource()
+	local source = mainContainer.Visible and (hoveredSlot or selectedSlot) or nil
+	if not mainContainer.Visible then
+		local equippedIndex = getEquippedHotbarIndex()
+		if equippedIndex then source = {Type="Hotbar",Index=equippedIndex} end
+	end
+	return source
+end
+
+local function dropOneFrom(source)
+	if not source or not rDrop or not Settings.CanInput() or player:GetAttribute("IsDead") then return false end
+	local data = getSlotData(source.Type, source.Index)
+	if not data then return false end
+	rDrop:FireServer({SlotType=source.Type, SlotIndex=source.Index, Amount=1, ExpectedId=data.Id})
+	return true
+end
+
 UserInputService.InputBegan:Connect(function(input, processed)
 	if input.KeyCode == Enum.KeyCode.Escape and splitCursor.From then
 		clearSplitCursor()
 		return
 	end
-	if input.KeyCode == Enum.KeyCode.Q and mainContainer.Visible and hoveredSlot and Settings.CanInput() and not player:GetAttribute("IsDead") then
+	if input.KeyCode == Enum.KeyCode.Q and Settings.CanInput() and not player:GetAttribute("IsDead") then
+		if qDropKeyDown then return end
+		qDropKeyDown = true
 		if splitCursor.From then clearSplitCursor(); return end
-		local data = getSlotData(hoveredSlot.Type, hoveredSlot.Index)
+		local source = qDropSource()
+		local data = source and getSlotData(source.Type, source.Index)
 		if data and rDrop then
 			local whole = UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
-			rDrop:FireServer({SlotType=hoveredSlot.Type, SlotIndex=hoveredSlot.Index, Amount=whole and data.N or 1, ExpectedId=data.Id})
+			rDrop:FireServer({SlotType=source.Type, SlotIndex=source.Index, Amount=whole and data.N or 1, ExpectedId=data.Id})
+			qDropHeld = not whole
+			qDropGeneration += 1
+			local generation = qDropGeneration
+			if qDropHeld then task.spawn(function()
+				task.wait(Q_DROP_REPEAT_DELAY)
+				while qDropHeld and qDropGeneration == generation do
+					if not dropOneFrom(source) then break end
+					task.wait(Q_DROP_REPEAT_INTERVAL)
+				end
+			end) end
 		end
 		return
 	end

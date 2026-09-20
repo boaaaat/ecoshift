@@ -6,6 +6,7 @@ local Collection = game:GetService("CollectionService")
 local Instances = require(RS.Shared.ItemInstance)
 local Inventory = require(script.Parent.InventoryService)
 local Stats = require(script.Parent.StatsService)
+local ServerUtil = require(script.Parent.ServerUtil)
 local Gear = {}
 local runtime = setmetatable({}, {__mode="k"})
 local function catalog() return require(RS.Shared.OverhaulCatalog) end
@@ -15,8 +16,7 @@ local function state(player)
  return runtime[player]
 end
 local function alive(player)
- local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
- return hum and hum.Health > 0 and not player:GetAttribute("IsDead") and not player:GetAttribute("WorldPlayerLoading") and not player:GetAttribute("WorldPlayerRestoring") and not RS:GetAttribute("WorldRestoring") and (not RS:GetAttribute("WorldShifting") or player:GetAttribute("InteriorId"))
+ return ServerUtil.IsLiving(player) and not RS:GetAttribute("WorldRestoring") and (not RS:GetAttribute("WorldShifting") or player:GetAttribute("InteriorId"))
 end
 local function visit() return RS:GetAttribute("BiomeVisitSerial") or workspace:GetAttribute("BiomeVisitSerial") or 0 end
 local function nearCamp(player)
@@ -61,6 +61,17 @@ function Gear:EnchantValue(player,id)
  local definition=active() and catalog().Enchantments[id]
  return definition and (definition.Values or {})[level] or 0
 end
+function Gear:GetHeldEnchantValue(player,id)
+ if not active() then return 0 end
+ local entry=self:GetHeld(player)
+ local level=rank(entry,id)
+ local definition=catalog().Enchantments[id]
+ return definition and (definition.Values or {})[level] or 0
+end
+function Gear:GetHeldEnchantLevel(player,id)
+ if not active() then return 0 end
+ return rank(self:GetHeld(player),id)
+end
 local function merge(result, additions, scale)
  for key,value in pairs(additions or {}) do
   if type(value)=="number" then result[key]=(result[key] or 0)+value*((string.find(key,"Cooldown") or string.find(key,"Seconds") or string.find(key,"Threshold")) and 1 or (scale or 1))
@@ -92,6 +103,7 @@ function Gear:GetModifiers(player)
  end
  local current=state(player)
  if (current.Timers.DrinkMove or 0)>0 then result.WalkSpeedBonus=(result.WalkSpeedBonus or 0)+.1 end
+ if (current.Timers.EnchantMove or 0)>0 then result.WalkSpeedBonus=(result.WalkSpeedBonus or 0)+(current.EnchantMoveBonus or 0) end
  if (current.Timers.AuroraRecovery or 0)>0 then result.ExposureRecovery=(result.ExposureRecovery or 0)+.15 end
  return result
 end
@@ -218,15 +230,14 @@ function Gear:OnHarvestComplete(player,node,drops)
 end
 function Gear:BasicHitBonus(player,target,baseDamage)
  if not active() then return 0 end
- local entry=self:GetHeld(player);local current=state(player);local now=os.clock()
- local targetId=target:GetAttribute("EntityId") or tostring(target)
- current.HitChain=current.HitTarget==targetId and now-(current.HitAt or 0)<4 and (current.HitChain or 0)+1 or 1
- current.HitTarget,current.HitAt=targetId,now
- local bonus=0;local level=rank(entry,"StrikeRhythm")
- if level>0 and current.HitChain%3==0 then bonus+=baseDamage*(({.10,.14,.18,.22,.26})[level] or 0) end
+ local entry=self:GetHeld(player);local current=state(player)
+ local definition=self:GetDefinition(entry)
+ local bonus=0
  if (current.Timers.ReturnShot or 0)>0 then
-  local definition=self:GetDefinition(entry)
-  if definition and (definition.WeaponFamily=="Bow" or definition.WeaponFamily=="Staff") then bonus+=baseDamage*(({.10,.15,.20,.25})[rank(entry,"ReturnShot")] or 0);current.Timers.ReturnShot=0 end
+  if definition and definition.WeaponFamily=="Bow" then bonus+=baseDamage*(({.10,.15,.20,.25})[rank(entry,"ReturnShot")] or 0);current.Timers.ReturnShot=0 end
+ end
+ if (current.Timers.GuardReturnStrike or 0)>0 and definition and definition.WeaponFamily=="Sword" then
+  bonus+=baseDamage*(({.12,.18,.25})[rank(entry,"GuardReturn")] or 0);current.Timers.GuardReturnStrike=nil
  end
  return bonus
 end
@@ -275,8 +286,22 @@ function Gear:BeforeMonsterDamage(player,attacker,damage)
  if not active() then return damage end
  local current=state(player)
  if (current.Timers.DodgeInvulnerability or 0)>0 then
-  if not current.Timers.ReturnShotCooldown and self:GetEnchantLevel(player,"ReturnShot")>0 then current.Timers.ReturnShot=3;current.Timers.ReturnShotCooldown=8 end
+  local held,definition=self:GetHeld(player)
+  if definition and definition.WeaponFamily=="Bow" and not current.Timers.ReturnShotCooldown and rank(held,"ReturnShot")>0 then current.Timers.ReturnShot=3;current.Timers.ReturnShotCooldown=8 end
+  if definition and definition.WeaponFamily=="Dagger" and not current.Timers.SlipCutCooldown and rank(held,"SlipCut")>0 then current.Timers.SlipCut=2;current.Timers.SlipCutCooldown=6 end
   return 0
+ end
+ local held,definition=self:GetHeld(player)
+ local guardLevel=definition and definition.WeaponFamily=="Sword" and rank(held,"GuardReturn") or 0
+ if guardLevel>0 and (current.Timers.SwordGuard or 0)>0 then
+  damage*=1-(({.25,.35,.45})[guardLevel] or 0)
+  current.Timers.SwordGuard=nil;current.Timers.GuardReturnStrike=4
+ end
+ local briarLevel=held and held.Id=="ThornBlade" and rank(held,"BriarDebt") or 0
+ if briarLevel>0 then
+  local normal=definition and definition.Damage or 0
+  local cap=normal*(({.25,.45})[briarLevel] or 0)
+  current.BriarDebt=math.min(cap,(current.BriarDebt or 0)+damage*(({.10,.18})[briarLevel] or 0))
  end
  local modifiers=self:GetModifiers(player)
  if current.LastHitAge>=20 and modifiers.FirstHitReduction then damage*=1-modifiers.FirstHitReduction end
@@ -310,11 +335,46 @@ function Gear:RestorePlayer(player,saved)
  local entry=Instances.Copy(saved);entry.Timers=entry.Timers or {};entry.Survey=entry.Survey or {};entry.LastHitAge=entry.LastHitAge or 999
  for key,value in pairs(entry.Timers) do if type(value)~="number" or value~=value then entry.Timers[key]=nil else entry.Timers[key]=math.clamp(value,0,86400) end end
  runtime[player]=entry
+ player:SetAttribute("MedicalItemCooldown",math.max(0,tonumber(entry.MedicalCooldown) or 0))
  require(script.Parent.StatusService):RestorePlayer(player,entry.Burn)
  if player.Character then player.Character:SetAttribute("ToxinStacks",math.clamp(tonumber(entry.ToxinStacks) or 0,0,100)) end
 end
 function Gear:GetSpecialRemaining(player) return state(player).Timers.WeaponSpecial or 0 end
 function Gear:StartSpecialCooldown(player,seconds) state(player).Timers.WeaponSpecial=seconds;player:SetAttribute("WeaponSpecialReadyAt",workspace:GetServerTimeNow()+seconds) end
+function Gear:AdjustSpecialCooldown(player,seconds)
+ local current=state(player);current.Timers.WeaponSpecial=math.max(0,(current.Timers.WeaponSpecial or 0)-math.max(0,seconds or 0))
+ player:SetAttribute("WeaponSpecialReadyAt",workspace:GetServerTimeNow()+(current.Timers.WeaponSpecial or 0))
+end
+function Gear:BeginSwordGuard(player) state(player).Timers.SwordGuard=.5 end
+function Gear:ConsumeSlipCut(player)
+ local current=state(player)
+ if (current.Timers.SlipCut or 0)<=0 then return false end
+ current.Timers.SlipCut=nil;return true
+end
+function Gear:GrantEnchantMove(player,bonus,seconds)
+ local current=state(player);current.EnchantMoveBonus=current.Timers.EnchantMove and math.max(current.EnchantMoveBonus or 0,bonus or 0) or (bonus or 0);current.Timers.EnchantMove=math.max(current.Timers.EnchantMove or 0,seconds or 0)
+end
+function Gear:PrimeTailwind(player,reduction)
+ local current=state(player);current.TailwindCostReduction=math.max(current.TailwindCostReduction or 0,reduction or 0);current.Timers.TailwindCost=4
+end
+function Gear:GetTailwindCostReduction(player)
+ local current=state(player)
+ return (current.Timers.TailwindCost or 0)>0 and (current.TailwindCostReduction or 0) or 0
+end
+function Gear:ConsumeTailwindCost(player)
+ local current=state(player)
+ if (current.Timers.TailwindCost or 0)<=0 then return 0 end
+ current.Timers.TailwindCost=nil;local value=current.TailwindCostReduction or 0;current.TailwindCostReduction=nil;return value
+end
+function Gear:IsBraced(player)
+ return (state(player).BraceStill or 0)>=.6
+end
+function Gear:ConsumeBrace(player)
+ state(player).BraceStill=0
+end
+function Gear:ConsumeBriarDebt(player)
+ local current=state(player);local value=current.BriarDebt or 0;current.BriarDebt=0;return value
+end
 function Gear:TryDodge(player,direction)
  if not active() or not alive(player) or typeof(direction)~="Vector3" or direction.Magnitude~=direction.Magnitude then return false,"Cannot dodge." end
  local current=state(player);local root=player.Character:FindFirstChild("HumanoidRootPart")
@@ -377,7 +437,7 @@ function Gear:_finishMedical(player)
  if pending.Target and (not target or target.Durability>=target.MaxDurability) then return end
  if not Inventory:TakeFromSlot(player,pending.Kind,pending.Index,1,{ExpectedId=pending.Id}) then return end
  local modifiers=self:GetModifiers(player)
- current.MedicalCooldown=5
+ current.MedicalCooldown=5;player:SetAttribute("MedicalItemCooldown",5)
  if def.RepairFraction then self:Repair(player,target.Uid,def.RepairFraction*(1+(modifiers.FieldRepairBonus or 0)))
  elseif def.Health then current.Medical={Id=pending.Id,Remaining=def.Duration,Rate=def.Health/def.Duration*(1+(player:GetAttribute("Class_HealBonus") or 0))*(1+(modifiers.MedicalHealingBonus or 0))*(1+(modifiers.MedicalHotBonus or 0))}
  elseif def.ClearPoison then
@@ -629,8 +689,16 @@ function Gear:Init()
   for _,player in ipairs(Players:GetPlayers()) do
    if not alive(player) then local stopped=state(player);stopped.PendingMedical=nil;stopped.Maintenance=nil;if player:GetAttribute("IsDead") then stopped.Medical=nil;stopped.Gliding=nil end;continue end
    local current=state(player);current.LastHitAge+=dt
+   local held,heldDefinition=self:GetHeld(player)
+   local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+   local hum=player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+   if heldDefinition and heldDefinition.WeaponFamily=="Spear" and rank(held,"Brace")>0 and root and hum then
+    local horizontal=Vector3.new(root.AssemblyLinearVelocity.X,0,root.AssemblyLinearVelocity.Z).Magnitude
+    current.BraceStill=horizontal<1 and hum.MoveDirection.Magnitude<.05 and math.min(1,(current.BraceStill or 0)+dt) or 0
+   else current.BraceStill=0 end
    if current.PendingMedical then current.PendingMedical.Remaining-=dt;player:SetAttribute("GearTreatmentProgress",1-current.PendingMedical.Remaining/current.PendingMedical.Total);if current.PendingMedical.Remaining<=0 then self:_finishMedical(player) end else player:SetAttribute("GearTreatmentProgress",nil) end
    current.MedicalCooldown=math.max(0,(current.MedicalCooldown or 0)-dt)
+   player:SetAttribute("MedicalItemCooldown",current.MedicalCooldown)
    if current.Medical then
     local hum=player.Character:FindFirstChildOfClass("Humanoid");local treatment=current.Medical;local amount=math.min(dt,treatment.Remaining)*treatment.Rate
     hum.Health=math.min(hum.MaxHealth,hum.Health+amount);treatment.Remaining-=dt;if treatment.Remaining<=0 then current.Medical=nil end

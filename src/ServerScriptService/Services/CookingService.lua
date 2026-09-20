@@ -10,6 +10,7 @@ local Items = require(RS.Shared.Items.ItemDatabase)
 local Inventory = require(script.Parent.InventoryService)
 local Codec = require(script.Parent.WorldSnapshotCodec)
 local GameState = require(script.Parent.GameStateService)
+local ServerUtil = require(script.Parent.ServerUtil)
 local Service = { _stations = {}, _viewers = {}, _requests = {}, _limits = {} }
 local OUTPUT_SLOTS, MAX_JOBS, MAX_QUANTITY, MAX_FUEL = 12, 3, 20, 3600
 
@@ -17,10 +18,7 @@ local function integer(value, minimum, maximum)
 	return type(value) == "number" and value == value and value % 1 == 0 and value >= minimum and value <= maximum
 end
 local function alive(player)
-	local character = player and player.Character
-	local hum = character and character:FindFirstChildOfClass("Humanoid")
-	return player and player.Parent == Players and hum and hum.Health > 0 and not player:GetAttribute("IsDead")
-		and not player:GetAttribute("WorldPlayerLoading") and not player:GetAttribute("WorldPlayerRestoring")
+	return ServerUtil.IsLiving(player)
 end
 local function paused()
 	return RS:GetAttribute("CookingEnabled") == false or RS:GetAttribute("WorldRestoring") or GameState:IsGameOver()

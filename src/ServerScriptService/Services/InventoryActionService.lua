@@ -88,6 +88,9 @@ function InventoryActionService:Init()
 			local slotIndex = payload.SlotIndex
 			print(string.format("[InventoryAction] Equip request %s slot %s[%s]", plr.Name, tostring(slotType), tostring(slotIndex)))
 			if slotType ~= "Hotbar" or typeof(slotIndex) ~= "number" or slotIndex % 1 ~= 0 or slotIndex < 1 or slotIndex > 6 then return end
+			-- Retain the selected slot even when it is empty or its held item is
+			-- toggled away. Pick-block uses this server-owned selection.
+			plr:SetAttribute("SelectedHotbarSlot", slotIndex)
 			
 			local char = plr.Character
 			local hum = char and char:FindFirstChildOfClass("Humanoid")

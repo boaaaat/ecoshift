@@ -4,11 +4,12 @@ local Players=game:GetService("Players")
 local Shared=RS:WaitForChild("Shared")
 if require(Shared.SessionConfig).GetMode()~="Expedition" then return end
 local Theme=require(Shared.UI.UITheme)
+local UIFactory=require(Shared.UI.UIFactory)
 local Catalog=require(Shared.OverhaulCatalog)
 local player=Players.LocalPlayer
 local remote=RS:WaitForChild("Remotes"):WaitForChild("UtilityBuild")
 local colors=Theme.Colors
-local function make(class,parent,props)local v=Instance.new(class);for k,x in pairs(props) do v[k]=x end;v.Parent=parent;return v end
+local make=UIFactory.Create
 local gui=make("ScreenGui",player:WaitForChild("PlayerGui"),{Name="UtilityBuildUI",DisplayOrder=67,ResetOnSpawn=false,Enabled=false})
 make("Frame",gui,{Size=UDim2.fromScale(1,1),BackgroundColor3=colors.Night,BackgroundTransparency=.35,Active=true,BorderSizePixel=0})
 local panel=make("CanvasGroup",gui,{Name="UtilityPanel",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(620,580),BackgroundColor3=colors.Panel})

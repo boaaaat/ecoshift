@@ -4,6 +4,7 @@ local RS = game:GetService("ReplicatedStorage")
 local Tags = game:GetService("CollectionService")
 local RunService = game:GetService("RunService")
 local Classes = require(RS.Shared.ClassConfig)
+local ServerUtil = require(script.Parent.ServerUtil)
 local Stats = require(script.Parent.StatsService)
 local Service = { _states={}, _effects={}, _fields={}, _marks={}, _overclocks={} }
 local function pose(object)
@@ -13,12 +14,9 @@ local function pose(object)
 	return nil
 end
 local function living(player)
-	local char = player and player.Character
-	local hum = char and char:FindFirstChildOfClass("Humanoid")
-	return player and player.Parent==Players and hum and hum.Health>0 and not player:GetAttribute("IsDead")
-		and not player:GetAttribute("WorldPlayerLoading") and not player:GetAttribute("WorldPlayerRestoring")
+	return ServerUtil.IsLiving(player)
 end
-local function root(player) return player.Character and player.Character:FindFirstChild("HumanoidRootPart") end
+local function root(player) return ServerUtil.Root(player) end
 local function boss(model) return model:GetAttribute("IsBoss")==true or model:GetAttribute("Boss")==true or Tags:HasTag(model,"Boss") end
 local function monster(model)
 	if typeof(model)~="Instance" or not model:IsA("Model") or not model:IsDescendantOf(workspace) or not Tags:HasTag(model,"Monster") then return false end

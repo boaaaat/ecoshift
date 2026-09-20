@@ -1,6 +1,7 @@
 -- Shared readable item details, drawn above both inventory and chest panels.
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 local Theme = require(script.Parent.UITheme)
 local ItemDatabase = require(script.Parent.Parent.Items.ItemDatabase)
 local Instances = require(script.Parent.Parent.ItemInstance)
@@ -141,10 +142,93 @@ function ItemTooltip.new(owner)
 	local name = label("ItemName", 21, Theme.Colors.Text, 1, true)
 	local tags = label("Tags", 16.5, Theme.Colors.Sage, 2)
 	local description = label("Description", 16.5, Theme.Colors.Text, 3)
-	local quantity = label("Quantity", 16.5, Theme.Colors.TextMuted, 4)
-	local hint = label("Hint", 15, Theme.Colors.TextMuted, 5)
-	local comparison = label("EquippedComparison", 16.5, Theme.Colors.Sage, 6)
-	local source = label("Source", 15, Theme.Colors.TextMuted, 7)
+	local enchantments = Instance.new("Frame")
+	enchantments.Name = "Enchantments"
+	enchantments.Size = UDim2.new(1, 0, 0, 0)
+	enchantments.AutomaticSize = Enum.AutomaticSize.Y
+	enchantments.BackgroundTransparency = 1
+	enchantments.LayoutOrder = 4
+	enchantments.Visible = false
+	enchantments.Parent = frame
+	local enchantmentLayout = Instance.new("UIListLayout")
+	enchantmentLayout.Padding = UDim.new(0, 5)
+	enchantmentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	enchantmentLayout.Parent = enchantments
+	local quantity = label("Quantity", 16.5, Theme.Colors.TextMuted, 5)
+	local hint = label("Hint", 15, Theme.Colors.TextMuted, 6)
+	local comparison = label("EquippedComparison", 16.5, Theme.Colors.Sage, 7)
+	local source = label("Source", 15, Theme.Colors.TextMuted, 8)
+	local romanRanks = {"I", "II", "III", "IV", "V", "VI", "VII", "VIII"}
+	local function enchantmentRank(value)
+		local rank = math.max(1, math.floor(tonumber(type(value) == "table" and (value.Level or value.Rank) or value) or 1))
+		return romanRanks[rank] or tostring(rank)
+	end
+	local function renderEnchantments(data)
+		for _, child in ipairs(enchantments:GetChildren()) do
+			if child ~= enchantmentLayout then child:Destroy() end
+		end
+		local entries = {}
+		for id, level in pairs(data.Enchantments or {}) do
+			local definition = Catalog.Enchantments[id]
+			table.insert(entries, {Id = id, Name = definition and definition.Name or id, Level = level})
+		end
+		table.sort(entries, function(a, b) return a.Name < b.Name end)
+		enchantments.Visible = #entries > 0
+		if #entries == 0 then return end
+		for index, entry in ipairs(entries) do
+			local card = Instance.new("Frame")
+			card.Name = entry.Id
+			card.Size = UDim2.new(1, 0, 0, 34)
+			card.BackgroundColor3 = Theme.Colors.SlotFilled
+			card.BackgroundTransparency = 0.08
+			card.BorderSizePixel = 0
+			card.LayoutOrder = index
+			card.Parent = enchantments
+			Theme.Corner(card, 7)
+			local stroke = Instance.new("UIStroke")
+			stroke.Color = Theme.Colors.Special
+			stroke.Transparency = 0.58
+			stroke.Thickness = 1
+			stroke.Parent = card
+			local enchantmentName = Instance.new("TextLabel")
+			enchantmentName.Name = "Name"
+			enchantmentName.Position = UDim2.fromOffset(12, 0)
+			enchantmentName.Size = UDim2.new(1, -90, 1, 0)
+			enchantmentName.BackgroundTransparency = 1
+			enchantmentName.Text = entry.Name
+			enchantmentName.TextSize = 15
+			enchantmentName.Font = Enum.Font.GothamMedium
+			enchantmentName.TextColor3 = Theme.Colors.Text
+			enchantmentName.TextXAlignment = Enum.TextXAlignment.Left
+			enchantmentName.TextTruncate = Enum.TextTruncate.AtEnd
+			enchantmentName.Parent = card
+			local nameGradient = Instance.new("UIGradient")
+			nameGradient.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Theme.Colors.Amber),
+				ColorSequenceKeypoint.new(0.5, Theme.Colors.Special),
+				ColorSequenceKeypoint.new(1, Theme.Colors.Cold),
+			})
+			nameGradient.Offset = Vector2.new(-0.65, 0)
+			nameGradient.Parent = enchantmentName
+			if not Players.LocalPlayer:GetAttribute("ReducedMotion") then
+				TweenService:Create(nameGradient, TweenInfo.new(2.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {Offset = Vector2.new(0.65, 0)}):Play()
+			end
+			local rank = Instance.new("TextLabel")
+			rank.Name = "Rank"
+			rank.AnchorPoint = Vector2.new(1, 0.5)
+			rank.Position = UDim2.new(1, -8, 0.5, 0)
+			rank.Size = UDim2.fromOffset(68, 23)
+			rank.BackgroundColor3 = Theme.Colors.Moss
+			rank.BackgroundTransparency = 0.08
+			rank.BorderSizePixel = 0
+			rank.Text = "RANK " .. enchantmentRank(entry.Level)
+			rank.TextSize = 11
+			rank.Font = Enum.Font.GothamBold
+			rank.TextColor3 = Theme.Colors.Paper
+			rank.Parent = card
+			Theme.Corner(rank, 6)
+		end
+	end
 	local self = {Frame = frame}
 	function self:Move()
 		local mouse = UserInputService:GetMouseLocation() - screen.AbsolutePosition
@@ -159,6 +243,7 @@ function ItemTooltip.new(owner)
 		if not data or not data.Id then self:Hide(); return end
 		local item = ItemDatabase:Get(data.Id)
 		name.Text = item and item.Name or data.Id
+		name.TextColor3 = item and item.IconColor or Theme.Colors.Text
 		local itemTags = item and item.Tags or {}
 		tags.Text = table.concat(itemTags, " • ")
 		tags.Visible = #itemTags > 0
@@ -183,9 +268,9 @@ function ItemTooltip.new(owner)
     if set then table.insert(lines,"2 pieces: "..set.TwoDescription);table.insert(lines,"4 pieces: "..set.FourDescription) end
    end
 			if data.MaxDurability then table.insert(lines,string.format("Durability: %d / %d%s",math.ceil(data.Durability or 0),data.MaxDurability,(data.Durability or 0)<=0 and " · BROKEN" or "")) end
-			for id,level in pairs(data.Enchantments or {}) do local def=catalog.Enchantments[id];table.insert(lines,(def and def.Name or id).." "..tostring(type(level)=="table" and level.Level or level)) end
 			description.Text=table.concat(lines,"\n")
 		end
+		renderEnchantments(data)
 		comparison.Text = gear and compare(data, gear) or ""
 		comparison.Visible = comparison.Text ~= ""
 		source.Text = sourceHint(data.Id)

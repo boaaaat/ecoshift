@@ -14,6 +14,7 @@ local SnapshotValidator = require(script.Parent.WorldSnapshotValidator)
 local Saves = require(script.Parent.WorldSaveService)
 local Parties = require(script.Parent.PartyService)
 local Profiles = require(script.Parent.ProfileService)
+local Loading = require(script.Parent.LoadingProgress)
 local Service = { _travel = {}, _loading = {}, _present = {}, _workers = {}, _recoveryAt = {}, _closing = false }
 local LAUNCH_SECONDS, RESERVATION_SECONDS, SAVE_SECONDS = 300, 90, 120
 local function guid() return Http:GenerateGUID(false) end
@@ -289,6 +290,7 @@ end
 function Service:_travelFailure(player, state)
 	if self._travel[player] ~= state then return end
 	state.InFlight = false
+	if state.Kind == "World" then player:SetAttribute("ExpeditionTravelState", "Retrying") end
 	if state.Kind == "Lobby" and (state.Attempts or 0) >= 5 then
 		self._travel[player] = nil
 		local remotes = RS:FindFirstChild("Remotes")
@@ -313,6 +315,7 @@ function Service:_teleport(player, state)
 	local attemptId = guid()
 	state.TravelId, state.Attempts, state.InFlight = attemptId, (state.Attempts or 0) + 1, true
 	state.StartedAt = os.clock()
+	if state.Kind == "World" then player:SetAttribute("ExpeditionTravelState", "Connecting") end
 	local options = Instance.new("TeleportOptions")
 	local placeId = Config.LobbyPlaceId
 	if state.Kind == "World" then
@@ -320,7 +323,7 @@ function Service:_teleport(player, state)
 		if self._travel[player] ~= state or state.TravelId ~= attemptId or not state.InFlight then return end
 		if not record or record.Generation ~= state.Generation or not contains(record, player.UserId)
 			or record.MatchmakingType ~= nativeType() or (not active(record) and not launching(record)) then
-			self._travel[player] = nil; Parties:CancelTransfer(player); return
+			self._travel[player] = nil; player:SetAttribute("ExpeditionTravelState", nil); Parties:CancelTransfer(player); return
 		end
 		if type(record.PrivateAccessCode) ~= "string" then self:_travelFailure(player, state); return end
 		options.ReservedServerAccessCode = record.PrivateAccessCode
@@ -361,6 +364,7 @@ function Service:_queueTravel(player, record)
 	self:_initTravel()
 	local state = { Kind = "World", WorldId = record.Id, Generation = record.Generation, Attempts = 0 }
 	self._travel[player] = state
+	player:SetAttribute("ExpeditionTravelState", "Preparing")
 	task.spawn(function() self:_teleport(player, state) end)
 	return true, "Travel to your expedition is starting."
 end
@@ -493,8 +497,56 @@ function Service:Resume(player, slotId)
 	return true, ready and "Your original crew's saved world is launching." or "Your world reservation is retrying. Keep your crew together."
 end
 
+local function findUsableCharacter(player, timeout)
+	local expires = os.clock() + (timeout or 0)
+	repeat
+		local character = player.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if character and character.Parent and humanoid and humanoid.Health > 0 and root then
+			-- Freeze as soon as Roblox produces a usable rig. The saved chunk and pose
+			-- may not have streamed to this client yet, so even one physics frame here
+			-- can put the character beneath terrain before restoration starts.
+			if root:GetAttribute("WorldLoadWasAnchored") == nil then
+				root:SetAttribute("WorldLoadWasAnchored", root.Anchored)
+			end
+			root.Anchored = true
+			root.AssemblyLinearVelocity, root.AssemblyAngularVelocity = Vector3.zero, Vector3.zero
+			return character
+		end
+		if player.Parent ~= Players then return nil end
+		task.wait()
+	until os.clock() >= expires
+	return nil
+end
+
+local function loadCharacterSafely(player)
+	local failures = {}
+	for attempt = 1, 3 do
+		player:SetAttribute("WorldRestoreStage", "CharacterLoad" .. attempt)
+		local ok, reason = pcall(function() player:LoadCharacterAsync() end)
+		if player.Parent ~= Players then return nil end
+		-- LoadCharacterAsync can reject because one avatar asset failed after Roblox
+		-- already constructed a complete, playable character. Treat that character
+		-- as authoritative instead of destroying it and kicking the player.
+		local character = findUsableCharacter(player, ok and 10 or 3)
+		if character then
+			if not ok then
+				warn("[WorldSession] Avatar load reported an error after producing a usable character for "
+					.. tostring(player.UserId) .. ": " .. tostring(reason))
+			end
+			return character
+		end
+		failures[#failures + 1] = tostring(reason or "IncompleteCharacter")
+		if player.Character then player.Character:Destroy() end
+		if attempt < 3 then task.wait(attempt * 0.5) end
+	end
+	error("CharacterLoadFailed: " .. table.concat(failures, " | "))
+end
+
 function Service:_loadPlayer(player)
 	if self._loading[player] or self._stopped or self._closing or self._finalWanted or player.Parent ~= Players then return end
+	Loading.BindPlayer(player)
 	self._loading[player] = true
 	local ok, loadError = xpcall(function()
 		local expires = os.clock() + 60
@@ -506,17 +558,23 @@ function Service:_loadPlayer(player)
 			assert(active(self._record) and contains(self._record, player.UserId), "WorldAdmissionExpired")
 			require(script.Parent.RoleService):ApplyRunRole(player, self._record.Members[tostring(player.UserId)].Role, self._record.Members[tostring(player.UserId)].ClassLevel or 1)
 		end
-		player:LoadCharacterAsync()
+		local char = loadCharacterSafely(player)
 		if player.Parent ~= Players or self._stopped then return end
-		local char = assert(player.Character, "CharacterUnavailable")
-		assert(char:WaitForChild("Humanoid", 10), "HumanoidUnavailable")
+		assert(char and char == player.Character, "CharacterUnavailable")
+		player:SetAttribute("WorldRestoreStage", "SavedState")
 		self._snapshots:RestorePlayer(player)
+		player:SetAttribute("WorldRestoreStage", nil)
 	end, debug.traceback)
 	self._loading[player] = nil
 	if not ok and player.Parent == Players then
-		warn("[WorldSession] Character restore failed for " .. tostring(player.UserId) .. ": " .. tostring(loadError))
+		local stage = player:GetAttribute("WorldRestoreStage") or "Unknown"
+		warn("[WorldSession] Character restore failed for " .. tostring(player.UserId)
+			.. " at " .. tostring(stage) .. ": " .. tostring(loadError))
+		player:SetAttribute("WorldRestoreStage", nil)
 		if player.Character then player.Character:Destroy() end
-		player:Kick("Your expedition character could not load safely. Rejoin from the lobby.")
+		player:SetAttribute("PlayerLoadStage", "Explorer could not load. Rejoin from the lobby.")
+		player:SetAttribute("PlayerLoadFailed", true)
+		player:Kick("Your expedition character could not load safely during " .. tostring(stage) .. ". Rejoin from the lobby.")
 	end
 end
 
@@ -548,6 +606,7 @@ function Service:PrepareExpedition()
 	RS:SetAttribute("WorldGeneration", acquired.Generation)
 	RS:SetAttribute("OriginalCrewSize", #acquired.Roster)
 	RS:SetAttribute("WorldSessionState", "AwaitingOriginalCrew")
+	Loading.World(.08, "Waiting for your original crew")
 	self:_startLeaseWorkers(); self:_initTravel()
 	local function admit(player)
 		if self._stopped or self._closing or self._finalWanted or self._ending then player:Kick("This expedition is pausing or has ended. Reunite with your crew in the lobby."); return end
@@ -575,6 +634,7 @@ function Service:PrepareExpedition()
 		task.wait(0.25)
 	end
 	if self._stopped then return false, "WorldLeaseLost" end
+	Loading.World(.12, "Retrieving the expedition record")
 	local snapshot, readError, recovered = Store:ReadSnapshot(self._record, function(candidate)
 		return SnapshotValidator.Validate(candidate, acquired.Roster)
 	end)

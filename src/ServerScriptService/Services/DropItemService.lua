@@ -18,7 +18,12 @@ local function createThenTake(plr, root, itemId, amount, take, entry)
 	-- Preparation may fail. Keep inventory intact and the pickup unclaimable
 	-- until the matching debit commits without yielding to inventory callbacks.
 	local ok, drop = pcall(function()
-		return ItemDropService:SpawnDrop(itemId, amount, root.Position + Vector3.new(0, 2, -4), {PendingPickup = true, Entry = entry})
+		local forward = root.CFrame.LookVector
+		return ItemDropService:SpawnDrop(itemId, amount, root.Position + forward * 4 + Vector3.new(0, 2, 0), {
+			PendingPickup = true,
+			Entry = entry,
+			InitialVelocity = forward * 8 + Vector3.new(0, 5, 0),
+		})
 	end)
 	if not ok or not drop then return false end
 	local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")

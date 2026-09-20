@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Services = script.Parent.Services
+local Loading = require(Services.LoadingProgress)
 -- Expeditions admit/load characters only after their reservation, saved world
 -- and gameplay services are ready. The lobby keeps normal Roblox autoload.
 ReplicatedStorage:SetAttribute("ServerBootState", "Preparing")
@@ -94,8 +95,9 @@ local tier3Services = {
 }
 
 -- Initialize services in parallel batches
-local function initTier(services, initMethod)
+local function initTier(services, initMethod, progressStart, progressEnd)
 	local remaining, errors = 0, {}
+	local completed = 0
 	for _, entry in ipairs(services) do
 		local name = type(entry) == "string" and entry or entry.name
 		local method = type(entry) == "table" and entry.method or initMethod
@@ -111,6 +113,10 @@ local function initTier(services, initMethod)
 				table.insert(errors, name .. ": " .. tostring(err))
 			end
 			remaining -= 1
+			completed += 1
+			if progressStart and ok then
+				Loading.World(progressStart + (progressEnd - progressStart) * completed / #services, "Preparing expedition systems " .. completed .. "/" .. #services)
+			end
 		end)
 	end
 	local deadline = os.clock() + 60
@@ -134,6 +140,7 @@ local function boot()
 		ReplicatedStorage:SetAttribute("ServerBootState", "Ready")
 		return
 	end
+	Loading.World(.02, "Establishing expedition signal")
 	for _, player in ipairs(Players:GetPlayers()) do if player.Character then player.Character:Destroy() end end
 	-- Must precede every gameplay require, including WorldSession dependencies:
 	-- departure capture needs to observe inventories before their cleanup handlers.
@@ -149,7 +156,9 @@ local function boot()
 	else
 		assert(RunService:IsStudio(), "Published expeditions require WorldSessionService admission and persistence")
 	end
+	Loading.World(.15, saved and "Reading your saved expedition" or "Charting a new expedition")
 	snapshots:StageWorld(saved)
+	Loading.World(.2, "Preparing field equipment")
 	-- Supply art before tools/streaming initialize their prefab caches.
 	getService("PrototypePrefabService"):Init()
 	StarterPlayer.EnableMouseLockOption = true
@@ -157,9 +166,11 @@ local function boot()
 	if Services:FindFirstChild("ExpeditionRewardsService") then
 		table.insert(tier2Services, { name = "ExpeditionRewardsService", method = "Init" })
 	end
-	initTier(tier1Services, "Init")
-	initTier(tier2Services)
+	initTier(tier1Services, "Init", .25, .3)
+	initTier(tier2Services, nil, .3, .45)
+	Loading.World(.45, "Restoring camp and field records")
 	snapshots:RestoreWorld()
+	Loading.World(.5, "Surveying the wilderness")
 	ReplicatedStorage:SetAttribute("ServerBootState", "GeneratingWorld")
 	initTier(tier3Services)
 	local generator, deadline = getService("WorldGenController"), os.clock() + 90
@@ -169,7 +180,9 @@ local function boot()
 		assert(os.clock() < deadline, "World terrain generation did not complete")
 		task.wait(0.1)
 	end
+	Loading.World(.95, "Bringing the expedition to life")
 	snapshots:CompleteWorldRestore()
+	Loading.World(1, "World ready")
 	_G.Ecoshift = _G.Ecoshift or {}
 	_G.Ecoshift.ComputeEnemyWave = function() return getService("SpawnService"):ComputeEnemyWave() end
 	_G.Ecoshift.GetActiveResourceTags = function() return getService("SpawnService"):GetActiveResourceTags() end

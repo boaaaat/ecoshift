@@ -7,6 +7,7 @@ local Players = game:GetService("Players")
 local Theme = require(game:GetService("ReplicatedStorage").Shared.UI.UITheme)
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local GuiService = game:GetService("GuiService")
 local ContextActionService = game:GetService("ContextActionService")
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -25,6 +26,12 @@ end
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
+local crewMarkerRemote = ReplicatedStorage:WaitForChild("Remotes"):FindFirstChild("CrewMapMarker")
+if not crewMarkerRemote then
+	task.spawn(function()
+		crewMarkerRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CrewMapMarker", 120)
+	end)
+end
 
 local WORLD_RADIUS = (BiomeConfig.WORLD and BiomeConfig.WORLD.WorldRadius) or (BiomeConfig.world_radius or 1000)
 local CHUNK_SIZE = BiomeConfig.chunk_size or 240
@@ -103,6 +110,9 @@ local UI = {
 	zoomLabel = nil,
 	cursorLabel = nil,
 	mapToggleButton = nil,
+	waypointRoot = nil,
+	waypointIcon = nil,
+	waypointDistance = nil,
 	toggleButtons = {},
 }
 
@@ -126,6 +136,8 @@ local INPUT = {
 	dragInput = nil,
 	dragging = false,
 	lastTouchPan = nil,
+	pressPosition = nil,
+	dragDistance = 0,
 	gamepadPan = Vector2.new(0, 0),
 }
 
@@ -679,6 +691,44 @@ local function createUI()
 	UI.minimapMarkerLayer = markerLayer
 	UI.minimapCoords = coords
 	UI.minimapZoom = zoom
+
+	-- Shared crew waypoint. It remains in the world HUD after the atlas closes,
+	-- clamps to the screen edge when off-screen, and never uses a square marker.
+	local waypointRoot = Instance.new("Frame")
+	waypointRoot.Name = "CrewWaypoint"
+	waypointRoot.AnchorPoint = Vector2.new(0.5, 0.5)
+	waypointRoot.Size = UDim2.fromOffset(116, 62)
+	waypointRoot.BackgroundTransparency = 1
+	waypointRoot.BorderSizePixel = 0
+	waypointRoot.ZIndex = 34
+	waypointRoot.Visible = false
+	waypointRoot.Parent = gui
+
+	local waypointIconHost = Instance.new("Frame")
+	waypointIconHost.Name = "WaypointIcon"
+	waypointIconHost.AnchorPoint = Vector2.new(0.5, 0)
+	waypointIconHost.Position = UDim2.fromScale(0.5, 0)
+	waypointIconHost.Size = UDim2.fromOffset(38, 38)
+	waypointIconHost.BackgroundTransparency = 1
+	waypointIconHost.ZIndex = 35
+	waypointIconHost.Parent = waypointRoot
+	local waypointGlyph = Theme.Icon(waypointIconHost, "Waypoint", 34)
+	for _, descendant in ipairs(waypointGlyph:GetDescendants()) do
+		if descendant:IsA("Frame") then
+			descendant:SetAttribute("ThemeFixed", true)
+			descendant.BackgroundColor3 = Theme.Colors.Amber
+		end
+	end
+
+	local waypointDistance = buildLabel(waypointRoot, "0 studs", UDim2.new(1, 0, 0, 22), UDim2.fromOffset(0, 38), Enum.Font.GothamBold, 13, Theme.Colors.Paper, Enum.TextXAlignment.Center)
+	waypointDistance.Name = "Distance"
+	waypointDistance.TextStrokeColor3 = Theme.Colors.Night
+	waypointDistance.TextStrokeTransparency = 0.15
+	waypointDistance.ZIndex = 35
+
+	UI.waypointRoot = waypointRoot
+	UI.waypointIcon = waypointIconHost
+	UI.waypointDistance = waypointDistance
 	playerGui:GetAttributeChangedSignal("BuildPlacementActive"):Connect(function()
 		miniContainer.Visible = STATE.minimapVisible and not (Theme.IsMobile() and (playerGui:GetAttribute("BuildPlacementActive") or playerGui:GetAttribute("MenuCursorOpen")))
 	end)
@@ -696,7 +746,7 @@ local function createUI()
 	local header = buildCoreFrame(panel, UDim2.new(1, -16, 0, 40), UDim2.fromOffset(8, 8), Color3.new(), 1)
 	header.Name = "Header"
 	local mapTitle = buildLabel(header, "EXPEDITION ATLAS", UDim2.new(1, -54, 0, 22), UDim2.fromOffset(0, 0), Enum.Font.GothamBlack, 18, MapConfig.Colors.TextPrimary)
-	local mapHint = buildLabel(header, "ESC CLOSE  /  SCROLL ZOOM  /  DRAG PAN", UDim2.new(1, -54, 0, 16), UDim2.fromOffset(0, 24), Enum.Font.Gotham, 11, MapConfig.Colors.TextMuted)
+	local mapHint = buildLabel(header, "CLICK MARKER  /  SCROLL ZOOM  /  DRAG PAN", UDim2.new(1, -54, 0, 16), UDim2.fromOffset(0, 24), Enum.Font.Gotham, 11, MapConfig.Colors.TextMuted)
 	local closeButton = Instance.new("TextButton")
 	closeButton.Name = "CloseMapButton"
 	closeButton.Size = UDim2.fromOffset(40, 40)
@@ -825,17 +875,17 @@ local function createUI()
 
 	-- The minimap itself is the touch target; no duplicate bottom-screen MAP button.
 	Theme.BindResponsive(gui, function(mobile, safeSize)
-		local compactPortrait = mobile and safeSize.X < safeSize.Y and safeSize.Y < 680
 		local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or safeSize
 		gui.IgnoreGuiInset = not mobile
-		local width = 106
+		local width = 127 -- 20% larger than the previous 106px mobile card.
 		miniContainer.Parent = mobile and mobileLayer or gui
 		miniContainer.BackgroundTransparency = mobile and .48 or .04
 		miniScale.Scale = mobile and 1 or math.min(math.clamp(math.min(viewport.X / 1440, viewport.Y / 900), 1, 2.5), (viewport.X - 40) / 900, (viewport.Y - 90) / 610)
-		miniContainer.AnchorPoint = Vector2.new(1, mobile and 0 or 1)
-		miniContainer.Position = mobile and UDim2.new(1, -4, 0, 4) or UDim2.new(1, -18 * miniScale.Scale, 1, -18 * miniScale.Scale)
+		miniContainer.AnchorPoint = mobile and Vector2.zero or Vector2.new(1,1)
+		-- Keep the larger mobile map on the far-left rail, below the vitals card.
+		miniContainer.Position = mobile and UDim2.fromOffset(4,196) or UDim2.new(1, -18 * miniScale.Scale, 1, -18 * miniScale.Scale)
 		miniContainer.Size = UDim2.fromOffset(mobile and width or miniW, mobile and width or miniH)
-		local mapSize = mobile and 98 or MapConfig.Minimap.Size
+		local mapSize = mobile and 118 or MapConfig.Minimap.Size
 		mapFrame.Size = UDim2.fromOffset(mapSize, mapSize)
 		mapFrame.Position = UDim2.fromOffset(mobile and 4 or 10, mobile and 4 or 10)
 		coords.Visible = not mobile
@@ -844,7 +894,7 @@ local function createUI()
 		zoom.TextSize = mobile and 13 or 10
 		panel.Size = mobile and UDim2.new(1, -12, 1, -12) or UDim2.fromScale(.92, .9)
 		panel.Position = mobile and UDim2.fromOffset(6, 6) or UDim2.fromScale(.04, .05)
-		mapHint.Text = mobile and "PINCH ZOOM / DRAG PAN" or "ESC CLOSE  /  SCROLL ZOOM  /  DRAG PAN"
+		mapHint.Text = mobile and "TAP MARKER / PINCH ZOOM / DRAG PAN" or "CLICK MARKER  /  SCROLL ZOOM  /  DRAG PAN"
 		mapTitle.Text = mobile and safeSize.X < 480 and "ATLAS" or "EXPEDITION ATLAS"
 		mapTitle.Size = UDim2.new(1, mobile and -140 or -54, 0, 22)
 		mapHint.Size = UDim2.new(1, mobile and -140 or -54, 0, 16)
@@ -1213,7 +1263,7 @@ getMarkerGlyph = function(kind)
 	if type(value) ~= "string" or value == "" then
 		value = "?"
 	end
-	if markerType ~= "icon" then
+	if markerType ~= "icon" and markerType ~= "theme" then
 		markerType = "emoji"
 	end
 	return {
@@ -1251,10 +1301,38 @@ applyGlyphToFrame = function(frame, glyphKey, color, textSize)
 		icon.Parent = frame
 	end
 
+	local themeIcon = frame:FindFirstChild("GlyphTheme")
+	if not themeIcon then
+		themeIcon = Instance.new("Frame")
+		themeIcon.Name = "GlyphTheme"
+		themeIcon.Size = UDim2.fromScale(1, 1)
+		themeIcon.Position = UDim2.fromOffset(0, 0)
+		themeIcon.BackgroundTransparency = 1
+		themeIcon.ZIndex = frame.ZIndex + 1
+		themeIcon.Parent = frame
+	end
+
 	if glyph.Type == "icon" then
 		icon.Image = glyph.Value
 		icon.ImageColor3 = color or Color3.new(1, 1, 1)
 		icon.Visible = true
+		emoji.Visible = false
+		themeIcon.Visible = false
+	elseif glyph.Type == "theme" then
+		local wantedSize = math.max(12, textSize or 12)
+		local drawn = themeIcon:FindFirstChild("Glyph")
+		if not drawn or drawn:GetAttribute("IconKind") ~= glyph.Value or drawn:GetAttribute("RequestedSize") ~= wantedSize then
+			drawn = Theme.Icon(themeIcon, glyph.Value, wantedSize)
+			drawn:SetAttribute("RequestedSize", wantedSize)
+		end
+		for _, descendant in ipairs(drawn:GetDescendants()) do
+			if descendant:IsA("Frame") then
+				descendant:SetAttribute("ThemeFixed", true)
+				descendant.BackgroundColor3 = color or Color3.new(1, 1, 1)
+			end
+		end
+		themeIcon.Visible = true
+		icon.Visible = false
 		emoji.Visible = false
 	else
 		emoji.Text = glyph.Value
@@ -1262,6 +1340,7 @@ applyGlyphToFrame = function(frame, glyphKey, color, textSize)
 		emoji.TextSize = textSize or 12
 		emoji.Visible = true
 		icon.Visible = false
+		themeIcon.Visible = false
 	end
 end
 
@@ -1271,6 +1350,8 @@ clearGlyphFromFrame = function(frame)
 	if emoji then emoji.Visible = false end
 	local icon = frame:FindFirstChild("GlyphIcon")
 	if icon then icon.Visible = false end
+	local themeIcon = frame:FindFirstChild("GlyphTheme")
+	if themeIcon then themeIcon.Visible = false end
 end
 
 applyPlayerPortrait = function(frame, descriptor)
@@ -1404,6 +1485,8 @@ setFullMapOpen = function(open)
 		INPUT.dragInput = nil
 		INPUT.dragging = false
 		INPUT.lastTouchPan = nil
+		INPUT.pressPosition = nil
+		INPUT.dragDistance = 0
 		INPUT.gamepadPan = Vector2.zero
 	end
 	if UI.fullRoot then
@@ -1420,9 +1503,19 @@ local function toggleFullMap()
 	setFullMapOpen(not STATE.fullMapOpen)
 end
 
+local function mouseGuiPosition()
+	local point = UserInputService:GetMouseLocation()
+	-- Mouse coordinates include Roblox's top inset. AbsolutePosition does not
+	-- when this ScreenGui draws through that inset, so compare in one space.
+	if UI.gui and UI.gui.IgnoreGuiInset then
+		point -= GuiService:GetGuiInset()
+	end
+	return point
+end
+
 local function getMouseOver(guiObject)
 	if not guiObject then return false end
-	local pos = UserInputService:GetMouseLocation()
+	local pos = mouseGuiPosition()
 	local absPos = guiObject.AbsolutePosition
 	local absSize = guiObject.AbsoluteSize
 	return pos.X >= absPos.X and pos.X <= (absPos.X + absSize.X) and pos.Y >= absPos.Y and pos.Y <= (absPos.Y + absSize.Y)
@@ -1437,8 +1530,37 @@ local function canGestureMap(point)
 	return STATE.fullMapOpen and containsPoint(UI.fullCanvas, point) and not containsPoint(UI.legend, point)
 end
 local function pointerPosition(input)
-	if input.UserInputType == Enum.UserInputType.Touch then return input.Position end
-	return UserInputService:GetMouseLocation() - game:GetService("GuiService"):GetGuiInset()
+	-- Touch InputObject positions already share GuiObject.AbsolutePosition's
+	-- coordinate space. Mouse locations need the inset correction above.
+	if input.UserInputType == Enum.UserInputType.Touch then
+		return Vector2.new(input.Position.X, input.Position.Y)
+	end
+	return mouseGuiPosition()
+end
+
+local function getCrewMarker()
+	local folder = WORLD.sharedFolder or ReplicatedStorage:FindFirstChild("TeamExploration")
+	if not folder then return nil end
+	local x, z = folder:GetAttribute("CrewMarkerX"), folder:GetAttribute("CrewMarkerZ")
+	local layer = folder:GetAttribute("CrewMarkerLayer")
+	if type(x) ~= "number" or type(z) ~= "number" or (layer ~= "Surface" and layer ~= "Cave") then return nil end
+	return {X=x, Z=z, Layer=layer}
+end
+
+local function toggleCrewMarkerAt(point)
+	if not crewMarkerRemote or not UI.fullCanvas or STATE.mapLayer == "Interior" then return end
+	local canvasPosition, canvasSize = UI.fullCanvas.AbsolutePosition, UI.fullCanvas.AbsoluteSize
+	local localPoint = point - canvasPosition
+	local marker = getCrewMarker()
+	if marker and marker.Layer == STATE.mapLayer then
+		local markerX, markerY = worldToCanvas(marker.X, marker.Z, canvasSize, STATE.fullZoom, STATE.panWorld)
+		if (localPoint - Vector2.new(markerX, markerY)).Magnitude <= 22 then
+			crewMarkerRemote:FireServer({Remove=true})
+			return
+		end
+	end
+	local worldX, worldZ = canvasToWorld(localPoint.X, localPoint.Y, canvasSize, STATE.fullZoom, STATE.panWorld)
+	crewMarkerRemote:FireServer({X=worldX, Z=worldZ, Layer=STATE.mapLayer})
 end
 
 local function setFullZoom(target, focusAbs)
@@ -1476,12 +1598,15 @@ local function applyMinimapZoom(deltaSign)
 end
 
 local function startDrag(input)
-	if not canGestureMap(pointerPosition(input)) then return end
+	local point = pointerPosition(input)
+	if not canGestureMap(point) or INPUT.dragInput == input then return end
 	INPUT.dragInput = input
 	INPUT.dragging = true
+	INPUT.pressPosition = point
+	INPUT.dragDistance = 0
 	markFullMapInteraction()
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		INPUT.lastTouchPan = UserInputService:GetMouseLocation()
+		INPUT.lastTouchPan = mouseGuiPosition()
 	else
 		INPUT.lastTouchPan = input.Position
 	end
@@ -1489,9 +1614,14 @@ end
 
 local function endDrag(input)
 	if INPUT.dragInput == input then
+		local point = pointerPosition(input)
+		local placeMarker = INPUT.dragDistance < 8 and INPUT.pressPosition ~= nil and canGestureMap(point)
 		INPUT.dragInput = nil
 		INPUT.dragging = false
 		INPUT.lastTouchPan = nil
+		INPUT.pressPosition = nil
+		INPUT.dragDistance = 0
+		if placeMarker then toggleCrewMarkerAt(point) end
 	end
 end
 
@@ -1516,6 +1646,7 @@ local function updateDrag(input)
 	local delta = currentPos - prevPos
 	INPUT.lastTouchPan = currentPos
 	if delta.Magnitude == 0 then return end
+	INPUT.dragDistance += delta.Magnitude
 
 	STATE.panWorld = STATE.panWorld + Vector2.new(delta.X / scale, -delta.Y / scale)
 	clampPan()
@@ -1532,6 +1663,8 @@ local function updateMouseDrag()
 		INPUT.dragInput = nil
 		INPUT.dragging = false
 		INPUT.lastTouchPan = nil
+		INPUT.pressPosition = nil
+		INPUT.dragDistance = 0
 		return
 	end
 	if not UI.fullCanvas then return end
@@ -1539,11 +1672,12 @@ local function updateMouseDrag()
 	local scale = mapScale(absSize, STATE.fullZoom)
 	if scale <= 0 then return end
 
-	local currentPos = UserInputService:GetMouseLocation()
+	local currentPos = mouseGuiPosition()
 	local prevPos = INPUT.lastTouchPan or currentPos
 	local delta = currentPos - prevPos
 	INPUT.lastTouchPan = currentPos
 	if delta.Magnitude == 0 then return end
+	INPUT.dragDistance += delta.Magnitude
 
 	STATE.panWorld = STATE.panWorld + Vector2.new(delta.X / scale, -delta.Y / scale)
 	clampPan()
@@ -1615,13 +1749,13 @@ local function bindInput()
 
 		if input.KeyCode == Enum.KeyCode.Equals or input.KeyCode == Enum.KeyCode.Plus or input.KeyCode == Enum.KeyCode.RightBracket or input.KeyCode == Enum.KeyCode.ButtonR2 then
 			if STATE.fullMapOpen then
-				applyFullZoom(1, UserInputService:GetMouseLocation())
+				applyFullZoom(1, mouseGuiPosition())
 			else
 				applyMinimapZoom(1)
 			end
 		elseif input.KeyCode == Enum.KeyCode.Minus or input.KeyCode == Enum.KeyCode.LeftBracket or input.KeyCode == Enum.KeyCode.ButtonL2 then
 			if STATE.fullMapOpen then
-				applyFullZoom(-1, UserInputService:GetMouseLocation())
+				applyFullZoom(-1, mouseGuiPosition())
 			else
 				applyMinimapZoom(-1)
 			end
@@ -1641,6 +1775,7 @@ local function bindInput()
 			if not pinchZoom then return end
 			-- Scale is relative to gesture start; zoom around the fingers, not a stale mouse position.
 			INPUT.dragging, INPUT.dragInput, INPUT.lastTouchPan = false, nil, nil
+			INPUT.pressPosition, INPUT.dragDistance = nil, 0
 			setFullZoom(pinchZoom * scale, (positions[1] + positions[2]) * 0.5)
 		end)
 	end)
@@ -1758,6 +1893,7 @@ end
 local function styleMarkerFrame(frame, markerKind, rotation, markerSize, glyphKey)
 	if not frame then return end
 	frame.Size = UDim2.fromOffset(markerSize, markerSize)
+	frame.AnchorPoint = glyphKey == "CrewMarker" and Vector2.new(0.5, 1) or Vector2.new(0.5, 0.5)
 	frame.BackgroundColor3 = colorForMarkerType(markerKind)
 
 	if markerKind == "Players" or markerKind == "Enemies" or markerKind == "Spawn" then
@@ -1933,9 +2069,13 @@ local function renderFullscreen(playerPos)
 		end
 	end
 
-	local function drawMarker(key, wx, wz, markerKind, rotation, size, glyphKey)
-  local cell=WORLD.chunksByKey[chunkKey(math.floor(wx/CHUNK_SIZE),math.floor(wz/CHUNK_SIZE))]
-  if cell and chunkLayer(cell)~=STATE.mapLayer then return end
+	local function drawMarker(key, wx, wz, markerKind, rotation, size, glyphKey, explicitLayer)
+  if explicitLayer then
+   if explicitLayer~=STATE.mapLayer then return end
+  else
+   local cell=WORLD.chunksByKey[chunkKey(math.floor(wx/CHUNK_SIZE),math.floor(wz/CHUNK_SIZE))]
+   if cell and chunkLayer(cell)~=STATE.mapLayer then return end
+  end
 		local px, py = worldToCanvas(wx, wz, canvasSize, STATE.fullZoom, STATE.panWorld)
 		if px < -20 or py < -20 or px > canvasSize.X + 20 or py > canvasSize.Y + 20 then
 			return
@@ -1958,6 +2098,10 @@ local function renderFullscreen(playerPos)
 			spawnRotation = headingDegFromPoints(STATE.spawnPosition, playerPos)
 		end
 		drawMarker("spawn", STATE.spawnPosition.X, STATE.spawnPosition.Z, "Spawn", spawnRotation, 28, "Spawn")
+	end
+	local crewMarker = getCrewMarker()
+	if crewMarker and crewMarker.Layer == STATE.mapLayer then
+		drawMarker("crew_marker", crewMarker.X, crewMarker.Z, "Objectives", 0, 20, "CrewMarker", crewMarker.Layer)
 	end
 
 	if STATE.markerVisibility.Structures or STATE.markerVisibility.Objectives then
@@ -2043,7 +2187,7 @@ local function renderFullscreen(playerPos)
 
 	if UI.cursorLabel then
 		if getMouseOver(UI.fullCanvas) then
-			local mouse = UserInputService:GetMouseLocation()
+			local mouse = mouseGuiPosition()
 			local localPos = mouse - UI.fullCanvas.AbsolutePosition
 			local wx, wz = canvasToWorld(localPos.X, localPos.Y, canvasSize, STATE.fullZoom, STATE.panWorld)
 			local region = getNearestRegionName(wx, wz)
@@ -2201,6 +2345,10 @@ local function renderMinimap(playerPos, playerLook)
 		local spawnRotation = headingDegFromPoints(STATE.spawnPosition, playerPos)
 		drawMiniMarker("spawn", STATE.spawnPosition.X, STATE.spawnPosition.Z, "Spawn", spawnRotation, 28, "Spawn", true)
 	end
+	local crewMarker = getCrewMarker()
+	if crewMarker and crewMarker.Layer == STATE.mapLayer then
+		drawMiniMarker("crew_marker", crewMarker.X, crewMarker.Z, "Objectives", 0, 18, "CrewMarker", true)
+	end
 
 	if STATE.markerVisibility.Structures or STATE.markerVisibility.Objectives then
 		for inst, data in pairs(WORLD.markersByInstance) do
@@ -2282,20 +2430,41 @@ local function renderMinimap(playerPos, playerLook)
 end
 
 local function initSpawnCapture()
-	local function onCharacter(character)
-		task.defer(function()
-			local hrp = character:FindFirstChild("HumanoidRootPart") or character:WaitForChild("HumanoidRootPart", 5)
-			if hrp and not STATE.spawnPosition then
-				STATE.spawnPosition = hrp.Position
-				dprint("Spawn set", STATE.spawnPosition)
+	local function resolveCampSpawn()
+		-- The character's first replicated position can be a restored logout position.
+		-- Spawn belongs to the world, so keep the marker anchored to the camp instead.
+		local campCenter = Workspace:GetAttribute("CampCenter") or ReplicatedStorage:GetAttribute("CampCenter")
+		if typeof(campCenter) == "Vector3" then
+			return campCenter
+		end
+
+		local closestSpawn, closestDistance
+		for _, instance in ipairs(Workspace:GetDescendants()) do
+			if instance:IsA("SpawnLocation") then
+				local distance = Vector2.new(instance.Position.X, instance.Position.Z).Magnitude
+				if not closestDistance or distance < closestDistance then
+					closestSpawn, closestDistance = instance, distance
+				end
 			end
-		end)
+		end
+		local campRadius = tonumber(BiomeConfig.center_exclusion_radius) or 200
+		if closestSpawn and closestDistance <= campRadius then
+			return closestSpawn.Position
+		end
+		return Vector3.zero
 	end
 
-	player.CharacterAdded:Connect(onCharacter)
-	if player.Character then
-		onCharacter(player.Character)
+	local function refresh()
+		STATE.spawnPosition = resolveCampSpawn()
+		dprint("Camp spawn set", STATE.spawnPosition)
 	end
+
+	refresh()
+	Workspace:GetAttributeChangedSignal("CampCenter"):Connect(refresh)
+	ReplicatedStorage:GetAttributeChangedSignal("CampCenter"):Connect(refresh)
+	Workspace.DescendantAdded:Connect(function(instance)
+		if instance:IsA("SpawnLocation") then refresh() end
+	end)
 end
 
 local function applyGamepadPan(dt)
@@ -2313,12 +2482,63 @@ local function applyGamepadPan(dt)
 	markFullMapInteraction()
 end
 
+local function updateCrewWaypoint(playerPosition)
+	local root = UI.waypointRoot
+	if not root then return end
+	local marker = getCrewMarker()
+	local currentLayer = player:GetAttribute("MapLayer") or "Surface"
+	if STATE.fullMapOpen or player:GetAttribute("InteriorId") ~= nil or not marker or marker.Layer ~= currentLayer or not finiteVector3(playerPosition) then
+		root.Visible = false
+		return
+	end
+
+	local camera = Workspace.CurrentCamera
+	if not camera then
+		root.Visible = false
+		return
+	end
+	local viewport = camera.ViewportSize
+	local guiSize = UI.gui and UI.gui.AbsoluteSize or viewport
+	if viewport.X <= 1 or viewport.Y <= 1 or guiSize.X <= 1 or guiSize.Y <= 1 then
+		root.Visible = false
+		return
+	end
+
+	-- The shared marker is horizontal map data. Project it at the local
+	-- player's height so distant or streamed-out terrain is not required.
+	local projected, inViewport = camera:WorldToViewportPoint(Vector3.new(marker.X, playerPosition.Y + 2.5, marker.Z))
+	local point = Vector2.new(projected.X * guiSize.X / viewport.X, projected.Y * guiSize.Y / viewport.Y)
+	local center = guiSize * 0.5
+	local halfWidth = math.max(1, center.X - 58)
+	local halfHeight = math.max(1, center.Y - 58)
+	local onScreen = inViewport and projected.Z > 0
+		and point.X >= 58 and point.X <= guiSize.X - 58
+		and point.Y >= 58 and point.Y <= guiSize.Y - 58
+
+	if not onScreen then
+		local direction = point - center
+		if projected.Z <= 0 then direction = -direction end
+		if direction.Magnitude < 0.001 then direction = Vector2.new(0, -1) end
+		local edgeScale = math.min(
+			halfWidth / math.max(math.abs(direction.X), 0.001),
+			halfHeight / math.max(math.abs(direction.Y), 0.001)
+		)
+		point = center + direction * edgeScale
+	end
+
+	local horizontalDistance = (Vector2.new(marker.X, marker.Z) - Vector2.new(playerPosition.X, playerPosition.Z)).Magnitude
+	UI.waypointDistance.Text = string.format("%d studs", math.floor(horizontalDistance + 0.5))
+	root.Position = UDim2.fromOffset(point.X, point.Y)
+	root.Visible = true
+end
+
 local lastMinimapRender = 0
 local lastFullRender = 0
 
 local function update()
 	local now = os.clock()
 	local position, look = getPlayerMapPose(player)
+	updateCrewWaypoint(position)
 	if STATE.markerVisibility.Enemies or STATE.markerVisibility.Resources then
 		getOptionalMarkers()
 	end
@@ -2365,7 +2585,7 @@ end
 
 function MinimapClient:ZoomIn()
 	if STATE.fullMapOpen then
-		applyFullZoom(1, UserInputService:GetMouseLocation())
+		applyFullZoom(1, mouseGuiPosition())
 	else
 		applyMinimapZoom(1)
 	end
@@ -2373,7 +2593,7 @@ end
 
 function MinimapClient:ZoomOut()
 	if STATE.fullMapOpen then
-		applyFullZoom(-1, UserInputService:GetMouseLocation())
+		applyFullZoom(-1, mouseGuiPosition())
 	else
 		applyMinimapZoom(-1)
 	end

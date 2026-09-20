@@ -95,7 +95,10 @@ local function bindActivation(tool)
 	tool:SetAttribute("InventoryActivationBound", true)
 	local consumedThisPress = false
 	tool.Deactivated:Connect(function() consumedThisPress = false end)
-	tool.Unequipped:Connect(function() consumedThisPress = false end)
+	tool.Unequipped:Connect(function()
+		consumedThisPress = false
+		tool:SetAttribute("BowDrawStarted", nil)
+	end)
 	tool.Activated:Connect(function()
 		local character = tool.Parent
 		local player = character and Players:GetPlayerFromCharacter(character)
@@ -163,6 +166,7 @@ function ToolService:Sync(player)
 		if definition and (definition.Kind == "Tool" or definition.Kind == "Weapon") then
 			tool:SetAttribute("Damage", (entry.Durability or 1) > 0 and definition.Damage or 0)
 			tool:SetAttribute("Range", definition.Reach or 8)
+			tool:SetAttribute("Cooldown", definition.AttackCycle or 0.6)
 			tool:SetAttribute("AttackSpeed", 1 / (definition.AttackCycle or 1))
 			local power = definition.Power and definition.Power * (entry.Id == "Harvester" and 1 or 2 ^ ((entry.Grade or definition.Grade) - definition.Grade))
 			tool:SetAttribute("ToolPower", power)
@@ -174,6 +178,7 @@ function ToolService:Sync(player)
 				tool:SetAttribute("CombatDamage", entry.Id == "Harvester" and 6 or 0)
 				tool:SetAttribute("HarvestPower", power)
 				tool:SetAttribute("CombatRange", 8)
+				tool:SetAttribute("CombatCooldown", definition.AttackCycle or 0.6)
 			elseif definition.Kind == "Weapon" then
 				local weaponType = definition.WeaponFamily == "Bow" and "Bow" or definition.WeaponFamily == "Staff" and "Gun" or "Sword"
 				tool:SetAttribute("ToolType", nil)

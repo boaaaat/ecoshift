@@ -5,24 +5,21 @@ local Collection=game:GetService("CollectionService")
 local RunService=game:GetService("RunService")
 local Config=require(RS.Shared.CampaignConfig)
 local Util=require(RS.Shared.Util)
+local ServerUtil=require(script.Parent.ServerUtil)
 local Service={_saved={},_live={}}
 local ORDER={BogKing=1,FallenStar=2,Ironback=3,DeepArchive=4,MoonWarden=5,BogKingEnhanced=6}
 local function isBogKing(id) return id=="BogKing" or id=="BogKingEnhanced" end
 local function service(name) return require(script.Parent[name]) end
 local function living(player)
- local h=player.Character and player.Character:FindFirstChildOfClass("Humanoid")
- return player.Parent==Players and not player:GetAttribute("IsDead") and h and h.Health>0 and not player:GetAttribute("WorldPlayerLoading") and not player:GetAttribute("WorldPlayerRestoring")
+ return ServerUtil.IsLiving(player)
 end
 local function part(parent,name,size,position,color)
- local p=Instance.new("Part");p.Name=name;p.Size=size;p.Position=position;p.Anchored=true;p.Material=Enum.Material.Slate;p.Color=color or Color3.fromRGB(70,83,79);p.Parent=parent;return p
+ return ServerUtil.Part(parent,name,size,position,{Material=Enum.Material.Slate,Color=color or Color3.fromRGB(70,83,79)})
 end
 local function prompt(parent,action,fn)
- local p=Instance.new("ProximityPrompt");p.ActionText=action;p.ObjectText="Expedition interior";p.KeyboardKeyCode=Enum.KeyCode.F;p.RequiresLineOfSight=false;p.MaxActivationDistance=10;p.HoldDuration=1;p.Parent=parent
- p.Triggered:Connect(function(player)
-  local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-  if living(player) and root and (root.Position-parent.Position).Magnitude<=12 and not RS:GetAttribute("WorldRestoring") then fn(player) end
+ return ServerUtil.Prompt(parent,action,"Expedition interior",function(player)
+	if ServerUtil.IsNear(player,parent,12) and not RS:GetAttribute("WorldRestoring") then fn(player) end
  end)
- return p
 end
 function Service:_state(id)
  if not self._saved[id] then self._saved[id]={Id=id,Participants={},Rooms={},Phase=1,Health=0,MaxHealth=0,Completed=false,LootClaimed=false,Records={},Exposed=0,AttackRemaining=3,AttackIndex=0,RewardRemaining=0} end
@@ -42,7 +39,7 @@ function Service:_participant(id,player)
  state.Participants[key]=true
  local boss=Config.Bosses[id]
  if boss then
-  local extra=180*Config.Damage[boss.Tier]*(n==0 and 1 or .65)
+  local extra=Config.BossHealthPerTierDamage*Config.Damage[boss.Tier]*(n==0 and 1 or .65)
   state.MaxHealth+=extra;state.Health+=extra
   local live=self._live[id]
   if live and live.Boss then local h=live.Boss:FindFirstChildOfClass("Humanoid");h.MaxHealth=state.MaxHealth;h.Health=state.Health end

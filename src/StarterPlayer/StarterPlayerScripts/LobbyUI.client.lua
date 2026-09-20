@@ -424,8 +424,15 @@ local function renderPicker()
 			entry.Name = other.Name; entry.DisplayName = other.DisplayName; entry.InServer = true
 		end
 	end
+	local function inviteGroup(entry)
+		if entry.Friend == true and entry.InServer == true then return 1, "FRIENDS IN THIS SERVER" end
+		if entry.Friend == true then return 2, "ONLINE FRIENDS" end
+		return 3, "OTHER PLAYERS IN THIS LOBBY"
+	end
 	table.sort(entries, function(a, b)
-		if (a.Friend == true) ~= (b.Friend == true) then return a.Friend == true end
+		local aGroup = inviteGroup(a)
+		local bGroup = inviteGroup(b)
+		if aGroup ~= bGroup then return aGroup < bGroup end
 		local an, bn = string.lower(a.DisplayName or a.Name or ""), string.lower(b.DisplayName or b.Name or "")
 		return an == bn and a.UserId < b.UserId or an < bn
 	end)
@@ -434,7 +441,7 @@ local function renderPicker()
 		label(content, friendsLoading and "Loading online friends…" or friendsError, 0, y, 790, 40, 15, "TextMuted").TextWrapped = true; y += 48
 	end
 	for _, entry in ipairs(entries) do
-		local nextGroup = entry.Friend and "ONLINE FRIENDS" or "IN THIS SERVER"
+		local _, nextGroup = inviteGroup(entry)
 		if nextGroup ~= group then
 			if column > 0 then y += 226; column = 0 end
 			group = nextGroup; label(content, group, 0, y, 790, 27, 14, "TextMuted", true); y += 36

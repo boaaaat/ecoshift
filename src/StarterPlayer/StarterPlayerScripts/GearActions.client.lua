@@ -27,7 +27,10 @@ local function special()
  local def=tool and Instances.Definition(tool.Name)
  if not camera or not root or not def or def.Kind~="Weapon" then return end
  local ray=camera:ViewportPointToRay(camera.ViewportSize.X/2,camera.ViewportSize.Y/2)
- combat:FireServer("Special",{Dir=ray.Direction,Touch=Theme.IsMobile()})
+ local params=RaycastParams.new();params.FilterType=Enum.RaycastFilterType.Exclude;params.FilterDescendantsInstances={player.Character}
+ local distance=math.max(tonumber(def.Reach) or 8,8)+64
+ local hit=workspace:Raycast(ray.Origin,ray.Direction*distance,params)
+ combat:FireServer("Special",{Dir=ray.Direction,AimPoint=hit and hit.Position or ray.Origin+ray.Direction*distance,Touch=Theme.IsMobile()})
 end
 local function makeButton(name,icon,callback)
  local button=Instance.new("TextButton");button.Name=name;button.Size=UDim2.fromOffset(48,48);button.AnchorPoint=Vector2.new(1,1);button.Text="";button.Parent=gui
@@ -38,6 +41,7 @@ end
 local roll,rollLabel=makeButton("Dodge","Rotate",dodge)
 local burst,burstLabel=makeButton("WeaponSpecial","Attack",special)
 local glide=makeButton("Glide","Survey",function() if not blocked() then remote:FireServer("Glide") end end)
+burst.Visible=false
 local status=Theme.Label(gui,"",UDim2.fromOffset(350,40),UDim2.new(.5,-175,1,-160),16,Theme.Colors.Text);status.TextXAlignment=Enum.TextXAlignment.Center;status.Visible=false
 local wear=Theme.Label(gui,"",UDim2.fromOffset(350,24),UDim2.new(.5,-175,1,-142),13,Theme.Colors.Amber);wear.TextXAlignment=Enum.TextXAlignment.Center
 local token=0
@@ -66,9 +70,15 @@ local tick=0;local wasProgress=false
 local warnings={}
 Run.RenderStepped:Connect(function(dt)
  tick+=dt;if tick<.1 then return end;tick=0
- local mobile=Theme.IsMobile();local available=not blocked();local tool=player.Character and player.Character:FindFirstChildOfClass("Tool");local def=tool and Instances.Definition(tool.Name)
- roll.Visible=mobile and available;burst.Visible=mobile and available and def~=nil and def.Kind=="Weapon";glide.Visible=mobile and available and (player:GetAttribute("Gear_Glide")==true or player:GetAttribute("Gear_Climb")==true)
- roll.Position=UDim2.new(1,-74,1,-132);burst.Position=UDim2.new(1,-16,1,-186);glide.Position=UDim2.new(1,-132,1,-132)
+ local mobile=Theme.IsMobile();local available=not blocked();local tool=player.Character and player.Character:FindFirstChildOfClass("Tool")
+ roll.Visible=mobile and available
+ -- Normal world taps activate equipped weapons. Keep the separate weapon-special
+ -- action off touch screens so it cannot overlap the movement controls.
+ burst.Visible=false
+ glide.Visible=mobile and available and (player:GetAttribute("Gear_Glide")==true or player:GetAttribute("Gear_Climb")==true)
+ -- A vertical movement rail sits immediately left of Roblox's jump button.
+ roll.Position=UDim2.new(1,-142,1,-108)
+ glide.Position=UDim2.new(1,-76,1,-112)
  local durability=tool and tool:GetAttribute("Durability");local maximum=tool and tool:GetAttribute("MaxDurability")
  wear.Visible=available and durability~=nil and maximum~=nil and durability<=maximum*.2
  wear.Text=wear.Visible and (durability<=0 and "BROKEN · Repair at camp" or string.format("Gear worn · %d%% durability",durability/maximum*100)) or ""

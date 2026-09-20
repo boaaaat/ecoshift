@@ -480,6 +480,34 @@ function InventoryService:TryAddToSlot(plr, slotType, slotIndex, itemId, amount)
 	return add
 end
 
+-- Minecraft-style pick block. Survival moves an owned stack into the selected
+-- hotbar slot; creative replaces that slot with a fresh single item.
+function InventoryService:PickToHotbar(plr, itemId, slotIndex, creative)
+	if type(itemId) ~= "string" or not ItemDatabase:Get(itemId)
+		or type(slotIndex) ~= "number" or slotIndex % 1 ~= 0 or slotIndex < 1 or slotIndex > HOTBAR_SLOTS then
+		return false
+	end
+	local inv = getInv(plr)
+	local selected = inv.Hotbar[slotIndex]
+	if selected and selected.Id == itemId then return true end
+	if creative then
+		inv.Hotbar[slotIndex] = ItemInstance.New(itemId, 1)
+		self:Sync(plr)
+		return true
+	end
+	for _, kind in ipairs({"Hotbar", "Storage"}) do
+		local count = kind == "Hotbar" and HOTBAR_SLOTS or (inv.StorageCapacity or STORAGE_SLOTS)
+		for index = 1, count do
+			local entry = inv[kind][index]
+			if entry and entry.Id == itemId then
+				if kind == "Hotbar" and index == slotIndex then return true end
+				return self:Move(plr, kind, index, "Hotbar", slotIndex)
+			end
+		end
+	end
+	return false
+end
+
 function InventoryService:CanAfford(plr, costList)
 	local required = {}
 	for _, cost in ipairs(costList or {}) do

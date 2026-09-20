@@ -33,9 +33,52 @@ function BiomeService:_pickNext()
  local pool={};local newest=math.min(4,ReplicatedStorage:GetAttribute("CampaignTier") or 1)
  local uniform=ReplicatedStorage:GetAttribute("MainBiomesUniform")==true
  for _,id in ipairs(self:GetEligibleBiomes()) do
-  if id~=self._current then table.insert(pool,{Id=id,Weight=not uniform and OverhaulBiomes.Biomes[id].UnlockTier==newest and 2 or 1}) end
+  if id~=self._current then table.insert(pool,{Id=id,Weight=not uniform and OverhaulBiomes.Biomes[id].UnlockTier==newest and 4 or 1}) end
  end
  local pick=Util.ChooseWeighted(pool,"Weight");return pick and pick.Id or self._current
+end
+
+-- Project progression changes the live forecast instead of waiting for the
+-- following schedule cycle. A newly unlocked main biome is guaranteed for the
+-- next shift; later schedules retain the increased newest-tier weight above.
+function BiomeService:OnCampaignTierAdvanced(previousTier,newTier)
+ previousTier=math.max(1,math.floor(tonumber(previousTier) or 1))
+ newTier=math.max(previousTier,math.floor(tonumber(newTier) or previousTier))
+ self:GetCurrent()
+ if self._pausedAt or ReplicatedStorage:GetAttribute("WorldShifting") then return false end
+
+ local pool={}
+ for _,id in ipairs(self:GetEligibleBiomes()) do
+  local definition=OverhaulBiomes.Biomes[id]
+  if id~=self._current and definition.UnlockTier>previousTier and definition.UnlockTier<=newTier then
+   table.insert(pool,{Id=id,Weight=4})
+  end
+ end
+
+ -- Tiers after four improve gear and sub-biome progression rather than
+ -- unlocking another main biome. They still reroll the cached destination so
+ -- every project tier-up visibly changes the next planned shift.
+ if #pool==0 then
+  for _,id in ipairs(self:GetEligibleBiomes()) do
+   if id~=self._current and id~=self._upcomingBiome then
+    local definition=OverhaulBiomes.Biomes[id]
+    table.insert(pool,{Id=id,Weight=definition.UnlockTier==math.min(4,newTier) and 4 or 1})
+   end
+  end
+ end
+
+ local pick=Util.ChooseWeighted(pool,"Weight")
+ local nextBiome=pick and pick.Id or self:_pickNext()
+ if not nextBiome or nextBiome==self._current then return false end
+ self._upcomingBiome=nextBiome
+ self._upcomingWeather=weatherFor(nextBiome,self:GetElapsed()+self:GetTiming().Remaining)
+ self._selected=false
+ self._version+=1
+ task.defer(function()
+  local gameState=script.Parent:FindFirstChild("GameStateService")
+  if gameState then require(gameState):Broadcast() end
+ end)
+ return true
 end
 function BiomeService:_ensureRemote()
 	self._remote = self._remote or ReplicatedStorage.Remotes:FindFirstChild(Config.RemoteNames.BiomeChanged)

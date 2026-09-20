@@ -5,6 +5,7 @@ local ResultMessages = {}
 
 ResultMessages.Build = {
 	Success = "Build action complete.",
+	TemporaryLight = "Placed outside camp. This light will be removed on the next biome shift.",
 	InvalidPayload = "Invalid build request.",
 	InvalidType = "That item cannot be placed.",
 	OutOfRange = "Move closer to build there.",

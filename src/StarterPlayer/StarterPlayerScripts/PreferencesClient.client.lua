@@ -1,9 +1,23 @@
 local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
 local Settings = require(ReplicatedStorage.Shared.ClientSettings)
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
+local isExpedition = require(ReplicatedStorage.Shared.SessionConfig).GetMode() == "Expedition"
 local original = setmetatable({}, { __mode = "k" })
+local renderDistanceRemote
+local renderDistanceValues = {Near=1, Medium=2, Far=3, ["Very Far"]=4}
+local function renderDistanceChunks()
+	local value = Settings.Get("RenderDistance")
+	if value == "Auto" then
+		return UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled and 1 or 2
+	end
+	return renderDistanceValues[value] or 2
+end
+local function applyRenderDistance()
+	if renderDistanceRemote then renderDistanceRemote:FireServer(renderDistanceChunks()) end
+end
 -- Apply to authored and streamed prompts too, including old saved structures.
 local function interactionKey(instance)
 	if instance:IsA("ProximityPrompt") then instance.KeyboardKeyCode = Enum.KeyCode.F end
@@ -36,5 +50,14 @@ local function cameraChanged()
 end
 Lighting.ChildAdded:Connect(effect)
 workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(cameraChanged)
-Settings.Changed:Connect(apply)
+Settings.Changed:Connect(function(key)
+	apply()
+	if key == nil or key == "RenderDistance" then applyRenderDistance() end
+end)
+if isExpedition then
+	task.spawn(function()
+		renderDistanceRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RenderDistance", 120)
+		applyRenderDistance()
+	end)
+end
 cameraChanged()

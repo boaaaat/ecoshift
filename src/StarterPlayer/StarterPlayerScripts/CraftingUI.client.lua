@@ -11,6 +11,7 @@ local TweenService = game:GetService("TweenService")
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 local ItemDescriptionUI = require(ReplicatedStorage.Shared.UI.ItemDescriptionUI)
 local RecipeGuideUI = require(ReplicatedStorage.Shared.UI:WaitForChild("RecipeGuideUI"))
+local RecipeCardUI = require(ReplicatedStorage.Shared.UI.RecipeCardUI)
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
@@ -422,187 +423,36 @@ local function outputDescription(recipeId, quantity)
 	return string.format("%d × %s", (output.N or 1) * quantity, item and item.Name or output.Id)
 end
 
-local function createIngredientDisplay(ingredient, parent, recipeId)
-	local needed = ingredientCost(ingredient)
-	local have = getItemCount(ingredient.Id)
-	local item = ItemDatabase:Get(ingredient.Id)
-	local name = item and item.Name or ingredient.Id
-	local canAfford = have >= needed
-	
-	local frame = Instance.new("TextButton")
-	frame.Name = "Ingredient_" .. ingredient.Id
-	frame.Text = ""
-	frame.AutoButtonColor = false
-	frame:SetAttribute("IngredientId", ingredient.Id)
-	frame.Activated:Connect(function()
-		RecipeGuideUI.Open(ingredient.Id, {
-			PreferredStationType = "Hand",
-			RootRecipeId = recipeId,
-			RootQuantity = selectedRecipe == recipeId and craftQuantity or 1,
-		})
-	end)
-	frame.Size = UDim2.new(0, 80, 0, 44)
-	frame.BackgroundColor3 = COLORS.SlotEmpty
-	frame.BackgroundTransparency = 0.5
-	frame.BorderSizePixel = 0
-	frame.ZIndex = 13
-	frame.Parent = parent
-	
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 6)
-	corner.Parent = frame
-	
-	-- Item name/icon
-	local itemLabel = Instance.new("TextLabel")
-	itemLabel.Name = "ItemName"
-	itemLabel.Size = UDim2.new(1, -8, 0, 30)
-	itemLabel.Position = UDim2.new(0, 2, 0, 3)
-	itemLabel.BackgroundTransparency = 1
-	itemLabel.Text = name .. " ›"
-	itemLabel.TextColor3 = canAfford and COLORS.Text or COLORS.Danger
-	itemLabel.TextSize = Theme.IsMobile() and 14 or 10
-	itemLabel.Font = Enum.Font.GothamBold
-	itemLabel.TextWrapped = true
-	itemLabel.ZIndex = 14
-	itemLabel.Parent = frame
-	
-	-- Count display
-	local countLabel = Instance.new("TextLabel")
-	countLabel.Name = "Count"
-	countLabel.Size = UDim2.new(1, -4, 0, 18)
-	countLabel.Position = UDim2.new(0, 2, 0, 33)
-	countLabel.BackgroundTransparency = 1
-	countLabel.Text = string.format("%d/%d", have, needed)
-	countLabel.TextColor3 = canAfford and COLORS.Success or COLORS.Warning
-	countLabel.TextSize = Theme.IsMobile() and 14 or 11
-	countLabel.Font = Enum.Font.Gotham
-	countLabel.ZIndex = 14
-	countLabel.Parent = frame
-	
-	return frame
-end
-
 local recipeCards = {}
 
 local function createRecipeCard(recipeId, recipeData)
-	local ingredients = recipeData.Ingredients or {}
-	local output = recipeData.Output or { Id = recipeId, N = 1 }
-	
-	local item = ItemDatabase:Get(output.Id)
-	local name = item and item.Name or output.Id
-	local canCraft = canCraftRecipe(recipeId)
-	local outputCount = output.N or 1
-	
-	local card = Instance.new("TextButton")
-	card.Name = recipeId
-	card.Size = UDim2.new(1, -12, 0, 38 + math.max(1, math.ceil(#ingredients / (Theme.IsMobile() and 2 or 3))) * (Theme.IsMobile() and 60 or 54))
-	card.BackgroundColor3 = COLORS.SlotFilled
-	card.BorderSizePixel = 0
-	card.Text = ""
-	card.AutoButtonColor = false
-	card.ZIndex = 12
-	card.Parent = recipeContainer
-	Theme.Button(card)
-	
-	local cardCorner = Instance.new("UICorner")
-	cardCorner.CornerRadius = UDim.new(0, 8)
-	cardCorner.Parent = card
-	
-	local cardStroke = Instance.new("UIStroke")
-	cardStroke.Name = "Stroke"
-	cardStroke.Color = COLORS.Border
-	cardStroke.Thickness = 1
-	cardStroke.Transparency = 0.5
-	cardStroke.Parent = card
-	
-	-- Result item name (with output count if > 1)
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Name = "Name"
-	nameLabel.Size = UDim2.new(1, -102, 0, 22)
-	nameLabel.Position = UDim2.new(0, 10, 0, 6)
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Text = outputCount > 1 and string.format("%s x%d", name, outputCount) or name
-	nameLabel.TextColor3 = COLORS.Text
-	nameLabel.TextSize = 14
-	nameLabel.Font = Enum.Font.GothamBold
-	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-	nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-	nameLabel.ZIndex = 13
-	nameLabel.Parent = card
-	
-	-- Craftable indicator
-	local statusLabel = Instance.new("TextLabel")
-	statusLabel.Name = "Status"
-	statusLabel.Size = UDim2.new(0, 80, 0, 18)
-	statusLabel.AnchorPoint = Vector2.new(1, 0)
-	statusLabel.Position = UDim2.new(1, -10, 0, 8)
-	statusLabel.BackgroundTransparency = 1
-	statusLabel.Text = canCraft and "READY" or "MISSING"
-	statusLabel.TextColor3 = canCraft and COLORS.Success or COLORS.Danger
-	statusLabel.TextSize = 11
-	statusLabel.Font = Enum.Font.GothamBold
-	statusLabel.TextXAlignment = Enum.TextXAlignment.Right
-	statusLabel.ZIndex = 13
-	statusLabel.Parent = card
-	
-	-- Ingredients container
-	local ingredientsFrame = Instance.new("Frame")
-	ingredientsFrame.Name = "Ingredients"
-	ingredientsFrame.Size = UDim2.new(1, -20, 0, math.max(1, math.ceil(#ingredients / (Theme.IsMobile() and 2 or 3))) * (Theme.IsMobile() and 60 or 54))
-	ingredientsFrame.Position = UDim2.new(0, 10, 0, 32)
-	ingredientsFrame.BackgroundTransparency = 1
-	ingredientsFrame.ZIndex = 13
-	ingredientsFrame.Parent = card
-	ItemDescriptionUI.Mount(card, item, ingredientsFrame, 32, 10)
-	
-	local ingredientLayout = Instance.new("UIGridLayout")
-	ingredientLayout.FillDirection = Enum.FillDirection.Horizontal
-	ingredientLayout.FillDirectionMaxCells = Theme.IsMobile() and 2 or 3
-	ingredientLayout.CellSize = UDim2.new(1 / (Theme.IsMobile() and 2 or 3), -4, 0, Theme.IsMobile() and 56 or 50)
-	ingredientLayout.CellPadding = UDim2.fromOffset(4, 4)
-	ingredientLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	ingredientLayout.Parent = ingredientsFrame
-	
-	-- Add ingredient displays
-	for _, ingredient in ipairs(ingredients) do
-		createIngredientDisplay(ingredient, ingredientsFrame, recipeId)
-	end
-	
-	-- Interactions
-	card.MouseEnter:Connect(function()
-		TweenService:Create(card, TweenInfo.new(0.12), {BackgroundColor3 = COLORS.SlotHover}):Play()
-	end)
-	
-	card.MouseLeave:Connect(function()
-		local isSelected = selectedRecipe == recipeId
-		local targetColor = isSelected and COLORS.SlotSelected or COLORS.SlotFilled
-		TweenService:Create(card, TweenInfo.new(0.12), {BackgroundColor3 = targetColor}):Play()
-	end)
-	
-	card.MouseButton1Click:Connect(function()
-		if isCraftPending then return end
-		-- Deselect previous
+	local card = RecipeCardUI.Create(recipeContainer, recipeId, recipeData, {
+		Theme=Theme, Colors=COLORS, Items=ItemDatabase, IngredientCost=ingredientCost,
+		GetItemCount=getItemCount, CanCraft=canCraftRecipe,
+		OpenIngredient=function(itemId, rootRecipeId)
+			RecipeGuideUI.Open(itemId,{PreferredStationType="Hand",RootRecipeId=rootRecipeId,RootQuantity=selectedRecipe==rootRecipeId and craftQuantity or 1})
+		end,
+		IsSelected=function(id)return selectedRecipe==id end,
+		IsBusy=function()return isCraftPending end,
+		MountDescription=function(root,item,ingredients)ItemDescriptionUI.Mount(root,item,ingredients,32,10)end,
+		OnSelect=function(id, selectedCard, selectedStroke)
 		if selectedRecipe and recipeCards[selectedRecipe] then
 			local prevCard = recipeCards[selectedRecipe]
 			prevCard.Stroke.Color = COLORS.Border
 			prevCard.Stroke.Thickness = 1
 			prevCard.BackgroundColor3 = COLORS.SlotFilled
 		end
-		
-		-- Select this one
-		if selectedRecipe ~= recipeId then
+		if selectedRecipe ~= id then
 			craftQuantity = 1
 			quantityBox.Text = "1"
 		end
-		selectedRecipe = recipeId
-		cardStroke.Color = COLORS.SlotSelected
-		cardStroke.Thickness = 2
-		card.BackgroundColor3 = COLORS.SlotSelected
-		
-		-- Update craft button
+		selectedRecipe = id
+		selectedStroke.Color = COLORS.SlotSelected
+		selectedStroke.Thickness = 2
+		selectedCard.BackgroundColor3 = COLORS.SlotSelected
 		updateCraftButton()
-	end)
-	
+		end,
+	})
 	recipeCards[recipeId] = card
 	return card
 end

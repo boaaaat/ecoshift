@@ -1,11 +1,12 @@
 -- Shared furnace work and station upgrades use one mobile-friendly scrolling surface.
 local RS=game:GetService("ReplicatedStorage")
 local Players=game:GetService("Players")
-local Http=game:GetService("HttpService")
 local UIS=game:GetService("UserInputService")
 local Shared=RS:WaitForChild("Shared")
 if require(Shared.SessionConfig).GetMode()~="Expedition" then return end
 local Theme=require(Shared.UI.UITheme)
+local UIFactory=require(Shared.UI.UIFactory)
+local RemoteRequest=require(Shared.UI.RemoteRequest)
 local Catalog=require(Shared.OverhaulCatalog)
 local Items=require(Shared.Items.ItemDatabase)
 local Ingredients=require(Shared.IngredientResolver)
@@ -17,9 +18,9 @@ local remote=RS:WaitForChild("Remotes"):WaitForChild("Station")
 local inventoryRemote=RS.Remotes:WaitForChild("InventoryUpdate")
 local inventory={}
 local inventorySignature=""
-local pending
 local colors=Theme.Colors
-local function make(class,parent,props)local o=Instance.new(class);for k,v in pairs(props) do o[k]=v end;o.Parent=parent;return o end
+local make=UIFactory.Create
+local requests=RemoteRequest.new(remote)
 local gui=make("ScreenGui",player:WaitForChild("PlayerGui"),{Name="StationUI",Enabled=false,ResetOnSpawn=false,DisplayOrder=66,ZIndexBehavior=Enum.ZIndexBehavior.Sibling})
 make("Frame",gui,{Size=UDim2.fromScale(1,1),BackgroundColor3=colors.Night,BackgroundTransparency=.3,Active=true,BorderSizePixel=0})
 local panel=make("CanvasGroup",gui,{Name="StationPanel",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.fromOffset(750,680),BackgroundColor3=colors.Panel})
@@ -38,21 +39,16 @@ local title=label(panel,"Station",40);title.Position=UDim2.fromOffset(16,8);titl
 local status=label(panel,"",38);status.Position=UDim2.new(0,16,1,-42);status.Size=UDim2.new(1,-32,0,38)
 local function send(action,extra)
  if not state then return end
- if pending and action~="Close" then status.Text="Waiting for the furnace…";return end
- local payload=extra or {};payload.Station=state.Station;payload.RequestId=Http:GenerateGUID(false)
- if action~="Close" then
-  pending={Id=payload.RequestId,Action=action,Station=state.Station}
-  status.Text="Sending…";status.TextColor3=colors.Amber
-  task.delay(8,function()
-   if pending and pending.Id==payload.RequestId then
-    pending=nil;status.Text="No reply from the furnace. Reopen it to refresh.";status.TextColor3=colors.Warning
-    if gui.Enabled then render() end
-   end
-  end)
- end
- remote:FireServer(action,payload)
+ local payload=extra or {};payload.Station=state.Station
+ requests:Send(action,payload,{
+  Track=action~="Close",
+  Timeout=8,
+  OnBusy=function()status.Text="Waiting for the furnace…" end,
+  OnStart=function()status.Text="Sending…";status.TextColor3=colors.Amber end,
+  OnTimeout=function()status.Text="No reply from the furnace. Reopen it to refresh.";status.TextColor3=colors.Warning;if gui.Enabled then render() end end,
+ })
 end
-local function close()send("Close");pending=nil;gui.Enabled=false;state=nil end
+local function close()send("Close");requests:Cancel();gui.Enabled=false;state=nil end
 local x=button(panel,"",close);x.Size=UDim2.fromOffset(44,44);x.Position=UDim2.new(1,-58,0,8);Theme.Icon(x,"Close",22)
 local tabs=make("Frame",panel,{Position=UDim2.fromOffset(16,58),Size=UDim2.new(1,-32,0,44),BackgroundTransparency=1})
 local recipesTab=button(tabs,"Recipes",function()page="Recipes";render(true) end,"Flame","Craft");recipesTab.Size=UDim2.new(1/3,-5,1,0)
@@ -72,9 +68,86 @@ work.Size=UDim2.new(1,-160,0,30)
 local fuelQuick=button(panel,"0s",function()page="Station";render(true) end,"Flame","Fuel")
 fuelQuick.Position=UDim2.new(1,-140,0,106);fuelQuick.Size=UDim2.fromOffset(124,34)
 local function name(id)local item=Items:Get(id);return item and item.Name or id end
-local function costs(list)local pieces={};for _,v in ipairs(list or {}) do table.insert(pieces,name(v.Id).." ×"..v.N) end;return table.concat(pieces," + ") end
 local function owned(id)return Ingredients.Count(inventory,id) end
 local function affordable(recipe)return Ingredients.Max(recipe.Ingredients,inventory,player,20) end
+local function itemGlyph(item,id)
+ if item then
+  if item:HasTag("Mineral") or item:HasTag("Ore") then return "Mineral" end
+  if item:HasTag("Food") then return "Food" end
+  if item:HasTag("Armor") then return "Armor" end
+ end
+ local key=string.lower(id or "")
+ if key:find("wood") or key:find("plank") or key:find("fiber") or key:find("reeds") then return "Leaf" end
+ if key:find("ore") or key:find("bar") or key:find("metal") or key:find("stone") or key:find("glass") or key:find("crystal") then return "Mineral" end
+ if key:find("cloth") or key:find("hide") or key:find("wool") then return "Armor" end
+ return "Craft"
+end
+local function iconWell(parent,itemId,size)
+ local item=Items:Get(itemId);local glyph=itemGlyph(item,itemId)
+ local tint=item and item.IconColor or (glyph=="Mineral" and colors.Cold or glyph=="Armor" and colors.Sage or colors.Moss)
+ local well=make("Frame",parent,{Name="ItemIcon",Size=UDim2.fromOffset(size,size),BackgroundColor3=tint,BackgroundTransparency=.12,BorderSizePixel=0,ZIndex=(parent.ZIndex or 1)+1})
+ well:SetAttribute("ThemeFixed",true);Theme.Corner(well,8)
+ local asset=item and type(item.Icon)=="string" and item.Icon or ""
+ if asset~="" then
+  make("ImageLabel",well,{Size=UDim2.new(1,-8,1,-8),Position=UDim2.fromOffset(4,4),BackgroundTransparency=1,Image=asset,ScaleType=Enum.ScaleType.Fit,ZIndex=well.ZIndex+1})
+ else Theme.Icon(well,glyph,math.floor(size*.52)) end
+ return well
+end
+local function stationUnlocks(stationType,nextGrade)
+ local result,seen={},{ }
+ for recipeId,recipe in pairs(Catalog.Recipes) do
+  if not recipe.Future and (recipe.RequiredGrade or recipe.Tier or 1)==nextGrade and table.find(recipe.AllowedStations or {},stationType) then
+   local output=recipe.Output or {Id=recipeId,N=1}
+   local key=output.Id..":"..tostring(output.N or 1)
+   if not seen[key] then
+    seen[key]=true
+    table.insert(result,{Id=output.Id,N=output.N or 1,Category=recipe.Category or (recipe.Cooking and "Meal" or "Recipe")})
+   end
+  end
+ end
+ table.sort(result,function(a,b)return name(a.Id)<name(b.Id) end)
+ return result
+end
+local function upgradeDetail(stationType,nextGrade,unlockCount)
+ local stationName=(Catalog.Stations[stationType] or {}).Name or stationType
+ local lines={stationName.." becomes Grade "..nextGrade.."."}
+ if unlockCount>0 then table.insert(lines,"Unlocks "..unlockCount.." Grade "..nextGrade.." recipe"..(unlockCount==1 and "" or "s").." shown below.")
+ else table.insert(lines,"No new recipe is assigned to this exact grade; it advances the station toward later grade requirements.") end
+ if stationType=="Anvil" then
+  table.insert(lines,"Can repair Grade "..nextGrade.." weapons and tools, and reforge Grade "..nextGrade.." armor families assigned to an Anvil.")
+ elseif stationType=="Loom" then
+  table.insert(lines,"Can repair Grade "..nextGrade.." armor and reforge Grade "..nextGrade.." armor families assigned to a Loom.")
+ elseif stationType=="RepairBench" then
+  table.insert(lines,"Can repair Grade "..nextGrade.." weapons, tools, and armor.")
+ elseif stationType=="EnchantingTable" then
+  table.insert(lines,"Can perform enchantment work whose station requirement is Grade "..nextGrade..".")
+ elseif stationType=="Workbench" and (nextGrade==4 or nextGrade==7) then
+  table.insert(lines,"Its field name changes to "..(nextGrade==4 and "Advanced Workbench" or "Master Workbench")..".")
+ end
+ if stationType=="Furnace" or table.find({"Campfire","Stove","Oven"},stationType) then
+  table.insert(lines,"Queue size, processing speed, fuel value, and output space do not change.")
+ else table.insert(lines,"Crafting speed and recipe material costs do not change.") end
+ return table.concat(lines," ")
+end
+local function upgradeMaterialRow(cost,order)
+ local itemId,need=cost.Id,cost.N;local have=owned(itemId);local ready=have>=need
+ local row=make("TextButton",content,{Name="UpgradeMaterial_"..itemId,Size=UDim2.new(1,0,0,72),LayoutOrder=order,Text="",AutoButtonColor=false,BackgroundColor3=colors.SlotFilled,BorderSizePixel=0})
+ Theme.Button(row);Theme.Corner(row,9)
+ local stroke=make("UIStroke",row,{Thickness=1,Transparency=.5,Color=ready and colors.Success or colors.Border})
+ local well=iconWell(row,itemId,52);well.Position=UDim2.fromOffset(10,10)
+ local itemName=label(row,name(itemId),26);itemName.Position=UDim2.fromOffset(74,8);itemName.Size=UDim2.new(1,-200,0,26);itemName.Font=Enum.Font.GothamBold;itemName.TextSize=16;itemName.TextWrapped=false;itemName.TextTruncate=Enum.TextTruncate.AtEnd
+ local count=label(row,have.." / "..need,26);count.Position=UDim2.new(1,-120,0,8);count.Size=UDim2.fromOffset(104,26);count.Font=Enum.Font.GothamBold;count.TextSize=16;count.TextXAlignment=Enum.TextXAlignment.Right;count.TextColor3=ready and colors.Success or colors.Warning
+ local track=make("Frame",row,{Position=UDim2.fromOffset(74,45),Size=UDim2.new(1,-90,0,9),BackgroundColor3=colors.Background,BackgroundTransparency=.08,BorderSizePixel=0});Theme.Corner(track,5)
+ local bar=make("Frame",track,{Size=UDim2.fromScale(math.clamp(have/math.max(1,need),0,1),1),BackgroundColor3=ready and colors.Success or colors.Amber,BorderSizePixel=0});Theme.Corner(bar,5)
+ row.Activated:Connect(function()Guide.Open(itemId,{PreferredStationType=state and state.StationType})end)
+ return ready
+end
+local function upgradeUnlockRow(unlock,order)
+ local row=make("Frame",content,{Name="Unlock_"..unlock.Id,Size=UDim2.new(1,0,0,54),LayoutOrder=order,BackgroundColor3=colors.SlotEmpty,BackgroundTransparency=.12,BorderSizePixel=0});Theme.Corner(row,8)
+ local well=iconWell(row,unlock.Id,38);well.Position=UDim2.fromOffset(8,8)
+ local itemName=label(row,name(unlock.Id),24);itemName.Position=UDim2.fromOffset(58,5);itemName.Size=UDim2.new(1,-74,0,24);itemName.Font=Enum.Font.GothamBold;itemName.TextSize=15;itemName.TextWrapped=false;itemName.TextTruncate=Enum.TextTruncate.AtEnd
+ local detail=label(row,(unlock.N>1 and ("Makes ×"..unlock.N.." · ") or "")..unlock.Category,20);detail.Position=UDim2.fromOffset(58,28);detail.Size=UDim2.new(1,-74,0,20);detail.TextSize=12;detail.TextColor3=colors.TextMuted
+end
 local function lockReason(recipe)
  if recipe.RequiredGrade>state.Grade then return "Needs furnace grade "..recipe.RequiredGrade end
  if recipe.CampaignTier>state.CampaignTier then return "Needs campaign tier "..recipe.CampaignTier end
@@ -161,7 +234,7 @@ render=function(reset)
   local plus=button(actions,"+",function()quantity=math.min(20,quantity+1);render() end);plus.Position=UDim2.fromOffset(92,0);plus.Size=UDim2.fromOffset(40,44)
   local maximum=affordable(r)
   local blocked=lockReason(r) or (#state.State.Jobs>=3 and "Queue full — three jobs maximum") or (quantity>maximum and "Missing materials")
-  local queue=button(actions,pending and "Sending…" or blocked and "Can't smelt" or "Smelt",function()
+  local queue=button(actions,requests:IsPending() and "Sending…" or blocked and "Can't smelt" or "Smelt",function()
    if blocked then status.Text=blocked;return end
    send("Queue",{RecipeId=recipeId,Quantity=quantity})
   end,"Flame",blocked and "Neutral" or "Craft")
@@ -203,10 +276,40 @@ render=function(reset)
    end,"Craft","Collect")
   end
   if state.Grade<8 then
-   button(content,"Upgrade station · G"..(state.Grade+1),function()send("Upgrade") end,"Upgrade","Special")
-   label(content,costs(state.UpgradeCost),48)
-   if state.CampaignTier<=state.Grade then label(content,"Complete the next campaign tier first.",36).TextColor3=colors.Warning end
-  else label(content,"Station fully upgraded",40) end
+   local nextGrade=state.Grade+1
+   local unlocks=stationUnlocks(state.StationType,nextGrade)
+   local summary=make("Frame",content,{Name="UpgradeSummary",Size=UDim2.new(1,0,0,132),BackgroundColor3=colors.SlotFilled,BorderSizePixel=0});Theme.Corner(summary,10)
+   local summaryStroke=make("UIStroke",summary,{Color=colors.Special,Transparency=.35,Thickness=1})
+   local badge=make("Frame",summary,{Size=UDim2.fromOffset(94,38),Position=UDim2.fromOffset(12,12),BackgroundColor3=Color3.fromRGB(88,67,110),BorderSizePixel=0});badge:SetAttribute("ThemeFixed",true);Theme.Corner(badge,7)
+   local badgeIcon=Theme.Icon(badge,"Upgrade",21);badgeIcon.Position=UDim2.new(0,22,.5,0)
+   local badgeText=label(badge,"G"..state.Grade.."  ›  G"..nextGrade,38);badgeText.Position=UDim2.fromOffset(38,0);badgeText.Size=UDim2.new(1,-42,1,0);badgeText.Font=Enum.Font.GothamBold;badgeText.TextSize=13
+   local heading=label(summary,"STATION UPGRADE",30);heading.Position=UDim2.fromOffset(118,10);heading.Size=UDim2.new(1,-132,0,30);heading.Font=Enum.Font.GothamBold;heading.TextSize=18;heading.TextColor3=colors.Special
+   local detailText=upgradeDetail(state.StationType,nextGrade,#unlocks)
+   local detail=label(summary,detailText,72);detail.Position=UDim2.fromOffset(14,54);detail.Size=UDim2.new(1,-28,0,68);detail.TextSize=13;detail.TextColor3=colors.TextMuted;detail.TextYAlignment=Enum.TextYAlignment.Top
+   label(content,"UPGRADE MATERIALS · OWNED / REQUIRED",26).TextColor3=colors.Amber
+   local materialsReady=true
+   for index,cost in ipairs(state.UpgradeCost or {}) do if not upgradeMaterialRow(cost,20+index) then materialsReady=false end end
+   if #unlocks>0 then
+    local unlockHeader=label(content,"NEW RECIPES AT GRADE "..nextGrade,28);unlockHeader.TextColor3=colors.Cold;unlockHeader.LayoutOrder=40
+    for index,unlock in ipairs(unlocks) do upgradeUnlockRow(unlock,40+index) end
+   end
+   local campaignReady=state.CampaignTier>=nextGrade
+   local canUpgrade=materialsReady and campaignReady and not requests:IsPending()
+   local upgradeText=requests:IsPending() and "UPGRADING…" or not campaignReady and ("CAMPAIGN TIER "..nextGrade.." REQUIRED") or not materialsReady and "MISSING UPGRADE MATERIALS" or ("UPGRADE TO GRADE "..nextGrade)
+   local upgradeButton=button(content,upgradeText,function()
+    if requests:IsPending() then return end
+    if not campaignReady then status.Text="Complete campaign tier "..nextGrade.." first.";status.TextColor3=colors.Warning;return end
+    if not materialsReady then status.Text="Collect the missing upgrade materials first.";status.TextColor3=colors.Warning;return end
+    send("Upgrade")
+   end,"Upgrade",canUpgrade and "Special" or "Neutral")
+   upgradeButton.LayoutOrder=100;upgradeButton.Active=canUpgrade;upgradeButton.Selectable=canUpgrade
+   if not campaignReady then local warning=label(content,"Campaign certification controls the maximum station grade.",34);warning.LayoutOrder=101;warning.TextColor3=colors.Warning end
+  else
+   local complete=make("Frame",content,{Size=UDim2.new(1,0,0,92),BackgroundColor3=colors.SlotFilled,BorderSizePixel=0});Theme.Corner(complete,10)
+   local icon=iconWell(complete,state.StationType,54);icon.Position=UDim2.fromOffset(12,19)
+   local done=label(complete,"STATION FULLY UPGRADED",30);done.Position=UDim2.fromOffset(78,16);done.Size=UDim2.new(1,-94,0,30);done.Font=Enum.Font.GothamBold;done.TextSize=18;done.TextColor3=colors.Success
+   local copy=label(complete,"Grade 8 · every available station-grade function is enabled.",28);copy.Position=UDim2.fromOffset(78,46);copy.Size=UDim2.new(1,-94,0,28);copy.TextColor3=colors.TextMuted
+  end
  end
  content.CanvasPosition=reset and Vector2.zero or pos
  updateWork()
@@ -217,11 +320,10 @@ search:GetPropertyChangedSignal("Text"):Connect(function()
 end)
 remote.OnClientEvent:Connect(function(kind,payload)
  if type(payload)~="table" then return end
- if kind=="Close" then gui.Enabled=false;state=nil;pending=nil;return end
+ if kind=="Close" then gui.Enabled=false;state=nil;requests:Cancel();return end
  if kind=="Result" then
   if payload.Station and state and payload.Station~=state.Station then return end
-  local completed=pending and pending.Id==payload.RequestId and pending
-  if completed then pending=nil end
+  local completed=requests:Resolve(payload.RequestId)
   if payload.Message then status.Text=payload.Message;status.TextColor3=payload.Success and colors.Success or colors.Warning end
   if completed and payload.Success and completed.Action=="Queue" then page="Queue" end
   if gui.Enabled then render(completed and payload.Success and completed.Action=="Queue") end
@@ -232,7 +334,7 @@ remote.OnClientEvent:Connect(function(kind,payload)
  state=payload;gui.Enabled=true
  local output={};for i=1,12 do output[i]=state.State.Output and (state.State.Output[i] or state.State.Output[tostring(i)]) or false end;state.State.Output=output
  if fresh then
-  pending=nil;page=state.StationType=="Furnace" and "Recipes" or "Station";recipeId=nil;quantity=1;searchQuery="";search.Text=""
+  requests:Cancel();page=state.StationType=="Furnace" and "Recipes" or "Station";recipeId=nil;quantity=1;searchQuery="";search.Text=""
   status.Text="Choose a recipe; green rows have enough materials.";status.TextColor3=colors.TextMuted
   inventoryRemote:FireServer("RequestSnapshot")
  end

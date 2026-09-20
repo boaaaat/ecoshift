@@ -64,6 +64,7 @@ MapConfig.PlayerPortraits = {
 -- Marker glyph source:
 -- Type = "emoji" uses Value as text glyph
 -- Type = "icon" uses Value as Image (rbxassetid://...)
+-- Type = "theme" uses one of UITheme's resolution-independent line icons.
 MapConfig.MarkerGlyphs = {
 	PlayerSelf = { Type = "emoji", Value = "▲" },
 	PlayerOther = { Type = "emoji", Value = "●" },
@@ -71,6 +72,7 @@ MapConfig.MarkerGlyphs = {
 	Enemy = { Type = "emoji", Value = "!" },
 	Structure = { Type = "emoji", Value = "■" },
 	Objective = { Type = "emoji", Value = "+" },
+	CrewMarker = { Type = "theme", Value = "Waypoint" },
 	PlayerUnique = {
 		Type = "emoji_pool",
 		Values = { "●" },

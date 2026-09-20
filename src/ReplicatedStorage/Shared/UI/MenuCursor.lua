@@ -1,4 +1,6 @@
 -- Shared ownership keeps the cursor free until the last interactive menu closes.
+-- Bind any menu's visible root through Theme.CaptureCursor; this module handles
+-- nested menus and restores normal camera ownership after the final one closes.
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
@@ -18,8 +20,9 @@ end
 
 function MenuCursor.Bind(root)
 	if not RunService:IsClient() then return end
+	assert(typeof(root) == "Instance", "MenuCursor.Bind expects a UI instance")
 	roots[root] = true
-	if started then return end
+	if started then return root end
 	started = true
 	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 	local gui = Instance.new("ScreenGui")
@@ -33,11 +36,14 @@ function MenuCursor.Bind(root)
 	modal.Size = UDim2.fromOffset(1, 1)
 	modal.BackgroundTransparency = 1
 	modal.Text = ""
-	modal.Active = false
+	-- Roblox's camera controller only honors Modal while its GuiButton is active.
+	-- This suspends shift lock without placing a click-blocking surface over menus.
+	modal.Active = true
 	modal.Selectable = false
 	modal.Modal = true
 	modal.Visible = false
 	modal.Parent = gui
+	playerGui:SetAttribute("MenuCursorOpen", false)
 	RunService:BindToRenderStep("EcoShiftMenuVisibility", Enum.RenderPriority.Camera.Value - 1, function()
 		local visible = false
 		for frame in pairs(roots) do
@@ -50,15 +56,16 @@ function MenuCursor.Bind(root)
 			playerGui:SetAttribute("MenuCursorOpen", open)
 		end
 	end)
-	RunService:BindToRenderStep("EcoShiftMenuCursor", Enum.RenderPriority.Camera.Value + 1, function()
+	-- Run after the stock camera and mouse-lock controller. Camera.Value + 1 is
+	-- early enough for another camera callback to recapture the pointer.
+	RunService:BindToRenderStep("EcoShiftMenuCursor", Enum.RenderPriority.Last.Value, function()
 		if open then
-			-- Modal also tells the stock camera to suspend first-person rotation.
-			-- Override after the camera so holding RMB cannot recapture the cursor.
 			UIS.MouseBehavior = Enum.MouseBehavior.Default
 			UIS.MouseIconEnabled = true
 		end
 		-- On close, the stock camera restores its current mode/lock next frame.
 	end)
+	return root
 end
 
 return MenuCursor

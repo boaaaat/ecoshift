@@ -7,9 +7,68 @@ local HttpService = game:GetService("HttpService")
 local Codec = require(script.Parent.WorldSnapshotCodec)
 local Validator = require(script.Parent.WorldSnapshotValidator)
 local Rules = require(ReplicatedStorage.Shared.GameRules)
+local Loading = require(script.Parent.LoadingProgress)
 local Snapshot = { Version = 2, GeneratorVersion = 2, MaxBytes = 3500000, _players = {}, _ready = {}, _errors = {} }
 local function service(name) return require(script.Parent[name]) end
 local AUXILIARY = { "EventService", "ObjectiveService", "ExpeditionRewardsService" }
+
+local function holdCharacterForRestore(character)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return nil, false end
+	local savedAnchored = root:GetAttribute("WorldLoadWasAnchored")
+	-- False is the usual pre-load state. An and/or fallback would discard it
+	-- and reuse the temporary loading anchor, permanently freezing the player.
+	local wasAnchored = root.Anchored
+	if type(savedAnchored) == "boolean" then wasAnchored = savedAnchored end
+	root.Anchored = true
+	root.AssemblyLinearVelocity, root.AssemblyAngularVelocity = Vector3.zero, Vector3.zero
+	return root, wasAnchored
+end
+
+local function releaseRestoredCharacter(player, character, root, wasAnchored)
+	if not root or not root.Parent or player.Character ~= character then return end
+	if not player:GetAttribute("InteriorId") then
+		local world = service("OverhaulWorldService")
+		world:EnsureArea(root.Position)
+		-- Wait for Roblox streaming to deliver collision around the restored pose.
+		-- This is harmless when streaming is disabled and bounded when unavailable.
+		pcall(function() player:RequestStreamAroundAsync(root.Position, 5) end)
+		if player:GetAttribute("CreativeFlying") ~= true then
+			local minimumY = world:GetHeight(root.Position.X, root.Position.Z) + 3.2
+			if root.Position.Y < minimumY then
+				root.CFrame = CFrame.new(root.Position.X, minimumY, root.Position.Z) * root.CFrame.Rotation
+			end
+		end
+	end
+	-- Give the restored CreativeFlying attribute time to start the local flight
+	-- constraints before gravity is allowed to act on a previously flying player.
+	task.wait(player:GetAttribute("CreativeFlying") == true and 0.5 or 0.75)
+	if root.Parent and player.Character == character then
+		root.AssemblyLinearVelocity, root.AssemblyAngularVelocity = Vector3.zero, Vector3.zero
+		root.Anchored = wasAnchored
+		root:SetAttribute("WorldLoadWasAnchored", nil)
+	end
+end
+
+local function creativeStateWithLegacyFlight(player, character, state)
+	local creative = type(state.Creative) == "table" and table.clone(state.Creative) or state.Creative
+	if workspace:GetAttribute("WorldType") ~= "Creative" or (type(creative) == "table" and creative.Mode == false)
+		or (type(creative) == "table" and creative.Flying ~= nil) or state.InteriorId then
+		return creative
+	end
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then return creative end
+	local terrainHeight = service("OverhaulWorldService"):GetHeight(root.Position.X, root.Position.Z)
+	if root.Position.Y <= terrainHeight + 8 then return creative end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { character }
+	params.RespectCanCollide = true
+	if workspace:Raycast(root.Position, Vector3.new(0, -8, 0), params) then return creative end
+	creative = type(creative) == "table" and creative or { Mode = true, Invincible = true }
+	creative.Flying = true
+	return creative
+end
 
 function Snapshot:CapturePlayer(player, departingCharacter)
 	local key = tostring(player.UserId)
@@ -64,6 +123,7 @@ Players.PlayerAdded:Connect(bindCharacterCapture)
 for _, player in ipairs(Players:GetPlayers()) do bindCharacterCapture(player) end
 
 local function markJoiningPlayer(player)
+	Loading.BindPlayer(player)
 	player:SetAttribute("WorldPlayerLoading", true)
 	local state = Snapshot._players[tostring(player.UserId)]
 	if state then
@@ -193,18 +253,24 @@ function Snapshot:RestorePlayer(player)
 	if self._ready[player] then return true end
 	local char = assert(player.Character, "Character required for player restore")
 	assert(char:FindFirstChildOfClass("Humanoid"), "Humanoid required for player restore")
+	local heldRoot, rootWasAnchored = holdCharacterForRestore(char)
 	local state = self._players[tostring(player.UserId)]
 	if state then
 		player:SetAttribute("WorldPlayerRestoring", true)
+		player:SetAttribute("WorldRestoreStage", "Role")
 		service("RoleService"):ApplyRunRole(player, state.Role, state.ClassLevel or 1)
 		char:SetAttribute("WorldStateRestored", true)
+		player:SetAttribute("WorldRestoreStage", "Stats")
 		service("StatsService"):RestoreWorldState(player, state.Stats)
+		player:SetAttribute("WorldRestoreStage", "Inventory")
 		service("InventoryService"):RestoreWorldState(player, state.Inventory)
+		player:SetAttribute("WorldRestoreStage", "Position")
 		service("InteriorService"):RestorePlayer(player, state.InteriorId)
 		if state.Transform then
 			local transform = Codec.ReadCFrame(state.Transform)
-			local root = char:FindFirstChild("HumanoidRootPart")
+			local root = heldRoot or char:FindFirstChild("HumanoidRootPart")
 			if not state.InteriorId then
+				service("OverhaulWorldService"):EnsureArea(transform.Position)
 				local ground = service("OverhaulWorldService"):GetHeight(transform.Position.X, transform.Position.Z) + 3.2
 				if transform.Position.Y < ground then
 					transform = CFrame.new(transform.Position.X, ground, transform.Position.Z) * transform.Rotation
@@ -221,14 +287,20 @@ function Snapshot:RestorePlayer(player)
 			if root then root.AssemblyLinearVelocity, root.AssemblyAngularVelocity = Vector3.zero, Vector3.zero end
 		end
 		char:SetAttribute("WetStacks", Codec.Number(state.WetStacks or 0, 0, 5))
+		player:SetAttribute("WorldRestoreStage", "CraftRefund")
 		service("CraftingService"):RestoreRefund(player, state)
+		player:SetAttribute("WorldRestoreStage", "ClassAbility")
 		service("ClassAbilityService"):RestorePlayer(player, state.ClassAbility)
-		service("CreativeService"):RestorePlayer(player, state.Creative)
+		player:SetAttribute("WorldRestoreStage", "CreativeState")
+		service("CreativeService"):RestorePlayer(player, creativeStateWithLegacyFlight(player, char, state))
+		player:SetAttribute("WorldRestoreStage", "FoodEffects")
 		service("FoodService"):RestorePlayer(player, state.Death.Downed and nil or state.Food)
+		player:SetAttribute("WorldRestoreStage", "GearEffects")
 		service("GearService"):RestorePlayer(player, state.Gear)
 		-- Reconstruct a saved corpse only after every system that may need the
 		-- temporary character has restored its state. This is the final operation
 		-- that destroys that character and switches the client to spectating.
+		player:SetAttribute("WorldRestoreStage", "DeathState")
 		service("DeathService"):RestoreWorldState(player, state.Death)
 	else
 		-- New expeditions start at their class-adjusted maximum; restores and revives never heal here.
@@ -237,14 +309,22 @@ function Snapshot:RestorePlayer(player)
 		stats:SetModifier(player, "Speed", player:GetAttribute("Class_SpeedBonus") or 0, "Mult", "ClassSpeed")
 		stats:SetBase(player, "Health", stats:GetStat(player, "MaxHealth"))
 		char:SetAttribute("WorldStateRestored", true)
+		player:SetAttribute("WorldRestoreStage", "StarterInventory")
 		service("InventoryService"):Reset(player, true)
+		player:SetAttribute("WorldRestoreStage", "CreativeState")
 		service("CreativeService"):RestorePlayer(player, nil)
 	end
+	player:SetAttribute("WorldRestoreStage", "StreamingPosition")
+	releaseRestoredCharacter(player, char, heldRoot, rootWasAnchored)
 	player:SetAttribute("WorldPlayerRestoring", nil)
 	player:SetAttribute("WorldPlayerLoading", nil)
 	self._ready[player] = true
+	player:SetAttribute("WorldRestoreStage", "Checkpoint")
 	self:CapturePlayer(player)
+	player:SetAttribute("WorldRestoreStage", "GameState")
 	service("GameStateService"):SendToPlayer(player)
+	Loading.PlayerReady(player)
+	player:SetAttribute("WorldRestoreStage", nil)
 	return true
 end
 

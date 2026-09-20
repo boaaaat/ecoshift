@@ -94,6 +94,17 @@ function Validator.Validate(snapshot, expectedRoster)
 			end
 			assert(total <= maxSubBiomes, "Saved sub-biome visit count is invalid")
 		end
+		arrayShape(snapshot.Structures, 0, 1500)
+		for _, structure in ipairs(snapshot.Structures) do
+			assert(type(structure) == "table" and type(structure.Type) == "string" and #structure.Type > 0, "Saved structure is invalid")
+			arrayShape(structure.Transform, 12, 12)
+			assert(structure.ExpiresOnBiomeShift == nil or type(structure.ExpiresOnBiomeShift) == "boolean",
+				"Saved structure biome-shift flag is invalid")
+			assert(structure.ExpiresAfterBiomeVisit == nil or (type(structure.ExpiresAfterBiomeVisit) == "number"
+				and structure.ExpiresAfterBiomeVisit == structure.ExpiresAfterBiomeVisit and structure.ExpiresAfterBiomeVisit >= 0
+				and structure.ExpiresAfterBiomeVisit <= 1e8 and structure.ExpiresAfterBiomeVisit % 1 == 0),
+				"Saved structure biome-shift serial is invalid")
+		end
 		for userId, record in pairs(snapshot.RunStats) do
 			assert(type(userId) == "string" and tonumber(userId) and type(record) == "table", "Saved crew record is invalid")
 			assert(record.MonsterDefeats == nil or (type(record.MonsterDefeats) == "number" and record.MonsterDefeats == record.MonsterDefeats

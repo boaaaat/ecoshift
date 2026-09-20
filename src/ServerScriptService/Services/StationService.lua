@@ -8,13 +8,13 @@ local Catalog=require(RS.Shared.OverhaulCatalog)
 local Ingredients=require(RS.Shared.IngredientResolver)
 local Inventory=require(script.Parent.InventoryService)
 local Items=require(RS.Shared.Items.ItemDatabase)
+local ServerUtil=require(script.Parent.ServerUtil)
 local Codec=require(script.Parent.WorldSnapshotCodec)
 local GameState=require(script.Parent.GameStateService)
 local S={_states={},_viewers={},_requests={},_rateLimits={}}
 local function integer(n,a,b) return type(n)=="number" and n==n and n%1==0 and n>=a and n<=b end
 local function alive(p)
- local hum=p.Character and p.Character:FindFirstChildOfClass("Humanoid")
- return hum and hum.Health>0 and not p:GetAttribute("IsDead") and not p:GetAttribute("WorldPlayerLoading") and not p:GetAttribute("WorldPlayerRestoring")
+ return ServerUtil.IsLiving(p)
 end
 local function kind(model)
  if typeof(model)~="Instance" or not model:IsDescendantOf(workspace) or not Collection:HasTag(model,"Structure") or not (model:IsA("Model") or model:IsA("BasePart")) then return nil end

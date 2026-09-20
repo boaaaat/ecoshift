@@ -3,6 +3,7 @@ local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local UIS = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
+local ContextActionService = game:GetService("ContextActionService")
 local Config = require(RS:WaitForChild("Shared").Config)
 local Theme = require(RS:WaitForChild("Shared").UI.UITheme)
 local Items = require(RS.Shared.Items.ItemDatabase)
@@ -15,6 +16,7 @@ gui.ResetOnSpawn = false
 -- Keep the mode switch reachable above death/spectator overlays.
 gui.DisplayOrder = 125
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.ScreenInsets = Enum.ScreenInsets.DeviceSafeInsets
 gui.Enabled = false
 gui.Parent = player:WaitForChild("PlayerGui")
 Theme.TrackRoot(gui)
@@ -50,7 +52,7 @@ panel.Visible = false
 panel.Parent = gui
 Theme.Panel(panel)
 Theme.CaptureCursor(panel)
-local title = Theme.Label(panel, "CREATIVE FIELD KIT", UDim2.new(1,-220,0,28), UDim2.fromOffset(16,12), 21,nil,true)
+local title = Theme.Label(panel, "CREATIVE FIELD KIT", UDim2.new(1,-280,0,28), UDim2.fromOffset(16,12), 21,nil,true)
 local modeButton
 local close = button(panel,"×",UDim2.fromOffset(44,44),UDim2.new(1,-52,0,6),function() panel.Visible=false end)
 close.TextSize = 28
@@ -98,6 +100,24 @@ modeButton = button(panel,"Creative ↔",UDim2.fromOffset(130,44),UDim2.new(1,-1
 	local creative = player:GetAttribute("CreativeMode") == true
 	request("SetMode",{Mode=creative and "Survival" or "Creative"},modeButton)
 end,true)
+local function setInventoryVisible(open)
+	local inventoryGui = player.PlayerGui:FindFirstChild("InventoryUI")
+	local bridge = inventoryGui and inventoryGui:FindFirstChild("SetInventoryOpen")
+	if bridge and bridge:IsA("BindableEvent") then
+		bridge:Fire(open == true)
+		return true
+	end
+	return false
+end
+local inventoryButton = button(panel,"",UDim2.fromOffset(44,44),UDim2.new(1,-242,0,6),function()
+	if setInventoryVisible(true) then
+		panel.Visible = false
+	else
+		message("Your inventory is still loading. Try again shortly.",false)
+	end
+end)
+inventoryButton.Name = "OpenInventory"
+Theme.TouchIcon(inventoryButton,"Pack",27)
 
 local itemsPage = Instance.new("Frame")
 itemsPage.Name, itemsPage.Size, itemsPage.BackgroundTransparency = "Items", UDim2.fromScale(1,1),1
@@ -118,11 +138,12 @@ local itemsTab, worldTab
 itemsTab=button(panel,"ITEMS",UDim2.new(.5,-20,0,40),UDim2.fromOffset(16,56),function() showPage("Items") end,true)
 worldTab=button(panel,"WORLD CONTROLS",UDim2.new(.5,-20,0,40),UDim2.new(.5,4,0,56),function() showPage("World") end)
 local category="All"
-local categories={"All","Resources","Tools","Weapons","Armor","Food","Medical","Stations & builds","Other"}
-local categoryRules={Resources={"Resource"},Tools={"Tool"},Weapons={"Weapon"},Armor={"Armor"},Food={"Food"},Medical={"Medical","Healing"},["Stations & builds"]={"Placeable"}}
-local categoryGlyph={All="Pack",Resources="Mineral",Tools="Harvest",Weapons="Attack",Armor="Shield",Food="Food",Medical="Health",["Stations & builds"]="Build",Other="Survey"}
+local categories={"All","Resources","Tools","Weapons","Armor","Accessories","Food","Medical","Crafting tables","Lights","Builds","Other"}
+local categoryRules={Resources={"Resource"},Tools={"Tool"},Weapons={"Weapon"},Armor={"Armor"},Accessories={"Accessory"},Food={"Food"},Medical={"Medicine","Medical","Healing"},["Crafting tables"]={"CraftingStation"},Lights={"Light"},Builds={"Placeable"}}
+local categoryGlyph={All="Pack",Resources="Mineral",Tools="Harvest",Weapons="Attack",Armor="Shield",Accessories="Pack",Food="Food",Medical="Health",["Crafting tables"]="Craft",Lights="Flame",Builds="Build",Other="Survey"}
 local function matchesCategory(item, selected)
 	if selected=="All" then return true end
+	if selected=="Builds" then return item:HasTag("Placeable") and not item:HasTag("CraftingStation") and not item:HasTag("Light") end
 	if selected=="Other" then
 		for _,tags in pairs(categoryRules) do for _,tag in ipairs(tags) do if item:HasTag(tag) then return false end end end
 		return true
@@ -167,9 +188,7 @@ grid.CellPadding,grid.SortOrder=UDim2.fromOffset(8,8),Enum.SortOrder.LayoutOrder
 grid.Parent=catalog
 local empty=Theme.Label(itemsPage,"No matching items",UDim2.new(1,0,0,40),UDim2.fromOffset(0,65),18)
 empty.TextXAlignment,empty.Visible=Enum.TextXAlignment.Center,false
-local quantityLabel=Theme.Label(itemsPage,"QUANTITY",UDim2.fromOffset(92,40),UDim2.new(0,0,1,-42),13,nil,true)
-local quantity=box(itemsPage,"1–999","1",UDim2.fromOffset(80,40),UDim2.new(0,92,1,-42))
-local giveHint=Theme.Label(itemsPage,"Drag owned items here to delete. Shift-click trash clears everything.",UDim2.new(1,-244,0,40),UDim2.new(0,184,1,-42),14)
+local giveHint=Theme.Label(itemsPage,"Click +1 · Shift-click full stack · Drag owned items here to delete.",UDim2.new(1,-56,0,40),UDim2.new(0,0,1,-42),14)
 giveHint.TextWrapped=true
 local trash=button(itemsPage,"",UDim2.fromOffset(44,40),UDim2.new(1,-44,1,-42))
 trash.Name="CreativeTrash"
@@ -228,9 +247,11 @@ local function renderOwned()
   for index=1,(kind=="Hotbar" and 6 or kind=="Storage" and 18 or 1) do
    order+=1
    local data=kind=="Armor" and inventorySnapshot.Armor or (inventorySnapshot[kind] or {})[index]
-   local name=data and (Items:Get(data.Id) and Items:Get(data.Id).Name or data.Id)
-   local slot=button(owned,name and (name.." ×"..tostring(data.N)) or "—",UDim2.new())
-   slot.Name=kind..index;slot.LayoutOrder=order;slot.TextSize=12;slot.TextWrapped=true
+		local item=data and Items:Get(data.Id)
+		local name=data and (item and item.Name or data.Id)
+		local slot=button(owned,name and (name.." ×"..tostring(data.N)) or "—",UDim2.new())
+		slot.Name=kind..index;slot.LayoutOrder=order;slot.TextSize=12;slot.TextWrapped=true
+		if item and item.IconColor then slot.TextColor3=item.IconColor end
    local caption=Theme.Label(slot,kind=="Hotbar" and tostring(index) or kind=="Armor" and "ARMOR" or "",UDim2.new(1,-8,0,14),UDim2.fromOffset(4,2),10)
    if data then
     slot.InputBegan:Connect(function(input) beginDrag(kind,index,data,input) end)
@@ -270,7 +291,8 @@ UIS.InputChanged:Connect(function(input)
    if (scrollingX and math.abs(delta.X)>math.abs(delta.Y)*1.2) or (not scrollingX and math.abs(delta.Y)>math.abs(delta.X)*1.2) then stopDrag();return end
   end
   drag.Active=true;owned.ScrollingEnabled=false
-  drag.Ghost=Theme.Label(gui,(Items:Get(drag.Data.Id).Name).." ×"..drag.Data.N,UDim2.fromOffset(140,48),UDim2.new(),14,nil,true)
+		local draggedItem=Items:Get(drag.Data.Id)
+		drag.Ghost=Theme.Label(gui,(draggedItem and draggedItem.Name or drag.Data.Id).." ×"..drag.Data.N,UDim2.fromOffset(140,48),UDim2.new(),14,draggedItem and draggedItem.IconColor or nil,true)
   drag.Ghost.ZIndex=100;drag.Ghost.BackgroundTransparency=.1;Theme.Bind(drag.Ghost,"BackgroundColor3","Panel");Theme.Corner(drag.Ghost,8)
  end
  if drag and drag.Ghost then
@@ -314,6 +336,15 @@ for _,item in ipairs(Items:All()) do
 	if not item.SeasoningId then table.insert(allItems,item) end
 end
 table.sort(allItems,function(a,b) return a.Name<b.Name end)
+local function catalogAmount(item, fullStack)
+	return fullStack and math.max(1,math.floor(tonumber(item.StackSize) or 99)) or 1
+end
+local function grantCatalogItem(item, amount)
+	if drag or os.clock()<draggedUntil or gui.Parent:GetAttribute("InventoryDragActive") then return end
+	request("GiveItem",{Id=item.Id,Quantity=amount},nil,function(result)
+		if result.Success then message(result.Message or ("Added "..amount.." × "..item.Name)) end
+	end)
+end
 renderItems=function()
  itemTooltip:Hide()
 	for _,child in ipairs(catalog:GetChildren()) do if child:IsA("GuiObject") then child:Destroy() end end
@@ -322,17 +353,42 @@ renderItems=function()
 	for _,item in ipairs(allItems) do
 		if matchesCategory(item,category) and (query=="" or string.find(string.lower(item.Name.." "..item.Id.." "..table.concat(item.Tags," ")),query,1,true)) then
 			count+=1
-			local card
-			card=button(catalog,"",UDim2.new(),nil,function()
-				if drag or os.clock()<draggedUntil or gui.Parent:GetAttribute("InventoryDragActive") then return end
-				local amount=tonumber(quantity.Text)
-				if not amount or amount%1~=0 or amount<1 or amount>999 then message("Choose a whole quantity from 1 to 999.",false);return end
-				request("GiveItem",{Id=item.Id,Quantity=amount},nil,function(result)
-					if result.Success then message(result.Message or ("Added "..amount.." × "..item.Name)) end
+			local card=button(catalog,"",UDim2.new())
+			card.Name,card.LayoutOrder=item.Id,count
+			local touchToken,touchActive,touchHandledUntil=0,false,0
+			card.Activated:Connect(function()
+				-- Touch grants are resolved below so dragging the catalog cannot add items.
+				if touchActive or os.clock()<touchHandledUntil then return end
+				local fullStack=UIS:IsKeyDown(Enum.KeyCode.LeftShift) or UIS:IsKeyDown(Enum.KeyCode.RightShift)
+				grantCatalogItem(item,catalogAmount(item,fullStack))
+			end)
+			card.InputBegan:Connect(function(input)
+				if input.UserInputType~=Enum.UserInputType.Touch then return end
+				touchToken+=1;touchActive=true
+				local token,startPosition=touchToken,Vector2.new(input.Position.X,input.Position.Y)
+				local moved,fullStackGranted=false,false
+				local changed
+				changed=input.Changed:Connect(function()
+					if (Vector2.new(input.Position.X,input.Position.Y)-startPosition).Magnitude>14 then
+						moved=true
+						if token==touchToken then touchToken+=1 end
+					end
+					if input.UserInputState==Enum.UserInputState.End or input.UserInputState==Enum.UserInputState.Cancel then
+						touchActive=false;touchHandledUntil=os.clock()+.25
+						if token==touchToken then touchToken+=1 end
+						if input.UserInputState==Enum.UserInputState.End and not moved and not fullStackGranted then
+							grantCatalogItem(item,1)
+						end
+						changed:Disconnect()
+					end
+				end)
+				task.delay(.55,function()
+					if token~=touchToken or moved or not card.Parent or not panel.Visible or not itemsPage.Visible then return end
+					touchToken+=1;fullStackGranted=true
+					grantCatalogItem(item,catalogAmount(item,true))
 				end)
 			end)
-			card.Name,card.LayoutOrder=item.Id,count
-   card.MouseEnter:Connect(function() if not drag then itemTooltip:Show({Id=item.Id,N=tonumber(quantity.Text) or 1},"Click to add this item") end end)
+   card.MouseEnter:Connect(function() if not drag then itemTooltip:Show({Id=item.Id,N=1},"Click: 1 · Shift-click: full stack") end end)
    card.MouseLeave:Connect(function() itemTooltip:Hide() end)
 			if item.Icon and item.Icon~="" then
 				local image=Instance.new("ImageLabel");image.BackgroundTransparency=1;image.Size=UDim2.fromOffset(36,36);image.AnchorPoint=Vector2.new(.5,0);image.Position=UDim2.new(.5,0,0,9);image.Image=item.Icon;image.ScaleType=Enum.ScaleType.Fit;image.Parent=card
@@ -342,13 +398,23 @@ renderItems=function()
 				local holder=Instance.new("Frame");holder.BackgroundTransparency=1;holder.Size=UDim2.fromOffset(36,36);holder.AnchorPoint=Vector2.new(.5,0);holder.Position=UDim2.new(.5,0,0,8);holder.Parent=card;Theme.Icon(holder,glyph,30)
 			end
 			local label=Theme.Label(card,item.Name,UDim2.new(1,-12,1,-48),UDim2.fromOffset(6,46),14,nil,true)
+			if item.IconColor then label.TextColor3=item.IconColor end
 			label.TextWrapped,label.TextTruncate,label.TextXAlignment=true,Enum.TextTruncate.None,Enum.TextXAlignment.Center
+			local stackBadge=Theme.Label(card,"×"..catalogAmount(item,true),UDim2.fromOffset(38,16),UDim2.new(1,-42,0,4),10,nil,true)
+			stackBadge.TextXAlignment=Enum.TextXAlignment.Right
 		end
 	end
 	empty.Visible=count==0
 	catalog.CanvasPosition=Vector2.zero
 end
-search:GetPropertyChangedSignal("Text"):Connect(function() if renderItems then renderItems() end end)
+search:GetPropertyChangedSignal("Text"):Connect(function()
+	if search.Text~="" and category~="All" then
+		category="All"
+		categoryButton.Text="All ▾"
+		categoryPicker.Visible=false
+	end
+	if renderItems then renderItems() end
+end)
 
 -- Selectors use a separate page, never a scroll box nested inside another.
 local selection=Instance.new("ScrollingFrame")
@@ -436,7 +502,7 @@ end
 
 local trigger=button(gui,"",UDim2.fromOffset(46,46),UDim2.new(.5,0,0,8),function()
 	panel.Visible=not panel.Visible
-	if panel.Visible then request("State",{}) end
+	if panel.Visible then setInventoryVisible(false);request("State",{}) end
 end)
 trigger.Name="OpenCreativeConsole"
 Theme.TouchIcon(trigger,"Build",29)
@@ -459,6 +525,17 @@ UIS.InputBegan:Connect(function(input,processed)
 		if selection.Visible then selection.Visible=false elseif categoryPicker.Visible then categoryPicker.Visible=false else panel.Visible=false end
 	end
 end)
+local CREATIVE_MENU_ACTION="EcoShiftCreativeMenu"
+ContextActionService:BindActionAtPriority(CREATIVE_MENU_ACTION,function(_,inputState)
+	if workspace:GetAttribute("WorldType")~="Creative" then return Enum.ContextActionResult.Pass end
+	if UIS:GetFocusedTextBox() then return Enum.ContextActionResult.Pass end
+	if inputState~=Enum.UserInputState.Begin then return Enum.ContextActionResult.Sink end
+	if player:GetAttribute("IsDead") then return Enum.ContextActionResult.Sink end
+	panel.Visible=not panel.Visible
+	if panel.Visible then setInventoryVisible(false);request("State",{}) end
+	return Enum.ContextActionResult.Sink
+end,false,Enum.ContextActionPriority.High.Value+300,Enum.KeyCode.E)
+script.Destroying:Connect(function() ContextActionService:UnbindAction(CREATIVE_MENU_ACTION) end)
 Theme.BindResponsive(gui,function(mobile,viewport)
 	local width=math.min(1040,viewport.X-24)
 	local height=math.min(760,viewport.Y-20)
@@ -479,10 +556,14 @@ Theme.BindResponsive(gui,function(mobile,viewport)
  ownedGrid.CellSize=compact and UDim2.fromOffset(76,68) or UDim2.new(1/inventoryColumns,-6,0,70)
  local columns=math.max(2,math.floor(catalogWidth/132))
 	grid.CellSize=UDim2.new(1/columns,-(8+(5/columns)),0,mobile and 100 or 112)
-	trigger.AnchorPoint=Vector2.new(1,0)
-	trigger.Position=UDim2.new(1,-12,0,mobile and 122 or 10)
+	trigger.AnchorPoint=mobile and Vector2.zero or Vector2.new(.5,0)
+	-- The shortcut stays at the upper-left edge of the left-side minimap.
+	trigger.Position=mobile and UDim2.fromOffset(4,148) or UDim2.new(.5,0,0,8)
+	trigger.Size=UDim2.fromOffset(mobile and 42 or 46,mobile and 42 or 46)
+	trigger.BackgroundTransparency=mobile and .38 or 0
+	triggerLabel.Visible=not mobile
 	giveHint.TextSize=width<500 and 12 or 14
- giveHint.Text=mobile and "Drag to delete · Hold trash 2s to clear all" or "Drag to delete · Shift-click trash to clear all"
+	 giveHint.Text=mobile and "Tap +1 · Hold item for full stack · Drag to delete" or "Click +1 · Shift-click full stack · Drag to delete"
 end)
 eligibility()
 renderItems()

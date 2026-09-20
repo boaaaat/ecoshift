@@ -1070,7 +1070,7 @@ Projects use cumulative world progress, not a one-visit timer. Stage costs below
 - Fallen Star: sweeping arm, falling debris with marked safe lanes, and an exposed core after a committed slam.
 - Ironback: armored frontal attacks; players activate reachable side machinery to expose a weak side. No class-specific interaction required.
 - Moon Warden: grounded melee phase, controlled low-gravity platform phase with safe routes, final combined attack pattern. Normal movement can complete the mandatory route; traversal accessories provide optional advantages.
-- Proposed boss HP is 180D × **(1 + 0.65×(participants−1))**. Attack damage is 1.5× standard tier damage, with at least 0.8s windup for high-damage moves. Target 5–8 minutes of active combat, including evasive downtime; this must be measured later.
+- Boss HP is 135D × **(1 + 0.65×(participants−1))**. Attack damage is 1.5× standard tier damage, with at least 0.8s windup for high-damage moves. Target 5–8 minutes of active combat, including evasive downtime; this must be measured later.
 - Register participants once per encounter. Late entries increase remaining/max HP by only their additional budget; repeat entry never does. Leaving does not lower HP. Ordinary project defenses scale counts rather than silently multiplying monster damage.
 - Introductory boss rewards guarantee the progression item. Optional repeated bosses supply crafting materials and schematics, with a once-per-encounter reward receipt.
 - Deep E elite sites drop **3 + participant count** matching trophy units for the whole group, not that amount separately for every player. High-end crafting batches should be affordable with deliberate successful expeditions, not dozens of identical random visits.

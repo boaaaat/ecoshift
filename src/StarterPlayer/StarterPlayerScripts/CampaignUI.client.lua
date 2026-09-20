@@ -1,25 +1,22 @@
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 local Shared = RS:WaitForChild("Shared")
 if require(Shared.SessionConfig).GetMode() ~= "Expedition" then return end
 
 local Theme = require(Shared.UI.UITheme)
+local UIFactory = require(Shared.UI.UIFactory)
+local RemoteRequest = require(Shared.UI.RemoteRequest)
 local Items = require(Shared.Items.ItemDatabase)
 local Guide = require(Shared.UI.RecipeGuideUI)
+local CampaignConfig = require(Shared.CampaignConfig)
 local remote = RS:WaitForChild("Remotes"):WaitForChild("Campaign", 120)
 if not remote then return end
 
 local colors = Theme.Colors
 local player = Players.LocalPlayer
-local function make(className, parent, properties)
-	local object = Instance.new(className)
-	for key, value in pairs(properties or {}) do object[key] = value end
-	object.Parent = parent
-	return object
-end
+local make = UIFactory.Create
 local function bind(object, property, token)
 	Theme.Bind(object, property, token)
 	return object
@@ -38,8 +35,57 @@ local gui = make("ScreenGui", player:WaitForChild("PlayerGui"), {
 })
 Theme.TrackRoot(gui)
 
--- A real modal surface releases first-person and shift-lock mouse capture even
--- before MenuCursor's next visibility pass.
+local defenseGui = make("ScreenGui", player.PlayerGui, {
+	Name = "CampaignDefenseHUD", ResetOnSpawn = false, DisplayOrder = 58,
+	ZIndexBehavior = Enum.ZIndexBehavior.Sibling, ScreenInsets = Enum.ScreenInsets.DeviceSafeInsets,
+})
+Theme.TrackRoot(defenseGui)
+local defenseCard = make("CanvasGroup", defenseGui, {
+	Name = "DefenseStatus", Size = UDim2.fromOffset(460, 116), Position = UDim2.new(.5, 0, 0, 132),
+	AnchorPoint = Vector2.new(.5, 0), BackgroundColor3 = colors.Night, BorderSizePixel = 0,
+	Visible = false,
+})
+Theme.Panel(defenseCard, true)
+local defenseIcon = make("Frame", defenseCard, {
+	Name = "Icon", Size = UDim2.fromOffset(42, 42), Position = UDim2.fromOffset(16, 14),
+	BackgroundColor3 = colors.Moss, BackgroundTransparency = .08, BorderSizePixel = 0,
+})
+Theme.Corner(defenseIcon, 10)
+Theme.Icon(defenseIcon, "Shield", 27)
+local defenseEyebrow = label(defenseCard, "PROJECT DEFENSE STARTED",
+	UDim2.new(1, -184, 0, 18), UDim2.fromOffset(70, 11), 11, "Amber", true)
+defenseEyebrow.TextWrapped = false
+local defenseTitle = label(defenseCard, "Defend the project",
+	UDim2.new(1, -184, 0, 27), UDim2.fromOffset(70, 29), 17, "Text", true)
+defenseTitle.TextWrapped = false
+defenseTitle.TextTruncate = Enum.TextTruncate.AtEnd
+local defenseProgress = label(defenseCard, "0 / 0 SEC",
+	UDim2.fromOffset(106, 24), UDim2.new(1, -122, 0, 24), 12, "Amber", true)
+defenseProgress.TextXAlignment = Enum.TextXAlignment.Right
+defenseProgress.TextWrapped = false
+local defenseBar = make("Frame", defenseCard, {
+	Name = "Progress", Position = UDim2.fromOffset(16, 68), Size = UDim2.new(1, -32, 0, 10),
+	BackgroundColor3 = colors.Background, BackgroundTransparency = .12, BorderSizePixel = 0,
+})
+Theme.Corner(defenseBar, 5)
+local defenseFill = make("Frame", defenseBar, {
+	Name = "Fill", Size = UDim2.fromScale(0, 1), BackgroundColor3 = colors.Amber, BorderSizePixel = 0,
+})
+Theme.Corner(defenseFill, 5)
+local defenseHint = label(defenseCard, "Stay within 70 studs of the project site to advance",
+	UDim2.new(1, -32, 0, 20), UDim2.fromOffset(16, 84), 11, "TextMuted")
+defenseHint.TextWrapped = false
+defenseHint.TextTruncate = Enum.TextTruncate.AtEnd
+
+Theme.BindResponsive(defenseGui, function(isMobile, available)
+	defenseCard.Size = UDim2.fromOffset(math.min(isMobile and 330 or 460, available.X - 20), isMobile and 108 or 116)
+	defenseCard.Position = UDim2.new(.5, 0, 0, isMobile and 124 or 132)
+	defenseIcon.Size = UDim2.fromOffset(isMobile and 36 or 42, isMobile and 36 or 42)
+	defenseTitle.TextSize = isMobile and 14 or 17
+	defenseProgress.TextSize = isMobile and 10 or 12
+	defenseHint.TextSize = isMobile and 10 or 11
+end)
+
 local backdrop = make("TextButton", gui, {
 	Name = "RelayBackdrop", Text = "", AutoButtonColor = false, Modal = true, Active = true,
 	Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.fromRGB(8, 13, 11),
@@ -102,12 +148,36 @@ local statusDot = make("Frame", statusCard, {
 Theme.Corner(statusDot, 5)
 local status = label(statusCard, "Contributions and discoveries are shared with the whole crew.",
 	UDim2.new(1, -46, 1, 0), UDim2.fromOffset(34, 0), 14, "TextMuted")
-status.TextWrapped = false
-status.TextTruncate = Enum.TextTruncate.AtEnd
+status.TextWrapped = true
+status.TextTruncate = Enum.TextTruncate.None
 status.TextYAlignment = Enum.TextYAlignment.Center
 
-local state, pending, signature
+local state, signature
+local defenseWasActive = false
+local requests = RemoteRequest.new(remote)
 local mobile = false
+local function updateDefenseHUD(nextState)
+	local milestone = nextState and nextState.Milestone
+	local target = milestone and tonumber(milestone.Defense)
+	local activeDefense = nextState and nextState.Started and target and target > 0
+	if not activeDefense then
+		defenseCard.Visible = false
+		defenseFill.Size = UDim2.fromScale(0, 1)
+		defenseWasActive = false
+		return
+	end
+	local elapsed = math.clamp(tonumber(nextState.Defense) or 0, 0, target)
+	local progress = elapsed / target
+	defenseTitle.Text = "Defend the " .. (milestone.Name or "project")
+	defenseProgress.Text = string.format("%d / %d SEC", math.floor(elapsed), target)
+	if not defenseWasActive then
+		defenseCard.GroupTransparency = 1
+		defenseCard.Visible = true
+		Theme.Tween(defenseCard, {GroupTransparency = 0}, .25)
+	end
+	Theme.Tween(defenseFill, {Size = UDim2.fromScale(progress, 1)}, .3)
+	defenseWasActive = true
+end
 local function setStatus(text, token)
 	status.Text = text
 	bind(status, "TextColor3", token or "TextMuted")
@@ -118,8 +188,6 @@ local function setOpen(open)
 	if open then
 		panel.Visible = false
 		panel.Visible = true
-		UIS.MouseBehavior = Enum.MouseBehavior.Default
-		UIS.MouseIconEnabled = true
 	end
 end
 local function closeUI() setOpen(false) end
@@ -127,15 +195,6 @@ close.Activated:Connect(closeUI)
 backdrop.Activated:Connect(closeUI)
 UIS.InputBegan:Connect(function(input, processed)
 	if not processed and gui.Enabled and input.KeyCode == Enum.KeyCode.Escape then closeUI() end
-end)
-
--- MenuCursor remains the shared owner. This immediate guard covers the frame in
--- which a ProximityPrompt opens the relay while the stock camera is mouse-locked.
-RunService:BindToRenderStep("EcoShiftRelayCursor", Enum.RenderPriority.Camera.Value + 2, function()
-	if gui.Enabled then
-		UIS.MouseBehavior = Enum.MouseBehavior.Default
-		UIS.MouseIconEnabled = true
-	end
 end)
 
 local function sectionHeading(text, iconKind, order)
@@ -247,23 +306,19 @@ local function actionButton(text, icon, role, callback, order)
 end
 
 local function request(action)
-	if pending then return end
-	pending = true
-	setStatus("Sending request…", "Amber")
-	remote:FireServer(action)
-	task.delay(5, function()
-		if pending then
-			pending = false
-			setStatus("No response yet. Close and reopen the relay to refresh.", "Warning")
-		end
-	end)
+	requests:Send(action, nil, {
+		AddRequestId = false,
+		Timeout = 5,
+		OnStart = function() setStatus("Sending request…", "Amber") end,
+		OnTimeout = function() setStatus("No response yet. Close and reopen the relay to refresh.", "Warning") end,
+	})
 end
 
 local function render(force)
 	if not state or not gui.Enabled then return end
 	local nextSignature = HttpService:JSONEncode({
 		state.Tier, state.Facts, state.Paid, state.Cost, state.Instruments, state.Started,
-		math.floor(state.Defense or 0), state.Endurance, state.CompleteAt, state.Ready, mobile,
+		math.floor(state.Defense or 0), state.Endurance, state.CompleteAt, state.Ready, state.CreativeWorld, mobile,
 	})
 	if not force and signature == nextSignature then return end
 	signature = nextSignature
@@ -314,8 +369,16 @@ local function render(force)
 			local clueName = fact:gsub("(%l)(%u)", "%1 %2")
 			local text = label(clue, clueName, UDim2.new(1, -142, 1, 0), UDim2.fromOffset(52, 0), mobile and 14 or 16, recovered and "Success" or "Text")
 			text.TextYAlignment = Enum.TextYAlignment.Center
-			local tag = label(clue, recovered and "RECOVERED" or "MISSING", UDim2.fromOffset(98, 30), UDim2.new(1, -112, .5, -15), 11, recovered and "Success" or "TextMuted", true)
+			local tag = label(clue, recovered and "RECOVERED" or "FIND  ›", UDim2.fromOffset(98, 30), UDim2.new(1, -112, .5, -15), 11, recovered and "Success" or "Amber", true)
 			tag.TextXAlignment = Enum.TextXAlignment.Right; tag.TextYAlignment = Enum.TextYAlignment.Center
+			local discoveryButton = make("TextButton", clue, {
+				Name = "DiscoveryHelp", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
+				Text = "", AutoButtonColor = false, ZIndex = 8,
+			})
+			discoveryButton.Activated:Connect(function()
+				local hint = CampaignConfig.DiscoveryHints[fact] or "Explore matching landmarks to recover this discovery."
+				setStatus((recovered and "Recovered. " or "How to find it: ") .. hint, recovered and "Success" or "Amber")
+			end)
 			order += 1
 		end
 		if milestone.Instruments then
@@ -323,8 +386,15 @@ local function render(force)
 			for _ in pairs(state.Instruments or {}) do instrumentCount += 1 end
 			local instrument = card(list, "CalibratedInstruments", mobile and 52 or 58, order, instrumentCount >= 3 and "Success" or "Cold")
 			label(instrument, "Calibrated instruments", UDim2.new(1, -150, 1, 0), UDim2.fromOffset(18, 0), mobile and 14 or 16, "Text", true).TextYAlignment = Enum.TextYAlignment.Center
-			local number = label(instrument, tostring(instrumentCount) .. " / 3 REGIONS", UDim2.fromOffset(128, 30), UDim2.new(1, -144, .5, -15), 12, instrumentCount >= 3 and "Success" or "Cold", true)
+			local number = label(instrument, tostring(instrumentCount) .. " / 3  ·  FIND ›", UDim2.fromOffset(140, 30), UDim2.new(1, -156, .5, -15), 12, instrumentCount >= 3 and "Success" or "Cold", true)
 			number.TextXAlignment = Enum.TextXAlignment.Right; number.TextYAlignment = Enum.TextYAlignment.Center
+			local discoveryButton = make("TextButton", instrument, {
+				Name = "DiscoveryHelp", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
+				Text = "", AutoButtonColor = false, ZIndex = 8,
+			})
+			discoveryButton.Activated:Connect(function()
+				setStatus("How to find it: " .. CampaignConfig.DiscoveryHints.CalibratedInstrument, instrumentCount >= 3 and "Success" or "Amber")
+			end)
 			order += 1
 		end
 
@@ -337,6 +407,9 @@ local function render(force)
 		end
 		if #ids > 0 then
 			actionButton("CONTRIBUTE FROM FIELD PACK", "Collect", "Collect", function() request("Contribute") end, 150)
+		end
+		if state.CreativeWorld and not state.Ready then
+			actionButton("CREATIVE: FIND MATERIALS + DISCOVERIES", "Search", "Special", function() request("CreativePrepare") end, 155)
 		end
 		if state.Started and milestone.Defense then
 			sectionHeading("PROJECT DEFENSE", "Shield", 160)
@@ -372,9 +445,9 @@ Theme.BindResponsive(gui, function(isMobile, available)
 		tierBadge.Position = UDim2.new(1, -132, 0, 13); tierBadge.Size = UDim2.fromOffset(76, 30); tierBadge.TextSize = 11
 		close.Position = UDim2.new(1, -48, 0, 7); close.Size = UDim2.fromOffset(40, 40)
 		headerRule.Position = UDim2.fromOffset(12, 60); headerRule.Size = UDim2.new(1, -24, 0, 1)
-		list.Position = UDim2.fromOffset(10, 70); list.Size = UDim2.new(1, -20, 1, -120)
-		statusCard.Position = UDim2.new(0, 10, 1, -42); statusCard.Size = UDim2.new(1, -20, 0, 34)
-		statusDot.Position = UDim2.fromOffset(11, 12); status.Size = UDim2.new(1, -38, 1, 0); status.Position = UDim2.fromOffset(29, 0); status.TextSize = 12
+		list.Position = UDim2.fromOffset(10, 70); list.Size = UDim2.new(1, -20, 1, -134)
+		statusCard.Position = UDim2.new(0, 10, 1, -56); statusCard.Size = UDim2.new(1, -20, 0, 48)
+		statusDot.Position = UDim2.fromOffset(11, 19); status.Size = UDim2.new(1, -38, 1, -4); status.Position = UDim2.fromOffset(29, 2); status.TextSize = 12
 	else
 		panel.Size = UDim2.fromOffset(900, 720)
 		responsiveScale.Scale = math.min(math.clamp(math.min(available.X / 1280, available.Y / 800), 1.05, 2.2), (available.X - 34) / 900, (available.Y - 28) / 720)
@@ -384,9 +457,9 @@ Theme.BindResponsive(gui, function(isMobile, available)
 		tierBadge.Position = UDim2.new(1, -154, 0, 24); tierBadge.Size = UDim2.fromOffset(92, 34); tierBadge.TextSize = 13
 		close.Position = UDim2.new(1, -56, 0, 18); close.Size = UDim2.fromOffset(42, 42)
 		headerRule.Position = UDim2.fromOffset(20, 80); headerRule.Size = UDim2.new(1, -40, 0, 1)
-		list.Position = UDim2.fromOffset(18, 94); list.Size = UDim2.new(1, -36, 1, -166)
-		statusCard.Position = UDim2.new(0, 18, 1, -60); statusCard.Size = UDim2.new(1, -36, 0, 44)
-		statusDot.Position = UDim2.fromOffset(14, 17); status.Size = UDim2.new(1, -46, 1, 0); status.Position = UDim2.fromOffset(34, 0); status.TextSize = 14
+		list.Position = UDim2.fromOffset(18, 94); list.Size = UDim2.new(1, -36, 1, -176)
+		statusCard.Position = UDim2.new(0, 18, 1, -70); statusCard.Size = UDim2.new(1, -36, 0, 54)
+		statusDot.Position = UDim2.fromOffset(14, 22); status.Size = UDim2.new(1, -46, 1, -4); status.Position = UDim2.fromOffset(34, 2); status.TextSize = 13
 	end
 	responsiveScale:SetAttribute("TargetScale", responsiveScale.Scale)
 	render(true)
@@ -395,10 +468,11 @@ end)
 remote.OnClientEvent:Connect(function(action, first, second)
 	if action == "State" or action == "Open" then
 		state = first
+		updateDefenseHUD(state)
 		if action == "Open" then setOpen(true) end
 		render(action == "Open")
 	elseif action == "Result" then
-		pending = false
+		requests:Resolve()
 		setStatus(second or (first and "Project records updated." or "That action is not available yet."), first and "Success" or "Danger")
 	end
 end)

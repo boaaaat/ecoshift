@@ -8,18 +8,18 @@ local Biomes=require(RS.Shared.OverhaulBiomes)
 local Codec=require(script.Parent.WorldSnapshotCodec)
 local Loot=require(script.Parent.LootService)
 local Art=require(RS.Shared.Art.OverhaulBuildModels)
+local ServerUtil=require(script.Parent.ServerUtil)
 local Service={_serial=nil,_records={},_sites={},_actors={},_chests={}}
 local order={"Forest","Desert","Swamp","FrozenTundra","Volcanic","CrystalWastes","AuroraVale","StarfallCrater","SaltglassCoast","StormspireHighlands","MyceliumHollow","IronrootBadlands","CanopySea","SunkenArchive","UmbralDepths","ShattermoonExpanse"}
 local trophyFor={};for i,id in ipairs(order) do trophyFor[id]=Catalog.Trophies[i] end
 local function alive(player)
- local hum=player.Character and player.Character:FindFirstChildOfClass("Humanoid")
- return hum and hum.Health>0 and not player:GetAttribute("IsDead") and not player:GetAttribute("InteriorId") and not player:GetAttribute("WorldPlayerLoading") and not player:GetAttribute("WorldPlayerRestoring")
+ return ServerUtil.IsLiving(player,{ExcludeInterior=true})
 end
 local function active()
  return not RS:GetAttribute("WorldRestoring") and not RS:GetAttribute("WorldShifting") and not require(script.Parent.GameStateService):IsGameOver()
 end
 local function decoration(parent,name,position,size,color)
- local p=Instance.new("Part");p.Name=name;p.Anchored=true;p.CanCollide=false;p.CanTouch=false;p.Size=size;p.Position=position;p.Color=color;p.Material=Enum.Material.Neon;p.Parent=parent;return p
+ return ServerUtil.Part(parent,name,size,position,{CanCollide=false,CanTouch=false,Color=color,Material=Enum.Material.Neon})
 end
 function Service:_visit()
  local serial=require(script.Parent.BiomeService):GetVisitSerial()

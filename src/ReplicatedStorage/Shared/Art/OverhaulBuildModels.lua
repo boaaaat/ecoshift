@@ -1,5 +1,7 @@
 -- Original low-poly expedition constructions, authored with their base on y=0.
 local Catalog=require(script.Parent.Parent.OverhaulCatalog)
+local LightModels=require(script.Parent.LightModels)
+local Lights=require(script.Parent.Parent.LightConfig).Definitions
 local Art={}
 local wood=Color3.fromRGB(121,91,51)
 local green=Color3.fromRGB(79,102,68)
@@ -25,7 +27,8 @@ function Art.Create(id)
  local m=Instance.new("Model");m.Name=id;m:SetAttribute("BuildType",id);m:SetAttribute("ArtVersion",2)
  local root=part(m,"GroundAnchor",Vector3.new(.1,.1,.1),Vector3.new(0,.05,0),wood);root.Transparency=1;root.CanCollide=false;root.CanQuery=false;root.CanTouch=false;m.PrimaryPart=root
  local V=Vector3.new
- if id=="Floor" or id=="Roof" then
+ if Lights[id] then LightModels.Build(m,id)
+ elseif id=="Floor" or id=="Roof" then
   for i=0,7 do part(m,"Plank",V(.96,.5,8),V(-3.5+i,.25,0),i%2==0 and wood or green) end
  elseif id=="Wall" then
   for i=0,7 do part(m,"WallPlank",V(.98,8,.35),V(-3.5+i,4,0),wood) end
@@ -52,11 +55,9 @@ function Art.Create(id)
   part(m,"ChestBody",V(w,2.4,3),V(0,1.2,0),wood);part(m,"Lid",V(w+.12,.35,3.1),V(0,2.57,0),green)
   for x=-1,1,2 do part(m,"Band",V(.2,2.8,3.15),V(x*w*.3,1.4,0),metal) end
   part(m,"Latch",V(.5,.65,.2),V(0,2,-1.6),amber)
- elseif id=="Torch" or id=="StandingLamp" or id=="CampMarker" or id=="TrailBeacon" then
-  local h=id=="StandingLamp" and 6 or 4
-  part(m,"Post",V(.35,h,.35),V(0,h/2,0),wood)
-  if id=="CampMarker" then part(m,"Flag",V(2,1.2,.1),V(.8,h-.8,0),green)
-  else local glow=part(m,"FlameFacet",V(.7,1,.7),V(0,h,0),amber,"WedgePart");light(glow,id=="StandingLamp" and 24 or 16) end
+ elseif id=="CampMarker" then
+  part(m,"Post",V(.35,4,.35),V(0,2,0),wood)
+  part(m,"Flag",V(2,1.2,.1),V(.8,3.2,0),green)
  elseif id=="RainCollector" then
   legs(m,5,5,3)
   part(m,"Basin",V(4.5,.4,4.5),V(0,2.8,0),metal)

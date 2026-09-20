@@ -8,6 +8,7 @@ local CollectionService = game:GetService("CollectionService")
 local Theme = require(RS.Shared.UI.UITheme)
 local Config = require(RS.Shared.Config)
 local Placement = require(RS.Shared.BuildPlacement)
+local LightConfig = require(RS.Shared.LightConfig)
 local Items = require(RS.Shared.Items.ItemDatabase)
 local Settings = require(RS.Shared.ClientSettings)
 local SettingsSchema = require(RS.Shared.SettingsConfig)
@@ -15,9 +16,10 @@ local Messages = require(RS.Shared.ResultMessages).Build
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local remote = RS:WaitForChild("Remotes"):WaitForChild(Config.RemoteNames.Build)
+local inventoryAction = RS:WaitForChild("Remotes"):WaitForChild(Config.RemoteNames.InventoryAction)
 local mouse = player:GetMouse()
 local selected, preview, position, target, heldTarget
-local rotation, lastPulse, startedAt, statusUntil = 0, 0, 0, 0
+local rotation, placementRotation, lastPulse, startedAt, statusUntil = 0, 0, 0, 0, 0
 local holding, latched = false, false
 local holdInput
 local duration = Config.BUILD.SalvageSeconds or 3
@@ -99,9 +101,29 @@ local function rotateKey()
  end
  return nil
 end
+local function aimedStructure(hit)
+ local node=hit and hit.Instance
+ while node and node~=workspace do
+  if CollectionService:HasTag(node,"Structure") and node:GetAttribute("BuildType") then return node end
+  node=node.Parent
+ end
+ return nil
+end
+local function rotationFromPlayerFacing()
+ local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+ if not root then return 0 end
+ local facing=Vector3.new(root.CFrame.LookVector.X,0,root.CFrame.LookVector.Z)
+ if facing.Magnitude<.01 then return 0 end
+ -- A build's forward face is local -Z. Snap the look-at yaw to the same
+ -- cardinal 90-degree rotations accepted by the authoritative server. This
+ -- follows the character orientation and does not change when aiming beside
+ -- the character.
+ local yaw=math.deg(math.atan2(-facing.X,-facing.Z))
+ return (math.floor(yaw/90+.5)*90)%360
+end
 local function place()
  if blocked() or not selected or not position then return end
- remote:FireServer("Place",{Type=selected,Position=position,Rotation=rotation})
+ remote:FireServer("Place",{Type=selected,Position=position,Rotation=placementRotation})
 end
 local function beginHold(input)
  if blocked() then return end
@@ -118,19 +140,32 @@ salvageButton.InputBegan:Connect(function(input)
 end)
 UIS.InputBegan:Connect(function(input,processed)
  if processed or blocked() then return end
- if input.UserInputType==Enum.UserInputType.MouseButton2 or input.KeyCode==Enum.KeyCode.ButtonL2 then place()
- elseif input.UserInputType==Enum.UserInputType.MouseButton1 or input.KeyCode==Enum.KeyCode.ButtonR2 then beginHold(input)
+ if input.UserInputType==Enum.UserInputType.MouseButton3 then
+  local structure=aimedStructure(aimRay())
+  if structure then remote:FireServer("PickBlock",{Target=structure}) end
+ elseif input.UserInputType==Enum.UserInputType.MouseButton1 or input.KeyCode==Enum.KeyCode.ButtonL2 then place()
+ elseif input.UserInputType==Enum.UserInputType.MouseButton2 or input.KeyCode==Enum.KeyCode.ButtonR2 then beginHold(input)
  elseif input.KeyCode==rotateKey() and selected then rotation=(rotation+90)%360 end
 end)
 UIS.InputEnded:Connect(function(input)
- if input==holdInput or input.UserInputType==Enum.UserInputType.MouseButton1 or input.KeyCode==Enum.KeyCode.ButtonR2 then endHold() end
+ if input==holdInput or input.UserInputType==Enum.UserInputType.MouseButton2 or input.KeyCode==Enum.KeyCode.ButtonR2 then endHold() end
 end)
 UIS.WindowFocusReleased:Connect(endHold)
 remote.OnClientEvent:Connect(function(kind,data)
  if kind~="Result" or type(data)~="table" then return end
- if data.Action=="Place" or data.Action=="Remove" or data.Action=="Salvage" then
+ if data.Action=="Place" or data.Action=="Remove" or data.Action=="Salvage" or data.Action=="PickBlock" then
+  if data.Action=="PickBlock" then
+   if data.Success and type(data.SlotIndex)=="number" and type(data.BuildType)=="string" then
+    local held=player.Character and player.Character:FindFirstChildOfClass("Tool")
+    if not held or held:GetAttribute("InventorySlotIndex")~=data.SlotIndex or held:GetAttribute("InventoryItemId")~=data.BuildType then
+     inventoryAction:FireServer("Equip",{SlotType="Hotbar",SlotIndex=data.SlotIndex})
+    end
+    showStatus("Selected "..(Items:Get(data.BuildType) and Items:Get(data.BuildType).Name or data.BuildType)..".")
+   else showStatus(Messages[data.Reason] or "You do not have that build item.") end
+   return
+  end
   if data.Action~="Place" then resetHold();latched=true end
-  showStatus(data.Success and (data.Action=="Place" and "Placed." or "Salvaged into your inventory.") or Messages[data.Reason] or "Unable to complete that build action.")
+  showStatus(data.Success and (data.Action=="Place" and (data.Reason=="TemporaryLight" and Messages.TemporaryLight or "Placed.") or data.Refunded and "Salvaged into your inventory." or "Build removed.") or Messages[data.Reason] or "Unable to complete that build action.")
  end
 end)
 RunService.RenderStepped:Connect(function()
@@ -157,10 +192,12 @@ RunService.RenderStepped:Connect(function()
   preview.Transparency=position and .6 or 1
   preview.Facing.Transparency=position and 0 or 1
   if position then
-   preview.CFrame=CFrame.new(position+Vector3.new(0,preview.Size.Y/2,0))*CFrame.Angles(0,math.rad(rotation),0)
+    placementRotation=(rotationFromPlayerFacing()+rotation)%360
+   preview.CFrame=CFrame.new(position+Vector3.new(0,preview.Size.Y/2,0))*CFrame.Angles(0,math.rad(placementRotation),0)
    preview.Facing.CFrame=preview.CFrame*CFrame.new(0,preview.Size.Y/2+.1,-1.1)*CFrame.Angles(0,math.pi,0)
    local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-   local valid=root and Placement.WithinCamp(position) and (position-root.Position).Magnitude<=(Config.GRID.BuildMaxDistance or 45)
+   local valid=root and (Placement.WithinCamp(position) or LightConfig.Definitions[selected]~=nil)
+    and (position-root.Position).Magnitude<=(Config.GRID.BuildMaxDistance or 45)
    preview.Color=valid and Theme.Colors.ValidPlacement or Theme.Colors.InvalidPlacement
    if not valid then position=nil end
   end
@@ -186,9 +223,14 @@ RunService.RenderStepped:Connect(function()
  end
  if not heldTarget and now>=statusUntil then
   status.Visible=not isBlocked and (selected~=nil or target~=nil)
-  if selected then
-   status.Text=Theme.IsMobile() and "Tap place · Hold salvage to recover a build" or ((Items:Get(selected) and Items:Get(selected).Name or selected) .. " · Right-click place · " .. (rotateKey() and rotateKey().Name or "") .. " rotate · Hold left-click salvage")
-  elseif target then status.Text=Theme.IsMobile() and "Hold the salvage icon to recover this build" or "Hold left-click for 3 seconds to salvage" end
+   if selected then
+    local outsideLight=position and LightConfig.Definitions[selected] and not Placement.WithinCamp(position)
+    if outsideLight then
+     status.Text="Outside camp · this light is removed on the next biome shift"
+    else
+     status.Text=Theme.IsMobile() and "Tap place · Hold salvage to recover a build" or ((Items:Get(selected) and Items:Get(selected).Name or selected) .. " · Left-click place · " .. (rotateKey() and rotateKey().Name or "") .. " rotate · Hold right-click salvage")
+    end
+   elseif target then status.Text=Theme.IsMobile() and "Hold the salvage icon to recover this build" or "Hold right-click for 3 seconds to salvage" end
  end
  toolbar.Visible=Theme.IsMobile() and not isBlocked and (selected~=nil or target~=nil)
  placeButton.Visible,rotateButton.Visible=selected~=nil,selected~=nil

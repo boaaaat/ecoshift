@@ -78,5 +78,8 @@ task.spawn(function()
 	end)
 end)
 -- Every input handler can use this without duplicating keyboard-capture state.
-function Settings.CanInput() return not Settings.Capturing and UIS:GetFocusedTextBox() == nil end
+function Settings.CanInput()
+	local gui = player:FindFirstChild("PlayerGui")
+	return not Settings.Capturing and UIS:GetFocusedTextBox() == nil and not (gui and gui:GetAttribute("ExpeditionLoading"))
+end
 return Settings

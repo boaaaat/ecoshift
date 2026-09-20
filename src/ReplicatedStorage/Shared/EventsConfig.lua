@@ -15,7 +15,7 @@ add("Whiteout","Whiteout",3,"Major","Shelter",{FrozenTundra=true},{{Id="IceCryst
 add("SporeBloom","Spore Bloom",3,"Major","Vents",{Swamp=true,MyceliumHollow=true},{{Id="HerbalPaste",N=3},{Id="ThickSpores",N=3}},{Toxin=.15})
 add("FallingStars","Falling Stars",4,"Major","Impact",{StarfallCrater=true},{{Id="MeteorOre",N=4},{Id="ImpactGlass",N=4}})
 add("HeatSurge","Heat Surge",3,"Major","Shelter",{Desert=true,Volcanic=true},{{Id="Sunstone",N=3},{Id="BlackGlass",N=3}},{Exposure=.35})
-add("CrystalEcho","Crystal Echo",4,"Minor","Puzzle",{CrystalWastes=true},{{Id="EnchantingDust",N=4}},{Schematic={"StrikeRhythm","OpenSeam","DryStep"}})
+add("CrystalEcho","Crystal Echo",4,"Minor","Puzzle",{CrystalWastes=true},{{Id="EnchantingDust",N=4}},{Schematic={"EchoCast","FocusLine","DrawForce","OpenSeam","DryStep"}})
 add("AuroraShift","Aurora Shift",4,"Major","Thermal",{AuroraVale=true},{{Id="AuroraStone",N=4},{Id="DawnFlower",N=3}},{Exposure=.3,Schematic={"WeatherMemory","HeatStore"}})
 add("Thunderfront","Thunderfront",5,"Major","Lightning",{StormspireHighlands=true},{{Id="StormOre",N=4},{Id="CloudWool",N=4}},{Schematic={"StormLatch","ReturnShot"}})
 add("RootOutbreak","Root Outbreak",5,"Minor","Break",{MyceliumHollow=true,IronrootBadlands=true},{{Id="LivingRoot",N=3},{Id="HerbalPaste",N=3}},{Harmful=true,Warning=15})
@@ -23,6 +23,6 @@ add("BrokenCrossing","Broken Crossing",5,"Minor","Repair",{CanopySea=true,Saltgl
 add("ArchiveAlarm","Archive Alarm",6,"Major","Disable",{SunkenArchive=true},{{Id="OldGear",N=4},{Id="PressureGlass",N=3}},{Schematic={"AirPocket","RescueReserve"}})
 add("DeepRumbling","Deep Rumbling",6,"Major","Break",{UmbralDepths=true},{{Id="LightOre",N=4},{Id="EchoShell",N=2}},{Schematic={"PackWarning","LastThread"}})
 add("GravityDrift","Gravity Drift",7,"Major","Survey",{ShattermoonExpanse=true},{{Id="MoonOre",N=3}},{Gravity=true,Schematic={"AirPocket","SurveyLink"}})
-add("HuntingParty","Hunting Party",4,"Major","Clear",nil,{{Id="BlacksteelBar",N=3}},{Elite=true,Schematic={"StrikeRhythm","VentStrike"}})
+add("HuntingParty","Hunting Party",4,"Major","Clear",nil,{{Id="BlacksteelBar",N=3}},{Elite=true,Schematic={"MeasuredEdge","SetPoint","Blindside","SplitArc","DrawForce","VentStrike"}})
 add("CampWarning","Camp Warning",3,"Major","Defend",nil,{{Id="Bandage",N=2},{Id="SteelBar",N=3}})
 return C

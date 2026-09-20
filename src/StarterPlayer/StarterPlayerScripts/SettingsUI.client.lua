@@ -56,18 +56,10 @@ local outline = Instance.new("UIStroke")
 outline.Thickness = 4
 outline.Parent = ring
 Theme.Bind(outline, "Color", "Paper")
-if isExpedition then
-	require(ReplicatedStorage.Shared.UI:WaitForChild("ExpeditionTopbar")).Mount(open, "Settings")
-else
-	local shortcut = Instance.new("Frame")
-	shortcut.Name = "SettingsShortcut"
-	shortcut.BackgroundTransparency = 1
-	shortcut.Size, shortcut.Position, shortcut.AnchorPoint = open.Size, open.Position, open.AnchorPoint
-	shortcut.Parent = gui
-	open.Parent = shortcut
-	open.Position, open.AnchorPoint = UDim2.new(), Vector2.zero
-	Theme.Fit(shortcut, 900, 610, nil, true)
-end
+-- Use the same safe topbar slot in the observatory and during expeditions.
+-- This keeps the button beside Roblox's controls instead of floating at a
+-- resolution-dependent point in the lobby.
+require(ReplicatedStorage.Shared.UI:WaitForChild("ExpeditionTopbar")).Mount(open, "Settings")
 
 local backdrop = Instance.new("TextButton")
 backdrop.Name = "Backdrop"
@@ -130,7 +122,11 @@ local function render()
 	for key, row in pairs(rows) do
 		row.Frame.Visible = Schema.Definitions[key].Section == currentTab
 		local value = Settings.Get(key)
-		row.Button.Text = capture == key and "Press a key..." or (type(value) == "boolean" and (value and "On" or "Off") or tostring(value))
+		local displayValue = value
+		if key == "RenderDistance" and value == "Auto" then
+			displayValue = Theme.IsMobile() and "Auto (Near)" or "Auto (Medium)"
+		end
+		row.Button.Text = capture == key and "Press a key..." or (type(displayValue) == "boolean" and (displayValue and "On" or "Off") or tostring(displayValue))
 	end
 	for name, tab in pairs(tabs) do Theme.Bind(tab, "BackgroundColor3", currentTab == name and "SlotSelected" or "SlotEmpty") end
 	if updateMobileContent then updateMobileContent() end

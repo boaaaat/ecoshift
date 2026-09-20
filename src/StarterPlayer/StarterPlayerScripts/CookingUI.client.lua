@@ -8,6 +8,8 @@ local TweenService = game:GetService("TweenService")
 local Shared = RS:WaitForChild("Shared")
 if require(Shared:WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 local Theme = require(Shared.UI.UITheme)
+local UIFactory = require(Shared.UI.UIFactory)
+local RemoteRequest = require(Shared.UI.RemoteRequest)
 local Catalog = require(Shared:WaitForChild("CookingConfig"))
 local Biomes = require(Shared.BiomeConfig)
 local Items = require(Shared.Items.ItemDatabase)
@@ -25,18 +27,14 @@ local inventoryRemote = remotes:WaitForChild(Config.RemoteNames.InventoryUpdate)
 local colors = Theme.Colors
 local state, inventory = nil, {}
 local page, recipeId, seasoningId, quantity = "Meals", nil, nil, 1
-local pending, rowCallbacks = {}, {}
+local rowCallbacks = {}
 local receivedAt, signature = 0, ""
 local searchQuery = ""
 local render
 local go
 local pageSearch = {}
-local function make(class, parent, props)
- local object = Instance.new(class)
- for key, value in pairs(props or {}) do object[key] = value end
- object.Parent = parent
- return object
-end
+local make = UIFactory.Create
+local requests = RemoteRequest.new(remote)
 local gui = make("ScreenGui", playerGui, {Name="CookingUI",ResetOnSpawn=false,DisplayOrder=65,Enabled=false,ZIndexBehavior=Enum.ZIndexBehavior.Sibling})
 local backdrop = make("Frame",gui,{Size=UDim2.fromScale(1,1),BackgroundColor3=colors.Night,BackgroundTransparency=.35,BorderSizePixel=0,Active=true})
 local panel = make("CanvasGroup",gui,{Name="Kitchen",AnchorPoint=Vector2.new(.5,.5),Position=UDim2.fromScale(.5,.5),Size=UDim2.new(1,-24,1,-24),BackgroundColor3=colors.Panel,BorderSizePixel=0})
@@ -108,14 +106,13 @@ local function seconds(n)
 end
 local function request(action,payload)
  if not state or not state.Station then return end
- if next(pending) then status.Text="Waiting for the station…";return end
- payload=payload or {};payload.Station=state.Station;payload.RequestId=HttpService:GenerateGUID(false)
- local id=payload.RequestId;pending[id]=true
- status.Text="Sending…";status.TextColor3=colors.Amber
- remote:FireServer(action,payload)
- task.delay(10,function()
-  if pending[id] then pending[id]=nil;status.Text="No response yet. Reopen the station to refresh.";status.TextColor3=colors.Warning end
- end)
+ payload=payload or {};payload.Station=state.Station
+ requests:Send(action,payload,{
+  Timeout=10,
+  OnBusy=function()status.Text="Waiting for the station…" end,
+  OnStart=function()status.Text="Sending…";status.TextColor3=colors.Amber end,
+  OnTimeout=function()status.Text="No response yet. Reopen the station to refresh.";status.TextColor3=colors.Warning end,
+ })
 end
 go=function(nextPage)
  pageSearch[page]=searchQuery
@@ -208,7 +205,7 @@ render=function(resetScroll)
  title.Text=state.StationType or "Kitchen"
  if not quantityBox:IsFocused() then quantityBox.Text=tostring(quantity) end
  local enough=enoughForMeal(chosenRecipe())
- queue.Text=next(pending) and "Sending…" or enough and "Cook" or "Can't cook"
+ queue.Text=requests:IsPending() and "Sending…" or enough and "Cook" or "Can't cook"
  Theme.StationStyle(queue,"Pot",enough and "Craft" or "Neutral")
  local readyCount=0
  for _,stack in pairs(state.Output or {}) do if type(stack)=="table" and (stack.N or 0)>0 then readyCount+=stack.N end end
@@ -314,7 +311,7 @@ end
 remote.OnClientEvent:Connect(function(kind,payload)
  if type(payload)~="table" then return end
  if kind=="Result" then
-  if payload.RequestId then pending[payload.RequestId]=nil end
+  requests:Resolve(payload.RequestId)
   status.Text=payload.Message or (payload.Success and "Done." or "Couldn't complete that action.")
   status.TextColor3=payload.Success and colors.Success or colors.Warning
   if gui.Enabled then render() end
@@ -327,7 +324,7 @@ remote.OnClientEvent:Connect(function(kind,payload)
  state=payload;receivedAt=os.clock()
  local newSignature=stateSignature(state)
  if kind=="Open" then
-  if changedStation then page="Meals";recipeId=nil;seasoningId=nil;quantity=1;searchQuery="";search.Text="";table.clear(pageSearch);table.clear(pending) end
+  if changedStation then page="Meals";recipeId=nil;seasoningId=nil;quantity=1;searchQuery="";search.Text="";table.clear(pageSearch);requests:Cancel() end
   if payload.RecipeId and Catalog.Recipes[payload.RecipeId] then
    recipeId=payload.RecipeId;page="Detail"
    local spice=payload.SeasoningId and Catalog.Seasonings[payload.SeasoningId]

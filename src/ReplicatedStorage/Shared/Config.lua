@@ -13,6 +13,7 @@ Config.RemoteNames = {
 	Build = "Build",
 	Damage = "Damage",
 	CombatAction = "CombatAction",
+	BowEffect = "BowEffect",
 	Interact = "Interact",
 	EventBroadcast = "EventBroadcast",
 	ObjectiveUpdate = "ObjectiveUpdate",

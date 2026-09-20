@@ -4,14 +4,13 @@ local Workspace = game:GetService("Workspace")
 local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
 local ClassConfig = require(game:GetService("ReplicatedStorage").Shared.ClassConfig)
+local ServerUtil = require(script.Parent.ServerUtil)
 
 local Service = { _active = {}, _byModel = {} }
 local COLORS = { Frame = Color3.fromRGB(67, 83, 53), Metal = Color3.fromRGB(112, 119, 99), Amber = Color3.fromRGB(225, 176, 73) }
 
 local function alive(player)
-	local character = player and player.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	return player and player.Parent == Players and not player:GetAttribute("IsDead") and humanoid and humanoid.Health > 0
+	return ServerUtil.IsLiving(player,{AllowLoading=true})
 end
 
 local function root(model)
@@ -23,13 +22,7 @@ local function finite(n)
 end
 
 local function part(model, name, size, cf, color)
-	local p = Instance.new("Part")
-	p.Name, p.Size, p.CFrame = name, size, cf
-	p.Anchored, p.CanCollide, p.CanTouch = true, true, false
-	p.Color, p.Material = color or COLORS.Frame, Enum.Material.Metal
-	p.TopSurface, p.BottomSurface = Enum.SurfaceType.Smooth, Enum.SurfaceType.Smooth
-	p.Parent = model
-	return p
+	return ServerUtil.Part(model,name,size,cf,{CanCollide=true,CanTouch=false,Color=color or COLORS.Frame,Material=Enum.Material.Metal,TopSurface=Enum.SurfaceType.Smooth,BottomSurface=Enum.SurfaceType.Smooth})
 end
 
 function Service:_remove(record)

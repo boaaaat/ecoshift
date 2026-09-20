@@ -3,6 +3,7 @@ local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Cooking = require(RS.Shared.CookingConfig)
+local ServerUtil = require(script.Parent.ServerUtil)
 local Food = {}
 local gameState
 local states = setmetatable({}, {__mode = "k"})
@@ -14,9 +15,7 @@ local function state(player)
 end
 
 local function living(player)
-	local character = player.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	return player.Parent == Players and not player:GetAttribute("IsDead") and humanoid and humanoid.Health > 0
+	return ServerUtil.IsLiving(player,{AllowLoading=true})
 end
 
 local function ready(player)

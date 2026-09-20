@@ -5,18 +5,17 @@ local RunService=game:GetService("RunService")
 local Collection=game:GetService("CollectionService")
 local TweenService=game:GetService("TweenService")
 local Catalog=require(RS.Shared.OverhaulCatalog)
+local ServerUtil=require(script.Parent.ServerUtil)
 local Inventory=require(script.Parent.InventoryService)
 local Codec=require(script.Parent.WorldSnapshotCodec)
 local Stats=require(script.Parent.StatsService)
 local S={_states={},_viewers={},_cooldowns={}}
 local kinds={RainCollector=true,WaterFilter=true,Bedroll=true,SpikeTrap=true,Door=true,Gate=true,CampMarker=true,TrailBeacon=true}
 local function alive(p)
- local h=p and p.Character and p.Character:FindFirstChildOfClass("Humanoid")
- return p and p.Parent==Players and h and h.Health>0 and not p:GetAttribute("IsDead") and not p:GetAttribute("WorldPlayerLoading") and not p:GetAttribute("WorldPlayerRestoring")
+ return ServerUtil.IsLiving(p)
 end
 local function near(p,m)
- local root=p.Character and p.Character:FindFirstChild("HumanoidRootPart")
- return alive(p) and root and m and m.Parent and (root.Position-m:GetPivot().Position).Magnitude<=9
+ return ServerUtil.IsNear(p,m,9)
 end
 local function paused()
  if RS:GetAttribute("WorldRestoring") or RS:GetAttribute("WorldShifting") or require(script.Parent.GameStateService):IsGameOver() then return true end

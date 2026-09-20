@@ -4,9 +4,9 @@ local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
 
 local InventoryService = require(script.Parent.InventoryService)
-local PromptQueueService = require(script.Parent.PromptQueueService)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local ResourceItemMap = require(ReplicatedStorage.Shared.ResourceItemMap)
 
@@ -14,18 +14,14 @@ local ItemInstance = require(ReplicatedStorage.Shared.ItemInstance)
 local ItemDropService = { _worldActive = false }
 local entries = setmetatable({}, {__mode="k"})
 local lifetimes = setmetatable({}, {__mode="k"})
+local claiming = setmetatable({}, {__mode="k"})
+local shiftAnchors = setmetatable({}, {__mode="k"})
 local DROP_LIFETIME_SECONDS = 10 * 60
+local AUTO_PICKUP_RADIUS = 4
 
 local function finiteVector(value)
 	return typeof(value) == "Vector3" and value.X == value.X and value.Y == value.Y
 		and value.Z == value.Z and value.Magnitude < math.huge
-end
-
-local function getPromptObjectText(itemId, count)
-	local item = ItemDatabase:Get(itemId)
-	local itemName = (item and item.Name) or itemId or "Item"
-	local qty = math.max(1, math.floor(tonumber(count) or 1))
-	return string.format("%dx %s", qty, itemName)
 end
 
 local function ensureFolder()
@@ -127,46 +123,83 @@ local function cloneFallbackResourceModel(sourceModel, itemId, dropScale)
 	return model
 end
 
-local function attachPrompt(model)
-	if not model or not model.Parent then return end
+local function tryAutoPickup(model, plr)
+	if not model or not model.Parent or claiming[model] then return false end
 	local part = model.PrimaryPart or getPrimary(model)
-	if not part then return end
+	if not part then return false end
 	model.PrimaryPart = part
-	local itemId = model:GetAttribute("ItemId") or model.Name
+	if model:GetAttribute("PickupPending") or ReplicatedStorage:GetAttribute("WorldRestoring") or not model:IsDescendantOf(Workspace) then return false end
+	if plr:GetAttribute("WorldPlayerRestoring") or plr:GetAttribute("WorldPlayerLoading") then return false end
+	local char = plr.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not hum or hum.Health <= 0 or not root or plr:GetAttribute("IsDead") then return false end
+	if (root.Position - part.Position).Magnitude > AUTO_PICKUP_RADIUS then return false end
+	local id = ResourceItemMap.Normalize(model:GetAttribute("ItemId"))
 	local count = model:GetAttribute("Count") or 1
-	local prompt = part:FindFirstChildOfClass("ProximityPrompt")
-	if not prompt then
-		prompt = Instance.new("ProximityPrompt")
-		prompt.Parent = part
+	if type(id) ~= "string" or not ItemDatabase:Get(id) then return false end
+	if typeof(count) ~= "number" or count % 1 ~= 0 or count <= 0 or count == math.huge then return false end
+	claiming[model] = true
+	local entry = entries[model] or {Id=id,N=count}
+	local added = InventoryService:GiveEntry(plr, entry, true)
+	if added > 0 then
+		model:Destroy()
+		return true
 	end
-	prompt.ActionText = "Pick Up"
-	prompt.KeyboardKeyCode = Enum.KeyCode.F
-	prompt.ObjectText = getPromptObjectText(itemId, count)
-	prompt.RequiresLineOfSight = false
-	prompt.HoldDuration = 0
-	prompt.MaxActivationDistance = 8
-	local claimed = false
-	prompt.Triggered:Connect(function(plr)
-		if claimed or model:GetAttribute("PickupPending") or ReplicatedStorage:GetAttribute("WorldRestoring") or not model:IsDescendantOf(Workspace) then return end
-		if plr:GetAttribute("WorldPlayerRestoring") or plr:GetAttribute("WorldPlayerLoading") then return end
-		local char = plr.Character
-		local hum = char and char:FindFirstChildOfClass("Humanoid")
-		local root = char and char:FindFirstChild("HumanoidRootPart")
-		if not hum or hum.Health <= 0 or not root or plr:GetAttribute("IsDead") then return end
-		if not ((root.Position - part.Position).Magnitude <= prompt.MaxActivationDistance + 0.5) then return end
-		local id = ResourceItemMap.Normalize(model:GetAttribute("ItemId"))
-		local count = model:GetAttribute("Count") or 1
-		if type(id) ~= "string" or not ItemDatabase:Get(id) then return end
-		if typeof(count) ~= "number" or count % 1 ~= 0 or count <= 0 or count == math.huge then return end
-		claimed = true
-		local entry = entries[model] or {Id=id,N=count}
-		local added = InventoryService:GiveEntry(plr, entry, true)
-		if added > 0 then
-			model:Destroy()
-		else
-			claimed = false
+	claiming[model] = nil
+	return false
+end
+
+local function freezeForBiomeShift(model)
+	if not model or not model.Parent or shiftAnchors[model] then return end
+	local states = {}
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") then
+			states[part] = part.Anchored
+			part.Anchored = true
+			part.AssemblyLinearVelocity = Vector3.zero
+			part.AssemblyAngularVelocity = Vector3.zero
 		end
-	end)
+	end
+	shiftAnchors[model] = states
+	model:SetAttribute("BiomeShiftDropFrozen", true)
+end
+
+local function restoreShiftAnchors(model)
+	local states = shiftAnchors[model]
+	if not states then return end
+	for part, anchored in pairs(states) do
+		if part.Parent then
+			part.AssemblyLinearVelocity = Vector3.zero
+			part.AssemblyAngularVelocity = Vector3.zero
+			part.Anchored = anchored
+		end
+	end
+	shiftAnchors[model] = nil
+	model:SetAttribute("BiomeShiftDropFrozen", nil)
+end
+
+local function settleOnTerrain(model, world)
+	if not model or not model.Parent or not world then return false end
+	local pivot = model:GetPivot()
+	local expectedY = world:GetHeight(pivot.Position.X, pivot.Position.Z)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = {Workspace.Terrain}
+	params.IgnoreWater = true
+	local hit = Workspace:Raycast(Vector3.new(pivot.Position.X, expectedY + 32, pivot.Position.Z), Vector3.new(0, -72, 0), params)
+	local surfaceY = hit and hit.Position.Y or expectedY
+	local bounds, size = model:GetBoundingBox()
+	local bottomY = bounds.Position.Y - size.Y * .5
+	local targetBottomY = surfaceY + .18
+	model:PivotTo(CFrame.new(pivot.Position + Vector3.new(0, targetBottomY - bottomY, 0)) * pivot.Rotation)
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.AssemblyLinearVelocity = Vector3.zero
+			part.AssemblyAngularVelocity = Vector3.zero
+		end
+	end
+	return hit ~= nil
 end
 
 function ItemDropService:SpawnDrop(itemId, count, position, options)
@@ -240,10 +273,25 @@ function ItemDropService:SpawnDrop(itemId, count, position, options)
 	model.Parent = ensureFolder()
 	if root then pcall(function() root:SetNetworkOwner(nil) end) end
 	applyInitialVelocity(model, options and options.InitialVelocity)
-	PromptQueueService:Enqueue(function()
-		attachPrompt(model)
-	end)
+	if ReplicatedStorage:GetAttribute("WorldShifting") then freezeForBiomeShift(model) end
 	return model
+end
+
+function ItemDropService:BeginBiomeShift()
+	for _, model in ipairs(ensureFolder():GetChildren()) do
+		if model:IsA("Model") and model:GetAttribute("ItemId") then freezeForBiomeShift(model) end
+	end
+end
+
+function ItemDropService:CompleteBiomeShift(world)
+	self._surfaceProvider = world
+	for model in pairs(shiftAnchors) do
+		if not model.Parent then
+			shiftAnchors[model] = nil
+		elseif settleOnTerrain(model, world) then
+			restoreShiftAnchors(model)
+		end
+	end
 end
 
 function ItemDropService:CaptureWorldState()
@@ -296,8 +344,28 @@ function ItemDropService:CompleteWorldRestore()
 end
 
 local lifetimeAccumulator = 0
+local pickupAccumulator = 0
 RunService.Heartbeat:Connect(function(delta)
-	if not ItemDropService._worldActive or ReplicatedStorage:GetAttribute("WorldRestoring") then return end
+	if not ItemDropService._worldActive or ReplicatedStorage:GetAttribute("WorldRestoring") or ReplicatedStorage:GetAttribute("WorldShifting") then return end
+	pickupAccumulator += delta
+	if pickupAccumulator >= 0.15 then
+		pickupAccumulator = 0
+		for model in pairs(shiftAnchors) do
+			if not model.Parent then
+				shiftAnchors[model] = nil
+			elseif settleOnTerrain(model, ItemDropService._surfaceProvider) then
+				restoreShiftAnchors(model)
+			end
+		end
+		local players = Players:GetPlayers()
+		for model in pairs(entries) do
+			if model.Parent and not model:GetAttribute("PickupPending") then
+				for _, plr in ipairs(players) do
+					if tryAutoPickup(model, plr) then break end
+				end
+			end
+		end
+	end
 	lifetimeAccumulator += delta
 	if lifetimeAccumulator < 1 then return end
 	local elapsed = lifetimeAccumulator

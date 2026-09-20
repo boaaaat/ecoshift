@@ -10,6 +10,7 @@ local ExpeditionModels = require(script.Parent.Parent.Art.ExpeditionModels)
 local ExpeditionEquipment = require(script.Parent.Parent.Art.ExpeditionEquipment)
 local FieldObjects = require(script.Parent.Parent.Art.ExpeditionFieldObjects)
 local LootConfig = require(ReplicatedStorage.Shared.ExpeditionLootConfig)
+local ServerUtil = require(script.Parent.ServerUtil)
 local Service = {}
 
 local GENERATOR = "ExpeditionPrefabService"
@@ -19,12 +20,7 @@ local function folder(parent, name)
 	return result
 end
 local function part(parent, name, size, cf, color)
-	local p = Instance.new("Part")
-	p.Name, p.Size, p.CFrame, p.Color = name, size, cf, color
-	p.Anchored, p.TopSurface, p.BottomSurface = true, Enum.SurfaceType.Smooth, Enum.SurfaceType.Smooth
-	p.Material = Enum.Material.SmoothPlastic
-	p.Parent = parent
-	return p
+	return ServerUtil.Part(parent,name,size,cf,{Color=color,Material=Enum.Material.SmoothPlastic,TopSurface=Enum.SurfaceType.Smooth,BottomSurface=Enum.SurfaceType.Smooth})
 end
 local function keepExisting(parent, name)
 	local existing = parent:FindFirstChild(name)

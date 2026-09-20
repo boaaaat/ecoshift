@@ -20,6 +20,7 @@ function Config.EligibleSchematics(biome,depth,tier)
  local biomeName=Catalog.BiomeNames[biome] or biome
  local pages={}
  for id,enchantment in pairs(Catalog.Enchantments) do
+  if enchantment.Hidden then continue end
   for rank,grade in ipairs(enchantment.Grades) do
    if grade<=maxGrade then
     local theme=enchantment.Themes and enchantment.Themes[rank] or enchantment.Theme

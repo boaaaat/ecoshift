@@ -7,6 +7,9 @@ local Inventory=require(script.Parent.InventoryService)
 local Gear=require(script.Parent.GearService)
 local Instances=require(RS.Shared.ItemInstance)
 local Service={_known={},_choices={},_sources={},_seen={},_rate={},_choiceRanks={}}
+local function creative(player)
+ return workspace:GetAttribute("WorldType")=="Creative" and player:GetAttribute("CreativeMode")==true
+end
 local function live(player)
  local hum=player.Character and player.Character:FindFirstChildOfClass("Humanoid")
  return hum and hum.Health>0 and not player:GetAttribute("IsDead") and not player:GetAttribute("WorldPlayerLoading")
@@ -23,6 +26,15 @@ local function level(entry,id)
 end
 function Service:GetState(player,station)
  local gear,pages,scrolls={},{},{}
+ local known=Instances.Copy(self._known)
+ local isCreative=creative(player)
+ if isCreative then
+  known={}
+  for id,enchantment in pairs(Catalog.Enchantments) do
+   known[id]={}
+   for rank in ipairs(enchantment.Grades) do known[id][tostring(rank)]=true end
+  end
+ end
  local inv=Inventory:GetAll(player)
  for _,kind in ipairs({"Hotbar","Storage","Equipment","Accessory"}) do
   for _,entry in pairs(inv[kind] or {}) do
@@ -35,12 +47,12 @@ function Service:GetState(player,station)
   end
  end
  table.sort(gear,function(a,b)return a.Id==b.Id and a.Uid<b.Uid or a.Id<b.Id end)
- return {Station=station,Known=Instances.Copy(self._known),Choices=Instances.Copy(self._choices),ChoiceRanks=Instances.Copy(self._choiceRanks),Gear=gear,Pages=pages,Scrolls=scrolls,
-  Tier=require(script.Parent.CampaignService):GetTier()}
+ return {Station=station,Known=known,Choices=isCreative and {} or Instances.Copy(self._choices),ChoiceRanks=Instances.Copy(self._choiceRanks),Gear=gear,
+  Pages=isCreative and {} or pages,Scrolls=isCreative and {} or scrolls,Creative=isCreative,Tier=require(script.Parent.CampaignService):GetTier()}
 end
 function Service:Discover(id,rank)
  local e=Catalog.Enchantments[id]
- if not e or not e.Grades[rank] then return false end
+ if not e or e.Hidden or not e.Grades[rank] then return false end
  self._known[id]=self._known[id] or {}
  if self._known[id][tostring(rank)] then return false end
  self._known[id][tostring(rank)]=true
@@ -57,18 +69,29 @@ function Service:GrantChoice(source,options,rank)
  end
  return true
 end
-local function compatible(entry,id,rank,allowExisting)
+local function compatible(entry,id,rank,allowExisting,isCreative)
  local def=Instances.Copy(Catalog.Gear[entry.Id]);if not def then return false,"Choose gear." end
  def.Grade=entry.Grade
- if not Catalog.CanEnchant(def,id,rank) then return false,"This enchantment requires compatible gear at a higher grade." end
+ if not Catalog.Enchantments[id].Grades[rank] then return false,"That enchantment rank is unavailable." end
+ if not Catalog.CanUseEnchantment(def,id) then return false,"That enchantment cannot be used on this item." end
+ if not isCreative and not Catalog.CanEnchant(def,id,rank) then return false,"This enchantment requires a higher gear grade." end
  local current=level(entry,id)
  if current>0 and not allowExisting then return false,"This item already has that enchantment." end
  local count=0;for _ in pairs(entry.Enchantments or {}) do count+=1 end
- if current==0 and count>=Catalog.EnchantmentSlots(def.Kind,entry.Grade) then return false,"No free enchantment slot." end
- local family=Catalog.Enchantments[id].Family
- if family and family~="" then
+ if not isCreative and current==0 and count>=Catalog.EnchantmentSlots(def.Kind,entry.Grade) then return false,"No free enchantment slot." end
+ local requested=Catalog.Enchantments[id]
+ local groups=table.clone(requested.ConflictGroups or {})
+ if requested.Family and requested.Family~="" then table.insert(groups,requested.Family) end
+ if not isCreative and #groups>0 then
   for other in pairs(entry.Enchantments or {}) do
-   if other~=id and Catalog.Enchantments[other] and Catalog.Enchantments[other].Family==family then return false,"Conflicts with "..Catalog.Enchantments[other].Name.."." end
+   local otherDef=other~=id and Catalog.Enchantments[other]
+   if otherDef then
+    local otherGroups=table.clone(otherDef.ConflictGroups or {})
+    if otherDef.Family and otherDef.Family~="" then table.insert(otherGroups,otherDef.Family) end
+    for _,group in ipairs(groups) do
+     if table.find(otherGroups,group) then return false,"Conflicts with "..otherDef.Name.."." end
+    end
+   end
   end
  end
  return true
@@ -115,6 +138,7 @@ function Service:Request(player,action,payload)
  end
  local entry=Gear:GetItemByUid(player,payload.Uid)
  local id=payload.Enchantment;local enchant=type(id)=="string" and Catalog.Enchantments[id]
+ local isCreative=creative(player)
  if not entry or not enchant then return false,"Select gear and an enchantment." end
  if action=="Remove" then
   if level(entry,id)==0 then return false,"That enchantment is not on this item." end
@@ -132,22 +156,25 @@ function Service:Request(player,action,payload)
   entry.Enchantments[id]=nil;Gear:Touch(player);return true,"Extracted a shareable scroll. Stored effect charges are not transferred."
  elseif action=="ApplyScroll" or action=="Enchant" then
   local scroll=action=="ApplyScroll" and type(payload.ItemId)=="string" and Catalog.Items[payload.ItemId]
-  local rank=scroll and scroll.Scroll and scroll.Scroll.Id==id and scroll.Scroll.Rank or level(entry,id)+1
+  local rank=isCreative and action=="Enchant" and enchant.MaxLevel or (scroll and scroll.Scroll and scroll.Scroll.Id==id and scroll.Scroll.Rank or level(entry,id)+1)
   if action=="ApplyScroll" and (not scroll or not scroll.Scroll or scroll.Scroll.Id~=id) then return false,"Choose a matching scroll." end
-  local ok,reason=compatible(entry,id,rank,action=="Enchant")
+  local ok,reason=compatible(entry,id,rank,action=="Enchant",isCreative)
   if not ok then return false,reason end
-  if not stationOK(player,station,enchant.Grades[rank]) then return false,"Upgrade this station first." end
-  if require(script.Parent.CampaignService):GetTier()<enchant.Grades[rank] then return false,"Campaign tier is too low." end
-  if action=="Enchant" and not (self._known[id] and self._known[id][tostring(rank)]) then return false,"Discover this rank's schematic first." end
-  -- Costs use the item's actual grade. Never trust preview numbers supplied by a client.
-  local copy=Instances.Copy(entry);copy._owner=player
-  local cost=costs(copy,id,rank,action=="ApplyScroll")
-  if not cost then return false,"A deep-region trophy is required." end
-  if scroll then table.insert(cost,{Id=payload.ItemId,N=1}) end
-  if not Inventory:PayCost(player,cost,true) then return false,"Missing materials." end
+  if not isCreative then
+   if not stationOK(player,station,enchant.Grades[rank]) then return false,"Upgrade this station first." end
+   if require(script.Parent.CampaignService):GetTier()<enchant.Grades[rank] then return false,"Campaign tier is too low." end
+   if action=="Enchant" and not (self._known[id] and self._known[id][tostring(rank)]) then return false,"Discover this rank's schematic first." end
+   -- Costs use the item's actual grade. Never trust preview numbers supplied by a client.
+   local copy=Instances.Copy(entry);copy._owner=player
+   local cost=costs(copy,id,rank,action=="ApplyScroll")
+   if not cost then return false,"A deep-region trophy is required." end
+   if scroll then table.insert(cost,{Id=payload.ItemId,N=1}) end
+   if not Inventory:PayCost(player,cost,true) then return false,"Missing materials." end
+  end
   entry.Enchantments=entry.Enchantments or {};entry.Enchantments[id]=rank
-  Gear:Touch(player);require(script.Parent.ExpeditionRewardsService):RecordActivity(player)
-  return true,action=="Enchant" and "Enchantment applied." or "Scroll transferred."
+  Gear:Touch(player)
+  if not isCreative then require(script.Parent.ExpeditionRewardsService):RecordActivity(player) end
+  return true,isCreative and "Maximum-rank enchantment applied for free." or (action=="Enchant" and "Enchantment applied." or "Scroll transferred.")
  end
  return false,"Unknown action."
 end

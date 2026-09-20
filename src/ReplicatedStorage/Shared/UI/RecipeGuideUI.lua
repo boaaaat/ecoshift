@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
 local TextService = game:GetService("TextService")
 local Theme = require(script.Parent.UITheme)
+local UIFactory = require(script.Parent.UIFactory)
 local SearchRank = require(script.Parent.SearchRank)
 local Resolver = require(script.Parent.Parent:WaitForChild("RecipeGuide"))
 local Recipes = require(script.Parent.Parent.WorkbenchConfig)
@@ -25,12 +26,7 @@ local preferredStation, activeCraft, render, refresh
 local statusRevision = 0
 local syncingInput = false
 
-local function create(class, parent, properties)
-	local object = Instance.new(class)
-	for key, value in pairs(properties or {}) do object[key] = value end
-	object.Parent = parent
-	return object
-end
+local create = UIFactory.Create
 local function label(parent, text, height, size)
 	return create("TextLabel", parent, {
 		Size=UDim2.new(1,0,0,height), BackgroundTransparency=1, Text=text,

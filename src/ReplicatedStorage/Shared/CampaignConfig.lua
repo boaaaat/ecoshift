@@ -1,6 +1,7 @@
 local C = {}
 C.Damage = {18,36,72,144,288,576,1152,2304}
 C.MonsterDamage = {8,12,18,27,41,62,93,140}
+C.BossHealthPerTierDamage = 135
 C.Milestones = {
  {Id="FieldRelay",Name="Field Relay",Facts={Antenna=true},Cost={Plank=12,IronBar=4,Cloth=4},Defense=60},
  {Id="BogKing",Name="Bog King",Facts={BogDen=true},Boss="BogKing"},
@@ -22,6 +23,20 @@ C.Clues = {
  {Id="MineArena",Name="Open the abandoned mine",Tier=6,Biomes={IronrootBadlands=true},Depth=4},
  {Id="ArchiveRoute",Name="Open the archive route",Tier=7,Biomes={SunkenArchive=true},Depth=4},
  {Id="MoonArena",Name="Chart the Warden's arena",Tier=8,Biomes={ShattermoonExpanse=true},Depth=5},
+}
+C.DiscoveryHints = {
+ Antenna="Search a depth 1 landmark in the Woodlands or Dunes, then hold F at the relay antenna.",
+ BogDen="Visit the Marsh at depth 2 and find the Bog King's den entrance.",
+ Cooling="Search a depth 2 Tundra landmark and restore the forge cooling assembly.",
+ Focus="Search a depth 2 Crystal Basin landmark and recover the focusing crystal.",
+ CraterInstrument="Explore a depth 3 Meteor Crater landmark and recover its instrument.",
+ CalibratedInstrument="Recover calibrated instruments from three different depth 3 biome regions.",
+ MineArena="Explore a depth 4 Badlands landmark and open the abandoned mine.",
+ ArchiveRoute="Explore a depth 4 Flooded Ruins landmark and open the Deep Archive route.",
+ ArchiveRecord1="Enter the Deep Archive and recover record 1 from its interior rooms.",
+ ArchiveRecord2="Enter the Deep Archive and recover record 2 from its interior rooms.",
+ ArchiveRecord3="Enter the Deep Archive and recover record 3 from its interior rooms.",
+ MoonArena="Explore a depth 5 Moon Surface landmark and chart the Warden arena.",
 }
 C.Bosses = {
  BogKing={Name="Bog King",Tier=2,Color=Color3.fromRGB(79,115,58),Rooms=2,Trophy="MarshHeart"},

@@ -46,8 +46,7 @@ local function layout()
 	local visible = not mobile or not gui.Parent:GetAttribute("MenuCursorOpen")
 	gui.Enabled,deviceGui.Enabled=visible,visible
 	local shortcutWidth = mobile and 92 or WIDTH
-	-- The 106px mobile minimap owns the top-right corner even in portrait.
-	local usableWidth = available.Width - (mobile and 112 or 0)
+	local usableWidth = available.Width
 	local fits = usableWidth >= shortcutWidth + GAP * 2 and available.Height >= HEIGHT
 	gui.Parent:SetAttribute("MobileTopbarFallback", mobile and not fits)
 	-- ScreenInsets applies the native safe rectangle; do not add its offset again.

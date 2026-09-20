@@ -398,21 +398,58 @@ function StatsService:CaptureWorldState(plr)
 end
 
 function StatsService:RestoreWorldState(plr, state)
-	local Codec = require(script.Parent.WorldSnapshotCodec)
-	assert(type(state) == "table" and type(state.Base) == "table", "Missing saved stats")
-	Codec.BoundedCount(state.Modifiers or {}, 128)
-	local data = newPlayerData()
-	for stat in pairs(self.DEFAULTS) do data.Base[stat] = Codec.Number(state.Base[stat], -1e6, 1e6) end
-	for _, mod in ipairs(state.Modifiers or {}) do
-		assert(data.Mods[mod.Stat] and (mod.Mode == "Add" or mod.Mode == "Mult"), "Invalid saved stat modifier")
-		local remaining = mod.Remaining ~= false and Codec.Number(mod.Remaining, 0, 86400 * 30) or nil
-		table.insert(data.Mods[mod.Stat], { Id = Codec.Text(mod.Id), Value = Codec.Number(mod.Value, -1e6, 1e6), Mode = mod.Mode,
-			ExpiresAt = remaining and os.clock() + remaining or nil })
+	local function savedNumber(value, minimum, maximum)
+		local number = tonumber(value)
+		if not number or number ~= number or math.abs(number) == math.huge then return nil end
+		return math.clamp(number, minimum, maximum)
 	end
+
+	state = type(state) == "table" and state or {}
+	local savedBase = type(state.Base) == "table" and state.Base or {}
+	local savedModifiers = type(state.Modifiers) == "table" and state.Modifiers or {}
+	local data = newPlayerData()
+	-- Base-stat fields have grown over time. Begin with the current defaults and
+	-- overlay every recognized saved value so adding a stat never strands an
+	-- otherwise valid world. Aliases also migrate early lowercase/underscore keys.
+	plr:SetAttribute("WorldRestoreStage", "Stats/Base")
+	for savedStat, value in pairs(savedBase) do
+		local stat = normalizeStat(savedStat)
+		local number = savedNumber(value, -1e6, 1e6)
+		if stat and number then data.Base[stat] = number end
+	end
+	plr:SetAttribute("WorldRestoreStage", "Stats/Modifiers")
+	for index, mod in ipairs(savedModifiers) do
+		if index > 128 then break end
+		if type(mod) == "table" then
+			local stat = normalizeStat(mod.Stat)
+			local savedMode = type(mod.Mode) == "string" and string.lower(mod.Mode) or ""
+			local mode = (savedMode == "add" or savedMode == "linear") and "Add"
+				or (savedMode == "mul" or savedMode == "mult" or savedMode == "multiply"
+					or savedMode == "percent" or savedMode == "pct") and "Mult"
+				or nil
+			local value = savedNumber(mod.Value, -1e6, 1e6)
+			-- Removed stats/modifier formats are safe to omit: equipment, class and
+			-- temporary effects rebuild their current modifiers after this migration.
+			if stat and mode and value then
+				local remaining = mod.Remaining ~= nil and mod.Remaining ~= false
+					and savedNumber(mod.Remaining, 0, 86400 * 30) or nil
+				local id = tostring(mod.Id or ("RestoredModifier" .. index)):sub(1, 160)
+				table.insert(data.Mods[stat], { Id = id, Value = value, Mode = mode,
+					ExpiresAt = remaining and os.clock() + remaining or nil })
+			end
+		end
+	end
+	plr:SetAttribute("WorldRestoreStage", "Stats/Recompute")
 	self._data[plr] = data
 	self:_recompute(plr, { Force = true, HealthChanged = true })
 	local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
-	if hum and state.Health then hum.Health = Codec.Number(state.Health, 0, hum.MaxHealth) end
+	if hum and state.Health ~= nil then
+		-- Max-health modifiers may be rebuilt by role, gear and food services after
+		-- this stage. A formerly boosted health value is valid; clamp it to the
+		-- maximum available now instead of rejecting the complete saved character.
+		local health = savedNumber(state.Health, 0, 1e6)
+		if health then hum.Health = math.min(health, hum.MaxHealth) end
+	end
 end
 
 return StatsService

@@ -3,11 +3,12 @@ local RS=game:GetService("ReplicatedStorage")
 if require(RS:WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode()~="Expedition" then return end
 local UIS=game:GetService("UserInputService")
 local RunService=game:GetService("RunService")
-local HttpService=game:GetService("HttpService")
 local Theme=require(RS.Shared.UI.UITheme)
+local RemoteRequest=require(RS.Shared.UI.RemoteRequest)
 local Settings=require(RS.Shared.ClientSettings)
 local Config=require(RS.Shared.ClassConfig)
 local remote=RS:WaitForChild("Remotes"):WaitForChild("ClassAbility")
+local requests=RemoteRequest.new(remote)
 local player=Players.LocalPlayer
 local gui=Instance.new("ScreenGui");gui.Name="ClassAbilityUI";gui.ResetOnSpawn=false;gui.DisplayOrder=24;gui.Parent=player.PlayerGui
 local icons={Generalist="Survey",Gatherer="Harvest",Builder="Build",Hunter="Bow",Medic="Health",Engineer="Craft",Scout="Sprint",Cook="Food",Botanist="Leaf",Prospector="Mineral",Warden="Shield",Climatologist="Exposure"}
@@ -21,7 +22,7 @@ end
 local notice=Theme.Label(gui,"",UDim2.fromOffset(340,54),UDim2.new(.5,0,.63,0),15,nil,true);notice.AnchorPoint=Vector2.new(.5,.5);notice.TextXAlignment=Enum.TextXAlignment.Center;notice.TextWrapped=true
 local choice=Instance.new("Frame");choice.Name="DeploymentChoice";choice.Size=UDim2.fromOffset(240,144);choice.AnchorPoint=Vector2.new(.5,.5);choice.Position=UDim2.fromScale(.5,.55);choice.Visible=false;choice.Parent=gui;Theme.Panel(choice);Theme.CaptureCursor(choice)
 local controls=Instance.new("Frame");controls.BackgroundTransparency=1;controls.Size=UDim2.fromOffset(180,52);controls.AnchorPoint=Vector2.new(.5,1);controls.Position=UDim2.new(.5,0,1,-155);controls.Visible=false;controls.Parent=gui
-local mode,rotation,previewPart,placement,valid,pending,role=nil,0,nil,nil,false,nil,nil
+local mode,rotation,previewPart,placement,valid,role=nil,0,nil,nil,false,nil
 local noticeSerial=0
 local outlines=setmetatable({},{__mode="k"})
 local function tell(message)
@@ -33,9 +34,11 @@ local function cancel()
 	player.PlayerGui:SetAttribute("ClassPlacementActive",false)
 end
 local function request(payload)
-	if pending then return end
-	payload.RequestId=HttpService:GenerateGUID(false);pending=payload.RequestId;remote:FireServer("Activate",payload);tell("Activating…")
-	task.delay(8,function() if pending==payload.RequestId then pending=nil;tell("No confirmation received. Please try again.") end end)
+	requests:Send("Activate",payload,{
+		Timeout=8,
+		OnStart=function() tell("Activating…") end,
+		OnTimeout=function() tell("No confirmation received. Please try again.") end,
+	})
 end
 local function choose(value)
 	choice.Visible=false;mode=value;controls.Visible=true;rotation=0
@@ -108,9 +111,9 @@ remote.OnClientEvent:Connect(function(action,data)
 			end
 		end
 	end
-	if action=="Result" and type(data)=="table" and data.RequestId==pending then
+	if action=="Result" and type(data)=="table" and requests:Resolve(data.RequestId) then
 		local reasons={NotAlive="Abilities require a living explorer.",Locked="Unlocks at class level 3",Cooldown="Ability is recovering.",InvalidTarget="Aim at a valid target.",NoPlants="No eligible harvested plants nearby.",OutOfRange="Move closer to your target.",Blocked="Choose clear ground.",Unsupported="Choose level, supported ground."}
-		pending=nil;tell(data.Success and "Ability activated" or reasons[data.Reason] or data.Reason or "Unable to activate here.");if data.Success then cancel() end
+		tell(data.Success and "Ability activated" or reasons[data.Reason] or data.Reason or "Unable to activate here.");if data.Success then cancel() end
 	end
 end)
 player:GetAttributeChangedSignal("IsDead"):Connect(function() if player:GetAttribute("IsDead") then cancel() end end)
@@ -149,13 +152,13 @@ RunService.RenderStepped:Connect(function(dt)
 	end
 	local currentRole=player:GetAttribute("Role") or "Generalist"
 	if role~=currentRole then role=currentRole;Theme.Icon(trigger,icons[role] or "Survey",30) end
-	local mobile=Theme.IsMobile();trigger.AnchorPoint=Vector2.new(1,1);trigger.Position=mobile and UDim2.new(1,-100,1,-210) or UDim2.new(1,-26,1,-145)
+	local mobile=Theme.IsMobile();trigger.AnchorPoint=Vector2.new(1,1);trigger.Position=mobile and UDim2.new(1,-20,1,-150) or UDim2.new(1,-26,1,-145)
 	local menus=player.PlayerGui:GetAttribute("MenuCursorOpen")
 	trigger.Visible=not player:GetAttribute("IsDead") and not menus and not player.PlayerGui:GetAttribute("BuildPlacementActive")
 	if mode and menus then cancel() end
 	local level=player:GetAttribute("ClassLevel") or 1;local remaining=player:GetAttribute("AbilityCooldownRemaining") or 0
 	local def=Config.Definitions[role] or Config.Definitions.Generalist;local fraction=math.clamp(remaining/def.Ability.Cooldown,0,1)
-	countdown.Text=pending and "…" or level<3 and "L3" or remaining>0 and tostring(math.ceil(remaining)) or ""
+	countdown.Text=requests:IsPending() and "…" or level<3 and "L3" or remaining>0 and tostring(math.ceil(remaining)) or ""
 	local glyph=trigger:FindFirstChild("Glyph");if glyph then glyph.Visible=countdown.Text=="" end
 	for i,segment in ipairs(ring) do segment.Visible=remaining>0 and i/40<=fraction end
 	binding.Text=mobile and "" or UIS.PreferredInput==Enum.PreferredInput.Gamepad and "Y" or Settings.Key("Ability").Name

@@ -14,6 +14,7 @@ local Profile = require(script.Parent.ProfileService)
 local Inventory = require(script.Parent.InventoryService)
 local Round = require(script.Parent.RoundService)
 local GameState = require(script.Parent.GameStateService)
+local ServerUtil = require(script.Parent.ServerUtil)
 local Service = { _players = {}, _objectives = {}, _deaths = {}, _pending = {}, _samples = {}, _flushing = {}, _delivering = {}, _activity = {}, _classSettled = {} }
 local function validId(value)
 	return type(value) == "string" and #value > 0 and #value <= 48 and value:match("^[%w_:%-]+$") ~= nil
@@ -55,8 +56,7 @@ local function participant(player)
 	return player.Parent == Players and not player:GetAttribute("WorldPlayerLoading") and not player:GetAttribute("WorldPlayerRestoring")
 end
 local function alive(player)
-	local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-	return participant(player) and not player:GetAttribute("IsDead") and hum ~= nil and hum.Health > 0
+	return participant(player) and ServerUtil.IsLiving(player)
 end
 local function count(map) local n = 0 for _ in pairs(map) do n += 1 end return n end
 local function rewardsEnabled() return workspace:GetAttribute("WorldType") ~= "Creative" end

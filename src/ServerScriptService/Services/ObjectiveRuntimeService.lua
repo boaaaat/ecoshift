@@ -5,17 +5,17 @@ local Tags=game:GetService("CollectionService")
 local Debris=game:GetService("Debris")
 local Definitions=require(RS.Shared.EventsConfig)
 local Codec=require(script.Parent.WorldSnapshotCodec)
+local ServerUtil=require(script.Parent.ServerUtil)
 local Service={_scenes={}}
 local function vector(a) return Vector3.new(a[1],a[2],a[3]) end
 local function part(parent,name,p,size,color)
- local object=Instance.new("Part");object.Name=name;object.Size=size or Vector3.new(4,4,4);object.CFrame=CFrame.new(p);object.Color=color or Color3.fromRGB(171,155,106);object.Anchored=true;object.Material=Enum.Material.SmoothPlastic;object.Parent=parent;return object
+ return ServerUtil.Part(parent,name,size or Vector3.new(4,4,4),CFrame.new(p),{Color=color or Color3.fromRGB(171,155,106),Material=Enum.Material.SmoothPlastic})
 end
 local function living(player)
- local h=player.Character and player.Character:FindFirstChildOfClass("Humanoid")
- return h and h.Health>0 and not player:GetAttribute("IsDead") and not player:GetAttribute("InteriorId") and not player:GetAttribute("WorldPlayerLoading") and not RS:GetAttribute("WorldRestoring") and not RS:GetAttribute("WorldShifting")
+ return ServerUtil.IsLiving(player,{ExcludeInterior=true}) and not RS:GetAttribute("WorldRestoring") and not RS:GetAttribute("WorldShifting")
 end
 local function close(player,p,distance)
- local r=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+ local r=ServerUtil.Root(player)
  return living(player) and r and (r.Position-p).Magnitude<=(distance or 12)
 end
 local function prompt(scene,anchor,label,callback)

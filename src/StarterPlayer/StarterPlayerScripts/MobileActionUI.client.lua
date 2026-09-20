@@ -1,36 +1,10 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
-local Workspace = game:GetService("Workspace")
 if require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
-
-local gui = Instance.new("ScreenGui")
-gui.Name, gui.ResetOnSpawn, gui.DisplayOrder = "MobileActionUI", false, 10
-gui.Parent = playerGui
-local action = Instance.new("TextButton")
-action.Name, action.Size = "HeldToolAction", UDim2.fromOffset(44, 44)
-action.AnchorPoint, action.Position = Vector2.new(1, 1), UDim2.new(1, -16, 1, -170)
-action.Text, action.TextSize, action.Font = "", 14, Enum.Font.GothamBold
-action.Visible, action.Parent = false, gui
-Theme.Button(action, true)
-action.BackgroundTransparency = .48
-local glyphs = {}
-for _, name in ipairs({"Attack", "Harvest", "Bow", "Shield"}) do
-	local glyph = Theme.Icon(action, name, 26)
-	glyph.Name = name .. "Glyph"
-	glyph.Visible = false
-	glyphs[name] = glyph
-end
-local heldGlow = Instance.new("UIStroke")
-heldGlow.Name, heldGlow.Color, heldGlow.Thickness = "HeldGlow", Theme.Colors.Amber, 2
-heldGlow.Enabled, heldGlow.Parent = false, action
-Theme.BindResponsive(action, function(_, available)
-	action.Position = available.X >= available.Y
-		and UDim2.new(1, -16, 1, -170) or UDim2.new(1, -16, 1, -192)
-end)
 
 -- A separate viewport GUI keeps the reticle exactly on the ray used by the tools.
 local aimGui = Instance.new("ScreenGui")
@@ -49,7 +23,8 @@ for _, shape in ipairs({{2, 6, 8, 0}, {2, 6, 8, 12}, {6, 2, 0, 8}, {6, 2, 12, 8}
 	stroke.Color, stroke.Thickness, stroke.Parent = Color3.fromRGB(20, 25, 20), 1, line
 end
 
-local heldInput, heldTool
+local activeBow
+local activationSerial = 0
 local focused = true
 local originalManual = setmetatable({}, { __mode = "k" })
 local characterConnections = {}
@@ -67,9 +42,9 @@ local function blocked()
 		or UserInputService:GetFocusedTextBox() ~= nil
 end
 local function release(cancelled)
-	local tool = heldTool
-	heldInput, heldTool = nil, nil
-	heldGlow.Enabled = false
+	activationSerial += 1
+	local tool = activeBow
+	activeBow = nil
 	if tool and tool.Parent then
 		tool:SetAttribute("CancelMobileRelease", cancelled and true or nil)
 		tool:Deactivate()
@@ -81,21 +56,11 @@ local function toolValue(tool, name)
 	local child = tool:FindFirstChild(name)
 	return child and child:IsA("ValueBase") and tostring(child.Value) or ""
 end
-local function isHarvester(tool)
-	return tool and (tool.Name == "Harvester" or toolValue(tool, "ItemId") == "Harvester")
-end
 local function update()
 	local tool = equippedTool()
 	local available = tool ~= nil and not blocked()
-	if heldInput and (not available or tool ~= heldTool) then release(true) end
-	action.Visible, reticle.Visible = false, available
-	if available and not heldInput then
-		local kind = string.lower(toolValue(tool, "WeaponType"))
-		local icon = (kind == "shield" or kind == "shields") and "Shield"
-			or (kind == "bow" or kind == "bows") and "Bow"
-			or (kind ~= "" and "Attack") or (toolValue(tool, "ToolType") ~= "" and "Harvest") or "Attack"
-		for name, glyph in pairs(glyphs) do glyph.Visible = name == icon end
-	end
+	if activeBow and (not available or tool ~= activeBow) then release(true) end
+	reticle.Visible = available
 end
 local function registerTool(tool)
 	if not tool:IsA("Tool") then return end
@@ -103,30 +68,32 @@ local function registerTool(tool)
 	tool.ManualActivationOnly = Theme.IsMobile() or originalManual[tool]
 end
 
-action.InputBegan:Connect(function(input)
-	if input.UserInputType ~= Enum.UserInputType.Touch or heldInput or blocked() then return end
-	local tool = equippedTool()
-	if not tool or not tool.Enabled then return end
-	heldInput, heldTool = input, tool
-	tool:SetAttribute("CancelMobileRelease", nil)
-	heldGlow.Enabled = true
-	tool:Activate()
-end)
 -- Tap gestures exclude camera drags, and UI-owned taps must not swing the tool.
 -- https://create.roblox.com/docs/reference/engine/classes/UserInputService#TouchTapInWorld
 UserInputService.TouchTapInWorld:Connect(function(_, processedByUI)
-	if processedByUI or heldInput or blocked() then return end
+	if processedByUI or blocked() then return end
 	local tool = equippedTool()
 	if not tool or not tool.Enabled then return end
 	if string.lower(toolValue(tool,"WeaponType"))=="bow" then
-		tool:Activate();task.delay(1.3,function() if tool and tool.Parent then if blocked() then tool:SetAttribute("CancelMobileRelease",true) end;tool:Deactivate() end end);return
+		release(true)
+		activationSerial += 1
+		local serial = activationSerial
+		activeBow = tool
+		tool:SetAttribute("CancelMobileRelease", nil)
+		tool:Activate()
+		task.delay(1.3,function()
+			if serial ~= activationSerial or activeBow ~= tool then return end
+			activeBow = nil
+			if tool.Parent then
+				if blocked() then tool:SetAttribute("CancelMobileRelease",true) end
+				tool:Deactivate()
+			end
+		end)
+		return
 	end
 	tool:SetAttribute("CancelMobileRelease", nil)
 	tool:Activate()
 	tool:Deactivate()
-end)
-UserInputService.InputEnded:Connect(function(input)
-	if input == heldInput then release(input.UserInputState == Enum.UserInputState.Cancel); update() end
 end)
 UserInputService.WindowFocusReleased:Connect(function() focused = false; release(true); update() end)
 UserInputService.WindowFocused:Connect(function() focused = true; update() end)
@@ -159,5 +126,5 @@ local function bindCharacter(character)
 	update()
 end
 player.CharacterAdded:Connect(bindCharacter)
-player.CharacterRemoving:Connect(function() release(true); action.Visible = false; reticle.Visible = false end)
+player.CharacterRemoving:Connect(function() release(true); reticle.Visible = false end)
 if player.Character then bindCharacter(player.Character) end

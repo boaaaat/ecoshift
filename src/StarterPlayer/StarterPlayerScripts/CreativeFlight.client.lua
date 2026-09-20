@@ -4,48 +4,42 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 local Settings = require(ReplicatedStorage.Shared.ClientSettings)
 
 local player = Players.LocalPlayer
+local flightRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CreativeFlightState")
 local SPEED = 100 -- Five times the intended 20 stud/second base movement speed.
 local DOUBLE_TAP_WINDOW = 0.32
 local flying, lastSpace = false, -math.huge
-local attachment, velocity, humanoid, root
-
-local gui = Instance.new("ScreenGui")
-gui.Name = "CreativeFlightUI"
-gui.ResetOnSpawn = false
-gui.DisplayOrder = 8
-gui.Parent = player:WaitForChild("PlayerGui")
-local status = Theme.Label(gui, "FLYING  ·  SPACE UP  ·  SHIFT DOWN", UDim2.fromOffset(300, 32), UDim2.new(.5, -150, 0, 92), 12, nil, true)
-status.BackgroundTransparency = .28
-status.Visible = false
-Theme.Bind(status, "BackgroundColor3", "Panel")
-Theme.Bind(status, "TextColor3", "Amber")
-Theme.Corner(status, 8)
+local attachment, velocity, orientation, humanoid, root
+local animateScript, animateWasEnabled
 
 local function eligible()
 	return workspace:GetAttribute("WorldType") == "Creative" and player:GetAttribute("CreativeMode") == true
 		and not player:GetAttribute("IsDead")
 end
 
-local function stopFlight()
+local function stopFlight(notifyServer)
 	flying = false
-	player:SetAttribute("CreativeFlying", nil)
-	status.Visible = false
+	if notifyServer ~= false then flightRemote:FireServer(false) end
+	if orientation then orientation:Destroy(); orientation = nil end
 	if velocity then velocity:Destroy(); velocity = nil end
 	if attachment then attachment:Destroy(); attachment = nil end
+	if animateScript and animateScript.Parent then
+		animateScript.Enabled = animateWasEnabled ~= false
+	end
+	animateScript, animateWasEnabled = nil, nil
 	if humanoid and humanoid.Parent then
 		humanoid.PlatformStand = false
 		humanoid.AutoRotate = true
-		humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+		humanoid:ChangeState(humanoid.FloorMaterial == Enum.Material.Air
+			and Enum.HumanoidStateType.Freefall or Enum.HumanoidStateType.GettingUp)
 	end
 	if root and root.Parent then root.AssemblyLinearVelocity = Vector3.zero end
 	humanoid, root = nil, nil
 end
 
-local function startFlight()
+local function startFlight(notifyServer)
 	if not eligible() then return end
 	local character = player.Character
 	humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -62,13 +56,30 @@ local function startFlight()
 	velocity.MaxForce = math.huge
 	velocity.VectorVelocity = Vector3.zero
 	velocity.Parent = root
+	orientation = Instance.new("AlignOrientation")
+	orientation.Name = "CreativeFlightOrientation"
+	orientation.Attachment0 = attachment
+	orientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
+	orientation.RigidityEnabled = true
+	orientation.MaxTorque = math.huge
+	orientation.Responsiveness = 35
+	orientation.Parent = root
+	local candidateAnimate = character:FindFirstChild("Animate")
+	animateScript = candidateAnimate and candidateAnimate:IsA("LocalScript") and candidateAnimate or nil
+	if animateScript then
+		animateWasEnabled = animateScript.Enabled
+		animateScript.Enabled = false
+	end
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if animator then
+		for _, track in ipairs(animator:GetPlayingAnimationTracks()) do track:Stop(0.12) end
+	end
 	humanoid.PlatformStand = true
 	humanoid.AutoRotate = false
 	humanoid:ChangeState(Enum.HumanoidStateType.Physics)
 	root.AssemblyLinearVelocity = Vector3.zero
 	flying = true
-	player:SetAttribute("CreativeFlying", true)
-	status.Visible = true
+	if notifyServer ~= false then flightRemote:FireServer(true) end
 end
 
 local function toggleFlight()
@@ -101,6 +112,15 @@ RunService.RenderStepped:Connect(function()
 	local desired = direction * SPEED + Vector3.new(0, vertical * SPEED, 0)
 	if desired.Magnitude > SPEED then desired = desired.Unit * SPEED end
 	velocity.VectorVelocity = desired
+	local facing = Vector3.new(direction.X, 0, direction.Z)
+	if facing.Magnitude < 0.05 then
+		local camera = workspace.CurrentCamera
+		local look = camera and camera.CFrame.LookVector or root.CFrame.LookVector
+		facing = Vector3.new(look.X, 0, look.Z)
+	end
+	if facing.Magnitude > 0.05 and orientation then
+		orientation.CFrame = CFrame.lookAt(Vector3.zero, facing.Unit, Vector3.yAxis)
+	end
 	root.AssemblyAngularVelocity = Vector3.zero
 end)
 
@@ -111,5 +131,13 @@ end
 workspace:GetAttributeChangedSignal("WorldType"):Connect(stateChanged)
 player:GetAttributeChangedSignal("CreativeMode"):Connect(stateChanged)
 player:GetAttributeChangedSignal("IsDead"):Connect(stateChanged)
-player.CharacterRemoving:Connect(stopFlight)
+player:GetAttributeChangedSignal("CreativeFlying"):Connect(function()
+	if player:GetAttribute("CreativeFlying") == true then
+		if not flying and eligible() then task.defer(function() if not flying then startFlight(false) end end) end
+	elseif flying then stopFlight(false) end
+end)
+-- Death/mode changes already clear the authoritative flag. During a disconnect,
+-- keep the last server-owned value intact so the departure snapshot records flight.
+player.CharacterRemoving:Connect(function() stopFlight(false) end)
 UserInputService.WindowFocusReleased:Connect(function() lastSpace = -math.huge end)
+if player:GetAttribute("CreativeFlying") == true then task.defer(function() startFlight(false) end) end

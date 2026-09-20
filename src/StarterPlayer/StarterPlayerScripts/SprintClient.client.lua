@@ -38,7 +38,7 @@ touchGui.Parent = player:WaitForChild("PlayerGui")
 sprintButton = Instance.new("TextButton")
 sprintButton.Name = "HoldSprint"
 sprintButton.AnchorPoint = Vector2.new(1, 1)
-sprintButton.Position = UDim2.new(1, -100, 1, -94)
+sprintButton.Position = UDim2.new(1, -142, 1, -48)
 sprintButton.Size = UDim2.fromOffset(44, 44)
 sprintButton.Text = ""
 sprintButton.TextSize = 15
@@ -72,7 +72,8 @@ player:GetAttributeChangedSignal("IsDead"):Connect(updateTouchVisibility)
 touchGui.Parent:GetAttributeChangedSignal("MenuCursorOpen"):Connect(updateTouchVisibility)
 touchGui.Parent:GetAttributeChangedSignal("BuildPlacementActive"):Connect(updateTouchVisibility)
 Theme.BindResponsive(sprintButton, function(_, available)
-	sprintButton.Position = UDim2.new(1, -100, 1, available.X < available.Y and -192 or -94)
+	-- Keep sprint below dodge and directly left of Roblox's jump control.
+	sprintButton.Position = UDim2.new(1, -142, 1, -48)
 end)
 updateTouchVisibility()
 

@@ -23,7 +23,7 @@ function Bow:GetChargeTime()
 end
 
 function Bow:GetRange()
-	return self:GetNumber("Range", 160)
+	return self:GetNumber("Range", 1000)
 end
 
 function Bow:ComputeDamage(chargeRatio)

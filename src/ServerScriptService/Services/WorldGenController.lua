@@ -22,6 +22,8 @@ function WorldGenController:_generateOverhaul(biomeName)
   while self._pendingBiome do
    local name=self._pendingBiome;self._pendingBiome=nil
    ReplicatedStorage:SetAttribute("WorldShifting",true)
+   local dropService=require(script.Parent.ItemDropService)
+   dropService:BeginBiomeShift()
    local frozen=held
    local death=require(script.Parent.DeathService)
    for _,player in ipairs(Players:GetPlayers()) do
@@ -46,6 +48,8 @@ function WorldGenController:_generateOverhaul(biomeName)
     local enemies=workspace:FindFirstChild("Enemies")
     if enemies then for _,model in ipairs(enemies:GetChildren()) do if not model:GetAttribute("InteriorId") then model:Destroy() end end end
     local world=require(script.Parent.OverhaulWorldService);world:Generate(name)
+    dropService:CompleteBiomeShift(world)
+    if self._hasGenerated then require(script.Parent.BuildService):RemoveBiomeShiftLights() end
     local ordered={};for player,entry in pairs(frozen) do table.insert(ordered,{Player=player,Entry=entry}) end
     table.sort(ordered,function(a,b)return a.Player.UserId<b.Player.UserId end)
     local ignored={};for _,record in ipairs(ordered) do if record.Entry.Corpse then table.insert(ignored,record.Entry.Corpse) end end
@@ -87,6 +91,9 @@ function WorldGenController:_generateOverhaul(biomeName)
    self._hasGenerated=true;ReplicatedStorage:SetAttribute("WorldShifting",false)
    else
     warn("[OverhaulWorld] Surface generation failed; retaining frozen active timers",err)
+    if not self._hasGenerated then
+     require(script.Parent.LoadingProgress).World(0,"Terrain generation interrupted; retrying")
+    end
     -- Retry the committed serial/seed, without awarding another visit or rerolling resources.
     self._pendingBiome=self._pendingBiome or name
     task.wait(2)

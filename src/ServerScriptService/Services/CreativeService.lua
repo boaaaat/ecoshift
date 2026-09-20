@@ -7,6 +7,7 @@ local ItemDatabase = require(Shared.Items.ItemDatabase)
 local BiomeConfig = require(Shared.BiomeConfig)
 local SurvivalConfig = require(Shared.SurvivalConfig)
 local EntityConfig = require(script.Parent.Parent.AI.EntityConfig)
+local ServerUtil = require(script.Parent.ServerUtil)
 local CreativeService = { _requests = {}, _busy = {}, _worldRequests = {} }
 local ACTIONS = { State = true, SetMode = true, GiveItem = true, SetInvincible = true, RestoreVitals = true,
 	SetTime = true, SetShiftTimer = true, SetWeather = true, SetBiome = true, SpawnMonster = true,
@@ -20,9 +21,7 @@ local function number(value, minimum, maximum, integer)
 		and (not integer or value % 1 == 0)
 end
 local function alive(player)
-	local char = player.Character
-	local hum = char and char:FindFirstChildOfClass("Humanoid")
-	return not player:GetAttribute("IsDead") and hum and hum.Health > 0 and char:FindFirstChild("HumanoidRootPart")
+	return ServerUtil.IsLiving(player,{AllowLoading=true}) and ServerUtil.Root(player)
 end
 local function sortedEntries(defs, filter)
 	local entries = {}
@@ -73,13 +72,15 @@ end
 
 function CreativeService:CapturePlayer(player)
 	if not available() then return nil end
-	return { Mode = player:GetAttribute("CreativeMode") == true, Invincible = player:GetAttribute("CreativeInvincible") == true }
+	return { Mode = player:GetAttribute("CreativeMode") == true, Invincible = player:GetAttribute("CreativeInvincible") == true,
+		Flying = player:GetAttribute("CreativeFlying") == true and player:GetAttribute("IsDead") ~= true }
 end
 
 function CreativeService:RestorePlayer(player, state)
 	local creative = available() and (type(state) ~= "table" or state.Mode ~= false)
 	player:SetAttribute("CreativeMode", creative)
 	player:SetAttribute("CreativeInvincible", creative and (type(state) ~= "table" or state.Invincible ~= false))
+	player:SetAttribute("CreativeFlying", creative and type(state) == "table" and state.Flying == true or nil)
 	self:_applyProtection(player)
 end
 
@@ -88,6 +89,7 @@ function CreativeService:_setMode(player, mode)
 	local creative = mode == "Creative"
 	player:SetAttribute("CreativeMode", creative)
 	player:SetAttribute("CreativeInvincible", creative)
+	if not creative then player:SetAttribute("CreativeFlying", nil) end
 	self:_applyProtection(player)
 	if creative then
 		if player:GetAttribute("IsDead") then
@@ -123,12 +125,14 @@ function CreativeService:_act(player, action, payload)
 		end
 		return true, "Deleted " .. payload.Amount .. " × " .. (ItemDatabase:Get(payload.ExpectedId).Name) .. "."
 	elseif action == "GiveItem" then
-		if type(payload.Id) ~= "string" or not ItemDatabase:Get(payload.Id) or not number(payload.Quantity, 1, 999, true) then
-			return false, "Choose an item and a quantity from 1 to 999."
+		local item = type(payload.Id) == "string" and ItemDatabase:Get(payload.Id) or nil
+		local stackSize = item and math.max(1, math.floor(tonumber(item.StackSize) or 99)) or 0
+		if not item or not number(payload.Quantity, 1, stackSize, true) then
+			return false, "Choose either one item or one full stack."
 		end
 		local inventory = require(script.Parent.InventoryService)
 		if inventory:Give(player, payload.Id, payload.Quantity, true) ~= payload.Quantity then return false, "Make more space in your inventory first." end
-		return true, "Added " .. payload.Quantity .. " × " .. (ItemDatabase:Get(payload.Id).Name or payload.Id) .. "."
+		return true, "Added " .. payload.Quantity .. " × " .. (item.Name or payload.Id) .. "."
 	elseif action == "SetInvincible" then
 		if not player:GetAttribute("CreativeMode") then return false, "Switch to Creative mode to enable invincibility." end
 		if type(payload.Enabled) ~= "boolean" then return false, "Choose an invincibility setting." end
@@ -198,6 +202,18 @@ function CreativeService:Init()
 	local remotes = ReplicatedStorage:WaitForChild("Remotes")
 	local remote = remotes:FindFirstChild("CreativeAction") or Instance.new("RemoteFunction")
 	remote.Name, remote.Parent = "CreativeAction", remotes
+	local flightRemote = remotes:FindFirstChild("CreativeFlightState") or Instance.new("RemoteEvent")
+	flightRemote.Name, flightRemote.Parent = "CreativeFlightState", remotes
+	flightRemote.OnServerEvent:Connect(function(player, enabled)
+		if type(enabled) ~= "boolean" then return end
+		if not enabled then
+			player:SetAttribute("CreativeFlying", nil)
+			return
+		end
+		if available() and player:GetAttribute("CreativeMode") == true and alive(player) then
+			player:SetAttribute("CreativeFlying", true)
+		end
+	end)
 	remote.OnServerInvoke = function(player, action, payload)
 		if not available() then return { Success = false, Message = "Creative controls are only available in creative worlds." } end
 		if type(action) ~= "string" or not ACTIONS[action] or (payload ~= nil and type(payload) ~= "table") then return { Success = false, Message = "Invalid creative request." } end

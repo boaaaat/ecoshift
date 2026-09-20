@@ -1,14 +1,15 @@
 -- Shared validation: only these personal preferences can enter a profile.
 local Settings = {}
-Settings.Order = { "UITheme", "StartingTutorial", "GraphicsQuality", "Shadows", "WeatherParticles", "PostEffects", "ReducedMotion", "FieldOfView", "ShowFieldNotes", "ShowNavigation", "SprintMode" }
+Settings.Order = { "UITheme", "StartingTutorial", "GraphicsQuality", "RenderDistance", "Shadows", "WeatherParticles", "PostEffects", "ReducedMotion", "FieldOfView", "ShowFieldNotes", "ShowNavigation", "SprintMode" }
 Settings.Definitions = {
-	ControlSchemeVersion = { Default = 2, Values = { 2 } },
+	ControlSchemeVersion = { Default = 3, Values = { 3 } },
 	UITheme = { Label = "Appearance", Default = "Dark", Values = { "Dark", "Light" }, Section = "Gameplay" },
 	StartingTutorial = { Label = "Show tutorial at expedition start", Default = true, Section = "Gameplay" },
 	ShowFieldNotes = { Label = "Field notes on HUD", Default = true, Section = "Gameplay" },
 	ShowNavigation = { Label = "Field kit shortcuts on HUD", Default = true, Section = "Gameplay" },
 	SprintMode = { Label = "Sprint mode", Default = "Hold", Values = { "Hold", "Toggle" }, Section = "Gameplay" },
 	GraphicsQuality = { Label = "Effects quality", Default = "High", Values = { "Low", "Medium", "High" }, Section = "Graphics" },
+	RenderDistance = { Label = "Render distance", Default = "Auto", Values = { "Auto", "Near", "Medium", "Far", "Very Far" }, Section = "Graphics" },
 	Shadows = { Label = "World shadows", Default = true, Section = "Graphics" },
 	WeatherParticles = { Label = "Weather particles", Default = true, Section = "Graphics" },
 	PostEffects = { Label = "Post processing", Default = true, Section = "Graphics" },
@@ -16,9 +17,9 @@ Settings.Definitions = {
 	FieldOfView = { Label = "Camera field of view", Default = 70, Values = { 60, 70, 80, 90 }, Section = "Graphics" },
 }
 Settings.Actions = { "Pack", "Craft", "Map", "Survey", "Settings", "Sprint", "Ability", "Dodge", "Glide" }
-local defaults = { Pack = "E", Craft = "C", Build = "B", Map = "M", Survey = "V", Settings = "F4", Sprint = "LeftShift", Salvage = "R", Ability = "G", Dodge = "Q", Glide = "R" }
+local defaults = { Pack = "E", Craft = "C", Build = "B", Map = "M", Survey = "V", Settings = "F4", Sprint = "LeftShift", Salvage = "R", Ability = "G", Dodge = "LeftAlt", Glide = "R" }
 -- Movement, interaction, hotbar, chat, camera lock and spectating keys stay reserved.
-Settings.AllowedKeys = { "Q", "B", "C", "E", "G", "H", "J", "K", "L", "M", "N", "O", "P", "R", "U", "V", "Y", "Z", "F4", "F6", "F7", "LeftShift", "RightShift" }
+Settings.AllowedKeys = { "B", "C", "E", "G", "H", "J", "K", "L", "M", "N", "O", "P", "R", "U", "V", "Y", "Z", "F4", "F6", "F7", "LeftAlt", "RightAlt", "LeftShift", "RightShift" }
 for _, action in ipairs(Settings.Actions) do
 	Settings.Definitions["Key" .. action] = { Label = action, Default = defaults[action], Values = Settings.AllowedKeys, Section = "Keybinds" }
 	table.insert(Settings.Order, "Key" .. action)
@@ -33,9 +34,13 @@ end
 function Settings.Normalize(raw)
 	local result, used = {}, {}
 	raw = type(raw) == "table" and raw or {}
-	if raw.ControlSchemeVersion ~= 2 and raw.KeyPack == "G" then
+	if raw.ControlSchemeVersion ~= 3 then
 		raw = table.clone(raw)
-		raw.KeyPack = "E"
+		if raw.KeyPack == "G" then raw.KeyPack = "E" end
+		-- Q is now the fixed drop key. Move the old default dodge binding for
+		-- existing profiles instead of requiring every player to reset settings.
+		if raw.KeyDodge == nil or raw.KeyDodge == "Q" then raw.KeyDodge = "LeftAlt" end
+		raw.ControlSchemeVersion = 3
 	end
 	for key, def in pairs(Settings.Definitions) do
 		if Settings.Valid(key, raw[key]) then result[key] = raw[key] else result[key] = def.Default end

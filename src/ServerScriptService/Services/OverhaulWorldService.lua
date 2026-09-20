@@ -5,10 +5,18 @@ local Http = game:GetService("HttpService")
 local Collection = game:GetService("CollectionService")
 local Biomes = require(RS.Shared.OverhaulBiomes)
 local Rules = require(RS.Shared.GameRules)
+local ClassConfig = require(RS.Shared.ClassConfig)
 local Codec = require(script.Parent.WorldSnapshotCodec)
+local Loading = require(script.Parent.LoadingProgress)
+local ServerUtil = require(script.Parent.ServerUtil)
 local Service = {_seed=require(RS.Shared.BiomeConfig).seed,_serial=-1,_chunks={},_loading={},_terrain={},_terrainFootprints={},_records={},_regions={},_landmarks={},_nodes={},_generation=0}
 local CELL, CHUNK, RADIUS, CAMP = 12,240,1500,200
+local DEFAULT_RENDER_RADIUS, MAX_RENDER_RADIUS = 2, 4
 local CAMP_HEIGHT, CAMP_BLEND = 12, 104
+local COAST_WATER_LEVEL = -4
+-- Coastal posts reach 11 studs above their foundation; leave clearance for
+-- the full structure and native terrain's four-stud voxel rounding.
+local COAST_SUBMERGED_DEPTH = 20
 local function hash(text,seed)
  local n=seed or 5381
  for i=1,#text do n=(n*33+string.byte(text,i))%2147483647 end
@@ -20,9 +28,31 @@ local function folder(parent,name)
  return f
 end
 local function part(parent,name,size,cf,color,material)
- local p=Instance.new("Part");p.Name=name;p.Size=size;p.CFrame=cf;p.Color=color
- p.Material=material or Enum.Material.SmoothPlastic;p.Anchored=true;p.TopSurface=Enum.SurfaceType.Smooth;p.BottomSurface=Enum.SurfaceType.Smooth;p.Parent=parent
- return p
+ return ServerUtil.Part(parent,name,size,cf,{Color=color,Material=material or Enum.Material.SmoothPlastic,TopSurface=Enum.SurfaceType.Smooth,BottomSurface=Enum.SurfaceType.Smooth})
+end
+local function chunkTouchesWorld(cx,cz)
+ local minX,maxX=cx*CHUNK,(cx+1)*CHUNK
+ local minZ,maxZ=cz*CHUNK,(cz+1)*CHUNK
+ local x,z=math.clamp(0,minX,maxX),math.clamp(0,minZ,maxZ)
+ return x*x+z*z<=(RADIUS+CELL)^2
+end
+function Service:Init()
+ if self._initialized then return end;self._initialized=true
+ local remotes=RS:WaitForChild("Remotes")
+ local remote=remotes:FindFirstChild("RenderDistance") or Instance.new("RemoteEvent")
+ remote.Name="RenderDistance";remote.Parent=remotes;self._renderDistanceRemote=remote
+ local requests={}
+ local function initialize(player)
+  if player:GetAttribute("RenderDistanceChunks")==nil then player:SetAttribute("RenderDistanceChunks",DEFAULT_RENDER_RADIUS) end
+ end
+ for _,player in ipairs(Players:GetPlayers()) do initialize(player) end
+ Players.PlayerAdded:Connect(initialize)
+ Players.PlayerRemoving:Connect(function(player) requests[player]=nil end)
+ remote.OnServerEvent:Connect(function(player,radius)
+  if type(radius)~="number" or radius%1~=0 or radius<1 or radius>MAX_RENDER_RADIUS then return end
+  local now=os.clock();if now-(requests[player] or -math.huge)<.15 then return end;requests[player]=now
+  player:SetAttribute("RenderDistanceChunks",radius)
+ end)
 end
 local function makeTree(model,height,color,rng,style)
  style=style or {};local pine=style.Pine==true
@@ -103,10 +133,12 @@ function Service:_riverLine(z)
 end
 function Service:_flow(x,z)
  if not riverBiomes[self._biome] or x*x+z*z<270^2 then return nil end
- local distance=math.abs(x-self:_riverLine(z))
- -- Keep the surface below the ordinary land band and let the channel carve
- -- down to it. The stepped grade creates occasional small drops downstream.
- local level=4-z*.01-math.floor((z+1440)/480)*4
+ local centerX=self:_riverLine(z)
+ local distance=math.abs(x-centerX)
+ if distance>=82 then return nil end
+ -- Follow the local landscape rather than cutting every hill down to a
+ -- fixed world elevation. The bed and water share this same surface height.
+ local level=self:_landHeight(centerX,z)-3
  return level,distance
 end
 function Service:_pool(x,z)
@@ -126,7 +158,7 @@ function Service:GetTemperatureAt(position)
  elseif r.Name:find("Glacier") or r.Name:find("Ice Cave") then temperature=-30 end
  return temperature
 end
-function Service:_rawHeight(x,z)
+function Service:_landHeight(x,z)
  local h=self:_baseHeight(x,z)
  local r=self:MetadataAt(Vector3.new(x,0,z))
  if r then
@@ -144,20 +176,24 @@ function Service:_rawHeight(x,z)
  end
  local pool,poolDistance=self:_pool(x,z)
  if pool and poolDistance<140 then h=(pool-6)+(h-(pool-6))*smooth((poolDistance-76)/64) end
+ return math.clamp(h,-120,240)
+end
+function Service:_rawHeight(x,z)
+ local h=self:_landHeight(x,z)
  local water,distance=self:_flow(x,z)
  if water then
   local landHeight=h
   if distance<34 then
    -- A submerged, curved bed instead of terrain ending at the water surface.
    local t=distance/34
-   h=water-9+7*t*t
+   h=water-6+5*t*t
   elseif distance<44 then
    -- Short visible bank rising from the waterline.
-   h=(water-2)+6*smooth((distance-34)/10)
+   h=(water-1)+3*smooth((distance-34)/10)
   elseif distance<82 then
    -- Blend the raised bank back into the surrounding generated terrain.
    local t=smooth((distance-44)/38)
-   h=(water+4)+(h-(water+4))*t
+   h=(water+2)+(h-(water+2))*t
   end
   if distance<82 then
    -- Preserve the local land at crossings, with broad banks into the river.
@@ -188,6 +224,13 @@ end
 function Service:GetWaterLevel(x,z)
  if x*x+z*z<240^2 then return nil end
  local b=Biomes.Biomes[self._biome];if not b then return nil end
+ -- The ocean also fills landmark foundations. Applying the dry-landmark
+ -- exclusion here used to cut circular air pockets all the way to the seabed.
+ -- Below-sea-level tide pools must connect to the ocean at the same surface.
+ if b.Landform=="Coast" then
+  local pool,poolDistance=self:_pool(x,z)
+  return pool and poolDistance<80 and math.max(COAST_WATER_LEVEL,pool) or COAST_WATER_LEVEL
+ end
  for _,landmark in ipairs(self._landmarks) do if Vector2.new(x-landmark.Position.X,z-landmark.Position.Z).Magnitude<(landmark.FoundationRadius or 40) then return nil end end
  local river,distance=self:_flow(x,z)
 	if river and distance<34 then
@@ -198,7 +241,6 @@ function Service:GetWaterLevel(x,z)
  local pool,poolDistance=self:_pool(x,z)
  if pool and poolDistance<80 then return pool end
  local f=b.Landform
- if f=="Coast" then return -4 end
  if f=="Wetland" or f=="Ruins" then return -8 end
  local r=self:MetadataAt(Vector3.new(x,0,z))
  if r and (r.Name:find("Lake") or r.Name:find("Pool") or r.Name:find("Spring")) then return -12 end
@@ -311,8 +353,15 @@ function Service:_plan()
  for _,r in ipairs(self._regions) do
   r.Center=Vector3.new(r.Center.X,self:GetHeight(r.Center.X,r.Center.Z),r.Center.Z)
   local p=self:SafePosition(r.Center,true)
+  local foundation=p-Vector3.new(0,5,0)
+  if Biomes.Biomes[self._biome].Landform=="Coast" and foundation.Y<COAST_WATER_LEVEL then
+   -- Keep offshore landmarks on the seabed with their entire silhouette below
+   -- the ocean. GetHeight blends the surrounding terrain to this same floor,
+   -- and cache/clue placement consumes this shared foundation position.
+   foundation=Vector3.new(foundation.X,math.min(foundation.Y,COAST_WATER_LEVEL-COAST_SUBMERGED_DEPTH),foundation.Z)
+  end
   local id=r.TypeId.."Landmark"
-  table.insert(self._landmarks,{Id=id,Position=p-Vector3.new(0,5,0),RegionId=r.Id,Name=r.Name,Biome=self._biome,Depth=r.Depth,FoundationRadius=(Biomes.Biomes[self._biome].Landform=="Forest" or Biomes.Biomes[self._biome].Landform=="Canopy") and 90 or 40})
+  table.insert(self._landmarks,{Id=id,Position=foundation,RegionId=r.Id,Name=r.Name,Biome=self._biome,Depth=r.Depth,FoundationRadius=(Biomes.Biomes[self._biome].Landform=="Forest" or Biomes.Biomes[self._biome].Landform=="Canopy") and 90 or 40})
  end
 end
 function Service:_clearSurface()
@@ -393,7 +442,7 @@ function Service:_resource(id,key,position,parent,rng)
  local model=Instance.new("Model");model.Name=id
  local biome=Biomes.Biomes[self._biome];local color=biome.Color
  local isTree=id=="Wood" or id=="Ironwood" or id=="Heartwood"
- local kind=profile.Kind or require(RS.Shared.ClassConfig).ResourceKind(id)
+  local kind=profile.Kind or ClassConfig.ResourceKind(id)
  local large=isTree and rng:NextNumber()<.3
  local region=self:MetadataAt(position)
  local birch=region and region.Name=="Birch Woods"
@@ -441,14 +490,14 @@ function Service:_candidates(cx,cz)
  end
  return result
 end
-function Service:_decorate(parent,cx,cz)
+function Service:_decorate(parent,resources,cx,cz)
  if riverBiomes[self._biome] then
   for z=-1440,1440,32 do
    local riverX=self:_riverLine(z);local water=self:GetWaterLevel(riverX,z)
    for _,side in ipairs({-1,1}) do
     local x=riverX+side*30
     if water and math.floor(x/CHUNK)==cx and math.floor(z/CHUNK)==cz and Vector2.new(x,z).Magnitude>270 then
-    local source=part(parent,"RiverWaterSource",Vector3.new(10,1,10),CFrame.new(x,self:GetHeight(x,z)+1,z),Color3.new(1,1,1));source.Transparency=1;source.CanCollide=false;source.CanTouch=false;source:SetAttribute("Decoration",true)
+    local source=part(parent,"RiverWaterSource",Vector3.new(10,1,10),CFrame.new(x,math.max(water,self:GetHeight(x,z))+1,z),Color3.new(1,1,1));source.Transparency=1;source.CanCollide=false;source.CanTouch=false;source:SetAttribute("Decoration",true)
     local prompt=Instance.new("ProximityPrompt");prompt.ActionText="Collect water";prompt.ObjectText="River";prompt.KeyboardKeyCode=Enum.KeyCode.F;prompt.HoldDuration=1.4;prompt.MaxActivationDistance=10;prompt.RequiresLineOfSight=false;prompt.Parent=source
     prompt.Triggered:Connect(function(player)
      local character=player.Character;local humanoid=character and character:FindFirstChildOfClass("Humanoid");local root=character and character:FindFirstChild("HumanoidRootPart")
@@ -471,7 +520,7 @@ function Service:_decorate(parent,cx,cz)
    local x=self:_riverLine(z)
    if math.floor(x/CHUNK)==cx and math.floor(z/CHUNK)==cz and Vector2.new(x,z).Magnitude>270 then
     local top=self:_flow(x,z-.1);local bottom=self:_flow(x,z+.1)
-    if top and bottom and top>bottom then
+    if top and bottom and top-bottom>1 then
      local flow=part(parent,"Waterfall",Vector3.new(36,top-bottom+3,2),CFrame.new(x,(top+bottom)*.5,z),Color3.fromRGB(123,183,197),Enum.Material.Glass)
      flow.Transparency=.45;flow.CanCollide=false;flow.CanTouch=false
      local spray=Instance.new("ParticleEmitter");spray.Texture="rbxasset://textures/particles/smoke_main.dds";spray.Rate=5;spray.Lifetime=NumberRange.new(.6,1);spray.Speed=NumberRange.new(1,3);spray.Transparency=NumberSequence.new(.75,1);spray.Size=NumberSequence.new(2,5);spray.Parent=flow
@@ -489,27 +538,32 @@ function Service:_decorate(parent,cx,cz)
   for _,entry in ipairs(self:_candidates(cx,cz)) do if (entry.Position-p).Magnitude<28 then blocked=true;break end end
   for _,landmark in ipairs(self._landmarks) do if (landmark.Position-p).Magnitude<(landmark.FoundationRadius or 40)+15 then blocked=true;break end end
   if blocked then continue end
-  local model=Instance.new("Model");model.Name=r.Name.."Scenery";model:SetAttribute("Decoration",true)
-  if f=="Cavern" or r.Name:find("Cave") or r.Name:find("Tunnel") then
+   local caveScenery=f=="Cavern" or r.Name:find("Cave") or r.Name:find("Tunnel")
+   local ruinScenery=f=="Ruins" or r.Name:find("Ruins") or r.Name:find("City") or r.Name:find("Village")
+   if not caveScenery and not ruinScenery then
+    -- Natural props used to be visually identical to harvestable nodes but were
+    -- parented as inert scenery. Generate them through the resource path so
+    -- health, drops, saving, tool hits, and prompts all use the normal binding.
+    local wantedKind
+    if f=="Canopy" or f=="Forest" then wantedKind="Wood"
+    elseif f=="Mushroom" then wantedKind="Plant"
+    else wantedKind="Mineral" end
+    local resourceId=wantedKind=="Wood" and "Wood" or wantedKind=="Plant" and "Mushroom" or "Stone"
+    for _,candidateId in ipairs(r.Resources or {}) do
+     if ClassConfig.ResourceKind(candidateId)==wantedKind then resourceId=candidateId;break end
+    end
+    self:_resource(resourceId,cx..","..cz..":scenery:"..i,p,resources,rng)
+    continue
+   end
+   local model=Instance.new("Model");model.Name=r.Name.."Scenery";model:SetAttribute("Decoration",true)
+   if caveScenery then
    part(model,"Column",Vector3.new(9,40,9),CFrame.new(p+Vector3.new(-18,20,0)),biome.Color,Enum.Material.Rock)
    part(model,"Column",Vector3.new(9,40,9),CFrame.new(p+Vector3.new(18,20,0)),biome.Color,Enum.Material.Rock)
    part(model,"Vault",Vector3.new(48,7,26),CFrame.new(p+Vector3.new(0,42,0)),biome.Color,Enum.Material.Rock)
-  elseif f=="Canopy" or f=="Forest" then
-   local h=f=="Canopy" and 26 or 15
-   makeTree(model,h,biome.Color,rng,{Birch=r.Name=="Birch Woods",Pine=self._biome=="FrozenTundra" or self._biome=="AuroraVale" or f=="Alpine" or f=="Highlands"})
-   model:PivotTo(CFrame.new(p)*CFrame.Angles(0,rng:NextNumber(0,math.pi*2),0)*model:GetPivot())
-   if f=="Canopy" then part(model,"RootRamp",Vector3.new(12,3,60),CFrame.new(p+Vector3.new(0,10,22))*CFrame.Angles(-.3,0,0),Color3.fromRGB(104,80,59),Enum.Material.Wood) end
-  elseif f=="Mushroom" then
-   part(model,"Stem",Vector3.new(4,18,4),CFrame.new(p+Vector3.new(0,9,0)),Color3.fromRGB(162,151,129))
-   local cap=part(model,"GiantCap",Vector3.new(30,6,30),CFrame.new(p+Vector3.new(0,20,0)),Color3.fromRGB(104,133,163));cap.Shape=Enum.PartType.Ball
-  elseif f=="Ruins" or r.Name:find("Ruins") or r.Name:find("City") or r.Name:find("Village") then
+   elseif ruinScenery then
    part(model,"Walkway",Vector3.new(30,2,12),CFrame.new(p+Vector3.new(0,1,0)),biome.Color,Enum.Material.Slate)
    for side=-1,1,2 do part(model,"BrokenPillar",Vector3.new(4,16,4),CFrame.new(p+Vector3.new(side*12,8,0)),biome.Color,Enum.Material.Slate) end
-  else
-   local h=f=="Crystal" and 22 or f=="Highlands" and 14 or 8
-   local rock=part(model,"Outcrop",Vector3.new(9,h,11),CFrame.new(p+Vector3.new(0,h/2,0))*CFrame.Angles(.18,rng:NextNumber()*6,.1),biome.Color,Enum.Material.Rock)
-   if f=="Crystal" then rock.Material=Enum.Material.Glass;rock.Color=Color3.fromRGB(144,124,201) end
-  end
+   end
   model.Parent=parent
   if f=="Cavern" or f=="Crystal" or f=="Mushroom" then
    local anchor=model:FindFirstChildWhichIsA("BasePart")
@@ -532,7 +586,7 @@ function Service:_chunkWork(cx,cz,token)
  self._chunks[key]={Folder=f,Last=os.clock(),X=cx,Z=cz}
  require(script.Parent.TeamExplorationService):RecordChunk(f,self._serial)
  for _,entry in ipairs(self:_candidates(cx,cz)) do self:_resource(entry.Id,entry.Key,entry.Position,resources,Random.new(entry.Seed)) end
- self:_decorate(props,cx,cz)
+  self:_decorate(props,resources,cx,cz)
  require(script.Parent.ResourceNodeService):BindFolder(resources)
  self:_materializeLandmarks(f,cx,cz)
 end
@@ -597,13 +651,17 @@ function Service:_materializeLandmarks(parent,cx,cz)
   if callback then callback(m,entry) end
  end
 end
-function Service:EnsureArea(position)
+function Service:EnsureArea(position, onChunkReady, renderRadius)
  local token=self._generation
  if self._clearingSurface then return end
+ renderRadius=math.clamp(math.floor(tonumber(renderRadius) or 1),1,MAX_RENDER_RADIUS)
  local cx,cz=math.floor(position.X/CHUNK),math.floor(position.Z/CHUNK)
- for dx=-1,1 do for dz=-1,1 do
+ local total=(renderRadius*2+1)^2;local done=0
+ for dx=-renderRadius,renderRadius do for dz=-renderRadius,renderRadius do
   if token~=self._generation then return end
-  self:_chunk(cx+dx,cz+dz,token)
+  local targetX,targetZ=cx+dx,cz+dz
+  if chunkTouchesWorld(targetX,targetZ) then self:_chunk(targetX,targetZ,token) end
+  done+=1;if onChunkReady then onChunkReady(done,total) end
  end end
 end
 function Service:GetClassScanMarkers(position,radius,mineralsOnly)
@@ -640,12 +698,15 @@ function Service:RegrowPlants(position,radius,limit)
  return count
 end
 function Service:Generate(biome)
+ local initialLoad=RS:GetAttribute("WorldRestoring")==true and RS:GetAttribute("WorldLoadProgress")~=1
+ if initialLoad then Loading.World(.5,"Preparing the landscape") end
  local BiomeService=require(script.Parent.BiomeService);local serial=BiomeService:GetVisitSerial()
  self._generation+=1;self._busy=true
  self._clearingSurface=true
  for _,node in pairs(self._nodes) do if node.Instance.Parent then node.Instance:SetAttribute("Unloading",true) end end
  self._folder=folder(workspace,"GeneratedWorld");self._folder:SetAttribute("Generated",false);self._folder:ClearAllChildren();self._chunks={};self._nodes={}
  self:_clearSurface()
+ if initialLoad then Loading.World(.53,"Charting regions and trails") end
  if self._serial~=serial or self._biome~=biome then self._records={};self._encounters={} end
  self._serial,self._biome=serial,biome;self._previousVisits=BiomeService:GetPreviousVisits()
  self._visitSeed=hash(biome..":"..serial,self._seed);self:_plan()
@@ -658,7 +719,10 @@ function Service:Generate(biome)
    local r=self:MetadataAt(center);exploration:RecordMetadata(cx,cz,biome,{{name=r.Name,x=r.Center.X,z=r.Center.Z,sx=r.Radius*1.4,sz=r.Radius*1.4,temp=self:GetTemperatureAt(center),height=self:GetHeight(center.X,center.Z),water=(self:GetWaterLevel(center.X,center.Z) or -1000)>self:GetHeight(center.X,center.Z),layer=self:GetMapLayer(center)}},serial)
   end
  end end
- self:EnsureArea(Vector3.zero)
+ self:EnsureArea(Vector3.zero,initialLoad and function(done,total)
+  Loading.World(.6+.28*done/total,"Generating camp terrain "..done.."/"..total)
+ end or nil)
+ if initialLoad then Loading.World(.9,"Securing arrival ground") end
  local spawn=workspace:FindFirstChildWhichIsA("SpawnLocation",true)
  if spawn and Vector2.new(spawn.Position.X,spawn.Position.Z).Magnitude<=CAMP then spawn.Position=Vector3.new(spawn.Position.X,CAMP_HEIGHT+spawn.Size.Y*.5+.15,spawn.Position.Z) end
  for _,player in ipairs(Players:GetPlayers()) do
@@ -677,7 +741,7 @@ function Service:Generate(biome)
       if token~=self._generation or self._busy then break end
       local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
       if root and not player:GetAttribute("InteriorId") then
-       local ok,err=pcall(self.EnsureArea,self,root.Position)
+       local ok,err=pcall(self.EnsureArea,self,root.Position,nil,player:GetAttribute("RenderDistanceChunks") or DEFAULT_RENDER_RADIUS)
        if token~=self._generation or self._busy then break end
        if not ok then warn("[SurfaceStreaming]",err) else exploration:RevealFromPlayer(player,root.Position) end
        local region=self:MetadataAt(root.Position)

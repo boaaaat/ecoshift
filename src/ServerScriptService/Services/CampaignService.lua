@@ -4,15 +4,13 @@ local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Config = require(RS.Shared.CampaignConfig)
 local Util = require(RS.Shared.Util)
+local ServerUtil = require(script.Parent.ServerUtil)
 local Service = {_sites={},_lastRequests={}}
 local function service(id) return require(script.Parent[id]) end
 local function fresh() return {SchemaVersion=1,Tier=1,Elapsed=0,TierSeconds=0,Transition=0,Facts={},Paid={},Completed={},Defense=0,Instruments={},Endurance=false} end
 Service._state = fresh()
 local function alive(player)
- local char=player.Character
- local hum=char and char:FindFirstChildOfClass("Humanoid")
- return player.Parent==Players and hum and hum.Health>0 and not player:GetAttribute("IsDead")
-  and not player:GetAttribute("WorldPlayerLoading") and not player:GetAttribute("WorldPlayerRestoring")
+ return ServerUtil.IsLiving(player)
 end
 local function active()
  if RS:GetAttribute("WorldRestoring") or RS:GetAttribute("WorldShifting")
@@ -21,8 +19,7 @@ local function active()
  return false
 end
 local function near(player,part,range)
- local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
- return alive(player) and part and part.Parent and root and (root.Position-part.Position).Magnitude<=(range or 12)
+ return ServerUtil.IsNear(player,part,range)
 end
 function Service:GetTier() return self._state.Tier end
 function Service:GetElapsed() return self._state.Elapsed end
@@ -48,6 +45,7 @@ end
 function Service:GetState()
  local s=Util.DeepCopy(self._state)
  s.Cost=self:GetCost();s.Milestone=self:GetMilestone();s.Ready=self:IsPrepared()
+ s.CreativeWorld=workspace:GetAttribute("WorldType")=="Creative"
  return s
 end
 function Service:GetCost()
@@ -76,7 +74,7 @@ function Service:RecordFact(id,source)
  if s.Tier==3 and (id=="Cooling" or id=="Focus") and not s.EnchantChoice then
   s.EnchantChoice=true
   local module=script.Parent:FindFirstChild("EnchantingService")
-  if module then require(module):GrantChoice("FirstForge",{"StrikeRhythm","OpenSeam","CampStitch"}) end
+  if module then require(module):GrantChoice("FirstForge",{"MeasuredEdge","SetPoint","SplitArc","Blindside","HeavyEcho","EchoCast","DrawForce","OpenSeam","CampStitch"}) end
  end
  self:_publish()
  return true
@@ -102,6 +100,25 @@ function Service:Contribute(player)
  inv:Sync(player);service("ExpeditionRewardsService"):RecordActivity(player);self:_publish()
  return true,"Materials contributed to the shared project."
 end
+function Service:CreativePrepare(player)
+ if workspace:GetAttribute("WorldType")~="Creative" then return false,"This shortcut is only available in creative worlds." end
+ if not near(player,self._camp) and not near(player,self._access and self._access[player]) then return false,"Visit the expedition project." end
+ local s,m=self._state,self:GetMilestone()
+ if s.CompleteAt then return false,"The expedition project is already complete." end
+ if s.Started then return false,"Finish the active encounter or defense first." end
+ for fact in pairs(m.Facts or {}) do s.Facts[fact]=true end
+ if m.Instruments then
+  for index=1,m.Instruments do s.Instruments["CreativeRegion"..index]=true end
+ end
+ for id,amount in pairs(self:GetCost()) do s.Paid[id]=amount end
+ if s.Tier==3 and (s.Facts.Cooling or s.Facts.Focus) and not s.EnchantChoice then
+  s.EnchantChoice=true
+  local module=script.Parent:FindFirstChild("EnchantingService")
+  if module then require(module):GrantChoice("FirstForge",{"MeasuredEdge","SetPoint","SplitArc","Blindside","HeavyEcho","EchoCast","DrawForce","OpenSeam","CampStitch"}) end
+ end
+ self:_publish()
+ return true,"Creative preparation completed: discoveries and project materials are ready."
+end
 function Service:Begin(player)
  if not near(player,self._camp) then return false,"Visit the project desk in camp." end
  local s,m=self._state,self:GetMilestone()
@@ -119,15 +136,18 @@ end
 function Service:Complete(id)
  local s,m=self._state,self:GetMilestone()
  if m.Id~=id or s.Completed[id] then return false end
+ local previousTier=s.Tier
  s.Completed[id]=true
  service("ExpeditionRewardsService"):AwardCampaign(id)
- if id=="BogKing" then service("EnchantingService"):GrantChoice("BogKing",{"StrikeRhythm","RescueReserve"})
+ if id=="BogKing" then service("EnchantingService"):GrantChoice("BogKing",{"DeepBite","SlipCut","GroundClaim","SplitFlight","RescueReserve"})
  elseif id=="WeatherTower" then service("EnchantingService"):GrantChoice("WeatherTower",{"SurveyLink","SharedCover"})
- elseif id=="MoonWarden" then service("EnchantingService"):GrantChoice("MoonWarden",{"StrikeRhythm","OpenSeam","WeatherMemory","ReturnShot"},"Maximum") end
+ elseif id=="MoonWarden" then service("EnchantingService"):GrantChoice("MoonWarden",{"MeasuredEdge","SetPoint","SplitArc","Blindside","HeavyEcho","EchoCast","DrawForce","OpenSeam","WeatherMemory","ReturnShot"},"Maximum") end
  if s.Tier<8 then
   s.Tier+=1;if s.Tier==4 then s.AllBiomesAt=s.Elapsed end;s.TierSeconds=0;s.Transition=120;s.Paid={};s.Started=false;s.Defense=0
  else s.CompleteAt=s.Elapsed;s.Started=false end
- self:_publish();self._siteRevision=nil
+ self:_publish()
+ if s.Tier>previousTier then service("BiomeService"):OnCampaignTierAdvanced(previousTier,s.Tier) end
+ self._siteRevision=nil
  return true
 end
 function Service:CaptureWorldState() return Util.DeepCopy(self._state) end
@@ -154,7 +174,7 @@ local function sitePart(name,position,parent,color)
 end
 function Service:_prompt(part,text,callback)
  local p=Instance.new("ProximityPrompt");p.ActionText=text;p.ObjectText="Expedition project";p.KeyboardKeyCode=Enum.KeyCode.F
- p.MaxActivationDistance=10;p.RequiresLineOfSight=false;p.HoldDuration=1;p.Parent=part
+ p.MaxActivationDistance=10;p.RequiresLineOfSight=false;p.HoldDuration=.5;p.Parent=part
  p.Triggered:Connect(function(player) if active() and near(player,part) then callback(player) end end)
 end
 function Service:_refreshSites()
@@ -222,6 +242,7 @@ function Service:Init()
   local ok,reason
   if action=="State" then self._remote:FireClient(player,"State",self:GetState());return
   elseif action=="Contribute" then ok,reason=self:Contribute(player)
+  elseif action=="CreativePrepare" then ok,reason=self:CreativePrepare(player)
   elseif action=="Begin" then ok,reason=self:Begin(player)
   elseif action=="Endurance" and near(player,self._camp) and self._state.CompleteAt then self._state.Endurance=true;ok=true;reason="Endurance enabled. The crew can keep exploring."
   else return end

@@ -5,14 +5,15 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
-local GuiService = game:GetService("GuiService")
 
 local Remotes = ReplicatedStorage:WaitForChild("Remotes", 5)
 local CombatRE = Remotes and Remotes:WaitForChild("CombatAction", 3)
 local WeaponFactory = require(ReplicatedStorage.Shared.Weapons.WeaponFactory)
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
+local ItemCooldown = require(ReplicatedStorage.Shared.UI.ItemCooldown)
 
 local player = Players.LocalPlayer
+local mouse = player:GetMouse()
 local activeTool = nil
 local activeWeapon = nil
 local holdingPrimary = false
@@ -43,10 +44,12 @@ end
 local function raycastFromMouse(maxRange)
 	local camera = Workspace.CurrentCamera
 	if not camera then return nil, nil end
-	local mousePos = UserInputService:GetMouseLocation()
-	local inset = GuiService:GetGuiInset()
-	local aim = Theme.IsMobile() and camera.ViewportSize * 0.5 or Vector2.new(mousePos.X - inset.X, mousePos.Y - inset.Y)
-	local ray = camera:ViewportPointToRay(aim.X, aim.Y)
+	local centered = Theme.IsMobile() or UserInputService.PreferredInput == Enum.PreferredInput.Gamepad
+	-- Mouse.UnitRay is Roblox's authoritative pointer ray and already accounts
+	-- for the top-bar inset. In shift lock it naturally points through center;
+	-- with a free cursor it points exactly where the player clicks.
+	local ray = centered and camera:ViewportPointToRay(camera.ViewportSize.X * .5, camera.ViewportSize.Y * .5)
+		or mouse.UnitRay
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { player.Character }
@@ -68,17 +71,23 @@ local function buildAimData(maxRange)
 	local char = player.Character
 	local head = char and char:FindFirstChild("Head")
 	local origin = head and head.Position or (ray and ray.Origin)
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	local cameraOffset = root and ray and (ray.Origin - root.Position).Magnitude or 0
+	local aimPoint = hit and hit.Position or (ray and (ray.Origin + ray.Direction * (maxRange + cameraOffset)))
 	local dir
 	local target
-	if hit and origin then
-		dir = (hit.Position - origin).Unit
+	if aimPoint and origin and (aimPoint - origin).Magnitude > 0.001 then
+		dir = (aimPoint - origin).Unit
+	end
+	if hit then
 		target = getTargetFromHit(hit)
-	elseif ray then
+	elseif not dir and ray then
 		dir = ray.Direction.Unit
 	end
 	return {
 		Origin = origin,
 		Dir = dir,
+		AimPoint = aimPoint,
 		Touch = Theme.IsMobile(),
 		Target = target,
 		HitPos = hit and hit.Position or nil,
@@ -89,6 +98,7 @@ local function canUseTool(cooldown)
 	local now = os.clock()
 	if now - lastClientFire < cooldown then return false end
 	lastClientFire = now
+	if activeTool then ItemCooldown.StartTool(activeTool, cooldown) end
 	return true
 end
 

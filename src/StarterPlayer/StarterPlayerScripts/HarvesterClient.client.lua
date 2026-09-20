@@ -4,12 +4,12 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
-local GuiService = game:GetService("GuiService")
 local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
+local ItemCooldown = require(ReplicatedStorage.Shared.UI.ItemCooldown)
 local Remotes = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage:WaitForChild("Remotes", 5)
 local function resolveInteractRemote()
 	if not Remotes then return nil end
@@ -22,6 +22,7 @@ local ToolConfig = require(ReplicatedStorage.Modules.ToolConfig)
 local missingInteractWarned = false
 
 local player = Players.LocalPlayer
+local mouse = player:GetMouse()
 
 local function inputBlocked()
 	local gui = player:FindFirstChildOfClass("PlayerGui")
@@ -47,10 +48,9 @@ end
 local function getMouseRay()
 	local camera = Workspace.CurrentCamera
 	if not camera then return nil, nil end
-	local mousePos = UserInputService:GetMouseLocation()
-	local inset = GuiService:GetGuiInset()
-	local aim = Theme.IsMobile() and camera.ViewportSize * 0.5 or Vector2.new(mousePos.X - inset.X, mousePos.Y - inset.Y)
-	local ray = camera:ViewportPointToRay(aim.X, aim.Y)
+	local centered = Theme.IsMobile() or UserInputService.PreferredInput == Enum.PreferredInput.Gamepad
+	local ray = centered and camera:ViewportPointToRay(camera.ViewportSize.X * .5, camera.ViewportSize.Y * .5)
+		or mouse.UnitRay
 	return ray.Origin, ray.Direction
 end
 
@@ -205,14 +205,16 @@ local function harvestOnce(tool)
 	local hit = acquireHarvestHit(range)
 	local function swingAt(target)
 		if not CombatRE or (tonumber(tool:GetAttribute("CombatDamage")) or 0) <= 0 then return end
-		local _, direction = getMouseRay()
+		local rayOrigin, direction = getMouseRay()
 		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 		local targetRoot = target and (target.PrimaryPart or target:FindFirstChild("HumanoidRootPart"))
+		local aimPoint = targetRoot and targetRoot.Position
+			or (rayOrigin and direction and (rayOrigin + direction * math.max(range * 6, 64)))
 		if root and targetRoot then
 			local delta = targetRoot.Position - root.Position
 			if delta.Magnitude > 0.001 then direction = delta.Unit end
 		end
-		CombatRE:FireServer("Attack", { Target = target, Dir = direction, Touch = Theme.IsMobile() })
+		CombatRE:FireServer("Attack", { Target = target, Dir = direction, AimPoint = aimPoint, Touch = Theme.IsMobile() })
 		local swing = Instance.new("StringValue")
 		swing.Name, swing.Value, swing.Parent = "toolanim", "Slash", tool
 		Debris:AddItem(swing, 1)
@@ -245,7 +247,9 @@ local function startLoop(tool)
 				break
 			end
 			harvestOnce(tool)
-			task.wait(getCooldown(tool))
+			local cooldown = getCooldown(tool)
+			ItemCooldown.StartTool(tool, cooldown)
+			task.wait(cooldown)
 		end
 		if generation == loopGeneration then runningTool = nil end
 	end)

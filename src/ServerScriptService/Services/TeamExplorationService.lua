@@ -9,7 +9,7 @@ local WORLD_RADIUS = Biomes.world_radius or (Biomes.WORLD and Biomes.WORLD.World
 local REVEAL_RADIUS = math.max(0, math.floor((MapConfig.Exploration or {}).RevealChunkRadius or 1))
 local GRID_LIMIT = math.ceil(WORLD_RADIUS / CHUNK_SIZE) + 1
 local MAX_REGIONS, MAX_REGION_JSON = 64, 32768
-local Service = { _cells = {}, _metadata = {}, _lastCells = {} }
+local Service = { _cells = {}, _metadata = {}, _lastCells = {}, _markerRequests = {} }
 
 local function finite(n)
 	return type(n) == "number" and n == n and math.abs(n) < math.huge
@@ -62,6 +62,36 @@ local function regionsCopy(regions)
 	return result
 end
 local function biomeValid(name) return type(name) == "string" and Biomes.BIOMES[name] ~= nil end
+local function markerValid(marker)
+	if type(marker) ~= "table" or not finite(marker.X) or not finite(marker.Z) then return false end
+	if marker.Layer ~= "Surface" and marker.Layer ~= "Cave" then return false end
+	return marker.X * marker.X + marker.Z * marker.Z <= (WORLD_RADIUS + CHUNK_SIZE) ^ 2
+end
+
+function Service:_publishMarker()
+	if not self._folder then return end
+	local marker = self._marker
+	self._folder:SetAttribute("CrewMarkerX", marker and marker.X or nil)
+	self._folder:SetAttribute("CrewMarkerZ", marker and marker.Z or nil)
+	self._folder:SetAttribute("CrewMarkerLayer", marker and marker.Layer or nil)
+	self._folder:SetAttribute("CrewMarkerOwner", marker and marker.Owner or nil)
+end
+
+function Service:_setMarker(player, request)
+	if player.Parent ~= Players or type(request) ~= "table" then return end
+	local now = os.clock()
+	if now - (self._markerRequests[player] or -math.huge) < .2 then return end
+	self._markerRequests[player] = now
+	if request.Remove == true then
+		self._marker = nil
+		self:_publishMarker()
+		return
+	end
+	local marker = {X=request.X, Z=request.Z, Layer=request.Layer, Owner=player.UserId}
+	if not markerValid(marker) then return end
+	self._marker = marker
+	self:_publishMarker()
+end
 
 function Service:_publish(cell)
 	if not self._folder then return end
@@ -89,7 +119,17 @@ function Service:Init()
 	folder:SetAttribute("Epoch", self._epoch)
 	for _, cell in pairs(self._cells) do self:_publish(cell) end
 	folder.Parent = ReplicatedStorage
-	self._removing = Players.PlayerRemoving:Connect(function(player) self._lastCells[player] = nil end)
+	self:_publishMarker()
+	local remotes = ReplicatedStorage:WaitForChild("Remotes")
+	local markerRemote = remotes:FindFirstChild("CrewMapMarker") or Instance.new("RemoteEvent")
+	markerRemote.Name = "CrewMapMarker"
+	markerRemote.Parent = remotes
+	self._markerRemote = markerRemote
+	markerRemote.OnServerEvent:Connect(function(player, request) self:_setMarker(player, request) end)
+	self._removing = Players.PlayerRemoving:Connect(function(player)
+		self._lastCells[player] = nil
+		self._markerRequests[player] = nil
+	end)
 end
 
 function Service:BeginBiome(biome, epoch)
@@ -191,11 +231,11 @@ function Service:CaptureWorldState()
 	end
 	assert(#cells <= MAX_CELLS, "Exploration cell capacity exceeded")
 	table.sort(cells, function(a, b) return a.X == b.X and a.Z < b.Z or a.X < b.X end)
-	return { Version = 1, Biome = self._biome, Epoch = self._epoch, Cells = cells }
+	return { Version = 1, Biome = self._biome, Epoch = self._epoch, Cells = cells, Marker = self._marker and table.clone(self._marker) or nil }
 end
 
 function Service:RestoreWorldState(state)
-	local restored, biome, epoch = {}, nil, nil
+	local restored, biome, epoch, marker = {}, nil, nil, nil
 	if state ~= nil then
 		assert(type(state) == "table" and state.Version == 1 and biomeValid(state.Biome), "Invalid exploration snapshot")
 		assert(finite(state.Epoch) and state.Epoch >= 0 and state.Epoch <= 1e8 and state.Epoch % 1 == 0, "Invalid exploration epoch")
@@ -207,14 +247,22 @@ function Service:RestoreWorldState(state)
 			assert(not restored[id], "Duplicate explored cell")
 			restored[id] = { X = cell.X, Z = cell.Z, Biome = cell.Biome, Regions = regionsCopy(cell.Regions or {}) }
 		end
+		if state.Marker ~= nil then
+			assert(markerValid(state.Marker), "Invalid crew map marker")
+			local owner = tonumber(state.Marker.Owner)
+			assert(owner and owner >= 0 and owner % 1 == 0, "Invalid crew map marker owner")
+			marker = {X=state.Marker.X, Z=state.Marker.Z, Layer=state.Marker.Layer, Owner=owner}
+		end
 	end
 	self._cells, self._metadata, self._lastCells = restored, {}, {}
+	self._marker = marker
 	self._biome, self._epoch = biome, epoch
 	if self._folder then
 		self._folder:ClearAllChildren()
 		self._folder:SetAttribute("Biome", biome)
 		self._folder:SetAttribute("Epoch", epoch)
 		for _, cell in pairs(restored) do self:_publish(cell) end
+		self:_publishMarker()
 	end
 	return true
 end

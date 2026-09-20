@@ -20,6 +20,8 @@ local ItemDropService = require(script.Parent.ItemDropService)
 local BuildService = { _salvageHolds = {}, _requests = {}, _entries = setmetatable({}, {__mode="k"}) }
 local Instances=require(ReplicatedStorage.Shared.ItemInstance)
 local Catalog=require(ReplicatedStorage.Shared.OverhaulCatalog)
+local LightConfig = require(ReplicatedStorage.Shared.LightConfig)
+local BuildModels = require(ReplicatedStorage.Shared.Art.OverhaulBuildModels)
 local SnapshotCodec = require(script.Parent.WorldSnapshotCodec)
 BuildService._remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 10)
 BuildService._remoteBuild = Util.GetRemote(BuildService._remotesFolder, Config.RemoteNames.Build)
@@ -37,6 +39,10 @@ end
 
 local function isPlaceableItem(t)
 	return Config.BUILD.PlaceableItems and Config.BUILD.PlaceableItems[t] == true
+end
+
+local function isLightType(t)
+	return LightConfig.Definitions[t] ~= nil
 end
 
 local function isChestStructure(inst, buildType)
@@ -69,42 +75,8 @@ local function getPrefab(buildType)
 end
 
 local function createFallbackPart(buildType, position)
-	if buildType == "Torch" then
-		local model = Instance.new("Model")
-		model.Name = "Build_" .. buildType
-		model:SetAttribute("BuildType", buildType)
-
-		local post = Instance.new("Part")
-		post.Name = "Post"
-		post.Size = Vector3.new(0.5, 3.5, 0.5)
-		post.Anchored = true
-		post.CanCollide = true
-		post.Material = Enum.Material.Wood
-		post.Color = Color3.fromRGB(94, 70, 44)
-		post.Parent = model
-
-		local flame = Instance.new("Part")
-		flame.Name = "Flame"
-		flame.Shape = Enum.PartType.Ball
-		flame.Size = Vector3.new(0.8, 0.8, 0.8)
-		flame.Anchored = true
-		flame.CanCollide = false
-		flame.Material = Enum.Material.Neon
-		flame.Color = Color3.fromRGB(255, 186, 80)
-		flame.Parent = model
-
-		local light = Instance.new("PointLight")
-		light.Name = "TorchLight"
-		light.Brightness = 2
-		light.Range = 16
-		light.Color = Color3.fromRGB(255, 214, 138)
-		light.Shadows = true
-		light.Parent = flame
-
-		model.PrimaryPart = post
-		post.CFrame = CFrame.new(position + Vector3.new(0, post.Size.Y * 0.5, 0))
-		flame.CFrame = CFrame.new(position + Vector3.new(0, post.Size.Y + flame.Size.Y * 0.3, 0))
-		return model
+	if LightConfig.Definitions[buildType] then
+		return BuildModels.Create(buildType)
 	end
 
 	local part = Instance.new("Part")
@@ -242,14 +214,16 @@ function BuildService:Place(plr, buildType, worldPos, rotation)
 	if not withinRange(plr, worldPos) then return false, "OutOfRange" end
 	local held = plr.Character and plr.Character:FindFirstChildOfClass("Tool")
 	if not held or held.Name ~= buildType then return false, "EquipBuildItem" end
-	if not BuildPlacement.WithinCamp(worldPos) and buildType~="TrailBeacon" then return false, "OutsideCamp" end
+	if not BuildPlacement.WithinCamp(worldPos) and not isLightType(buildType) then return false, "OutsideCamp" end
 
 	local gx, gz = GridService:WorldToGrid(worldPos)
 	if GridService:IsOccupied(gx, gz) then return false, "Occupied" end
 	local pos = BuildPlacement.Surface(worldPos)
 	if not pos then return false, "NoSurface" end
-	if not BuildPlacement.WithinCamp(pos) and buildType~="TrailBeacon" then return false, "OutsideCamp" end
+	if not BuildPlacement.WithinCamp(pos) and not isLightType(buildType) then return false, "OutsideCamp" end
 	if not withinRange(plr, pos) then return false, "OutOfRange" end
+	local expiresOnBiomeShift = isLightType(buildType) and not BuildPlacement.WithinCamp(pos)
+	local expiresAfterBiomeVisit = expiresOnBiomeShift and ((ReplicatedStorage:GetAttribute("BiomeVisitSerial") or 0) + 1) or nil
 
  -- Every build is an inventory item; retain its station grade and contents.
  local selectedIndex,heldEntry
@@ -283,6 +257,8 @@ function BuildService:Place(plr, buildType, worldPos, rotation)
 		inst:SetAttribute("GridX", gx)
 		inst:SetAttribute("GridZ", gz)
 		inst:SetAttribute("BuildType", buildType)
+		inst:SetAttribute("ExpiresOnBiomeShift", expiresOnBiomeShift or nil)
+		inst:SetAttribute("ExpiresAfterBiomeVisit", expiresAfterBiomeVisit)
 		self._entries[inst]=Instances.Copy(placedEntry)
 		inst:SetAttribute("StationGrade",placedEntry.StationGrade or (Catalog.Stations[buildType] and Catalog.Stations[buildType].Grade))
 		inst:SetAttribute("MapMarkerType", "PlayerBuiltStructure")
@@ -327,21 +303,25 @@ function BuildService:Place(plr, buildType, worldPos, rotation)
 	end
 	
 	print(string.format("[BuildService] %s placed %s at (%d, %d)", plr.Name, buildType, gx, gz))
-	return true, "Success"
+	return true, expiresOnBiomeShift and "TemporaryLight" or "Success"
 end
 
-local function salvageTarget(plr, target)
+local function resolveStructure(target)
 	if typeof(target) ~= "Instance" or not target:IsDescendantOf(workspace)
 		or (not target:IsA("Model") and not target:IsA("BasePart")) then return false, "InvalidPayload" end
-	if GameStateService:IsGameOver() then
-		return false, "GameOver"
-	end
 	local placed = target
 	while placed and placed ~= workspace do
 		if placed:GetAttribute("BuildType") and CollectionService:HasTag(placed, "Structure") then break end
 		placed = placed.Parent
 	end
 	if not placed or placed == workspace or (not placed:IsA("Model") and not placed:IsA("BasePart")) then return false, "NotStructure" end
+	return placed
+end
+
+local function salvageTarget(plr, target)
+	if GameStateService:IsGameOver() then return false, "GameOver" end
+	local placed, reason = resolveStructure(target)
+	if not placed then return false, reason end
 
 	local owner = tonumber(placed:GetAttribute("OwnerUserId"))
 	if owner ~= plr.UserId then return false, "NotOwner" end
@@ -391,23 +371,28 @@ function BuildService:Remove(plr, target)
 	end
 	
 	local buildType = placed:GetAttribute("BuildType")
+	local creative = workspace:GetAttribute("WorldType") == "Creative" and plr:GetAttribute("CreativeMode") == true
+	local refunded = false
 	local utilityReady,utilityReason=require(script.Parent.UtilityBuildService):CanSalvage(placed)
 	if not utilityReady then return false,utilityReason end
 	local stationReady,stationReason=require(script.Parent.StationService):CanSalvage(plr,placed)
 	if not stationReady then return false,stationReason end
 	local kitchenReady, kitchenReason = require(script.Parent.CookingService):CanSalvage(placed)
 	if not kitchenReady then return false, kitchenReason end
- if buildType and isPlaceableItem(buildType) then
+  if not creative and buildType and isPlaceableItem(buildType) then
   local entry=Instances.Copy(self._entries[placed] or {Id=buildType,N=1})
   entry.N=1;entry.StationGrade=placed:GetAttribute("StationGrade")
   entry.StationState=require(script.Parent.StationService):Snapshot(placed)
   entry.CookingState=require(script.Parent.CookingService):CaptureStation(placed)
   entry.UtilityState=require(script.Parent.UtilityBuildService):Capture(placed)
   if isChestStructure(placed,buildType) then entry.ChestState=LootService:CaptureChestState(placed) end
-  if InventoryService:GiveEntry(plr,entry,true)~=1 then return false,"InventoryFull" end
-  require(script.Parent.StationService):Remove(placed)
-  require(script.Parent.UtilityBuildService):Remove(placed)
- end
+   if InventoryService:GiveEntry(plr,entry,true)~=1 then return false,"InventoryFull" end
+   refunded = true
+  end
+	-- Runtime station state must be released in both modes. Creative simply skips
+	-- serializing that state back into a returned inventory item.
+	require(script.Parent.StationService):Remove(placed)
+	require(script.Parent.UtilityBuildService):Remove(placed)
 
 	local gx = placed:GetAttribute("GridX")
 	local gz = placed:GetAttribute("GridZ")
@@ -418,7 +403,23 @@ function BuildService:Remove(plr, target)
 	end
 	placed:Destroy()
 	require(script.Parent.ExpeditionRewardsService):RecordActivity(plr)
-	return true, "Success"
+  return true, "Success", refunded
+end
+
+function BuildService:PickBlock(plr, target)
+	if GameStateService:IsGameOver() then return false, "GameOver" end
+	local placed, reason = resolveStructure(target)
+	if not placed then return false, reason end
+	local position = placed:IsA("Model") and placed:GetPivot().Position or placed.Position
+	if not withinRange(plr, position) then return false, "OutOfRange" end
+	local buildType = placed:GetAttribute("BuildType")
+	if type(buildType) ~= "string" or not isPlaceableItem(buildType) then return false, "InvalidType" end
+	local slotIndex = math.clamp(math.floor(tonumber(plr:GetAttribute("SelectedHotbarSlot")) or 1), 1, 6)
+	local creative = workspace:GetAttribute("WorldType") == "Creative" and plr:GetAttribute("CreativeMode") == true
+	if not InventoryService:PickToHotbar(plr, buildType, slotIndex, creative) then
+		return false, "MissingPlaceableItem"
+	end
+	return true, "Success", slotIndex, buildType
 end
 
 function BuildService:CaptureWorldState()
@@ -431,6 +432,8 @@ function BuildService:CaptureWorldState()
 				PlacementVersion = inst:GetAttribute("PlacementVersion"),
 				GridX = inst:GetAttribute("GridX"), GridZ = inst:GetAttribute("GridZ"), Transform = SnapshotCodec.CFrame(inst:GetPivot()),
 				Durability = durability and durability.Value or 100, DurabilityMax = inst:GetAttribute("DurabilityMax") or 100 }
+			if inst:GetAttribute("ExpiresOnBiomeShift") == true then state.ExpiresOnBiomeShift = true end
+			if inst:GetAttribute("ExpiresAfterBiomeVisit") ~= nil then state.ExpiresAfterBiomeVisit = inst:GetAttribute("ExpiresAfterBiomeVisit") end
 			if isChestStructure(inst, state.Type) then state.Chest = LootService:CaptureChestState(inst) end
 			state.Cooking = require(script.Parent.CookingService):CaptureStation(inst)
 			state.Station = require(script.Parent.StationService):Snapshot(inst)
@@ -453,6 +456,14 @@ function BuildService:RestoreWorldState(states)
 		assert(gx % 1 == 0 and gz % 1 == 0 and not occupied[gx .. ":" .. gz], "Invalid saved grid occupancy")
 		occupied[gx .. ":" .. gz] = true
 		local cf = SnapshotCodec.ReadCFrame(state.Transform)
+		local expiresOnBiomeShift = state.ExpiresOnBiomeShift == true
+		if state.ExpiresOnBiomeShift == nil and isLightType(state.Type) and not BuildPlacement.WithinCamp(cf.Position) then
+			expiresOnBiomeShift = true
+		end
+		local currentBiomeVisit = ReplicatedStorage:GetAttribute("BiomeVisitSerial") or 0
+		local expiresAfterBiomeVisit = state.ExpiresAfterBiomeVisit
+		if expiresOnBiomeShift and expiresAfterBiomeVisit == nil then expiresAfterBiomeVisit = currentBiomeVisit + 1 end
+		if expiresOnBiomeShift and expiresAfterBiomeVisit <= currentBiomeVisit then continue end
 		local prefab = getPrefab(state.Type)
 		local inst = prefab and prefab:Clone() or createFallbackPart(state.Type, cf.Position)
 		inst:PivotTo(cf)
@@ -460,6 +471,8 @@ function BuildService:RestoreWorldState(states)
 		inst:SetAttribute("OwnerUserId", SnapshotCodec.Number(state.Owner))
 		inst:SetAttribute("GridX", gx); inst:SetAttribute("GridZ", gz)
 		inst:SetAttribute("BuildType", state.Type)
+		inst:SetAttribute("ExpiresOnBiomeShift", expiresOnBiomeShift or nil)
+		inst:SetAttribute("ExpiresAfterBiomeVisit", expiresAfterBiomeVisit)
 		inst:SetAttribute("StationGrade",state.StationGrade)
 		require(script.Parent.UtilityBuildService):Restore(inst,state.Utility)
 		self._entries[inst]=Instances.Copy(state.Item or {Id=state.Type,N=1})
@@ -490,6 +503,27 @@ function BuildService:RestoreWorldState(states)
 	end
 end
 
+function BuildService:RemoveBiomeShiftLights()
+	local removed = 0
+	local currentBiomeVisit = ReplicatedStorage:GetAttribute("BiomeVisitSerial") or 0
+	for _, inst in ipairs(CollectionService:GetTagged("Structure")) do
+		if inst:IsDescendantOf(workspace) and inst:GetAttribute("ExpiresOnBiomeShift") == true
+			and isLightType(inst:GetAttribute("BuildType"))
+			and (inst:GetAttribute("ExpiresAfterBiomeVisit") == nil or inst:GetAttribute("ExpiresAfterBiomeVisit") <= currentBiomeVisit) then
+			for player, hold in pairs(self._salvageHolds) do
+				if hold.Target == inst then self._salvageHolds[player] = nil end
+			end
+			require(script.Parent.StationService):Remove(inst)
+			require(script.Parent.UtilityBuildService):Remove(inst)
+			GridService:ReleaseByInstance(inst)
+			self._entries[inst] = nil
+			inst:Destroy()
+			removed += 1
+		end
+	end
+	return removed
+end
+
 function BuildService:Bind()
 	if self._bound then return end
 	if not self._remoteBuild then
@@ -509,7 +543,7 @@ function BuildService:Bind()
 		end
 	end)
 	self._remoteBuild.OnServerEvent:Connect(function(plr, action, payload)
-		if action ~= "Place" and action ~= "Remove" and action ~= "BeginSalvage" and action ~= "ContinueSalvage" and action ~= "CancelSalvage" then return end
+		if action ~= "Place" and action ~= "Remove" and action ~= "PickBlock" and action ~= "BeginSalvage" and action ~= "ContinueSalvage" and action ~= "CancelSalvage" then return end
 		if action == "CancelSalvage" then self._salvageHolds[plr] = nil; return end
 		local requests, now = self._requests[plr] or {}, os.clock()
 		self._requests[plr] = requests
@@ -546,6 +580,16 @@ function BuildService:Bind()
 				Success = success,
 				Reason = success and (reason or "Success") or (ok and (reason or "Unknown") or "Unknown"),
 			})
+		elseif action == "PickBlock" then
+			local ok, picked, reason, slotIndex, buildType = pcall(function()
+				return BuildService:PickBlock(plr, payload.Target)
+			end)
+			local success = ok and picked == true
+			self._remoteBuild:FireClient(plr, "Result", {
+				Action = "PickBlock", Success = success,
+				Reason = success and (reason or "Success") or (ok and (reason or "Unknown") or "Unknown"),
+				SlotIndex = slotIndex, BuildType = buildType,
+			})
 		elseif action == "Remove" then
 			local target = payload and payload.Target
 			if typeof(target) ~= "Instance" then
@@ -556,7 +600,7 @@ function BuildService:Bind()
 				})
 				return
 			end
-			local ok, removed, reason = pcall(function()
+			local ok, removed, reason, refunded = pcall(function()
 				return BuildService:Remove(plr, target)
 			end)
 			local success = ok and removed == true
@@ -564,6 +608,7 @@ function BuildService:Bind()
 				Action = "Remove",
 				Success = success,
 				Reason = success and (reason or "Success") or (ok and (reason or "Unknown") or "Unknown"),
+				Refunded = refunded == true,
 			})
 		end
 	end)
