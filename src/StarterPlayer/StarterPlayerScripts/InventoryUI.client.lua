@@ -17,6 +17,7 @@ local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local Instances = require(ReplicatedStorage.Shared.ItemInstance)
 local Catalog = require(ReplicatedStorage.Shared.OverhaulCatalog)
 local ItemCooldown = require(ReplicatedStorage.Shared.UI.ItemCooldown)
+local WeaponSpecialCooldown = require(ReplicatedStorage.Shared.Weapons.WeaponSpecialCooldown)
 local DEBUG = false
 local storageCapacity=18
 local arrangePack
@@ -175,7 +176,11 @@ armorLabel.Font = Enum.Font.GothamBold
 armorLabel.TextXAlignment = Enum.TextXAlignment.Left
 armorLabel.Parent = armorSection
 
-local armorContainer = Instance.new("Frame")
+local armorContainer = Instance.new("ScrollingFrame")
+armorContainer.BorderSizePixel = 0
+armorContainer.ScrollBarThickness = 0
+armorContainer.CanvasSize = UDim2.new()
+armorContainer.ScrollingDirection = Enum.ScrollingDirection.X
 armorContainer.Name = "Slots"
 armorContainer.Size = UDim2.new(1, 0, 0, SLOT_SIZE)
 armorContainer.Position = UDim2.new(0, 0, 0, 16)
@@ -810,7 +815,7 @@ local function updateSlotCooldown(slot)
 	local remaining, duration = ItemCooldown.Get(data)
 	local definition = Instances.Definition(data.Id)
 	if definition and definition.Kind == "Weapon" then
-		local specialRemaining = math.max(0, (player:GetAttribute("WeaponSpecialReadyAt") or 0) - workspace:GetServerTimeNow())
+		local specialRemaining = WeaponSpecialCooldown.Remaining(player, data.Id)
 		if specialRemaining > remaining and specialRemaining > 0.12 then
 			remaining = specialRemaining
 			duration = math.max(specialRemaining, (definition.SpecialCooldown or 8) * (1 - math.clamp(player:GetAttribute("Gear_SpecialCooldownReduction") or 0, 0, 0.9)))
@@ -1160,6 +1165,7 @@ local function showContextMenu(slot, position, touch)
 	local inset = GuiService:GetGuiInset()
 	if touch then inset = Vector2.zero end
 	local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(800, 600)
+	if touch then viewport = gui.AbsoluteSize end
 	local menuSize = contextMenu.AbsoluteSize
 	contextMenu.Position = UDim2.fromOffset(math.clamp(position.X - inset.X + 6, 4, math.max(4, viewport.X - menuSize.X - 8)), math.clamp(position.Y - inset.Y + 6, 4, math.max(4, viewport.Y - inset.Y - menuSize.Y - 8)))
 	local data = getSlotData(slot.Type, slot.Index)
@@ -1437,6 +1443,8 @@ end
 
 cancelDrag = function()
 	playerGui:SetAttribute("InventoryDragActive", false)
+	storageContainer.ScrollingEnabled = true
+	armorContainer.ScrollingEnabled = Theme.IsMobile() and gui:GetAttribute("ChestOpen") == true
 	if dragging.From then
 		dragging.From.Frame.BackgroundTransparency = 0
 	end
@@ -1456,6 +1464,10 @@ local function beginDrag(slot)
 	if not data then return end
 	
 	showTransferStatus(nil)
+	if dragging.Input and dragging.Input.UserInputType == Enum.UserInputType.Touch then
+		storageContainer.ScrollingEnabled = false
+		armorContainer.ScrollingEnabled = false
+	end
 	selectedSlot = slot
 	dragging.Active = true
 	playerGui:SetAttribute("InventoryDragActive", true)
@@ -1499,7 +1511,7 @@ local function chestSlotFrameAtPoint(point, touch)
 	if touch then inset = Vector2.zero end
 	local adjustedPoint = Vector2.new(point.X - inset.X, point.Y - inset.Y)
 	for _, frame in ipairs(chestSlots:GetChildren()) do
-		if frame:IsA("Frame") and tonumber(frame:GetAttribute("ChestIndex")) then
+		if frame:IsA("Frame") and tonumber(frame:GetAttribute("ChestIndex")) and (not touch or Theme.IsPointVisible(frame, adjustedPoint)) then
 			local pos = frame.AbsolutePosition
 			local size = frame.AbsoluteSize
 			if adjustedPoint.X >= pos.X and adjustedPoint.X <= pos.X + size.X and adjustedPoint.Y >= pos.Y and adjustedPoint.Y <= pos.Y + size.Y then
@@ -1542,7 +1554,7 @@ local function slotAtPoint(point, touch)
 	local adjustedPoint = Vector2.new(point.X - inset.X, point.Y - inset.Y)
 	
 	for _, slot in ipairs(slots) do
-		if not (slot.Frame:IsDescendantOf(mainContainer) and not mainContainer.Visible) then
+		if not (slot.Frame:IsDescendantOf(mainContainer) and not mainContainer.Visible) and (not touch or Theme.IsPointVisible(slot.Frame, adjustedPoint)) then
 			local pos = slot.Frame.AbsolutePosition
 			local size = slot.Frame.AbsoluteSize
 			if adjustedPoint.X >= pos.X and adjustedPoint.X <= pos.X + size.X and adjustedPoint.Y >= pos.Y and adjustedPoint.Y <= pos.Y + size.Y then
@@ -1564,7 +1576,8 @@ UserInputService.InputChanged:Connect(function(input)
 		if dragging.Pending and dragging.StartPos then
 			local delta = (input.Position - dragging.StartPos)
 			if delta.Magnitude >= DRAG_THRESHOLD and dragging.From then
-				beginDrag(dragging.From)
+				if input.UserInputType == Enum.UserInputType.Touch then cancelDrag()
+				else beginDrag(dragging.From) end
 			end
 		end
 		
@@ -1731,6 +1744,12 @@ for _, slot in ipairs(slots) do
 			dragging.From = slot
 			dragging.StartPos = input.Position
 			dragging.Input = input
+			if input.UserInputType == Enum.UserInputType.Touch then
+				-- Swipe scrolls; a deliberate hold lifts an item for rearranging.
+				task.delay(.25, function()
+					if dragging.Input == input and dragging.Pending and dragging.From == slot then beginDrag(slot) end
+				end)
+			end
 		end
 	end)
 	
@@ -1882,66 +1901,84 @@ arrangePack = function()
  local viewport = camera.ViewportSize
  local topInset, bottomInset = GuiService:GetGuiInset()
  local width, height = viewport.X - topInset.X - bottomInset.X, viewport.Y - topInset.Y - bottomInset.Y
+ if mobile then width, height = gui.AbsoluteSize.X, gui.AbsoluteSize.Y end
+ if width <= 1 or height <= 1 then return end
+ local metrics = Theme.MobileMetrics(Vector2.new(width, height))
  local chestOpen = gui:GetAttribute("ChestOpen") == true
+ local touchLayout = mobile and Theme.MobileInventoryLayout(Vector2.new(width, height), chestOpen)
  hotbarRoot.Visible = not mobile or (playerGui:GetAttribute("MenuCursorOpen") ~= true or mainContainer.Visible or chestOpen)
- local portrait = mobile and width < height
- local widePack = mobile and not portrait and not chestOpen
- local columns = widePack and 9 or STORAGE_COLS
- local packWidth = columns * SLOT_SIZE + (columns - 1) * SLOT_GAP + MARGIN * 2
- local packHeight = mobile and (widePack and 292 or 380) or MAIN_HEIGHT
+ local packWidth = touchLayout and touchLayout.PackSize.X or STORAGE_WIDTH + MARGIN * 2
+ local packHeight = touchLayout and touchLayout.PackSize.Y or MAIN_HEIGHT
+ local columns = mobile and math.max(4, math.floor((packWidth - MARGIN * 2 - 8 + SLOT_GAP) / (touchLayout.Cell + SLOT_GAP))) or STORAGE_COLS
+ local storageSlotSize = mobile and math.floor((packWidth - MARGIN * 2 - 8 - (columns - 1) * SLOT_GAP) / columns) or SLOT_SIZE
  local chestHeight = tonumber(gui:GetAttribute("ChestLayoutHeight")) or 200
- local maxScale = mobile and 1.65 or 2.5
-	hotbarScale.Scale = math.min(mobile and 0.8 or 1.5, (width - 64) / 422)
- -- Keep the last storage row above the hotbar, including short PC windows.
- local bottomReserve = mobile and (portrait and 192 or 96) or (18 + (HOTBAR_SLOT_SIZE + 12) * hotbarScale.Scale + 24)
- local availableHeight = math.max(120, height - bottomReserve)
+	hotbarScale.Scale = mobile and metrics.HotbarScale or math.min(1.5, (width - 64) / 422)
  hotbarRoot.BackgroundTransparency = 1
  hotbarRoot.BorderSizePixel = 0
  hotbarPanel.BackgroundTransparency = mobile and .48 or .04
- hotbarRoot.Position = UDim2.new(0.5, 0, 1, mobile and (portrait and -104 or -8) or -18)
- local totalWidth = chestOpen and not portrait and (packWidth + 382 + 24) or packWidth
- local totalHeight = chestOpen and (portrait and (packHeight + chestHeight + 12) or math.max(packHeight, chestHeight)) or packHeight
- local scale = math.min(maxScale, (width - 24) / totalWidth, availableHeight / totalHeight)
+ hotbarRoot.Position = UDim2.new(0.5, 0, 1, mobile and -metrics.HotbarBottom or -18)
+ local scale, x, y = 1, 0, 0
+ if touchLayout then
+  x = touchLayout.PackPosition.X + packWidth / 2
+  y = touchLayout.PackPosition.Y + packHeight / 2
+ else
+  local bottomReserve = 18 + (HOTBAR_SLOT_SIZE + 12) * hotbarScale.Scale + 24
+  local availableHeight = math.max(120, height - bottomReserve)
+  local totalWidth = chestOpen and packWidth + 382 + 24 or packWidth
+  local totalHeight = chestOpen and math.max(packHeight, chestHeight) or packHeight
+  scale = math.min(2.5, (width - 24) / totalWidth, availableHeight / totalHeight)
+  x = width * .5 + (chestOpen and (382 + 24) * scale * .5 or 0)
+  y = availableHeight * .5 + 8
+ end
  packScale.Scale = scale
  packScale:SetAttribute("TargetScale", scale)
  mainContainer.Size = UDim2.fromOffset(packWidth, packHeight)
  mainContainer.AnchorPoint = Vector2.new(0.5, 0.5)
- local centerY = availableHeight * 0.5 + 8
- local x = width * 0.5 + (chestOpen and not portrait and (382 + 24) * scale * 0.5 or 0)
- local y = centerY + (chestOpen and portrait and (chestHeight + 12) * scale * 0.5 or 0)
  mainContainer.Position = UDim2.fromOffset(x, y)
  closePack.Visible = not chestOpen
  local closeSize = mobile and 44 / scale or 40
  closePack.Size = UDim2.fromOffset(closeSize, closeSize)
  closePack.Position = UDim2.new(1, -closeSize - 8, 0, 5)
- titleLabel.TextSize = mobile and 22 or 20
+ titleLabel.TextSize = mobile and 18 or 20
  titleLabel.Size = UDim2.fromOffset(mobile and 200 or 230, 44)
  capacityLabel.Visible = not mobile
- armorLabel.Visible = true;armorLabel.Text="ARMOR                                  ACCESSORIES"
+ armorLabel.Visible = true;armorLabel.Text=mobile and "EQUIPMENT · ACCESSORIES" or "ARMOR                                  ACCESSORIES"
  armorHelp.Visible = false
  armorSection.Position = UDim2.fromOffset(MARGIN, HEADER_HEIGHT)
  armorSection.Size = UDim2.new(1,-MARGIN*2,0,ARMOR_SECTION_HEIGHT)
- armorContainer.Position = UDim2.fromOffset(0, 25)
- local equipmentColumns=portrait and 4 or 8
- local equipmentWidth=math.min(portrait and 64 or 72,(packWidth-MARGIN*2-(equipmentColumns-1)*SLOT_GAP)/equipmentColumns)
+ armorContainer.Position = UDim2.fromOffset(0, mobile and 16 or 25)
+ local equipmentColumns=mobile and (chestOpen and 8 or (packWidth < 480 and 4 or 8)) or 8
+ local equipmentWidth=mobile and math.clamp((packWidth-MARGIN*2-(equipmentColumns-1)*SLOT_GAP)/equipmentColumns,44,metrics.Tablet and 60 or 52) or math.min(72,(packWidth-MARGIN*2-(equipmentColumns-1)*SLOT_GAP)/equipmentColumns)
  local equipmentHeight=math.ceil(8/equipmentColumns)*(equipmentWidth+14)
- for i,slot in ipairs(equipmentSlots) do slot.Frame.Position=UDim2.fromOffset(((i-1)%equipmentColumns)*(equipmentWidth+SLOT_GAP),math.floor((i-1)/equipmentColumns)*(equipmentWidth+14));slot.Frame.Size=UDim2.fromOffset(equipmentWidth,equipmentWidth) end
- armorContainer.Size=UDim2.new(1,0,0,equipmentHeight)
- storageSection.Position = UDim2.fromOffset(MARGIN, HEADER_HEIGHT + 25 + equipmentHeight + 4)
+ for i,slot in ipairs(equipmentSlots) do
+  slot.Frame.Position=UDim2.fromOffset(((i-1)%equipmentColumns)*(equipmentWidth+SLOT_GAP),math.floor((i-1)/equipmentColumns)*(equipmentWidth+14) + (mobile and 12 or 0))
+  slot.Frame.Size=UDim2.fromOffset(equipmentWidth,equipmentWidth)
+  slot.Frame.EquipmentLabel.TextSize=mobile and 10 or 8
+ end
+ armorContainer.ClipsDescendants=mobile
+ armorContainer.ScrollingEnabled=mobile and chestOpen and not dragging.Active
+ armorContainer.ScrollBarThickness=mobile and chestOpen and 3 or 0
+ armorContainer.CanvasSize=mobile and UDim2.fromOffset(equipmentColumns*(equipmentWidth+SLOT_GAP)-SLOT_GAP,equipmentHeight) or UDim2.new()
+ if not mobile or not chestOpen then armorContainer.CanvasPosition=Vector2.zero end
+ armorContainer.Size=UDim2.new(1,0,0,equipmentHeight + (mobile and 4 or 0))
+ storageSection.Position = UDim2.fromOffset(MARGIN, HEADER_HEIGHT + (mobile and 20 or 25) + equipmentHeight + 4)
  storageSection.Size=UDim2.new(1,-MARGIN*2,0,packHeight-storageSection.Position.Y.Offset-12)
  storageContainer.Size=UDim2.new(1,0,1,-20)
- storageContainer.CanvasSize=UDim2.fromOffset(0,math.ceil(storageCapacity/columns)*(SLOT_SIZE+SLOT_GAP))
- storageLabel.Text = mobile and (chestOpen and "TAP TO STORE · DRAG TO ARRANGE" or "TAP FOR ACTIONS · DRAG TO ARRANGE") or "STORAGE"
- storageLabel.TextSize = mobile and 13 or 12
+ storageContainer.CanvasSize=UDim2.fromOffset(0,math.ceil(storageCapacity/columns)*(storageSlotSize+SLOT_GAP))
+ storageContainer.ScrollBarThickness=mobile and 6 or 4
+ storageContainer.ScrollingEnabled=not mobile or not dragging.Active
+ storageLabel.Text = mobile and (chestOpen and "TAP TO STORE · HOLD TO MOVE" or "TAP FOR ACTIONS · HOLD TO MOVE") or "STORAGE"
+ storageLabel.TextSize = mobile and 11 or 12
  transferStatusLabel.Size = UDim2.fromOffset(mobile and 236 or 240, 18)
- transferStatusLabel.Position = mobile and UDim2.new(0, MARGIN, 0, 63) or UDim2.new(1, -MARGIN, 1, -4)
+ transferStatusLabel.Position = mobile and UDim2.new(0, MARGIN, 0, 44) or UDim2.new(1, -MARGIN, 1, -4)
  transferStatusLabel.AnchorPoint = mobile and Vector2.new(0, 1) or Vector2.new(1, 1)
- transferStatusLabel.TextSize = mobile and 14 or 12
+ transferStatusLabel.TextSize = mobile and 11 or 12
  transferStatusLabel.TextXAlignment = mobile and Enum.TextXAlignment.Left or Enum.TextXAlignment.Right
  for _, slot in ipairs(slots) do
   local slotScale = slot.Type == "Hotbar" and hotbarScale.Scale or scale
   slot.Frame.BackgroundTransparency = mobile and slot.Type == "Hotbar" and not mainContainer.Visible and .4 or 0
-  slot.ItemText.TextSize = (slot.Type=="Equipment" or slot.Type=="Accessory") and 9 or mobile and 12 / slotScale or 12
+  slot.ItemText.TextSize = (slot.Type=="Equipment" or slot.Type=="Accessory") and (mobile and 11 or 9) or mobile and 12 / slotScale or 12
+  slot.ItemText.TextWrapped = mobile
   slot.QtyLabel.TextSize = mobile and 12 / slotScale or 12
   if mobile then
    slot.QtyBadge.Size = UDim2.fromOffset(30 / slotScale, 16 / slotScale)
@@ -1957,7 +1994,16 @@ arrangePack = function()
   if keybind then keybind.Visible = not mobile end
   if slot.Type == "Storage" then
    local index = slot.Index - 1
-   slot.Frame.Position = UDim2.fromOffset((index % columns) * (SLOT_SIZE + SLOT_GAP), math.floor(index / columns) * (SLOT_SIZE + SLOT_GAP))
+   slot.Frame.Size = UDim2.fromOffset(storageSlotSize, storageSlotSize)
+   slot.Frame.Position = UDim2.fromOffset((index % columns) * (storageSlotSize + SLOT_GAP), math.floor(index / columns) * (storageSlotSize + SLOT_GAP))
+  end
+  local cellSize=mobile and slot.Frame.Size.X.Offset or ((slot.Type=="Equipment" or slot.Type=="Accessory") and 46 or slot.Type=="Hotbar" and HOTBAR_SLOT_SIZE or SLOT_SIZE)
+  if slot.SizePixels~=cellSize then
+   slot.SizePixels=cellSize
+   for index,segment in ipairs(slot.CooldownSegments) do
+    local angle=(index-1)/24*math.pi*2-math.pi/2
+    segment.Position=UDim2.new(.5,math.cos(angle)*cellSize*.37,.5,math.sin(angle)*cellSize*.37)
+   end
   end
  end
  contextMenu.Size = UDim2.fromOffset(mobile and 180 or 140, mobile and 196 or 136)
@@ -1973,6 +2019,7 @@ gui:GetAttributeChangedSignal("ChestLayoutHeight"):Connect(arrangePack)
 playerGui:GetAttributeChangedSignal("MenuCursorOpen"):Connect(arrangePack)
 playerGui:GetAttributeChangedSignal("BuildPlacementActive"):Connect(arrangePack)
 mainContainer:GetPropertyChangedSignal("Visible"):Connect(arrangePack)
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(arrangePack)
 UserInputService:GetPropertyChangedSignal("PreferredInput"):Connect(arrangePack)
 local packViewportConnection
 local function bindPackViewport()

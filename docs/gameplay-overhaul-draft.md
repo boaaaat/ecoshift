@@ -496,7 +496,7 @@ Damage uses the tier's standard D from section 2. Specials list total damage, in
 | Dagger | 0.55D / 0.55 seconds | 6.5 studs | Quick Cut: 1.5D to one target and a 20% slow for 3 seconds |
 | Axe | 1.2D / 1.2 seconds | 8 studs | Heavy Cleave: 1.6D to up to two targets; 0.5-second stagger on ordinary enemies |
 | Hammer | 1.65D / 1.65 seconds | 8 studs | Ground Slam: 1.3D in a 10-stud forward area; 0.7-second ordinary-enemy stagger |
-| Bow | Up to 1.2D / 1.3 seconds | 120 studs | Piercing Shot: 1.6D through up to two targets, blocked by solid geometry |
+| Bow | Up to 1.2D / 1.3 seconds | 1,000 studs maximum travel | Each bow has its own special; see [bow specials](bow-specials.md). |
 | Staff | D / 1.1 seconds | 50 studs | Burst: 1.25D in a 7-stud target area; line of sight required |
 
 Bosses resist forced movement and stagger. They are not immune to ordinary damage. Elemental weapon visuals do not silently bypass armor or grant undocumented extra basic-hit damage.
@@ -511,7 +511,7 @@ The weapon names are distinct choices, not a requirement to craft every weapon. 
 | 2 | Steel Sword — Sword | Frost Spear — Spear; special slows 20% for 3s instead of moving the user | Marsh Bow — Bow |
 | 3 | Ember Axe — Axe; cleave damage is 1.2D immediately + 0.4D burn over 4s | Crystal Staff — Staff | Blacksteel Sword — Sword |
 | 4 | Meteor Pike — Spear | Dawn Bow — Bow | Crater Hammer — Hammer |
-| 5 | Thunder Hammer — Hammer; slam gains an electrical visual, same damage envelope | Tide Spear — Spear | Storm Bow — Bow; special deals 1.2D primary + 0.4D to one nearby visible target |
+| 5 | Thunder Hammer — Hammer; slam gains an electrical visual, same damage envelope | Tide Spear — Spear | Storm Bow — Bow; Lightning Rod special delivers three pulses to nearby visible enemies |
 | 6 | Thorn Blade — Sword; sweep damage is 0.8D immediately + 0.3D bleed over 3s | Ironwood Bow — Bow | Root Staff — Staff; burst slows 20% for 3s |
 | 7 | Deepsteel Sword — Sword | Lantern Staff — Staff; burst illuminates its area for 8s | Sky Spear — Spear |
 | 8 | Moonblade — Sword | Star Bow — Bow | Gravity Hammer — Hammer; slam briefly pulls ordinary targets up to 2 studs before impact |

@@ -153,6 +153,11 @@ RunService.RenderStepped:Connect(function(dt)
 	local currentRole=player:GetAttribute("Role") or "Generalist"
 	if role~=currentRole then role=currentRole;Theme.Icon(trigger,icons[role] or "Survey",30) end
 	local mobile=Theme.IsMobile();trigger.AnchorPoint=Vector2.new(1,1);trigger.Position=mobile and UDim2.new(1,-20,1,-150) or UDim2.new(1,-26,1,-145)
+	if mobile then
+		local metrics=Theme.MobileMetrics(gui.AbsoluteSize)
+		trigger.Size=UDim2.fromOffset(metrics.Button,metrics.Button)
+		trigger.Position=UDim2.new(1,-16,1,-metrics.ActionBottom-(metrics.Button+metrics.Gap)*3)
+	else trigger.Size=UDim2.fromOffset(58,58) end
 	local menus=player.PlayerGui:GetAttribute("MenuCursorOpen")
 	trigger.Visible=not player:GetAttribute("IsDead") and not menus and not player.PlayerGui:GetAttribute("BuildPlacementActive")
 	if mode and menus then cancel() end
@@ -160,7 +165,12 @@ RunService.RenderStepped:Connect(function(dt)
 	local def=Config.Definitions[role] or Config.Definitions.Generalist;local fraction=math.clamp(remaining/def.Ability.Cooldown,0,1)
 	countdown.Text=requests:IsPending() and "…" or level<3 and "L3" or remaining>0 and tostring(math.ceil(remaining)) or ""
 	local glyph=trigger:FindFirstChild("Glyph");if glyph then glyph.Visible=countdown.Text=="" end
-	for i,segment in ipairs(ring) do segment.Visible=remaining>0 and i/40<=fraction end
+	for i,segment in ipairs(ring) do
+		segment.Visible=remaining>0 and i/40<=fraction
+		local angle=(i/40)*math.pi*2-math.pi/2
+		local radius=mobile and trigger.Size.X.Offset*.43 or 25
+		segment.Position=UDim2.new(.5,math.cos(angle)*radius,.5,math.sin(angle)*radius)
+	end
 	binding.Text=mobile and "" or UIS.PreferredInput==Enum.PreferredInput.Gamepad and "Y" or Settings.Key("Ability").Name
 end)
 

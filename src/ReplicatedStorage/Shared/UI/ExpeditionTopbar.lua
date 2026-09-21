@@ -19,7 +19,7 @@ local deviceGui = Instance.new("ScreenGui")
 deviceGui.Name = "ExpeditionTopbarOverflow"
 deviceGui.ResetOnSpawn = false
 deviceGui.DisplayOrder = 55
-deviceGui.ScreenInsets = Enum.ScreenInsets.DeviceSafeInsets
+deviceGui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
 deviceGui.Parent = gui.Parent
 Theme.TrackRoot(deviceGui)
 
@@ -57,10 +57,11 @@ local function layout()
 	slots.Crew.Size = UDim2.fromOffset(mobile and 44 or 74, HEIGHT)
 	slots.Settings.Position = UDim2.fromOffset(mobile and 48 or 82, 0)
 	slots.Time.Visible = mobile
-	local inlineTime = not fits or usableWidth >= shortcutWidth + 104
+	local inlineTime = usableWidth >= shortcutWidth + 104
 	slots.Time.Parent = inlineTime and row or deviceGui
-	slots.Time.AnchorPoint = Vector2.new(inlineTime and 0 or 1, 0)
-	slots.Time.Position = inlineTime and UDim2.fromOffset(shortcutWidth + 8, 10) or UDim2.new(1, -12, 0, 114)
+	slots.Time.AnchorPoint = Vector2.zero
+	local metrics = Theme.MobileMetrics(deviceGui.AbsoluteSize)
+	slots.Time.Position = inlineTime and UDim2.fromOffset(shortcutWidth + 8, 10) or UDim2.fromOffset(60, (fits and 6 or 54) + 90 * metrics.HUDScale + 8)
 	slots.Time.Size = UDim2.fromOffset(90, 24)
 	local crew = slots.Crew:FindFirstChild("OpenCrew")
 	for _,slot in ipairs({slots.Crew,slots.Settings}) do

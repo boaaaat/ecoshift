@@ -4,6 +4,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Collection = game:GetService("CollectionService")
 local Instances = require(RS.Shared.ItemInstance)
+local WeaponSpecialCooldown = require(RS.Shared.Weapons.WeaponSpecialCooldown)
 local Inventory = require(script.Parent.InventoryService)
 local Stats = require(script.Parent.StatsService)
 local ServerUtil = require(script.Parent.ServerUtil)
@@ -339,11 +340,21 @@ function Gear:RestorePlayer(player,saved)
  require(script.Parent.StatusService):RestorePlayer(player,entry.Burn)
  if player.Character then player.Character:SetAttribute("ToxinStacks",math.clamp(tonumber(entry.ToxinStacks) or 0,0,100)) end
 end
-function Gear:GetSpecialRemaining(player) return state(player).Timers.WeaponSpecial or 0 end
-function Gear:StartSpecialCooldown(player,seconds) state(player).Timers.WeaponSpecial=seconds;player:SetAttribute("WeaponSpecialReadyAt",workspace:GetServerTimeNow()+seconds) end
-function Gear:AdjustSpecialCooldown(player,seconds)
- local current=state(player);current.Timers.WeaponSpecial=math.max(0,(current.Timers.WeaponSpecial or 0)-math.max(0,seconds or 0))
- player:SetAttribute("WeaponSpecialReadyAt",workspace:GetServerTimeNow()+(current.Timers.WeaponSpecial or 0))
+function Gear:GetSpecialRemaining(player,itemId)
+ local key=WeaponSpecialCooldown.TimerKey(itemId)
+ return key and (state(player).Timers[key] or 0) or 0
+end
+function Gear:StartSpecialCooldown(player,itemId,seconds)
+ local key=WeaponSpecialCooldown.TimerKey(itemId);local attribute=WeaponSpecialCooldown.Attribute(itemId)
+ if not key or not attribute then return end
+ seconds=math.max(0,tonumber(seconds) or 0);state(player).Timers[key]=seconds>0 and seconds or nil
+ player:SetAttribute(attribute,workspace:GetServerTimeNow()+seconds)
+end
+function Gear:AdjustSpecialCooldown(player,itemId,seconds)
+ local key=WeaponSpecialCooldown.TimerKey(itemId);local attribute=WeaponSpecialCooldown.Attribute(itemId)
+ if not key or not attribute then return end
+ local current=state(player);current.Timers[key]=math.max(0,(current.Timers[key] or 0)-math.max(0,seconds or 0))
+ player:SetAttribute(attribute,workspace:GetServerTimeNow()+(current.Timers[key] or 0))
 end
 function Gear:BeginSwordGuard(player) state(player).Timers.SwordGuard=.5 end
 function Gear:ConsumeSlipCut(player)
@@ -706,10 +717,14 @@ function Gear:Init()
    player:SetAttribute("Gear_ToxinTonic",current.Timers.Antidote and .35 or 0)
    player:SetAttribute("Gear_WetTonic",current.Timers.DryingSalve and .25 or 0)
    player:SetAttribute("Gear_TonicRecovery",current.Timers.RecoveryTonic and .5 or 0)
-   for key,remaining in pairs(current.Timers) do current.Timers[key]=remaining>dt and remaining-dt or nil end
+   for key,remaining in pairs(current.Timers) do
+    local nextRemaining=remaining>dt and remaining-dt or nil
+    current.Timers[key]=nextRemaining
+    local itemId=WeaponSpecialCooldown.ItemId(key)
+    if itemId then player:SetAttribute(WeaponSpecialCooldown.Attribute(itemId),workspace:GetServerTimeNow()+(nextRemaining or 0)) end
+   end
    player:SetAttribute("DodgeCooldown",current.Timers.Dodge or 0)
    player:SetAttribute("Gear_GatherTimeReduction",self:GetGatherReduction(player,true))
-   player:SetAttribute("WeaponSpecialReadyAt",workspace:GetServerTimeNow()+(current.Timers.WeaponSpecial or 0))
    for _,entry in ipairs(entries(player,true)) do
     if entry.State and entry.State.ThreadRemaining then
      entry.State.ThreadRemaining-=dt

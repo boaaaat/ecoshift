@@ -11,6 +11,7 @@ local elapsed, scanTime = 0, 0
 local budgets = {
 	Medium = { Distance = 85, Count = 24, Rate = 4 },
 	High = { Distance = 150, Count = 40, Rate = 10 },
+	Ultra = { Distance = 220, Count = 56, Rate = 12 },
 }
 
 local function removeEffects(source)
@@ -68,7 +69,7 @@ local function addEffects(source, model, def, budget)
 	attachment.Parent = source
 	table.insert(effect.Objects, attachment)
 	makeEmitter(attachment, def, budget.Rate, def.Effect == "Flame")
-	if quality == "High" then
+	if quality == "High" or quality == "Ultra" then
 		if def.Effect == "Flame" then
 			local fire = Instance.new("Fire")
 			fire.Name = "LocalTorchFlame"

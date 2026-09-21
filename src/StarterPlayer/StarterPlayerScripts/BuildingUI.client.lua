@@ -241,6 +241,12 @@ Theme.BindResponsive(gui,function(mobile,size)
  status.Size=UDim2.fromOffset(math.min(520,size.X-24),48)
  status.Position=mobile and UDim2.new(.5,0,1,-226) or UDim2.new(.5,0,1,-220)
  status.TextSize=mobile and 14 or 16
+ if mobile then
+  local metrics=Theme.MobileMetrics(size)
+  toolbar.AnchorPoint=Vector2.new(.5,1)
+  toolbar.Position=UDim2.new(.5,0,1,-metrics.HotbarTop-60)
+  status.Position=UDim2.new(.5,0,1,-metrics.HotbarTop-116)
+ end
 end)
 player.CharacterRemoving:Connect(endHold)
 gui.Destroying:Connect(function() if preview then preview:Destroy() end;highlight:Destroy() end)

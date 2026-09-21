@@ -863,12 +863,12 @@ local function openWorkbench(station, stationType)
 	mainPanel.Visible = true
 	
 	backdrop.BackgroundTransparency = 1
-	mainPanel.Position = Theme.IsMobile() and UDim2.new() or UDim2.new(0.5, 0, 0.5, 30)
+	mainPanel.Position = UDim2.new(0.5, 0, 0.5, Theme.IsMobile() and 0 or 30)
 	mainPanel.GroupTransparency = 1
 	
 	TweenService:Create(backdrop, TweenInfo.new(0.2), {BackgroundTransparency = 0.5}):Play()
 	TweenService:Create(mainPanel, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-		Position = Theme.IsMobile() and UDim2.new() or UDim2.new(0.5, 0, 0.5, 0),
+		Position = UDim2.fromScale(0.5, 0.5),
 		GroupTransparency = 0
 	}):Play()
 	
@@ -891,7 +891,7 @@ local function closeWorkbench()
 	
 	TweenService:Create(backdrop, TweenInfo.new(0.15), {BackgroundTransparency = 1}):Play()
 	local closeTween = TweenService:Create(mainPanel, TweenInfo.new(0.15), {
-		Position = Theme.IsMobile() and UDim2.new() or UDim2.new(0.5, 0, 0.5, 20),
+		Position = UDim2.new(0.5, 0, 0.5, Theme.IsMobile() and 0 or 20),
 		GroupTransparency = 1
 	})
 	closeTween:Play()
@@ -1056,6 +1056,28 @@ Theme.CaptureCursor(mainPanel); Theme.Panel(mainPanel)
 local menuScale=Instance.new("UIScale");menuScale.Parent=mainPanel
 layoutWorkbench=function()
  local chosen=selectedRecipe~=nil
+ if Theme.IsMobile() then
+  local width,height=mainPanel.Size.X.Offset,mainPanel.Size.Y.Offset
+  local split=chosen and width>=620 and height<500
+  local actionWidth=split and 228 or width-32
+  local actionX=split and width-actionWidth-16 or 16
+  local actionY=split and 62 or height-170
+  local listWidth=split and width-actionWidth-48 or width-32
+  quantityBar.Visible=chosen;craftBtn.Visible=chosen;batchTime.Visible=chosen;batchSummary.Visible=false;quantityLabel.Visible=false
+  quantityBar.Position=UDim2.fromOffset(actionX,actionY);quantityBar.Size=UDim2.fromOffset(actionWidth,44)
+  decreaseBtn.Position=UDim2.fromOffset(0,0);decreaseBtn.Size=UDim2.fromOffset(44,44)
+  quantityBox.Position=UDim2.fromOffset(48,0);quantityBox.Size=UDim2.fromOffset(50,44)
+  increaseBtn.Position=UDim2.fromOffset(102,0);increaseBtn.Size=UDim2.fromOffset(44,44)
+  maxBtn.Position=UDim2.fromOffset(150,0);maxBtn.Size=UDim2.fromOffset(actionWidth-150,44);maxBtn.TextSize=13
+  craftBtn.Position=UDim2.fromOffset(actionX,actionY+52);craftBtn.Size=UDim2.fromOffset(actionWidth,48)
+  craftBtn.TextWrapped=true;craftBtn.TextTruncate=Enum.TextTruncate.None
+  batchTime.Position=UDim2.fromOffset(actionX,actionY+108);batchTime.Size=UDim2.fromOffset(actionWidth,22)
+  categoryBar.Position=UDim2.fromOffset(16,62);categoryBar.Size=UDim2.fromOffset(listWidth,40)
+  recipeSearchBox.Position=UDim2.fromOffset(16,108);recipeSearchBox.Size=UDim2.fromOffset(listWidth,44)
+  recipeContainer.Position=UDim2.fromOffset(16,160)
+  recipeContainer.Size=UDim2.fromOffset(listWidth,height-160-(chosen and not split and 182 or 28))
+  return
+ end
  local compact=mainPanel.Size.Y.Offset<460
  quantityBar.Visible=chosen;craftBtn.Visible=chosen;batchTime.Visible=chosen;batchSummary.Visible=false
  quantityBar.Position=UDim2.fromOffset(16,58);quantityBar.Size=UDim2.new(1,-32,0,40)
@@ -1081,6 +1103,10 @@ Theme.BindResponsive(gui,function(mobile,available)
  local scale=mobile and 1 or math.clamp(math.min(available.X/1440,available.Y/900),1,2)
  menuScale.Scale=scale
  mainPanel.Size=UDim2.fromOffset(math.max(280,math.min(720,(available.X-20)/scale)),math.max(320,math.min(760,(available.Y-16)/scale)))
+ if mobile then
+  mainPanel.Size=UDim2.fromOffset(math.min(840,available.X-16),math.min(760,available.Y-16))
+  mainPanel.AnchorPoint=Vector2.new(.5,.5);mainPanel.Position=UDim2.fromScale(.5,.5)
+ end
  stationIcon.Visible=false
  closeBtn.Visible=true;closeBtn.Size=UDim2.fromOffset(44,44);closeBtn.Position=UDim2.new(1,-16,.5,0)
  recipeBookBtn.Size=UDim2.fromOffset(44,44);recipeBookBtn.Position=UDim2.new(1,-112,0,8)

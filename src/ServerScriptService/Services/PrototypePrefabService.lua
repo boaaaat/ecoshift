@@ -7,7 +7,12 @@ local ResourceMap = require(ReplicatedStorage.Shared.ResourceItemMap)
 local Config = require(ReplicatedStorage.Shared.Config)
 local Entities = require(script.Parent.Parent.AI.EntityConfig)
 local ExpeditionModels = require(script.Parent.Parent.Art.ExpeditionModels)
-local ExpeditionEquipment = require(script.Parent.Parent.Art.ExpeditionEquipment)
+local EnvironmentArt = require(script.Parent.Parent.Art.ExpeditionEnvironment)
+local ResourceCatalog = require(ReplicatedStorage.Shared.OverhaulCatalog)
+local BiomeCatalog = require(ReplicatedStorage.Shared.OverhaulBiomes)
+local ArmorArt = require(script.Parent.Parent.Art.ExpeditionArmor)
+local GearModels = require(ReplicatedStorage.Shared.Art.OverhaulGearModels)
+local ItemPresentation = require(ReplicatedStorage.Shared.Art.ItemPresentation)
 local FieldObjects = require(script.Parent.Parent.Art.ExpeditionFieldObjects)
 local LootConfig = require(ReplicatedStorage.Shared.ExpeditionLootConfig)
 local ServerUtil = require(script.Parent.ServerUtil)
@@ -27,7 +32,6 @@ local function keepExisting(parent, name)
 	if not existing then return false end
 	if existing:GetAttribute("PrefabOverride") == true then return true end
 	-- Replace only known generated placeholders; unmarked authored prefabs survive.
-	if existing:GetAttribute("ArtStyle") == "Expedition" and existing:GetAttribute("ArtVersion") == 1 then return true end
 	if existing:GetAttribute("PrototypePrefab") or existing:GetAttribute("GeneratedBy") == GENERATOR then
 		existing:Destroy()
 		return false
@@ -48,7 +52,7 @@ local function configureResource(model, name)
 	local id = ResourceMap.Normalize(name)
 	local item = Items:Get(id)
 	if not item then return false end
-	local profile = LootConfig.ResourceProfile(item, name)
+ local profile = ResourceCatalog.ResourceDefinitions[id] or LootConfig.ResourceProfile(item, name)
 	-- Preserve geometry, but replace legacy child values and hold prompts so they
 	-- cannot override the current balance or leave a second harvest route active.
 	local markers = { Health = true, MaxHealth = true, CurrentHealth = true, Duration = true, HarvestDuration = true }
@@ -81,7 +85,14 @@ local function makeResource(parent, name, biome, resource)
 		end
 		return
 	end
-	local model = resource and ExpeditionModels.CreateResource(name, biome) or ExpeditionModels.CreateProp(name, biome)
+ local model
+ if resource then
+  local currentBiome=BiomeCatalog.Biomes[biome]
+  model=EnvironmentArt.CreateResource(ResourceMap.Normalize(name),biome,{
+   Pine=currentBiome and (currentBiome.Landform=="Alpine" or currentBiome.Landform=="Highlands"),
+   Snow=biome=="FrozenTundra",Wetland=currentBiome and currentBiome.Landform=="Wetland",
+  })
+ else model=ExpeditionModels.CreateProp(name,biome) end
 	if not model then warn("[Art] No authored resource model:", name); return end
 	if resource and not configureResource(model, name) then model:Destroy(); return end
 	publish(model, parent)
@@ -89,6 +100,7 @@ end
 local Catalog=require(ReplicatedStorage.Shared.OverhaulCatalog)
 local function configureTool(tool,item)
  tool.Name,tool.ToolTip,tool.CanBeDropped=item.Id,item.Name,false
+ ItemPresentation.Configure(tool)
  local gear=Catalog.Gear[item.Id]
  for _,key in ipairs({"ToolType","WeaponType","Type","Damage","CombatDamage","Range","Cooldown","CombatRange","CombatCooldown","ToolPower","HarvestPower","MiningGrade","ToolFamily","WeaponFamily","AttackSpeed"}) do
   tool:SetAttribute(key,nil)
@@ -110,6 +122,20 @@ local function configureTool(tool,item)
  end
 end
 local function makeTool(parent, item)
+	local gear = Catalog.Gear[item.Id]
+	if gear and (gear.Kind == "Tool" or gear.Kind == "Weapon") then
+		local existing = parent:FindFirstChild(item.Id)
+		if existing then
+			-- Current campaign gear replaces generated art; explicit and unmarked authored prefabs win.
+			if existing:GetAttribute("PrefabOverride") == true then return end
+			if not existing:GetAttribute("PrototypePrefab") and existing:GetAttribute("GeneratedBy") ~= GENERATOR then return end
+			existing:Destroy()
+		end
+		local tool = GearModels.Create(item.Id, gear)
+		configureTool(tool, item)
+		publish(tool, parent)
+		return
+	end
 	if keepExisting(parent, item.Id) then
 		local existing = parent:FindFirstChild(item.Id)
 		-- Preserve generated artwork while bringing its gameplay bindings forward.
@@ -128,7 +154,7 @@ local function makeTool(parent, item)
 		handle.Color, handle.Material = Color3.fromRGB(121, 104, 67), Enum.Material.Wood
 		handle.CanCollide, handle.Massless, handle.Parent = false, true, tool
 	else
-		tool = ExpeditionModels.CreateTool(item.Id, item:HasTag("Weapon"))
+  tool = require(script.Parent.ToolService):CreateTool({Id=item.Id})
 	end
 	if not tool then warn("[Art] No authored tool model:", item.Id); return end
 	configureTool(tool, item)
@@ -165,9 +191,9 @@ local function makeBuild(parent,name)
 end
 local function makeArmor(parent, item)
 	if keepExisting(parent, item.Id) then return end
-	local accessory = ExpeditionEquipment.CreateArmor(item.Id)
+ local accessory = ArmorArt.CreateDisplay(item.Id,Catalog.Gear[item.Id])
 	if not accessory then warn("[Art] No authored armor model:", item.Id); return end
-	-- ArmorService already mounts GameItems accessories and reapplies resistance stats.
+ -- Pickups reuse the current equipped geometry; ArmorService mounts pieces directly.
 	publish(accessory, parent)
 end
 function Service:Init()

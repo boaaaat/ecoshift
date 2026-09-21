@@ -13,6 +13,7 @@ local StatsService = require(script.Parent.StatsService)
 local GameStateService = require(script.Parent.GameStateService)
 
 local Instances=require(ReplicatedStorage.Shared.ItemInstance)
+local ItemPresentation=require(ReplicatedStorage.Shared.Art.ItemPresentation)
 local CombatService = {}
 local acceptedCast=setmetatable({}, {__mode="k"})
 local enchantRuntime=setmetatable({}, {__mode="k"})
@@ -440,6 +441,8 @@ local function effectPulse(position,color,radius,duration)
 end
 
 local BowVisuals = require(ReplicatedStorage.Shared.Weapons.BowVisuals)
+local BowSpecials = require(ReplicatedStorage.Shared.Weapons.BowSpecials)
+local BowSpecialService = require(script.Parent.BowSpecialService)
 local function projectileFolder()
  local existing=Workspace:FindFirstChild("CombatProjectiles")
  if existing then return existing end
@@ -469,6 +472,10 @@ local function projectileTarget(instance)
  return nil
 end
 local function arrowSource(player,tool)
+ if tool:GetAttribute("ArticulatedBow") then
+  local torso=player.Character and (player.Character:FindFirstChild("UpperTorso") or player.Character:FindFirstChild("Torso"))
+  if torso then return torso.CFrame:PointToWorldSpace(Vector3.new(.35,.5,-1.65)*math.clamp(torso.Size.X/2,.65,1.6)),.35 end
+ end
  for _,name in ipairs(TOOL_ORIGIN_NAMES) do
   local source=tool:FindFirstChild(name,true)
   if source then
@@ -491,7 +498,9 @@ local function ballisticDirection(origin,target,speed,gravity)
  local cosine=1/math.sqrt(1+tangent*tangent)
  return flat.Unit*cosine+Vector3.yAxis*(tangent*cosine)
 end
-function CombatService:_launchArrow(player,tool,entry,def,direction,aimPoint,chargeRatio,special,touch,onHit)
+function CombatService:_launchArrow(player,tool,entry,def,direction,aimPoint,chargeRatio,special,touch,onHit,onImpact)
+ local bowSpecial=BowSpecials[entry.Id]
+ local piercing=special and bowSpecial.Id=="PiercingShot"
  local grade=math.clamp(math.floor(tonumber(entry.Grade or def.Grade) or 1),1,8)
  -- Draw strength controls real projectile velocity. Weak shots travel at about
  -- half speed and therefore arc much more sharply under the same gravity.
@@ -517,11 +526,15 @@ function CombatService:_launchArrow(player,tool,entry,def,direction,aimPoint,cha
  local velocity=direction*speed
  local range=tonumber(def.Reach) or 120
  local radius=touch and 1.65 or 1.2
- local maximumHits=special and (entry.Id=="StormBow" and 1 or math.max(1,math.floor(def.SpecialTargets or 2))) or 1
+ local maximumHits=piercing and bowSpecial.MaxHits or 1
+ local piercingRetention=piercing and bowSpecial.Retention or 1
  local ignored={arrow,player.Character}
  for _,other in ipairs(Players:GetPlayers()) do if other~=player and other.Character then ignored[#ignored+1]=other.Character end end
  local params=RaycastParams.new();params.FilterType=Enum.RaycastFilterType.Exclude;params.FilterDescendantsInstances=ignored;params.RespectCanCollide=false
  local position,travelled,hits=origin,0,0
+ local sourceCharacter=player.Character
+ local sourceInterior=player:GetAttribute("InteriorId")
+ local sourceVisit=ReplicatedStorage:GetAttribute("BiomeVisitSerial")
  local finished=false
  local connection
  local function finish(positionAtImpact,normal,showImpact)
@@ -544,7 +557,8 @@ function CombatService:_launchArrow(player,tool,entry,def,direction,aimPoint,cha
    local result=Workspace:Blockcast(cframe,size,displacement,params)
    if not result then return nil,nil end
    local target=projectileTarget(result.Instance)
-   if target then return result,target end
+   if target and healthRemaining(target)>0 then return result,target end
+   if target then ignored[#ignored+1]=target;continue end
    -- Resource foliage is often non-collidable. It may still be the exact object
    -- selected by the crosshair, so stop there instead of visibly landing behind it.
    if aimPoint and (result.Position-aimPoint).Magnitude<=math.max(2,radius*2) then return result,nil end
@@ -556,7 +570,9 @@ function CombatService:_launchArrow(player,tool,entry,def,direction,aimPoint,cha
  connection=RunService.Heartbeat:Connect(function(dt)
   if finished then return end
   if not arrow.Parent then finished=true;if connection then connection:Disconnect() end;return end
-  if not player.Parent or not player.Character or player:GetAttribute("IsDead") or GameStateService:IsGameOver()
+  if not player.Parent or player.Character~=sourceCharacter or player:GetAttribute("InteriorId")~=sourceInterior
+   or (not sourceInterior and ReplicatedStorage:GetAttribute("BiomeVisitSerial")~=sourceVisit)
+   or player:GetAttribute("IsDead") or GameStateService:IsGameOver()
    or (ReplicatedStorage:GetAttribute("WorldShifting") and not player:GetAttribute("InteriorId")) then finish(position,nil,false);return end
   dt=math.min(dt,.05)
   local nextVelocity=velocity+gravity*dt
@@ -564,21 +580,53 @@ function CombatService:_launchArrow(player,tool,entry,def,direction,aimPoint,cha
   local remaining=range-travelled
   if remaining<=0 then finish(position,nil,false);return end
   if displacement.Magnitude>remaining then displacement=displacement.Unit*remaining end
-  local facing=displacement.Magnitude>.001 and displacement.Unit or direction
-  local result,target=castSegment(CFrame.lookAt(position,position+facing),Vector3.one*(radius*2),displacement)
-  travelled+=result and result.Distance or displacement.Magnitude;velocity=nextVelocity
-  if result then
-   position=result.Position
-   arrow:PivotTo(CFrame.lookAt(position-facing*.55,position+facing))
-   if target then
-    hits+=1;impactEffect(position,result.Normal,entry.Id,grade,special);onHit(target,hits)
+  velocity=nextVelocity
+  local segmentRemaining=displacement.Magnitude
+  local facing=segmentRemaining>.001 and displacement.Unit or direction
+  -- A fast projectile can cross several enemies in one heartbeat. Consume the
+  -- complete segment instead of pausing at the first contact until next frame.
+  while segmentRemaining>.001 do
+   local result,target=castSegment(CFrame.lookAt(position,position+facing),Vector3.one*(radius*2),facing*segmentRemaining)
+   if not result then
+    position+=facing*segmentRemaining;travelled+=segmentRemaining;segmentRemaining=0
+    arrow:PivotTo(CFrame.lookAt(position,position+(velocity.Magnitude>.001 and velocity.Unit or facing)))
+   else
+    local contactDistance=math.clamp(result.Distance,0,segmentRemaining)
+    travelled+=contactDistance;segmentRemaining-=contactDistance
+    -- Blockcast Position is the surface contact, not the swept box center.
+    -- Keep motion on its original centerline so grazing hits cannot deflect it.
+    position+=facing*contactDistance
+    arrow:PivotTo(CFrame.lookAt(position-facing*.55,position+facing))
+    if not target then
+     finish(result.Position,result.Normal,true)
+     if onImpact then onImpact(result.Position,facing,nil,arrow) end
+     return
+    end
+
+    hits+=1
+    -- Ignore first so an enchant callback failure can never pin the projectile
+    -- inside this target and repeatedly collide with it.
     ignored[#ignored+1]=target
-    if hits>=maximumHits then finish(position,result.Normal,false);return end
-    position+=facing*.8
-   else finish(position,result.Normal,true);return end
-  else
-   position+=displacement
-   arrow:PivotTo(CFrame.lookAt(position,position+velocity.Unit))
+    if hits<maximumHits then impactEffect(result.Position,result.Normal,entry.Id,grade,special) end
+    local hitOk,hitError=pcall(onHit,target,hits,result.Position)
+    if not hitOk then warn("[CombatService] Bow hit effect failed:",hitError) end
+    if hits>=maximumHits then
+     finish(result.Position,result.Normal,true)
+     if onImpact then onImpact(result.Position,facing,target,arrow) end
+     return
+    end
+
+    if piercing then
+     velocity*=piercingRetention
+     segmentRemaining*=piercingRetention
+    end
+
+    -- Add a tiny numerical separation while retaining hits on tightly packed
+    -- enemies; the struck model is already excluded from the next blockcast.
+    local clearance=math.min(segmentRemaining,.05)
+    position+=facing*clearance;travelled+=clearance;segmentRemaining-=clearance
+    arrow:PivotTo(CFrame.lookAt(position-facing*.55,position+facing))
+   end
   end
   if travelled>=range then finish(position,nil,false) end
  end)
@@ -600,6 +648,7 @@ function CombatService:_overhaul(player,action,data)
  if action=="ChargeStart" and family=="Bow" then
   self._chargeStart[player]={Tool=tool,Started=os.clock()}
   tool:SetAttribute("BowDrawStarted",Workspace:GetServerTimeNow())
+  tool:SetAttribute("ItemAimDirection",getValidatedAimDirection(data) or root.CFrame.LookVector)
   return
  end
  if not special and action~="Attack" and action~="Fire" and action~="ChargeRelease" then return end
@@ -615,7 +664,7 @@ function CombatService:_overhaul(player,action,data)
  local runtime=enchantState(player)
  if not special and family=="Sword" and runtime.SwordPrimed and runtime.SwordTool==entry.Uid and now-(runtime.SwordAt or 0)<=2.5 then width*=1.15 end
  local modifiers=gear:GetModifiers(player)
- if special and (def.Kind~="Weapon" or gear:GetSpecialRemaining(player)>0) then return end
+ if special and (def.Kind~="Weapon" or gear:GetSpecialRemaining(player,entry.Id)>0) then return end
  local damage=def.Damage or 6
  local base=def.StandardDamage or damage
  local chargeRatio=1
@@ -634,28 +683,33 @@ function CombatService:_overhaul(player,action,data)
  end
  if family=="Bow" then
   if not special and not self:_canUseTool(tool,def.AttackCycle or 1.3,true) then return end
-  local cost=special and 20*(1-(modifiers.SpecialCostReduction or 0))*(1-(player:GetAttribute("Food_SpecialDrainReduction") or 0)) or 0
+  local bowSpecial=BowSpecials[entry.Id]
+  local cost=special and bowSpecial.Stamina*(1-(modifiers.SpecialCostReduction or 0))*(1-(player:GetAttribute("Food_SpecialDrainReduction") or 0)) or 0
   local stamina=StatsService:GetBase(player,"Stamina") or 0
   if stamina<cost then return end
   if not require(script.Parent.InventoryService):Consume(player,"Arrow",1) then return end
   if cost>0 then StatsService:SetBase(player,"Stamina",stamina-cost) end
   if special then
-   gear:StartSpecialCooldown(player,8*(1-(modifiers.SpecialCooldownReduction or 0)))
-   damage=def.SpecialDamage or base*(def.SpecialFactor or 1.5)
+   self._chargeStart[player]=nil
+   gear:StartSpecialCooldown(player,entry.Id,bowSpecial.Cooldown*(1-(modifiers.SpecialCooldownReduction or 0)))
+   damage=def.Damage*bowSpecial.Impact
   end
   local bowDamageMultiplier=1+gear:GetHeldEnchantValue(player,"DrawForce")
   local fullyDrawn=not special and chargeRatio>=.9
-  local function hitArrow(target,index)
+  local function hitArrow(target,index,impactPosition)
    if not target or not target.Parent then return end
-   local vanillaAmount=special and entry.Id=="StormBow" and base*1.2 or damage
+   local center=impactPosition or target:GetPivot().Position
+   local vanillaAmount=damage
    local enchantmentBonus=vanillaAmount*(bowDamageMultiplier-1)
    if special then
      local extra=index==1 and gear:OnSpecialHit(player,target,base) or 0
      enchantmentBonus+=extra
     elseif index==1 then enchantmentBonus+=gear:BasicHitBonus(player,target,base) end
     local amount=vanillaAmount+enchantmentBonus
+    if special and bowSpecial.Id=="PiercingShot" and index>1 then
+     amount*=bowSpecial.Retention^(index-1)
+    end
    deal(target,amount,"Bow","BowProjectile")
-   local center=getRoot(target) and getRoot(target).Position or target:GetPivot().Position
    if fullyDrawn and index==1 then
     local splitLevel=enchantRank(entry,"SplitFlight")
     if splitLevel>0 then
@@ -685,18 +739,17 @@ function CombatService:_overhaul(player,action,data)
      end)
     end
    end
-   if special and entry.Id=="StormBow" and index==1 then
-    local forkLevel=enchantRank(entry,"ForkedCurrent")
-    local chainCount=forkLevel>0 and require(ReplicatedStorage.Shared.OverhaulCatalog).Enchantments.ForkedCurrent.TargetValues[forkLevel] or 1
-    local chainFactor=forkLevel>0 and enchantValue(entry,"ForkedCurrent") or .4
-    for i,neighbor in ipairs(visibleNearby(player,center,12,target)) do
-     if i>chainCount then break end
-     deal(neighbor.Model,base*chainFactor*bowDamageMultiplier,"BowChain","BowProjectile")
-     broadcastBowEffect("Chain",entry.Id,entry.Grade or def.Grade,true,center,neighbor.Model:GetPivot().Position)
-    end
-   end
   end
-  self:_launchArrow(player,tool,entry,def,direction,aimPoint,chargeRatio,special,touch,hitArrow)
+  local context
+  if special and bowSpecial.Id~="PiercingShot" then
+   context=BowSpecialService:Context(player,entry.Id,def.Damage*bowDamageMultiplier,deal,revealMonster,
+    enchantValue(entry,"ForkedCurrent","TargetValues"),enchantValue(entry,"ForkedCurrent"))
+  end
+  local function impact(position,facing,target,arrow)
+   if context then BowSpecialService:Impact(context,position,facing,target,arrow) end
+  end
+  ItemPresentation.Action(tool,"Release",direction)
+  self:_launchArrow(player,tool,entry,def,direction,aimPoint,chargeRatio,special,touch,hitArrow,context and impact)
   gear:WearHeld(player,1)
   return
  end
@@ -725,9 +778,10 @@ function CombatService:_overhaul(player,action,data)
  if stamina<cost then return end
  if special and family=="Spear" and tailwindReduction>0 then gear:ConsumeTailwindCost(player) end
  if cost>0 then StatsService:SetBase(player,"Stamina",stamina-cost) end
+ ItemPresentation.Action(tool,special and "Special" or "Attack",direction)
  local specialCooldown=8*(1-(modifiers.SpecialCooldownReduction or 0))
  if special then
-  gear:StartSpecialCooldown(player,specialCooldown);damage=def.SpecialDamage or base*(def.SpecialFactor or 1.5)
+  gear:StartSpecialCooldown(player,entry.Id,specialCooldown);damage=def.SpecialDamage or base*(def.SpecialFactor or 1.5)
   if family=="Sword" and enchantRank(entry,"GuardReturn")>0 then gear:BeginSwordGuard(player) end
  end
  local maximum=special and (def.SpecialTargets or 1) or 1
@@ -792,7 +846,7 @@ function CombatService:_overhaul(player,action,data)
   deal(monster,amount,family=="Staff" and "Gun" or "Melee")
   if wasAlive and healthRemaining(monster)<=0 then
    if family=="Dagger" and enchantRank(entry,"QuickExit")>0 then gear:GrantEnchantMove(player,enchantValue(entry,"QuickExit"),3) end
-   if special and family=="Axe" and enchantRank(entry,"FellThrough")>0 and not fellRefunded then fellRefunded=true;gear:AdjustSpecialCooldown(player,specialCooldown*enchantValue(entry,"FellThrough")) end
+   if special and family=="Axe" and enchantRank(entry,"FellThrough")>0 and not fellRefunded then fellRefunded=true;gear:AdjustSpecialCooldown(player,entry.Id,specialCooldown*enchantValue(entry,"FellThrough")) end
   end
   if entry.Id=="DeepsteelSword" and enchantRank(entry,"PressureCut")>0 then
    local pressure=enchantRank(entry,"PressureCut");targetState.PressureHits=(targetState.PressureAt or 0)>now and (targetState.PressureHits or 0)+1 or 1;targetState.PressureAt=now+4

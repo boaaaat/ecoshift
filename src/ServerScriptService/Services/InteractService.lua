@@ -472,6 +472,7 @@ local function handleHarvest(plr, payload)
  if family~="Universal" and ((kind=="Mineral" and family~="Pickaxe") or (kind=="Wood" and family~="Axe")) then baseDamage*=.4 end
  local damage=math.max(0,math.floor(gear:HarvestPower(plr,node,baseDamage)))
  if damage<=0 then return end
+ require(ReplicatedStorage.Shared.Art.ItemPresentation).Action(tool,"Harvest")
 
 	local maxHealth = tonumber(getNodeAttr(node, "MaxHealth")) or tonumber(getNodeAttr(node, "Health")) or 100
 	local currentHealth = tonumber(node:GetAttribute("CurrentHealth"))

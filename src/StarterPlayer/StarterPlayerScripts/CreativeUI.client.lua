@@ -508,9 +508,16 @@ trigger.Name="OpenCreativeConsole"
 Theme.TouchIcon(trigger,"Build",29)
 local triggerLabel=Theme.Label(trigger,"CREATIVE",UDim2.fromOffset(86,18),UDim2.new(.5,-43,1,2),10,nil,true)
 triggerLabel.TextXAlignment=Enum.TextXAlignment.Center
-panel:GetPropertyChangedSignal("Visible"):Connect(function()
-	trigger.Visible=not panel.Visible
-end)
+local function updateTrigger()
+	trigger.Visible=not panel.Visible and not (Theme.IsMobile() and gui.Parent:GetAttribute("MenuCursorOpen"))
+	if Theme.IsMobile() then
+		local metrics=Theme.MobileMetrics(gui.AbsoluteSize)
+		trigger.Position=UDim2.fromOffset(8,(gui.Parent:GetAttribute("MobileTopbarFallback") and 54 or 6)+90*metrics.HUDScale+8)
+	end
+end
+panel:GetPropertyChangedSignal("Visible"):Connect(updateTrigger)
+gui.Parent:GetAttributeChangedSignal("MenuCursorOpen"):Connect(updateTrigger)
+gui.Parent:GetAttributeChangedSignal("MobileTopbarFallback"):Connect(updateTrigger)
 local function eligibility()
 	gui.Enabled=workspace:GetAttribute("WorldType")=="Creative"
 	if not gui.Enabled then panel.Visible=false end
@@ -557,13 +564,14 @@ Theme.BindResponsive(gui,function(mobile,viewport)
  local columns=math.max(2,math.floor(catalogWidth/132))
 	grid.CellSize=UDim2.new(1/columns,-(8+(5/columns)),0,mobile and 100 or 112)
 	trigger.AnchorPoint=mobile and Vector2.zero or Vector2.new(.5,0)
-	-- The shortcut stays at the upper-left edge of the left-side minimap.
-	trigger.Position=mobile and UDim2.fromOffset(4,148) or UDim2.new(.5,0,0,8)
-	trigger.Size=UDim2.fromOffset(mobile and 42 or 46,mobile and 42 or 46)
+	local metrics = Theme.MobileMetrics(viewport)
+	trigger.Position=mobile and UDim2.fromOffset(8,(gui.Parent:GetAttribute("MobileTopbarFallback") and 54 or 6) + 90 * metrics.HUDScale + 8) or UDim2.new(.5,0,0,8)
+	trigger.Size=UDim2.fromOffset(mobile and metrics.Button or 46,mobile and metrics.Button or 46)
 	trigger.BackgroundTransparency=mobile and .38 or 0
 	triggerLabel.Visible=not mobile
 	giveHint.TextSize=width<500 and 12 or 14
 	 giveHint.Text=mobile and "Tap +1 · Hold item for full stack · Drag to delete" or "Click +1 · Shift-click full stack · Drag to delete"
+	updateTrigger()
 end)
 eligibility()
 renderItems()

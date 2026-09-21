@@ -5,7 +5,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 local CollectionService = game:GetService("CollectionService")
-local Debris = game:GetService("Debris")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
@@ -201,6 +200,8 @@ local function harvestOnce(tool)
 		return
 	end
 	missingInteractWarned = false
+	tool:SetAttribute("LocalItemActionKind", "Harvest")
+	tool:SetAttribute("LocalItemActionStarted", Workspace:GetServerTimeNow())
 	local range = getRange(tool)
 	local hit = acquireHarvestHit(range)
 	local function swingAt(target)
@@ -215,9 +216,6 @@ local function harvestOnce(tool)
 			if delta.Magnitude > 0.001 then direction = delta.Unit end
 		end
 		CombatRE:FireServer("Attack", { Target = target, Dir = direction, AimPoint = aimPoint, Touch = Theme.IsMobile() })
-		local swing = Instance.new("StringValue")
-		swing.Name, swing.Value, swing.Parent = "toolanim", "Slash", tool
-		Debris:AddItem(swing, 1)
 	end
 	local target = hit
 	while target and target ~= Workspace do

@@ -79,12 +79,36 @@ function RecipeCard.Create(parent, recipeId, recipe, options)
 		ClipsDescendants=station,ZIndex=13,
 	})
 	if options.MountDescription then options.MountDescription(card, item, ingredientFrame) end
-	UIFactory.Create("UIGridLayout",ingredientFrame,{
+	local grid = UIFactory.Create("UIGridLayout",ingredientFrame,{
 		FillDirection=Enum.FillDirection.Horizontal,FillDirectionMaxCells=columns,
 		CellSize=UDim2.new(1/columns,-4,0,mobile and 56 or 50),CellPadding=UDim2.fromOffset(4,4),
 		SortOrder=Enum.SortOrder.LayoutOrder,
 	})
 	for _,ingredient in ipairs(ingredients) do ingredientDisplay(ingredientFrame,ingredient,recipeId,options) end
+	local function layoutIngredients()
+		local touch = theme.IsMobile()
+		local count = touch and math.clamp(math.floor(ingredientFrame.AbsoluteSize.X / 120), 2, 4) or 3
+		local rowHeight = touch and 52 or 54
+		local height = math.max(1, math.ceil(#ingredients / count)) * rowHeight
+		grid.FillDirectionMaxCells = count
+		grid.CellSize = UDim2.new(1 / count, -4, 0, rowHeight - 4)
+		ingredientFrame.Size = UDim2.new(1, station and -24 or -20, 0, height)
+		if not options.MountDescription then
+			card.Size = UDim2.new(1, -12, 0, (station and 52 or 38) + height)
+		end
+		for _, ingredient in ipairs(ingredientFrame:GetChildren()) do
+			if ingredient:IsA("TextButton") then
+				ingredient.ItemName.TextSize = touch and 12 or 10
+				ingredient.ItemName.Size = UDim2.new(1, -8, 0, touch and 26 or 30)
+				ingredient.Count.Position = UDim2.fromOffset(2, touch and 29 or 33)
+				ingredient.Count.Size = UDim2.new(1, -4, 0, touch and 16 or (station and 14 or 18))
+				ingredient.Count.TextSize = touch and 12 or (station and 10 or 11)
+			end
+		end
+	end
+	-- Reflow existing cards on rotation without rebuilding the selected recipe.
+	card:GetPropertyChangedSignal("AbsoluteSize"):Connect(layoutIngredients)
+	theme.BindResponsive(card, layoutIngredients)
 	card.MouseEnter:Connect(function() TweenService:Create(card,TweenInfo.new(.12),{BackgroundColor3=colors.SlotHover}):Play() end)
 	card.MouseLeave:Connect(function()
 		TweenService:Create(card,TweenInfo.new(.12),{BackgroundColor3=options.IsSelected(recipeId) and colors.SlotSelected or colors.SlotFilled}):Play()

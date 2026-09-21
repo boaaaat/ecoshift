@@ -629,7 +629,7 @@ local function createUI()
 	miniContainer.Name = "MinimapContainer"
 	local mobileLayer = Instance.new("ScreenGui")
 	mobileLayer.Name, mobileLayer.ResetOnSpawn, mobileLayer.DisplayOrder = "MobileMinimapLayer", false, gui.DisplayOrder
-	mobileLayer.ScreenInsets = Enum.ScreenInsets.DeviceSafeInsets
+	mobileLayer.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
 	mobileLayer.Parent = gui.Parent
 	miniContainer.AnchorPoint = Vector2.new(1, 1)
 	miniContainer.Position = UDim2.new(1, -18, 1, -18)
@@ -877,15 +877,15 @@ local function createUI()
 	Theme.BindResponsive(gui, function(mobile, safeSize)
 		local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or safeSize
 		gui.IgnoreGuiInset = not mobile
-		local width = 127 -- 20% larger than the previous 106px mobile card.
+		local width = Theme.MobileMetrics(safeSize).MapSize
 		miniContainer.Parent = mobile and mobileLayer or gui
 		miniContainer.BackgroundTransparency = mobile and .48 or .04
 		miniScale.Scale = mobile and 1 or math.min(math.clamp(math.min(viewport.X / 1440, viewport.Y / 900), 1, 2.5), (viewport.X - 40) / 900, (viewport.Y - 90) / 610)
-		miniContainer.AnchorPoint = mobile and Vector2.zero or Vector2.new(1,1)
-		-- Keep the larger mobile map on the far-left rail, below the vitals card.
-		miniContainer.Position = mobile and UDim2.fromOffset(4,196) or UDim2.new(1, -18 * miniScale.Scale, 1, -18 * miniScale.Scale)
+		miniContainer.AnchorPoint = mobile and Vector2.new(1,0) or Vector2.new(1,1)
+		-- The map occupies the opposite top corner from vitals, above touch controls.
+		miniContainer.Position = mobile and UDim2.new(1,-8,0,8) or UDim2.new(1, -18 * miniScale.Scale, 1, -18 * miniScale.Scale)
 		miniContainer.Size = UDim2.fromOffset(mobile and width or miniW, mobile and width or miniH)
-		local mapSize = mobile and 118 or MapConfig.Minimap.Size
+		local mapSize = mobile and width - 8 or MapConfig.Minimap.Size
 		mapFrame.Size = UDim2.fromOffset(mapSize, mapSize)
 		mapFrame.Position = UDim2.fromOffset(mobile and 4 or 10, mobile and 4 or 10)
 		coords.Visible = not mobile
@@ -2283,7 +2283,7 @@ local function renderMinimap(playerPos, playerLook)
 						frame.Size = UDim2.fromOffset(math.ceil(rw), math.ceil(rh))
 						local style = resolveRegionStyle(region.name)
 						frame.BackgroundColor3 = style.FillColor
-						frame.BackgroundTransparency = math.clamp(style.FillTransparency, 0, 1)
+						frame.BackgroundTransparency = Theme.IsMobile() and .86 or math.clamp(style.FillTransparency, 0, 1)
 						local stroke = frame:FindFirstChildOfClass("UIStroke")
 						if not stroke then
 							stroke = Instance.new("UIStroke")
@@ -2291,7 +2291,7 @@ local function renderMinimap(playerPos, playerLook)
 							stroke.Thickness = 1
 						end
 						stroke.Color = style.StrokeColor
-						stroke.Transparency = math.clamp(style.StrokeTransparency, 0, 1)
+						stroke.Transparency = Theme.IsMobile() and .8 or math.clamp(style.StrokeTransparency, 0, 1)
 
 						local label = frame:FindFirstChild("Label")
 						if not label then
@@ -2300,9 +2300,9 @@ local function renderMinimap(playerPos, playerLook)
 						end
 						label.Text = region.name
 						label.TextColor3 = style.StrokeColor
-						label.Visible = style.ShowLabel and rw > 42 and rh > 18
+						label.Visible = not Theme.IsMobile() and style.ShowLabel and rw > 42 and rh > 18
 
-						local canShowGlyph = rw > 16 and rh > 16
+						local canShowGlyph = not Theme.IsMobile() and rw > 16 and rh > 16
 						if canShowGlyph and style.Glyph then
 							applyGlyphToFrame(frame, style.Glyph, style.StrokeColor, math.max(10, math.floor(math.min(rw, rh) * 0.33)))
 						else

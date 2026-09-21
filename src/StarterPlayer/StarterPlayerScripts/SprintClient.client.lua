@@ -71,9 +71,11 @@ UserInputService:GetPropertyChangedSignal("PreferredInput"):Connect(updateTouchV
 player:GetAttributeChangedSignal("IsDead"):Connect(updateTouchVisibility)
 touchGui.Parent:GetAttributeChangedSignal("MenuCursorOpen"):Connect(updateTouchVisibility)
 touchGui.Parent:GetAttributeChangedSignal("BuildPlacementActive"):Connect(updateTouchVisibility)
-Theme.BindResponsive(sprintButton, function(_, available)
-	-- Keep sprint below dodge and directly left of Roblox's jump control.
-	sprintButton.Position = UDim2.new(1, -142, 1, -48)
+Theme.BindResponsive(sprintButton, function(mobile, available)
+	if not mobile then return end
+	local metrics = Theme.MobileMetrics(available)
+	sprintButton.Size = UDim2.fromOffset(metrics.Button, metrics.Button)
+	sprintButton.Position = UDim2.new(1, -metrics.ActionRight, 1, -metrics.ActionBottom)
 end)
 updateTouchVisibility()
 

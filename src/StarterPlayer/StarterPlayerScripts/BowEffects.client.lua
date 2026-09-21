@@ -5,13 +5,16 @@ if require(Shared:WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Visuals = require(Shared.Weapons.BowVisuals)
+local SpecialVisuals = require(Shared.Weapons.BowSpecialVisuals)
 local Settings = require(Shared.ClientSettings)
 local localPlayer = Players.LocalPlayer
 local folder = Instance.new("Folder")
 folder.Name, folder.Parent = "LocalBowEffects", workspace
 local active, bursts, arrows = {}, {}, {}
+local zones, zoneEffects = {}, {}
 local quality = 1
 local projectileFolder
+local specialFolder
 local dirty = true
 local MAX_ACTIVE, MAX_BURSTS = 24, 20
 
@@ -20,6 +23,7 @@ local function updateQuality()
 	if nextQuality == quality then return end
 	quality = nextQuality
 	for source, record in pairs(active) do record.Effect:Destroy(); active[source] = nil end
+	for model, effect in pairs(zoneEffects) do effect:Destroy(); zoneEffects[model] = nil end
 	dirty = true
 end
 Settings.Changed:Connect(updateQuality)
@@ -37,6 +41,14 @@ local function addBurst(effect)
 end
 
 local function watchProjectiles(instance)
+	if instance.Name == "BowSpecialEffects" and specialFolder ~= instance then
+		specialFolder = instance
+		local function added(child) if child:IsA("Model") then zones[child] = true; dirty = true end end
+		instance.ChildAdded:Connect(added)
+		instance.ChildRemoved:Connect(function(child) zones[child] = nil; dirty = true end)
+		for _, child in ipairs(instance:GetChildren()) do added(child) end
+		return
+	end
 	if instance.Name ~= "CombatProjectiles" or projectileFolder == instance then return end
 	projectileFolder = instance
 	local function added(child)
@@ -60,6 +72,25 @@ local function removeEffect(source, record)
 	active[source] = nil
 end
 local function reconcile()
+	local nearby = {}
+	for model in pairs(zones) do
+		if model.Parent and model.PrimaryPart and model:GetAttribute("BowId") and near(model.PrimaryPart.Position) then
+			table.insert(nearby, model)
+		end
+	end
+	local camera = workspace.CurrentCamera
+	if camera then table.sort(nearby, function(a,b)
+		return (a.PrimaryPart.Position-camera.CFrame.Position).Magnitude < (b.PrimaryPart.Position-camera.CFrame.Position).Magnitude
+	end) end
+	local wantedZones = {}
+	for i, model in ipairs(nearby) do
+		if i > (quality < .6 and 6 or 12) then break end
+		wantedZones[model] = true
+		if not zoneEffects[model] then zoneEffects[model] = SpecialVisuals.Zone(model, quality, folder) end
+	end
+	for model, effect in pairs(zoneEffects) do
+		if not wantedZones[model] then effect:Destroy(); zoneEffects[model] = nil end
+	end
 	local wanted, admitted = {}, 0
 	local function admit(source, owner, id, grade, mode, special, player)
 		if admitted >= MAX_ACTIVE or not source or not near(source.Position) then return end
@@ -99,6 +130,10 @@ RunService.RenderStepped:Connect(function(dt)
 	elapsed += dt
 	if dirty or elapsed >= .1 then elapsed = 0; dirty = false; reconcile() end
 	local now = os.clock()
+	for model, effect in pairs(zoneEffects) do
+		if not model.Parent or not model.PrimaryPart then effect:Destroy(); zoneEffects[model] = nil
+		else effect:Update(math.max(0, workspace:GetServerTimeNow() - (model:GetAttribute("Started") or workspace:GetServerTimeNow()))) end
+	end
 	for source, record in pairs(active) do
 		local live = source:IsDescendantOf(workspace) and record.Owner.Parent ~= nil
 		if record.Mode == "Flight" then live = live and record.Owner:GetAttribute("BowInFlight") == true
@@ -121,7 +156,7 @@ RunService.RenderStepped:Connect(function(dt)
 				end
 				if record.Player:GetAttribute("IsDead") or (ReplicatedStorage:GetAttribute("WorldShifting") and not record.Player:GetAttribute("InteriorId")) then charge = 0 end
 			end
-			record.Effect:Update(now, charge)
+			record.Effect:Update(record.Mode == "Bow" and Settings.Get("ReducedMotion") and 0 or now, charge)
 		end
 	end
 	for i = #bursts, 1, -1 do
@@ -134,10 +169,14 @@ end)
 
 local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("BowEffect")
 remote.OnClientEvent:Connect(function(kind, id, grade, special, position, normal)
+	if kind == "Special" then
+		local packet = id
+		if not near(packet.Position) then return end
+		addBurst(SpecialVisuals.Pulse(packet, quality, folder))
+		return
+	end
 	if not near(position) then return end
-	if kind == "Chain" then
-		if (normal - position).Magnitude > .01 then addBurst(Visuals.Chain(position, normal, folder)) end
-	elseif kind == "Release" or kind == "Impact" then
+	if kind == "Release" or kind == "Impact" then
 		addBurst(Visuals.Burst(id, grade, special, position, normal, kind == "Release", quality, folder))
 	end
 end)

@@ -438,12 +438,12 @@ Theme.BindResponsive(gui, function(isMobile, available)
 	mobile = isMobile
 	if mobile then
 		responsiveScale.Scale = 1
-		panel.Size = UDim2.fromOffset(math.max(320, available.X - 12), math.max(260, available.Y - 12))
+		panel.Size = UDim2.fromOffset(math.min(840, available.X - 16), math.min(760, available.Y - 16))
 		headerIcon.Size = UDim2.fromOffset(42, 42); headerIcon.Position = UDim2.fromOffset(12, 10)
 		eyebrow.Position = UDim2.fromOffset(64, 7); eyebrow.TextSize = 10
 		title.Position = UDim2.fromOffset(64, 22); title.Size = UDim2.new(1, -220, 0, 28); title.TextSize = 20
 		tierBadge.Position = UDim2.new(1, -132, 0, 13); tierBadge.Size = UDim2.fromOffset(76, 30); tierBadge.TextSize = 11
-		close.Position = UDim2.new(1, -48, 0, 7); close.Size = UDim2.fromOffset(40, 40)
+		close.Position = UDim2.new(1, -52, 0, 7); close.Size = UDim2.fromOffset(44, 44)
 		headerRule.Position = UDim2.fromOffset(12, 60); headerRule.Size = UDim2.new(1, -24, 0, 1)
 		list.Position = UDim2.fromOffset(10, 70); list.Size = UDim2.new(1, -20, 1, -134)
 		statusCard.Position = UDim2.new(0, 10, 1, -56); statusCard.Size = UDim2.new(1, -20, 0, 48)

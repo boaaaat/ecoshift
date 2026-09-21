@@ -256,7 +256,8 @@ function ItemTooltip.new(owner)
    local lines={gear.Description or "","Grade "..tostring(grade)}
    if gear.Kind=="Weapon" then
     table.insert(lines,string.format("Base damage %.1f / range %.1f studs / %.2fs attack",(data.Durability or 1)>0 and (gear.Damage or 0) or 0,gear.Reach or 0,gear.AttackCycle or 1))
-    table.insert(lines,"Special: "..(gear.Special or "None").." / 20 stamina / 8s cooldown")
+    table.insert(lines,string.format("%s / %s stamina / %ss cooldown",gear.SpecialName or gear.Special or "None",gear.SpecialStamina or 20,gear.SpecialCooldown or 8))
+    if gear.SpecialDescription then table.insert(lines,gear.SpecialDescription) end
    elseif gear.Kind=="Tool" then
     table.insert(lines,string.format("Breaking power %.0f / combat damage %.0f",(data.Durability or 1)>0 and (gear.Power or 0)*2^(grade-gear.Grade) or 0,data.Id=="Harvester" and 6 or 0))
    elseif gear.Kind=="Armor" then

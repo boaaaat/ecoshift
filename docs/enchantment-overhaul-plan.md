@@ -120,7 +120,7 @@ Signature enchantments use an exact `AllowedItems` list. They occupy a normal en
 
 | Weapon | Signature enchantment | Ranks | Effect |
 |---|---|---:|---|
-| Storm Bow, G5 | Forked Current | II | Its piercing special chains to 1/2 additional visible monsters for 25/35% damage. A chain hit cannot start another chain. |
+| Storm Bow, G5 | Forked Current | II | Lightning Rod pulses hit 1/2 additional visible monsters and deal 25/35% more pulse damage. Pulses do not chain recursively. |
 | Ironwood Bow, G6 | Root Pin | II | A fully drawn hit roots a non-boss for 0.75/1.25 seconds. Bosses are slowed 15/25% for 1.5 seconds instead. Six-second per-target cooldown. |
 | Star Bow, G8 | Starfall Trace | I | A fully drawn hit marks its impact; after 0.6 seconds a star pulse deals 25% arrow damage in a six-stud radius. Four-second cooldown. |
 | Thunder Hammer, G5 | Rolling Charge | II | Staggering a monster arcs 20/30% weapon damage to 1/2 nearby monsters. Each target can be hit once per trigger. |

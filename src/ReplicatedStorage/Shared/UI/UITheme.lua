@@ -9,6 +9,69 @@ function Theme.IsMobile()
 	return UserInputService.PreferredInput == Enum.PreferredInput.Touch
 end
 
+-- These dimensions are Roblox UI pixels, not the device's physical resolution.
+-- Use the ScreenGui's safe area so phones, iPads and rotated tablets agree.
+function Theme.MobileMetrics(available)
+	local portrait = available.X < available.Y
+	local tablet = math.min(available.X, available.Y) >= 600
+	local button = tablet and 48 or 44
+	local hotbarScale = math.min(tablet and .95 or .8, (available.X - 24) / 422)
+	local hotbarBottom = portrait and 104 or 8
+	return {
+		Portrait = portrait, Tablet = tablet, Button = button, Gap = 8,
+		HUDScale = tablet and 1 or .9,
+		MapSize = tablet and 136 or (portrait and 108 or 92),
+		HotbarScale = hotbarScale, HotbarBottom = hotbarBottom,
+		HotbarTop = hotbarBottom + 72 * hotbarScale,
+		ActionRight = tablet and 156 or 118,
+		ActionBottom = tablet and 48 or 24,
+	}
+end
+
+-- Pack and chest must compute the same rectangles, including in portrait.
+-- Their grids scroll at native size instead of shrinking both inventories.
+function Theme.MobileInventoryLayout(available, chestOpen)
+	local metrics = Theme.MobileMetrics(available)
+	local width = math.min(available.X - 16, metrics.Tablet and 920 or 740)
+	local height = math.min(available.Y - metrics.HotbarTop - 20, metrics.Tablet and 600 or 520)
+	local left, top = (available.X - width) / 2, 8
+	local gap, chestWidth, chestHeight = 12, 0, 0
+	local packWidth, packHeight = width, height
+	local sideBySide = chestOpen and not metrics.Portrait
+	if chestOpen then
+		if sideBySide then
+			chestWidth = math.floor((width - gap) * .44)
+			packWidth, chestHeight = width - gap - chestWidth, height
+		else
+			chestWidth, chestHeight = width, math.floor((height - gap) * .34)
+			packHeight = height - gap - chestHeight
+		end
+	end
+	return {
+		PackSize = Vector2.new(packWidth, packHeight),
+		PackPosition = Vector2.new(left + (sideBySide and chestWidth + gap or 0), top + (chestOpen and not sideBySide and chestHeight + gap or 0)),
+		ChestSize = Vector2.new(chestWidth, chestHeight), ChestPosition = Vector2.new(left, top),
+		Cell = metrics.Tablet and 60 or 52,
+	}
+end
+
+-- A scrolled-off slot is not a valid touch/drop target even if its rectangle
+-- extends behind another panel. Points use the same coordinates as AbsolutePosition.
+function Theme.IsPointVisible(object, point)
+	local current = object
+	while current do
+		if current:IsA("GuiObject") then
+			if not current.Visible then return false end
+			if current == object or current.ClipsDescendants then
+				local position, size = current.AbsolutePosition, current.AbsoluteSize
+				if point.X < position.X or point.Y < position.Y or point.X > position.X + size.X or point.Y > position.Y + size.Y then return false end
+			end
+		elseif current:IsA("ScreenGui") then return current.Enabled end
+		current = current.Parent
+	end
+	return false
+end
+
 -- Observe the usable ScreenGui area, including device notches and Roblox insets.
 function Theme.BindResponsive(root, callback)
 	local connections, cameraConnection = {}, nil
@@ -242,7 +305,7 @@ function Theme.Fit(frame, width, height, maximum, scaleEdgeOffsets)
 		-- Scale the field kit with desktop resolution, including 1440p/4K.
 		-- Small screens still fit within their available width and height.
 		local desktopScale = math.clamp(math.min(viewport.X / 1440, viewport.Y / 900), 1, 2.5)
-		scale.Scale = math.min(maximum or desktopScale, math.max(0.1, (viewport.X - 40) / width), math.max(0.1, (viewport.Y - 90) / height))
+		scale.Scale = math.min(Theme.IsMobile() and math.min(maximum or 1, 1) or (maximum or desktopScale), math.max(0.1, (viewport.X - 40) / width), math.max(0.1, (viewport.Y - 90) / height))
 		scale:SetAttribute("TargetScale", scale.Scale)
 		if scaleEdgeOffsets then
 			frame.Position = UDim2.new(designPosition.X.Scale, designPosition.X.Offset * scale.Scale,
@@ -257,8 +320,10 @@ function Theme.Fit(frame, width, height, maximum, scaleEdgeOffsets)
 		update()
 	end
 	local changed = Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(bindCamera)
+	local inputChanged = UserInputService:GetPropertyChangedSignal("PreferredInput"):Connect(update)
 	frame.Destroying:Connect(function()
 		changed:Disconnect()
+		inputChanged:Disconnect()
 		if cameraConnection then cameraConnection:Disconnect() end
 	end)
 	bindCamera()
@@ -318,9 +383,15 @@ function Theme.FitMenu(frame, width, height, options)
 		mobile = touch
 		if touch then
 			local availableWidth = math.max(1, available.X - 16)
-			local contentWidth = math.max(options.MobileWidth or math.min(width, 360), availableWidth)
-			local factor = math.min(1, availableWidth / contentWidth)
-			local contentHeight = math.max(options.MobileHeight or height, (available.Y - 16) / factor)
+			local metrics = Theme.MobileMetrics(available)
+			local contentWidth = math.min(availableWidth, math.max(options.MobileWidth or 360, options.MobileMaxWidth or (metrics.Tablet and 760 or 680)))
+			local factor = 1
+			local viewportHeight = math.min(available.Y - 16, options.MobileMaxHeight or 760)
+			local contentHeight = options.MobileFitHeight and viewportHeight or math.max(options.MobileHeight or height, viewportHeight)
+			host.Position = UDim2.fromOffset((available.X - contentWidth) / 2, (available.Y - viewportHeight) / 2)
+			host.Size = UDim2.fromOffset(contentWidth, viewportHeight)
+			host.ScrollingEnabled = not options.MobileFitHeight
+			close.Position = UDim2.fromOffset((available.X + contentWidth) / 2 - 8, (available.Y - viewportHeight) / 2 + 4)
 			frame.Parent, frame.AnchorPoint, frame.Position = host, Vector2.zero, UDim2.fromOffset(0, 0)
 			frame.Size = UDim2.fromOffset(contentWidth, contentHeight)
 			scale.Scale = factor

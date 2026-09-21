@@ -12,12 +12,33 @@ local ResourceItemMap = require(ReplicatedStorage.Shared.ResourceItemMap)
 
 local ItemInstance = require(ReplicatedStorage.Shared.ItemInstance)
 local ItemDropService = { _worldActive = false }
-local entries = setmetatable({}, {__mode="k"})
-local lifetimes = setmetatable({}, {__mode="k"})
-local claiming = setmetatable({}, {__mode="k"})
-local shiftAnchors = setmetatable({}, {__mode="k"})
+-- Own live drops until they are removed. Parenting an Instance to Workspace
+-- does not keep its Luau wrapper alive in a weak-key table: GC can otherwise
+-- erase the pickup entry while the physical item is still on the ground.
+local entries = {}
+local lifetimes = {}
+local claiming = {}
+local shiftAnchors = {}
 local DROP_LIFETIME_SECONDS = 10 * 60
 local AUTO_PICKUP_RADIUS = 4
+
+local function forgetDrop(model)
+	entries[model], lifetimes[model], claiming[model], shiftAnchors[model] = nil, nil, nil, nil
+end
+
+local function withinPickupRange(root, collider)
+	-- Large or rotated drops can keep the avatar outside a center-based radius.
+	-- Measure from the lower torso to the nearest point on the actual collider.
+	local origin = root.Position - Vector3.new(0, root.Size.Y * .5, 0)
+	local point = collider.CFrame:PointToObjectSpace(origin)
+	local half = collider.Size * .5
+	local nearest = Vector3.new(
+		math.clamp(point.X, -half.X, half.X),
+		math.clamp(point.Y, -half.Y, half.Y),
+		math.clamp(point.Z, -half.Z, half.Z)
+	)
+	return (point - nearest).Magnitude <= AUTO_PICKUP_RADIUS
+end
 
 local function finiteVector(value)
 	return typeof(value) == "Vector3" and value.X == value.X and value.Y == value.Y
@@ -134,16 +155,28 @@ local function tryAutoPickup(model, plr)
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
 	local root = char and char:FindFirstChild("HumanoidRootPart")
 	if not hum or hum.Health <= 0 or not root or plr:GetAttribute("IsDead") then return false end
-	if (root.Position - part.Position).Magnitude > AUTO_PICKUP_RADIUS then return false end
+	if not withinPickupRange(root, part) then return false end
 	local id = ResourceItemMap.Normalize(model:GetAttribute("ItemId"))
 	local count = model:GetAttribute("Count") or 1
 	if type(id) ~= "string" or not ItemDatabase:Get(id) then return false end
 	if typeof(count) ~= "number" or count % 1 ~= 0 or count <= 0 or count == math.huge then return false end
 	claiming[model] = true
-	local entry = entries[model] or {Id=id,N=count}
-	local added = InventoryService:GiveEntry(plr, entry, true)
+	local entry = ItemInstance.Copy(entries[model] or {Id=id,N=count})
+	entry.N = count
+	-- Commit inventory and ground count together, before Sync callbacks can yield.
+	-- A nearly full pack should collect what fits without losing the remainder.
+	local added = InventoryService:GiveEntry(plr, entry, false, true)
 	if added > 0 then
-		model:Destroy()
+		local remaining = count - added
+		if remaining > 0 then
+			entry.N = remaining
+			entries[model] = entry
+			model:SetAttribute("Count", remaining)
+		else
+			forgetDrop(model)
+			model:Destroy()
+		end
+		claiming[model] = nil
 		return true
 	end
 	claiming[model] = nil
@@ -266,6 +299,7 @@ function ItemDropService:SpawnDrop(itemId, count, position, options)
 	setAnchoredRecursive(model, false)
 	model:SetAttribute("ItemId", itemId)
 	model:SetAttribute("Count", count)
+	model.Destroying:Connect(function() forgetDrop(model) end)
 	entries[model] = ItemInstance.New(itemId,count,options and options.Entry)
 	lifetimes[model] = math.clamp(tonumber(options and options.LifetimeRemaining) or DROP_LIFETIME_SECONDS, 0, DROP_LIFETIME_SECONDS)
 	if options and options.PendingPickup then model:SetAttribute("PickupPending", true) end
@@ -358,12 +392,19 @@ RunService.Heartbeat:Connect(function(delta)
 			end
 		end
 		local players = Players:GetPlayers()
+		local collected = {}
 		for model in pairs(entries) do
-			if model.Parent and not model:GetAttribute("PickupPending") then
+			if not model.Parent then
+				forgetDrop(model)
+			elseif not model:GetAttribute("PickupPending") then
 				for _, plr in ipairs(players) do
-					if tryAutoPickup(model, plr) then break end
+					if tryAutoPickup(model, plr) then collected[plr] = true; break end
 				end
 			end
+		end
+		-- One update per collector, after every claimed drop has been settled.
+		for plr in pairs(collected) do
+			if plr.Parent == Players then InventoryService:Sync(plr) end
 		end
 	end
 	lifetimeAccumulator += delta
@@ -372,7 +413,7 @@ RunService.Heartbeat:Connect(function(delta)
 	lifetimeAccumulator = 0
 	for model, remaining in pairs(lifetimes) do
 		if not model.Parent then
-			lifetimes[model] = nil
+			forgetDrop(model)
 		elseif not model:GetAttribute("PickupPending") then
 			remaining -= elapsed
 			if remaining <= 0 then

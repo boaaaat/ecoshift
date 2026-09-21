@@ -245,6 +245,20 @@ local function layout(_, available)
 	kit.Size=portrait and UDim2.fromOffset(92,92) or UDim2.fromOffset(mobile and 140 or 300,mobile and 44 or 32)
 	kit.AnchorPoint=Vector2.new(portrait and 0 or .5,1)
 	kit.Position=portrait and UDim2.new(0,8,1,-176) or UDim2.new(.5,mobile and -36 or 0,1,mobile and -64 or -94*desktopScale)
+	if mobile then
+		local metrics = Theme.MobileMetrics(available)
+		local index = 0
+		for _, button in ipairs(navigationButtons) do
+			if button.Visible then
+				button.Size = UDim2.fromOffset(metrics.Button, metrics.Button)
+				button.Position = UDim2.fromOffset(index * (metrics.Button + metrics.Gap), 0)
+				index += 1
+			end
+		end
+		kit.Size = UDim2.fromOffset(index * (metrics.Button + metrics.Gap) - metrics.Gap, metrics.Button)
+		kit.AnchorPoint = Vector2.new(.5, 1)
+		kit.Position = UDim2.new(.5, 0, 1, -metrics.HotbarTop - metrics.Gap)
+	end
 	positionNavigation()
 	task.defer(positionNavigation)
 

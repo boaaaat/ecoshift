@@ -25,6 +25,10 @@ make("UIPadding",search,{PaddingLeft=UDim.new(0,12),PaddingRight=UDim.new(0,12)}
 local list=make("ScrollingFrame",panel,{Position=UDim2.fromOffset(18,65),Size=UDim2.new(1,-36,1,-123),BackgroundTransparency=1,BorderSizePixel=0,CanvasSize=UDim2.new(),AutomaticCanvasSize=Enum.AutomaticSize.Y,ScrollBarThickness=5})
 make("UIListLayout",list,{Padding=UDim.new(0,8)})
 local status=make("TextLabel",panel,{Position=UDim2.new(0,18,1,-52),Size=UDim2.new(1,-36,0,44),Text="Choose an item.",TextSize=15,TextColor3=colors.Text,Font=Enum.Font.Gotham,TextWrapped=true,BackgroundTransparency=1})
+Theme.BindResponsive(gui,function(mobile,available)
+ panel.Size=mobile and UDim2.fromOffset(math.min(840,available.X-16),math.min(760,available.Y-16)) or UDim2.new(.95,0,.92,0)
+ title.TextSize=mobile and 20 or 24
+end)
 local state,selected,enchantment,page,inventory,workshop=nil,nil,nil,"Gear",nil,false
 local requests=RemoteRequest.new(remote)
 local searchQuery=""

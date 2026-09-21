@@ -99,6 +99,10 @@ local function canUseTool(cooldown)
 	if now - lastClientFire < cooldown then return false end
 	lastClientFire = now
 	if activeTool then ItemCooldown.StartTool(activeTool, cooldown) end
+	if activeTool then
+		activeTool:SetAttribute("LocalItemActionKind", "Attack")
+		activeTool:SetAttribute("LocalItemActionStarted", Workspace:GetServerTimeNow())
+	end
 	return true
 end
 
@@ -129,7 +133,7 @@ local function startBowCharge()
 	if wtype ~= "bow" and wtype ~= "bows" then return end
 	bowCharging = true
 	player:SetAttribute("BowChargeStarted",os.clock())
-	CombatRE:FireServer("ChargeStart")
+	CombatRE:FireServer("ChargeStart", buildAimData(activeWeapon:GetRange()))
 end
 
 local function releaseBowCharge()
@@ -141,6 +145,10 @@ local function releaseBowCharge()
 		return
 	end
 	local data = buildAimData(activeWeapon:GetRange())
+	if activeTool then
+		activeTool:SetAttribute("LocalItemActionKind", "Release")
+		activeTool:SetAttribute("LocalItemActionStarted", Workspace:GetServerTimeNow())
+	end
 	CombatRE:FireServer("ChargeRelease", data)
 end
 

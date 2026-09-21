@@ -353,6 +353,7 @@ Theme.BindResponsive(gui,function(mobile,available)
  local scale=mobile and 1 or math.clamp(math.min(available.X/1440,available.Y/900),1,2.5)
  panelScale.Scale=scale
  panel.Size=UDim2.fromOffset(math.max(280,math.min(mobile and 900 or 850,(available.X-20)/scale)),math.max(240,math.min(mobile and available.Y-16 or 760,(available.Y-16)/scale)))
+ if mobile then panel.Size=UDim2.fromOffset(math.min(840,available.X-16),math.min(760,available.Y-16)) end
  if gui.Enabled then render() end
 end)
 local elapsed=0

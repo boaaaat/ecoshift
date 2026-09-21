@@ -116,7 +116,11 @@ local closeCorner = Instance.new("UICorner")
 closeCorner.CornerRadius = UDim.new(0, 6)
 closeCorner.Parent = closeButton
 
-local slotContainer = Instance.new("Frame")
+local slotContainer = Instance.new("ScrollingFrame")
+slotContainer.BorderSizePixel = 0
+slotContainer.ScrollBarThickness = 0
+slotContainer.ScrollingDirection = Enum.ScrollingDirection.Y
+slotContainer.CanvasSize = UDim2.new()
 slotContainer.Name = "Slots"
 slotContainer.Size = UDim2.new(1, -MARGIN * 2, 1, -54)
 slotContainer.Position = UDim2.new(0, MARGIN, 0, 46)
@@ -278,7 +282,7 @@ local function slotAtPoint(point, frames, touch)
 	for _, frame in ipairs(frames) do
 		local pos = frame.AbsolutePosition
 		local size = frame.AbsoluteSize
-		if adjusted.X >= pos.X and adjusted.X <= pos.X + size.X and adjusted.Y >= pos.Y and adjusted.Y <= pos.Y + size.Y then
+		if adjusted.X >= pos.X and adjusted.X <= pos.X + size.X and adjusted.Y >= pos.Y and adjusted.Y <= pos.Y + size.Y and (not touch or Theme.IsPointVisible(frame, adjusted)) then
 			return frame
 		end
 	end
@@ -459,6 +463,7 @@ local function endDrag(mousePoint, touch)
 	dragging.InvFrames = nil
 	dragging.ChestFrames = nil
 	dragging.Input, dragging.PendingIndex, dragging.StartPos = nil, nil, nil
+	slotContainer.ScrollingEnabled = Theme.IsMobile()
 
 	if not currentChestId or not chestRemote then return end
 
@@ -679,6 +684,13 @@ local function createSlot(index, x, y)
 		elseif input.UserInputType == Enum.UserInputType.Touch and chestSlotData(index) then
 			hideContextMenu()
 			dragging.Input, dragging.PendingIndex, dragging.StartPos = input, index, input.Position
+			task.delay(.25, function()
+				if dragging.Input == input and dragging.PendingIndex == index then
+					dragging.PendingIndex = nil
+					beginChestDrag(index)
+					if dragging.Active then slotContainer.ScrollingEnabled = false end
+				end
+			end)
 		end
 	end)
 
@@ -766,9 +778,7 @@ end
 UserInputService.InputChanged:Connect(function(input)
 	local touch = input == dragging.Input
 	if touch and dragging.PendingIndex and dragging.StartPos and (input.Position - dragging.StartPos).Magnitude >= 10 then
-		local index = dragging.PendingIndex
 		dragging.PendingIndex = nil
-		beginChestDrag(index)
 	end
 	if dragging.Active and (touch or (not dragging.Input and input.UserInputType == Enum.UserInputType.MouseMovement)) then
 		if dragging.Ghost then
@@ -837,32 +847,46 @@ arrangeChest = function()
 	local viewport = camera.ViewportSize
 	local topInset, bottomInset = GuiService:GetGuiInset()
 	local width, height = viewport.X - topInset.X - bottomInset.X, viewport.Y - topInset.Y - bottomInset.Y
-	local portrait = mobile and width < height
-	local packWidth, packHeight = 446, mobile and 292 or 380
-	local chestHeight = (mobile and 78 or 60) + math.max(1, math.ceil(slotCount / COLS)) * (SLOT_SIZE + SLOT_GAP)
-	local hotbarScale = math.min(1.5, (width - 64) / 422)
-	local bottomReserve = mobile and (portrait and 192 or 96) or (18 + 72 * hotbarScale + 24)
-	local availableHeight = math.max(120, height - bottomReserve)
-	local totalWidth = portrait and math.max(packWidth, 382) or packWidth + 382 + 24
-	local totalHeight = portrait and (packHeight + chestHeight + 12) or math.max(packHeight, chestHeight)
-	local scale = math.min(mobile and 1.65 or 2.5, (width - 24) / totalWidth, availableHeight / totalHeight)
+	if mobile then width, height = gui.AbsoluteSize.X, gui.AbsoluteSize.Y end
+	if width <= 1 or height <= 1 then return end
+	local touchLayout = mobile and Theme.MobileInventoryLayout(Vector2.new(width, height), true)
+	local chestHeight = 60 + math.max(1, math.ceil(slotCount / COLS)) * (SLOT_SIZE + SLOT_GAP)
+	local scale = 1
+	panel.AnchorPoint = Vector2.new(0.5, 0.5)
+	if touchLayout then
+		panel.Size = UDim2.fromOffset(touchLayout.ChestSize.X, touchLayout.ChestSize.Y)
+		panel.Position = UDim2.fromOffset(touchLayout.ChestPosition.X + touchLayout.ChestSize.X / 2, touchLayout.ChestPosition.Y + touchLayout.ChestSize.Y / 2)
+	else
+		local hotbarScale = math.min(1.5, (width - 64) / 422)
+		local availableHeight = math.max(120, height - (18 + 72 * hotbarScale + 24))
+		scale = math.min(2.5, (width - 24) / (446 + 382 + 24), availableHeight / math.max(380, chestHeight))
+		panel.Size = UDim2.fromOffset(382, chestHeight)
+		panel.Position = UDim2.fromOffset(width * .5 - (446 + 24) * scale * .5, availableHeight * .5 + 8)
+	end
 	chestScale.Scale = scale
 	chestScale:SetAttribute("TargetScale", scale)
-	panel.Size = UDim2.fromOffset(382, chestHeight)
-	panel.AnchorPoint = Vector2.new(0.5, 0.5)
-	panel.Position = UDim2.fromOffset(width * 0.5 - (portrait and 0 or (packWidth + 24) * scale * 0.5), availableHeight * 0.5 + 8 - (portrait and (packHeight + 12) * scale * 0.5 or 0))
-	title.TextSize = mobile and 22 or 20
+	title.TextSize = mobile and 18 or 20
 	closeButton.Size = UDim2.fromOffset(mobile and 64 / scale or 64, mobile and 44 / scale or 40)
 	closeButton.Text = mobile and "X" or "Close"
 	closeButton.TextSize = mobile and 18 / scale or 12
 	closeButton.AnchorPoint = Vector2.new(1, 0)
 	closeButton.Position = UDim2.new(1, -MARGIN, 0, 4)
-	transferStatusLabel.TextSize = mobile and 14 or 12
-	transferStatusLabel.Position = UDim2.new(0, MARGIN, 1, 12)
-	slotContainer.Position = UDim2.fromOffset(MARGIN, mobile and 76 or 58)
-	for _, slot in ipairs(slots) do
+	transferStatusLabel.TextSize = mobile and 11 or 12
+	transferStatusLabel.Position = mobile and UDim2.new(0, MARGIN, 1, -18) or UDim2.new(0, MARGIN, 1, 12)
+	slotContainer.Position = UDim2.fromOffset(MARGIN, mobile and 52 or 58)
+	slotContainer.Size = UDim2.new(1, -MARGIN * 2, 1, mobile and -76 or -54)
+	slotContainer.ScrollingEnabled = mobile and not dragging.Active
+	slotContainer.ClipsDescendants = mobile
+	slotContainer.ScrollBarThickness = mobile and 6 or 0
+	local columns = mobile and math.max(3, math.floor((touchLayout.ChestSize.X - MARGIN * 2 - 8 + SLOT_GAP) / (touchLayout.Cell + SLOT_GAP))) or COLS
+	local cell = mobile and math.floor((touchLayout.ChestSize.X - MARGIN * 2 - 8 - (columns - 1) * SLOT_GAP) / columns) or SLOT_SIZE
+	slotContainer.CanvasSize = mobile and UDim2.fromOffset(0, math.ceil(slotCount / columns) * (cell + SLOT_GAP)) or UDim2.new()
+	if not mobile then slotContainer.CanvasPosition = Vector2.zero end
+	for index, slot in ipairs(slots) do
+		slot.Frame.Size = UDim2.fromOffset(cell, cell)
+		slot.Frame.Position = UDim2.fromOffset((index - 1) % columns * (cell + SLOT_GAP), math.floor((index - 1) / columns) * (cell + SLOT_GAP))
 		slot.ItemText.TextSize = mobile and 12 / scale or 12
-		slot.ItemText.TextWrapped = false
+		slot.ItemText.TextWrapped = mobile
 		slot.ItemText.TextTruncate = Enum.TextTruncate.AtEnd
 		slot.ItemText.Size = UDim2.new(1, -8, 0, mobile and 26 / scale or 40)
 		slot.ItemText.Position = UDim2.fromOffset(4, mobile and 2 / scale or 7)
@@ -875,6 +899,7 @@ arrangeChest = function()
 end
 
 UserInputService:GetPropertyChangedSignal("PreferredInput"):Connect(arrangeChest)
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(arrangeChest)
 local chestViewportConnection
 local function bindChestViewport()
 	if chestViewportConnection then chestViewportConnection:Disconnect() end

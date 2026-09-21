@@ -107,6 +107,38 @@ local fill=create("Frame",progress,{Name="Fill",Size=UDim2.fromScale(0,1),Backgr
 Theme.Corner(fill,2)
 local status=label(panel,"",20,13); status.Name="Status"; status.Position=UDim2.new(0,16,1,-26); status.Size=UDim2.new(1,-32,0,20)
 
+local function layoutMobileGuide()
+	if not Theme.IsMobile() then return end
+	local width, height = panel.Size.X.Offset, panel.Size.Y.Offset
+	local node = stack[#stack]
+	local library = node and node.Library == true
+	local split = not library and width >= 620 and height < 500
+	local actionWidth = split and 250 or width - 32
+	local actionX = split and width - actionWidth - 16 or 16
+	local actionY = split and 100 or height - 176
+	back.Size = UDim2.fromOffset(76, 44)
+	title.TextSize = 17
+	trail.Position = UDim2.fromOffset(16, 62)
+	search.Position = UDim2.fromOffset(16, 96)
+	search.Size = UDim2.new(1, -32, 0, 40)
+	local contentY = library and 144 or 100
+	content.Position = UDim2.fromOffset(16, contentY)
+	content.Size = UDim2.new(1, split and -actionWidth - 48 or -32, 1, -contentY - ((library or split) and 32 or 184))
+	controls.Position = UDim2.fromOffset(actionX, actionY)
+	controls.Size = UDim2.fromOffset(actionWidth, 44)
+	batchCaption.Visible = not split
+	local start = split and 0 or 56
+	minus.Position = UDim2.fromOffset(start, 0); minus.Size = UDim2.fromOffset(44, 44)
+	quantity.Position = UDim2.fromOffset(start + 48, 0); quantity.Size = UDim2.fromOffset(54, 44)
+	plus.Position = UDim2.fromOffset(start + 106, 0); plus.Size = UDim2.fromOffset(44, 44)
+	maximum.Position = UDim2.fromOffset(start + 154, 0); maximum.Size = UDim2.fromOffset(actionWidth - start - 154, 44)
+	summary.Position = UDim2.fromOffset(actionX, actionY + 50); summary.Size = UDim2.fromOffset(actionWidth, 22)
+	timing.Position = UDim2.fromOffset(actionX, actionY + 76); timing.Size = UDim2.fromOffset(actionWidth, 22)
+	for _, text in ipairs({summary, timing}) do text.TextWrapped = false; text.TextTruncate = Enum.TextTruncate.AtEnd end
+	craft.Position = UDim2.fromOffset(actionX, actionY + 102); craft.Size = UDim2.fromOffset(actionWidth, 48)
+	craft.Visible, summary.Visible, timing.Visible = not library, not library, not library
+end
+
 local function current() return stack[#stack] end
 local function selectedRecipe(node)
 	if not node or not node.RecipeId then return nil end
@@ -285,6 +317,7 @@ render=function()
 	search.Visible=node.Library==true
 	content.Position=UDim2.fromOffset(16,node.Library and 130 or 90)
 	content.Size=UDim2.new(1,-32,1,node.Library and -314 or -274)
+	layoutMobileGuide()
 	syncingInput=true
 	quantity.Text=node.QuantityText or "1"
 	if node.Library then search.Text=node.Query or "" end
@@ -487,9 +520,12 @@ RunService.Heartbeat:Connect(function(delta)
 	if accumulator>=.5 then accumulator=0; refresh() end
 end)
 player:GetAttributeChangedSignal("Class_CraftBonus"):Connect(function() if gui.Enabled then refresh() end end)
-Theme.FitMenu(panel,620,670,{OnClose=function() gui.Enabled=false end,MobileWidth=360,OnResize=function(width, _, mobile)
+Theme.FitMenu(panel,620,670,{OnClose=function() gui.Enabled=false end,MobileFitHeight=true,MobileMaxWidth=840,OnResize=function(width, _, mobile)
 	close.Visible = not mobile
-	if not mobile then return end
+	if not mobile then
+		craft.Visible, summary.Visible, timing.Visible, batchCaption.Visible = true, true, true, true
+		return
+	end
 	back.Size=UDim2.fromOffset(76,44); close.Size=UDim2.fromOffset(44,44)
 	close.Position=UDim2.new(1,-56,0,8)
 	title.TextSize=17
@@ -499,5 +535,6 @@ Theme.FitMenu(panel,620,670,{OnClose=function() gui.Enabled=false end,MobileWidt
 	plus.Position=UDim2.fromOffset(166,0); plus.Size=UDim2.fromOffset(44,44)
 	maximum.Position=UDim2.fromOffset(216,0); maximum.Size=UDim2.new(1,-216,0,44)
 	content.ScrollBarThickness=6
+	layoutMobileGuide()
 end})
 return Guide

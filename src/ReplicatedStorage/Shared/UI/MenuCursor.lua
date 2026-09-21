@@ -37,10 +37,10 @@ function MenuCursor.Bind(root)
 	modal.BackgroundTransparency = 1
 	modal.Text = ""
 	-- Roblox's camera controller only honors Modal while its GuiButton is active.
-	-- This suspends shift lock without placing a click-blocking surface over menus.
-	modal.Active = true
+	-- Both properties stay disabled until a menu actually needs the cursor.
+	modal.Active = false
 	modal.Selectable = false
-	modal.Modal = true
+	modal.Modal = false
 	modal.Visible = false
 	modal.Parent = gui
 	playerGui:SetAttribute("MenuCursorOpen", false)
@@ -51,8 +51,19 @@ function MenuCursor.Bind(root)
 		end
 		if visible ~= open then
 			open = visible
-			modal.Visible = open
-			if open then previousIcon = UIS.MouseIconEnabled else UIS.MouseIconEnabled = previousIcon end
+			if open then
+				previousIcon = UIS.MouseIconEnabled
+				modal.Visible = true
+				modal.Active = true
+				modal.Modal = true
+			else
+				-- Release the modal before the stock camera runs so shift lock can
+				-- reclaim the pointer during this frame's camera update.
+				modal.Modal = false
+				modal.Active = false
+				modal.Visible = false
+				UIS.MouseIconEnabled = previousIcon
+			end
 			playerGui:SetAttribute("MenuCursorOpen", open)
 		end
 	end)

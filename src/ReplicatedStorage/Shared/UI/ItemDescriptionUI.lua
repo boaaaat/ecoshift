@@ -24,6 +24,7 @@ function DescriptionUI.Mount(card, item, ingredients, top, inset)
 		card.Size = UDim2.new(card.Size.X.Scale, card.Size.X.Offset, 0, ingredientsTop + ingredients.Size.Y.Offset + 8)
 	end
 	card:GetPropertyChangedSignal("AbsoluteSize"):Connect(resize)
+	ingredients:GetPropertyChangedSignal("Size"):Connect(resize)
 	resize()
 	return description
 end

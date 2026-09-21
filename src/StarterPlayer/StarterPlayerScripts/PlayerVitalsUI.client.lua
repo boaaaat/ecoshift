@@ -93,9 +93,10 @@ inputService.InputEnded:Connect(function(input)
 	end
 end)
 local function updatePlacementVisibility()
-	panel.Visible = not (Theme.IsMobile() and gui.Parent:GetAttribute("BuildPlacementActive"))
+	panel.Visible = not (Theme.IsMobile() and (gui.Parent:GetAttribute("BuildPlacementActive") or gui.Parent:GetAttribute("MenuCursorOpen")))
 end
 gui.Parent:GetAttributeChangedSignal("BuildPlacementActive"):Connect(updatePlacementVisibility)
+gui.Parent:GetAttributeChangedSignal("MenuCursorOpen"):Connect(updatePlacementVisibility)
 local function layout(_, available)
 	local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(900, 610)
 	local mobile = Theme.IsMobile()
@@ -123,7 +124,7 @@ local function layout(_, available)
 	panel.Active=mobile
 	panel.BackgroundTransparency=mobile and .4 or .04
 	if mobile then
-		scale.Scale=1;panel.Size=UDim2.fromOffset(184,90)
+		scale.Scale=Theme.MobileMetrics(available).HUDScale;panel.Size=UDim2.fromOffset(184,90)
 		panel.Position=UDim2.fromOffset(8,gui.Parent:GetAttribute("MobileTopbarFallback") and 54 or 6)
 	end
 	for i,bar in ipairs(meters) do

@@ -8,7 +8,7 @@ Settings.Definitions = {
 	ShowFieldNotes = { Label = "Field notes on HUD", Default = true, Section = "Gameplay" },
 	ShowNavigation = { Label = "Field kit shortcuts on HUD", Default = true, Section = "Gameplay" },
 	SprintMode = { Label = "Sprint mode", Default = "Hold", Values = { "Hold", "Toggle" }, Section = "Gameplay" },
-	GraphicsQuality = { Label = "Effects quality", Default = "High", Values = { "Low", "Medium", "High" }, Section = "Graphics" },
+	GraphicsQuality = { Label = "Graphics quality", Default = "High", Values = { "Low", "Medium", "High", "Ultra" }, Section = "Graphics" },
 	RenderDistance = { Label = "Render distance", Default = "Auto", Values = { "Auto", "Near", "Medium", "Far", "Very Far" }, Section = "Graphics" },
 	Shadows = { Label = "World shadows", Default = true, Section = "Graphics" },
 	WeatherParticles = { Label = "Weather particles", Default = true, Section = "Graphics" },

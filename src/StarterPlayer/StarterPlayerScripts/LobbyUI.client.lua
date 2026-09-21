@@ -932,7 +932,7 @@ Theme.BindResponsive(panel,function(mobile,available)
 	for c,properties in pairs(desktopGeometry) do if c.Parent then for k,v in pairs(properties) do c[k]=v end end end
 	panel.AnchorPoint=Vector2.new(.5,.5);panel.Position=UDim2.fromScale(.5,.5)
 	if mobile then
-		deskScale.Scale=1;panel.Size=UDim2.fromOffset(available.X-12,available.Y-12)
+		deskScale.Scale=1;panel.Size=UDim2.fromOffset(math.min(920,available.X-16),math.min(760,available.Y-16))
 		for _,c in ipairs(panel:GetChildren()) do
 			if c:IsA("TextLabel") and c~=funds and c~=feedback then
 				c.Visible=c.Text=="ECO / SHIFT";if c.Visible then mobileText(c,12,4,128,34,19) end

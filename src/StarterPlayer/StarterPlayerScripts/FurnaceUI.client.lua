@@ -364,5 +364,6 @@ inventoryRemote:FireServer("RequestSnapshot")
 UIS.InputBegan:Connect(function(input,processed)if not processed and gui.Enabled and input.KeyCode==Enum.KeyCode.Escape then close() end end)
 Theme.BindResponsive(gui,function(mobile,available)
  panel.Size=UDim2.fromOffset(math.max(280,math.min(850,available.X-20)),math.max(230,math.min(mobile and available.Y-16 or 740,available.Y-16)))
+ if mobile then panel.Size=UDim2.fromOffset(math.min(840,available.X-16),math.min(760,available.Y-16)) end
  if gui.Enabled then render() end
 end)

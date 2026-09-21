@@ -825,9 +825,9 @@ print("[CraftingUI] Ready - Press C for hand crafting (basic items)")
 print("[CraftingUI] Place workbenches for advanced recipes!")
 
 Theme.CaptureCursor(mainPanel); Theme.Panel(mainPanel)
-Theme.FitMenu(mainPanel, 452, 610, {OnClose = closeCrafting, MobileWidth = 360, MobileHeight = 610, OnResize = function(width, _, mobile)
+Theme.FitMenu(mainPanel, 452, 610, {OnClose = closeCrafting, MobileFitHeight = true, MobileMaxWidth = 840, OnResize = function(width, height, mobile)
 	closeBtn.Visible = not mobile
-	if not mobile then return end
+	if not mobile then quantityLabel.Visible = true; shadow.Visible = true; return end
 	closeBtn.Size = UDim2.fromOffset(44, 44)
 	recipeBookBtn.Size = UDim2.fromOffset(104, 44)
 	recipeBookBtn.Position = UDim2.new(1, -172, 0, 4)
@@ -840,6 +840,30 @@ Theme.FitMenu(mainPanel, 452, 610, {OnClose = closeCrafting, MobileWidth = 360, 
 	maxBtn.Position = UDim2.fromOffset(218, 0); maxBtn.Size = UDim2.new(1, -218, 0, 44)
 	batchSummary.TextSize = 14; batchTime.TextSize = 14
 	recipeContainer.ScrollBarThickness = 6
+	shadow.Visible = false
+	local split = width >= 620 and height < 500
+	local actionWidth = split and 240 or width - MARGIN * 2
+	local actionX = split and width - actionWidth - MARGIN or MARGIN
+	local actionY = split and 62 or height - 174
+	recipeContainer.Position = UDim2.fromOffset(MARGIN, 56)
+	recipeContainer.Size = split and UDim2.new(1, -actionWidth - MARGIN * 3, 1, -68) or UDim2.new(1, -MARGIN * 2, 1, -240)
+	quantityBar.Position = UDim2.fromOffset(actionX, actionY)
+	quantityBar.Size = UDim2.fromOffset(actionWidth, 44)
+	quantityLabel.Visible = not split
+	local start = split and 0 or 58
+	decreaseBtn.Position = UDim2.fromOffset(start, 0)
+	quantityBox.Position = UDim2.fromOffset(start + 48, 0)
+	increaseBtn.Position = UDim2.fromOffset(start + 106, 0)
+	maxBtn.Position = UDim2.fromOffset(start + 154, 0)
+	maxBtn.Size = UDim2.fromOffset(actionWidth - start - 154, 44)
+	batchSummary.Position = UDim2.fromOffset(actionX, actionY + 52)
+	batchSummary.Size = UDim2.fromOffset(actionWidth, 20)
+	batchTime.Position = UDim2.fromOffset(actionX, actionY + 76)
+	batchTime.Size = UDim2.fromOffset(actionWidth, 20)
+	craftBtn.Position = UDim2.fromOffset(actionX, actionY + 102)
+	craftBtn.Size = UDim2.fromOffset(actionWidth, 48)
+	inlineStatusLabel.Position = UDim2.fromOffset(actionX, height - 8)
+	inlineStatusLabel.Size = UDim2.fromOffset(actionWidth, 16)
 end})
 Theme.Button(closeBtn)
 Theme.Button(craftBtn)

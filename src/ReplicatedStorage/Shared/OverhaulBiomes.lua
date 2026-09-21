@@ -183,4 +183,20 @@ function C.EligibleRegions(biome, tier, visits)
  end
  return result
 end
+function C.PlanRegionTypes(biome,tier,visits,count,rng)
+ local eligible=C.EligibleRegions(biome,tier,visits)
+ local result=table.clone(eligible)
+ -- Every unlocked resource-bearing region must exist on a visit. Weighted
+ -- repeats add variety after coverage, rather than occasionally deleting Resin/ore regions.
+ local weights={3,3,2,1.5,1}
+ local total=0;for _,region in ipairs(eligible) do total+=weights[region.Depth] end
+ while #result<math.max(count,#eligible) do
+  local roll=rng:NextNumber()*total
+  for _,region in ipairs(eligible) do
+   roll-=weights[region.Depth]
+   if roll<=0 then table.insert(result,region);break end
+  end
+ end
+ return result
+end
 return C

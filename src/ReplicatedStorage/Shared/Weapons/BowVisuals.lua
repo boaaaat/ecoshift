@@ -32,7 +32,7 @@ end
 function Visuals.CreateArrow(id, grade, special, origin, direction)
 	local p = Visuals.Profile(id, grade)
 	local model = Instance.new("Model")
-	model.Name = id .. (special and " Piercing Arrow" or " Arrow")
+	model.Name = id .. (special and " Special Arrow" or " Arrow")
 	local frame = CFrame.lookAt(origin, origin + direction)
 	local shaft = part(model, "Shaft", V(.09, .09, 2.7), frame, Color3.fromRGB(101, 74, 51), Enum.Material.Wood)
 	model.PrimaryPart = shaft
@@ -162,10 +162,20 @@ function Visuals.Attach(source, id, grade, mode, special, quality, parent)
 			end
 		end
 		span = math.clamp(extent, 1.5, 3)
-		state.Strings = { line(state, p.Color, .025), line(state, p.Color, .025) }
+		if not source.Parent:GetAttribute("ArticulatedBow") then
+			state.Strings = { line(state, p.Color, .025), line(state, p.Color, .025) }
+		end
 	end
 	if flight then
 		tails[1] = tail(state, (.07 + p.Tier * .026) * scale, p.Tail, p.Color)
+		if special and p.Kind == "Star" then
+			-- A comet core and a broad violet/gold wake distinguish the endgame cast.
+			tails[1].Trail.Lifetime = .85
+			tails[1].Trail.Color = ColorSequence.new(Color3.fromRGB(255,211,117), p.Accent)
+			tails[1].A.Position = V(-.3,0,1)
+			tails[1].B.Position = V(.3,0,1)
+			state.CometCore = seed(state, WHITE, .45)
+		end
 	end
 	if p.Kind == "Feather" then
 		addPath(5)
@@ -208,12 +218,16 @@ function Visuals.Attach(source, id, grade, mode, special, quality, parent)
 	end
 	function state:Update(time, charge)
 		self.Root.CFrame = source.CFrame
+		if self.CometCore then
+			self.CometCore.CFrame = source.CFrame * CF(0,0,-1)
+			self.CometCore.Size = Vector3.one * (.4 + .08 * math.sin(time*12))
+		end
 		charge = charge or 0
-		local strength = flight and 1 or .25 + charge * .75
-		local radius = (flight and .3 + p.Tier * .025 or .52 + charge * .28) * scale
-		if p.Kind == "Star" and not flight then radius = (span * .55 + charge * .35) * scale end
+		local strength = flight and 1 or .035 + charge * .4
+		local radius = (flight and .3 + p.Tier * .025 or .16 + charge * .16) * scale
+		if p.Kind == "Star" and not flight then radius = (.22 + charge * .18) * scale end
 		local frame = flight and CF(0, 0, -.5) or CF(.17, 0, -.25)
-		local opacity = flight and .85 or .25 + charge * .7
+		local opacity = flight and .85 or .035 + charge * .38
 		if self.Light then self.Light.Brightness = strength * (.4 + p.Tier * .09) end
 		if self.Strings then
 			local nock = V(.17 - charge * .55, 0, 0)
@@ -236,7 +250,7 @@ function Visuals.Attach(source, id, grade, mode, special, quality, parent)
 				local angle = time * (1.2 + i * .12) + i * TAU / #seeds
 				local pos = V(math.sin(angle) * radius, math.sin(angle * 2) * radius * .8, flight and .8 + i * .32 or math.cos(angle) * .3)
 				mote.CFrame = self.Root.CFrame * frame * CF(pos)
-				mote.Transparency = .15 + (1 - strength) * .5
+				mote.Transparency = 1 - strength * .7
 				if tails[i + 1] then
 					tails[i + 1].A.Position = pos - V(.03, 0, 0)
 					tails[i + 1].B.Position = pos + V(.03, 0, 0)
@@ -285,8 +299,9 @@ function Visuals.Attach(source, id, grade, mode, special, quality, parent)
 				local pos = orbit:PointToWorldSpace(V(math.cos(angle) * radius * 1.5, math.sin(angle) * radius * 1.5, 0))
 				star.CFrame, star.Transparency = self.Root.CFrame * CF(pos), 1 - opacity
 				local edges = paths[self.OrbitCount + i]
-				draw(edges[1], pos - V(.16, 0, 0), pos + V(.16, 0, 0), opacity)
-				draw(edges[2], pos - V(0, .16, 0), pos + V(0, .16, 0), opacity)
+					local pointSize = flight and .16 or .045
+					draw(edges[1], pos - V(pointSize, 0, 0), pos + V(pointSize, 0, 0), opacity)
+					draw(edges[2], pos - V(0, pointSize, 0), pos + V(0, pointSize, 0), opacity)
 			end
 			for i = 2, #tails do
 				local angle = time * 8 + i * math.pi
@@ -379,20 +394,6 @@ function Visuals.Burst(id, grade, special, position, normal, release, quality, p
 			s.Transparency = 1 - fade
 			if p.Kind == "Wisp" then s.Size = Vector3.one * (.1 + growth * .18) end
 		end
-	end
-	return state
-end
-
-function Visuals.Chain(from, to, parent)
-	local state = stateRoot(parent, profiles.StormBow, CFrame.lookAt(from, to))
-	local length = (to - from).Magnitude
-	local edges = path(state, 9, profiles.StormBow.Color, .09)
-	state.Duration = .28
-	function state:Update(age)
-		curve(edges, function(u)
-			local jitter = math.sin(u * math.pi) * .65
-			return V(math.sin(u * 93 + math.floor(age * 20)) * jitter, math.cos(u * 71) * jitter, -length * u)
-		end, 1 - age / self.Duration)
 	end
 	return state
 end
