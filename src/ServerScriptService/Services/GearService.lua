@@ -4,7 +4,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Collection = game:GetService("CollectionService")
 local Instances = require(RS.Shared.ItemInstance)
-local WeaponSpecialCooldown = require(RS.Shared.Weapons.WeaponSpecialCooldown)
+local ItemCooldownScope = require(RS.Shared.ItemCooldownScope)
 local Inventory = require(script.Parent.InventoryService)
 local Stats = require(script.Parent.StatsService)
 local ServerUtil = require(script.Parent.ServerUtil)
@@ -141,9 +141,9 @@ function Gear:Touch(player) Inventory:Sync(player) end
 function Gear:Refresh(player)
  if not active() then return end
  local defense,resistance=self:GetDefense(player)
- Stats:RemoveModifier(player,"Armor","ArmorEquip")
- Stats:RemoveModifier(player,"TemperatureResistance","TempResEquip")
- Stats:AddModifier(player,"Armor",defense*100,"Add",nil,"OverhaulArmor")
+ -- Inventory and armor presentation can both request a refresh. Replacing the
+ -- stable modifier also collapses any duplicate entries from an earlier refresh.
+ Stats:SetModifier(player,"Armor",defense*100,"Add","OverhaulArmor")
  local char=player.Character
  if char then for key,value in pairs(resistance) do char:SetAttribute("GearRes_"..key,value) end end
  local modifiers=self:GetModifiers(player)
@@ -328,7 +328,7 @@ function Gear:AfterMonsterDamage(player)
 end
 function Gear:CapturePlayer(player)
  local current=state(player)
- local result={Burn=require(script.Parent.StatusService):CapturePlayer(player),ToxinStacks=player.Character and player.Character:GetAttribute("ToxinStacks") or 0,Medical=Instances.Copy(current.Medical),MedicalCooldown=current.MedicalCooldown,Timers=Instances.Copy(current.Timers),Visit=current.Visit,LastThreadVisit=current.LastThreadVisit,Survey=Instances.Copy(current.Survey),LastHitAge=current.LastHitAge,HeatBuffer=current.HeatBuffer,HeatDirection=current.HeatDirection,SavedHunger=current.SavedHunger,Air=current.Air,AirReserveSpent=current.AirReserveSpent,MemoryChannel=current.MemoryChannel,QualifiedSeen=current.QualifiedSeen}
+ local result={Burn=require(script.Parent.StatusService):CapturePlayer(player),ToxinStacks=player.Character and player.Character:GetAttribute("ToxinStacks") or 0,Medicals=Instances.Copy(current.Medicals),Timers=Instances.Copy(current.Timers),Visit=current.Visit,LastThreadVisit=current.LastThreadVisit,Survey=Instances.Copy(current.Survey),LastHitAge=current.LastHitAge,HeatBuffer=current.HeatBuffer,HeatDirection=current.HeatDirection,SavedHunger=current.SavedHunger,Air=current.Air,AirReserveSpent=current.AirReserveSpent,MemoryChannel=current.MemoryChannel,QualifiedSeen=current.QualifiedSeen}
  return result
 end
 function Gear:RestorePlayer(player,saved)
@@ -336,25 +336,24 @@ function Gear:RestorePlayer(player,saved)
  local entry=Instances.Copy(saved);entry.Timers=entry.Timers or {};entry.Survey=entry.Survey or {};entry.LastHitAge=entry.LastHitAge or 999
  for key,value in pairs(entry.Timers) do if type(value)~="number" or value~=value then entry.Timers[key]=nil else entry.Timers[key]=math.clamp(value,0,86400) end end
  runtime[player]=entry
- player:SetAttribute("MedicalItemCooldown",math.max(0,tonumber(entry.MedicalCooldown) or 0))
  require(script.Parent.StatusService):RestorePlayer(player,entry.Burn)
  if player.Character then player.Character:SetAttribute("ToxinStacks",math.clamp(tonumber(entry.ToxinStacks) or 0,0,100)) end
 end
 function Gear:GetSpecialRemaining(player,itemId)
- local key=WeaponSpecialCooldown.TimerKey(itemId)
+ local key=ItemCooldownScope.TimerKey("WeaponSpecial",itemId)
  return key and (state(player).Timers[key] or 0) or 0
 end
 function Gear:StartSpecialCooldown(player,itemId,seconds)
- local key=WeaponSpecialCooldown.TimerKey(itemId);local attribute=WeaponSpecialCooldown.Attribute(itemId)
- if not key or not attribute then return end
+ local key=ItemCooldownScope.TimerKey("WeaponSpecial",itemId)
+ if not key then return end
  seconds=math.max(0,tonumber(seconds) or 0);state(player).Timers[key]=seconds>0 and seconds or nil
- player:SetAttribute(attribute,workspace:GetServerTimeNow()+seconds)
+ ItemCooldownScope.SetReadyAt(player,"WeaponSpecial",itemId,seconds)
 end
 function Gear:AdjustSpecialCooldown(player,itemId,seconds)
- local key=WeaponSpecialCooldown.TimerKey(itemId);local attribute=WeaponSpecialCooldown.Attribute(itemId)
- if not key or not attribute then return end
+ local key=ItemCooldownScope.TimerKey("WeaponSpecial",itemId)
+ if not key then return end
  local current=state(player);current.Timers[key]=math.max(0,(current.Timers[key] or 0)-math.max(0,seconds or 0))
- player:SetAttribute(attribute,workspace:GetServerTimeNow()+(current.Timers[key] or 0))
+ ItemCooldownScope.SetReadyAt(player,"WeaponSpecial",itemId,current.Timers[key])
 end
 function Gear:BeginSwordGuard(player) state(player).Timers.SwordGuard=.5 end
 function Gear:ConsumeSlipCut(player)
@@ -418,7 +417,9 @@ function Gear:UseMedical(player,kind,index,callback)
  local definition=source and catalog().Consumables[source.Id]
  if not definition or definition.Revive then return false,"Use a Revival Kit on a fallen teammate." end
  local current=state(player)
- if current.PendingMedical or (current.MedicalCooldown or 0)>0 then return false,"Finish your current treatment first." end
+ local cooldownKey=ItemCooldownScope.TimerKey("Medical",source.Id)
+ if current.PendingMedical then return false,"Finish your current treatment first." end
+ if cooldownKey and (current.Timers[cooldownKey] or 0)>0 then return false,"That treatment is recovering." end
  local hum=player.Character and player.Character:FindFirstChildOfClass("Humanoid")
  if not alive(player) then return false,"You cannot use this right now." end
  if definition.Health and hum.Health>=hum.MaxHealth then return false,"Health is full." end
@@ -448,9 +449,12 @@ function Gear:_finishMedical(player)
  if pending.Target and (not target or target.Durability>=target.MaxDurability) then return end
  if not Inventory:TakeFromSlot(player,pending.Kind,pending.Index,1,{ExpectedId=pending.Id}) then return end
  local modifiers=self:GetModifiers(player)
- current.MedicalCooldown=5;player:SetAttribute("MedicalItemCooldown",5)
+ local cooldownKey=ItemCooldownScope.TimerKey("Medical",pending.Id)
+ current.Timers[cooldownKey]=5;ItemCooldownScope.SetReadyAt(player,"Medical",pending.Id,5)
  if def.RepairFraction then self:Repair(player,target.Uid,def.RepairFraction*(1+(modifiers.FieldRepairBonus or 0)))
- elseif def.Health then current.Medical={Id=pending.Id,Remaining=def.Duration,Rate=def.Health/def.Duration*(1+(player:GetAttribute("Class_HealBonus") or 0))*(1+(modifiers.MedicalHealingBonus or 0))*(1+(modifiers.MedicalHotBonus or 0))}
+ elseif def.Health then
+  current.Medicals=current.Medicals or {}
+  current.Medicals[pending.Id]={Remaining=def.Duration,Rate=def.Health/def.Duration*(1+(player:GetAttribute("Class_HealBonus") or 0))*(1+(modifiers.MedicalHealingBonus or 0))*(1+(modifiers.MedicalHotBonus or 0))}
  elseif def.ClearPoison then
   player.Character:SetAttribute("PoisonStacks",0);player.Character:SetAttribute("ToxinStacks",0);player.Character:SetAttribute("PoisonUntil",nil);current.Timers.Antidote=120
  elseif def.ClearWetness then player.Character:SetAttribute("WetStacks",0);current.Timers.DryingSalve=120
@@ -582,7 +586,7 @@ local function nearbyStation(player,types,grade)
  for _,station in ipairs(Collection:GetTagged("Structure")) do
   if station:IsDescendantOf(workspace) and (station:IsA("Model") or station:IsA("BasePart")) then
    local kind=station:GetAttribute("StationType") or station:GetAttribute("BuildType") or station.Name
-   if table.find(types,kind) and (tonumber(station:GetAttribute("StationGrade")) or tonumber(station:GetAttribute("Grade")) or 1)>=grade and (station:GetPivot().Position-root.Position).Magnitude<=12 then return station end
+   if table.find(types,kind) and (tonumber(station:GetAttribute("StationGrade")) or tonumber(station:GetAttribute("Grade")) or 1)>=grade and (station:GetPivot().Position-root.Position).Magnitude<=15 then return station end
   end
  end
 end
@@ -663,8 +667,8 @@ function Gear:_tickMaintenance(player,dt)
  if not job then player:SetAttribute("GearMaintenanceProgress",nil);return end
  local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
  local entry=self:GetItemByUid(player,job.Uid)
- if not entry or not root or player.Character~=job.Character or not job.Station.Parent or (job.Station:GetPivot().Position-root.Position).Magnitude>12 then current.Maintenance=nil;return end
- local rate=math.min(2,1+(player:GetAttribute("Class_CraftSpeed") or 0)+(player:GetAttribute("Class_CraftRate") or 0))
+ if not entry or not root or player.Character~=job.Character or not job.Station.Parent or (job.Station:GetPivot().Position-root.Position).Magnitude>15 then current.Maintenance=nil;return end
+ local rate=require(script.Parent.ClassAbilityService):GetCraftRate(player,job.Station)
  job.Progress+=dt*rate;player:SetAttribute("GearMaintenanceProgress",math.min(1,job.Progress/job.Work))
  if job.Progress<job.Work then return end
  current.Maintenance=nil
@@ -698,7 +702,7 @@ function Gear:Init()
   if not active() then return end
   accumulator+=dt;if accumulator<.1 then return end;dt=math.min(accumulator,.5);accumulator=0
   for _,player in ipairs(Players:GetPlayers()) do
-   if not alive(player) then local stopped=state(player);stopped.PendingMedical=nil;stopped.Maintenance=nil;if player:GetAttribute("IsDead") then stopped.Medical=nil;stopped.Gliding=nil end;continue end
+   if not alive(player) then local stopped=state(player);stopped.PendingMedical=nil;stopped.Maintenance=nil;if player:GetAttribute("IsDead") then stopped.Medicals=nil;stopped.Gliding=nil end;continue end
    local current=state(player);current.LastHitAge+=dt
    local held,heldDefinition=self:GetHeld(player)
    local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
@@ -708,11 +712,14 @@ function Gear:Init()
     current.BraceStill=horizontal<1 and hum.MoveDirection.Magnitude<.05 and math.min(1,(current.BraceStill or 0)+dt) or 0
    else current.BraceStill=0 end
    if current.PendingMedical then current.PendingMedical.Remaining-=dt;player:SetAttribute("GearTreatmentProgress",1-current.PendingMedical.Remaining/current.PendingMedical.Total);if current.PendingMedical.Remaining<=0 then self:_finishMedical(player) end else player:SetAttribute("GearTreatmentProgress",nil) end
-   current.MedicalCooldown=math.max(0,(current.MedicalCooldown or 0)-dt)
-   player:SetAttribute("MedicalItemCooldown",current.MedicalCooldown)
-   if current.Medical then
-    local hum=player.Character:FindFirstChildOfClass("Humanoid");local treatment=current.Medical;local amount=math.min(dt,treatment.Remaining)*treatment.Rate
-    hum.Health=math.min(hum.MaxHealth,hum.Health+amount);treatment.Remaining-=dt;if treatment.Remaining<=0 then current.Medical=nil end
+   if current.Medicals then
+    local hum=player.Character:FindFirstChildOfClass("Humanoid")
+    for itemId,treatment in pairs(current.Medicals) do
+     local amount=math.min(dt,treatment.Remaining)*treatment.Rate
+     hum.Health=math.min(hum.MaxHealth,hum.Health+amount);treatment.Remaining-=dt
+     if treatment.Remaining<=0 then current.Medicals[itemId]=nil end
+    end
+    if not next(current.Medicals) then current.Medicals=nil end
    end
    player:SetAttribute("Gear_ToxinTonic",current.Timers.Antidote and .35 or 0)
    player:SetAttribute("Gear_WetTonic",current.Timers.DryingSalve and .25 or 0)
@@ -720,8 +727,8 @@ function Gear:Init()
    for key,remaining in pairs(current.Timers) do
     local nextRemaining=remaining>dt and remaining-dt or nil
     current.Timers[key]=nextRemaining
-    local itemId=WeaponSpecialCooldown.ItemId(key)
-    if itemId then player:SetAttribute(WeaponSpecialCooldown.Attribute(itemId),workspace:GetServerTimeNow()+(nextRemaining or 0)) end
+    local scope,itemId=ItemCooldownScope.ReadTimerKey(key)
+    if scope then ItemCooldownScope.SetReadyAt(player,scope,itemId,nextRemaining) end
    end
    player:SetAttribute("DodgeCooldown",current.Timers.Dodge or 0)
    player:SetAttribute("Gear_GatherTimeReduction",self:GetGatherReduction(player,true))

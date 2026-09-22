@@ -52,7 +52,7 @@ render=function()
  elseif s.Type=="SpikeTrap" then
   label(scroll,string.format("Grade %d: %g damage to one crossing monster; three-second reset. Bone ×1 supplies ten triggers.",state.Grade,Catalog.StandardDamage[state.Grade]*.8),80)
   button(scroll,"Load Bone ×1 · ten triggers",function()send("Ammo") end)
-  local costs=Catalog.GetStationUpgradeCost(state.Grade+1)
+  local costs=Catalog.GetPlaceableUpgradeCost("SpikeTrap",state.Grade)
   if costs then
    local pieces={};for _,c in ipairs(costs) do table.insert(pieces,(Catalog.Items[c.Id].Name).." ×"..c.N) end
    label(scroll,"Next grade: "..table.concat(pieces," + "),65)

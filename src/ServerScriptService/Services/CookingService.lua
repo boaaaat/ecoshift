@@ -37,9 +37,11 @@ local function stationType(station)
 	return Cooking.Stations[kind] and kind or nil
 end
 local function inReach(player, station)
-	if not alive(player) or not stationType(station) then return false end
+	local id = stationType(station)
+	if not alive(player) or not id then return false end
 	local root = player.Character:FindFirstChild("HumanoidRootPart")
-	return root and (root.Position - station:GetPivot().Position).Magnitude <= 10
+	local definition = Cooking.Stations[id]
+	return root and (root.Position - station:GetPivot().Position).Magnitude <= (definition and definition.InteractRadius or 15)
 end
 local function newState()
 	local output = {}
@@ -106,6 +108,7 @@ function Service:_state(station)
 			Rate = rate, RemainingSeconds = seconds, OwnerUserId = job.OwnerUserId })
 	end
 	return { Station = station, StationType = stationType(station), Jobs = jobs, Output = Codec.Copy(state.Output),
+		Grade = station:GetAttribute("StationGrade") or 1, CampaignTier = workspace:GetAttribute("CampaignTier") or 1,
 		FuelSeconds = state.FuelSeconds, KeepWarm = state.KeepWarm, Enabled = state.Enabled,
 		Status = self:_status(station, state), RemainingSeconds = total }
 end
@@ -154,9 +157,7 @@ function Service:Cancel(player, station, jobId)
 				and Players:GetPlayerByUserId(job.OwnerUserId) then return false, "Only the cook or station owner can cancel this job." end
 			local refund = {}
 			for _, entry in ipairs(job.UnitCost) do table.insert(refund, { Id = entry.Id, N = entry.N * job.Remaining }) end
-			local projected, overflow = Inventory:ProjectRefund(Inventory:CaptureWorldState(player), refund, false)
-			if #overflow > 0 then return false, "Make room in your pack for the ingredient refund." end
-			Inventory:RestoreWorldState(player, projected, true)
+			if not Inventory:GiveEntriesOrDrop(player, refund, true) then return false, "Unable to return ingredients. Try again." end
 			table.remove(state.Jobs, index)
 			Inventory:Sync(player)
 			return true, "Unfinished ingredients and seasoning returned; spent fuel stays spent."
@@ -183,7 +184,7 @@ function Service:Collect(player, station, payload)
 	if payload.ExpectedId and payload.ExpectedId ~= slot.Id then return false, "The output changed. Select it again." end
 	local amount = payload.Quantity or slot.N
 	if not integer(amount, 1, slot.N) then return false, "Invalid output quantity." end
-	if Inventory:Give(player, slot.Id, amount, true, true) ~= amount then return false, "Make room in your pack for these meals." end
+	if Inventory:GiveOrDrop(player, slot.Id, amount, true) ~= amount then return false, "Unable to collect meals. Try again." end
 	slot.N -= amount
 	if slot.N == 0 then state.Output[payload.Slot] = false end
 	Inventory:Sync(player)

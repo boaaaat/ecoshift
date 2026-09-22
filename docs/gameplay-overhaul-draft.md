@@ -861,8 +861,8 @@ All dimensions are initial model targets. Place from the held inventory item. St
 | Stairs | 8-stud story connection | Plank ×3 |
 | Ladder | 8-stud vertical connection | Wood ×3 + Cord ×1 |
 | Watchtower | 8×8, approximately 16 high, accessible ladder | Plank ×10 + Stone ×6 |
-| Chest | 24 shared item slots | Plank ×4 + Resin ×2 |
-| Large Chest / tier 4 | 48 shared slots | Chest ×1 + Ironwood ×4 + Gears ×2 |
+| Chest | 18 shared item slots | Plank ×4 + Resin ×2 |
+| Large Chest / tier 4 | 36 shared slots | Chest ×1 + Ironwood ×4 + Gears ×2 |
 | Torch | Placeable light; no heat protection | Wood ×1 + Resin ×1; produces 2 |
 | Standing Lamp / tier 3 | Larger camp light, no ongoing fuel | Iron Bar ×2 + Glass ×2 + Clear Crystal ×1 |
 | Rain Collector / tier 2 | Produces one Water/minute during rain, stores up to 10; no offline production | Plank ×4 + Cloth ×3 + Resin ×2 |

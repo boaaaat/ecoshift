@@ -7,6 +7,7 @@ local TextService = game:GetService("TextService")
 local Theme = require(script.Parent.UITheme)
 local UIFactory = require(script.Parent.UIFactory)
 local SearchRank = require(script.Parent.SearchRank)
+local RecipeHelperUI = require(script.Parent.RecipeHelperUI)
 local Resolver = require(script.Parent.Parent:WaitForChild("RecipeGuide"))
 local Recipes = require(script.Parent.Parent.WorkbenchConfig)
 local Cooking = require(script.Parent.Parent.CookingConfig)
@@ -175,7 +176,7 @@ local function parsedQuantity()
 end
 local function duration(recipe,station,n)
 	local multiplier=Recipes:GetEffectiveStationModifiers(recipe,station)
-	return math.max(.05,(tonumber(recipe.BaseCraftTime) or 0)*multiplier)*n
+	return math.max(.05,(tonumber(recipe.BaseCraftTime) or 0)*multiplier)*n/Recipes:GetClientCraftRate(player)
 end
 local function timeText(seconds)
 	if seconds<60 then return string.format("%.1fs",seconds) end
@@ -371,19 +372,27 @@ render=function()
 		end
 		local recipe=selectedRecipe(node)
 		if recipe then
-			local heading=label(content,"CRAFTING STATION · click to see how to make it",24,14); heading.LayoutOrder=0; heading.TextColor3=colors.TextMuted
-			for index,station in ipairs(Resolver.GetStations(node.RecipeId,player)) do
-				local b=button(content,"Station_"..station.Id,station.Name,58); b.LayoutOrder=index
-				table.insert(stationRows,{Id=station.Id,Button=b})
-				if station.BuildItemId then b.Activated:Connect(function() push(station.BuildItemId,station.RecipeId) end) end
-			end
+			local track=button(content,"TrackRecipe","Track recipe on HUD",44)
+			track.LayoutOrder=-2
+			track.Activated:Connect(function()
+				local batches=parsedQuantity()
+				if not batches then feedback("Enter a whole batch quantity from 1 to 99.",false);return end
+				RecipeHelperUI.TrackRecipe(node.ItemId,node.RecipeId,batches)
+				gui.Enabled=false
+			end)
 			local materialHeading=label(content,"MATERIALS · follow each ingredient to its source",24,14)
-			materialHeading.LayoutOrder=100; materialHeading.TextColor3=colors.TextMuted
+			materialHeading.LayoutOrder=0; materialHeading.TextColor3=colors.TextMuted
 			local ids={}; local costs=costMap(recipe); for id in pairs(costs) do table.insert(ids,id) end; table.sort(ids)
 			for index,id in ipairs(ids) do
-				local b=button(content,"Material_"..id,"",60); b.LayoutOrder=100+index
+				local b=button(content,"Material_"..id,"",60); b.LayoutOrder=index
 				table.insert(materialRows,{Id=id,Cost=costs[id],Button=b,Craftable=Resolver.GetEntry(id).RecipeId~=nil})
 				b.Activated:Connect(function() push(id) end)
+			end
+			local heading=label(content,"CRAFTING STATION · click to see how to make it",24,14); heading.LayoutOrder=#ids+1; heading.TextColor3=colors.TextMuted
+			for index,station in ipairs(Resolver.GetStations(node.RecipeId,player)) do
+				local b=button(content,"Station_"..station.Id,station.Name,58); b.LayoutOrder=#ids+1+index
+				table.insert(stationRows,{Id=station.Id,Button=b})
+				if station.BuildItemId then b.Activated:Connect(function() push(station.BuildItemId,station.RecipeId) end) end
 			end
 		else
 			local heading=label(content,"FIELD SOURCE · this material is gathered, not crafted",44,16); heading.LayoutOrder=0; heading.Font=Enum.Font.GothamBold
@@ -455,7 +464,7 @@ craft.Activated:Connect(function()
 				if structure:IsDescendantOf(workspace) and (kind==stationType or kind==definition.BuildType) then
 					local position=structure:IsA("Model") and structure:GetPivot().Position or (structure:IsA("BasePart") and structure.Position)
 					local currentDistance=position and (root.Position-position).Magnitude
-					if currentDistance and currentDistance<distance and currentDistance<=(definition.InteractRadius or 8) then closest,distance=structure,currentDistance end
+					if currentDistance and currentDistance<distance and currentDistance<=(definition.InteractRadius or 15) then closest,distance=structure,currentDistance end
 				end
 			end
 		end

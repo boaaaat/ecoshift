@@ -1,0 +1,4383 @@
+{
+  "Items": [
+    {
+      "Name": "Abyssal Prism",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure",
+        "Light"
+      ],
+      "Id": "AbyssalPrism",
+      "Grade": 7
+    },
+    {
+      "Name": "Air Tank",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "AirTank",
+      "Grade": 4,
+      "Gear": {
+        "Family": "AirTank",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Amethyst Obelisk",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure",
+        "Light"
+      ],
+      "Id": "AmethystObelisk",
+      "Grade": 3
+    },
+    {
+      "Name": "Ancient Seed",
+      "Tags": [
+        "Resource",
+        "Trophy"
+      ],
+      "Id": "AncientSeed",
+      "Grade": 8
+    },
+    {
+      "Name": "Antidote",
+      "Tags": [
+        "Consumable",
+        "Medicine"
+      ],
+      "Id": "Antidote",
+      "Grade": 2
+    },
+    {
+      "Name": "Anvil",
+      "Tags": [
+        "Placeable",
+        "Station",
+        "Holdable",
+        "CraftingStation"
+      ],
+      "Id": "Anvil",
+      "Grade": 2
+    },
+    {
+      "Name": "Any Trophy",
+      "Tags": [
+        "RecipeRequirement"
+      ],
+      "Id": "AnyTrophy",
+      "Grade": 8
+    },
+    {
+      "Name": "Archive Heart",
+      "Tags": [
+        "Resource",
+        "Trophy"
+      ],
+      "Id": "ArchiveHeart",
+      "Grade": 8
+    },
+    {
+      "Name": "Armor Patch",
+      "Tags": [
+        "Consumable",
+        "Repair"
+      ],
+      "Id": "ArmorPatch",
+      "Grade": 1
+    },
+    {
+      "Name": "Armor Patch Grade 2",
+      "Tags": [
+        "Consumable",
+        "Repair"
+      ],
+      "Id": "ArmorPatch2",
+      "Grade": 2
+    },
+    {
+      "Name": "Armor Patch Grade 3",
+      "Tags": [
+        "Consumable",
+        "Repair"
+      ],
+      "Id": "ArmorPatch3",
+      "Grade": 3
+    },
+    {
+      "Name": "Armor Patch Grade 4",
+      "Tags": [
+        "Consumable",
+        "Repair"
+      ],
+      "Id": "ArmorPatch4",
+      "Grade": 4
+    },
+    {
+      "Name": "Armor Patch Grade 5",
+      "Tags": [
+        "Consumable",
+        "Repair"
+      ],
+      "Id": "ArmorPatch5",
+      "Grade": 5
+    },
+    {
+      "Name": "Armor Patch Grade 6",
+      "Tags": [
+        "Consumable",
+        "Repair"
+      ],
+      "Id": "ArmorPatch6",
+      "Grade": 6
+    },
+    {
+      "Name": "Armor Patch Grade 7",
+      "Tags": [
+        "Consumable",
+        "Repair"
+      ],
+      "Id": "ArmorPatch7",
+      "Grade": 7
+    },
+    {
+      "Name": "Armor Patch Grade 8",
+      "Tags": [
+        "Consumable",
+        "Repair"
+      ],
+      "Id": "ArmorPatch8",
+      "Grade": 8
+    },
+    {
+      "Name": "Arrow",
+      "Tags": [
+        "Ammunition"
+      ],
+      "Id": "Arrow",
+      "Grade": 1
+    },
+    {
+      "Name": "Ash Boots",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "AshBoots",
+      "Grade": 3,
+      "Gear": {
+        "Family": "Ash",
+        "Kind": "Armor",
+        "Slot": "Boots"
+      }
+    },
+    {
+      "Name": "Ash Coat",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "AshCoat",
+      "Grade": 3,
+      "Gear": {
+        "Family": "Ash",
+        "Kind": "Armor",
+        "Slot": "Chest"
+      }
+    },
+    {
+      "Name": "Ash Fiber",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant"
+      ],
+      "Id": "AshFiber",
+      "Grade": 3
+    },
+    {
+      "Name": "Ash Hood",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "AshHood",
+      "Grade": 3,
+      "Gear": {
+        "Family": "Ash",
+        "Kind": "Armor",
+        "Slot": "Head"
+      }
+    },
+    {
+      "Name": "Ash Trousers",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "AshTrousers",
+      "Grade": 3,
+      "Gear": {
+        "Family": "Ash",
+        "Kind": "Armor",
+        "Slot": "Legs"
+      }
+    },
+    {
+      "Name": "Aurora Boots",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "AuroraBoots",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Aurora",
+        "Kind": "Armor",
+        "Slot": "Boots"
+      }
+    },
+    {
+      "Name": "Aurora Coat",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "AuroraCoat",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Aurora",
+        "Kind": "Armor",
+        "Slot": "Chest"
+      }
+    },
+    {
+      "Name": "Aurora Hood",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "AuroraHood",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Aurora",
+        "Kind": "Armor",
+        "Slot": "Head"
+      }
+    },
+    {
+      "Name": "Aurora Lantern",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure",
+        "Light"
+      ],
+      "Id": "AuroraLantern",
+      "Grade": 4
+    },
+    {
+      "Name": "Aurora Stone",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "AuroraStone",
+      "Grade": 4
+    },
+    {
+      "Name": "Aurora Trousers",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "AuroraTrousers",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Aurora",
+        "Kind": "Armor",
+        "Slot": "Legs"
+      }
+    },
+    {
+      "Name": "Baked Roots",
+      "Tags": [
+        "Food",
+        "Consumable",
+        "Cooking"
+      ],
+      "Id": "BakedRoots",
+      "Grade": 1
+    },
+    {
+      "Name": "Bandage",
+      "Tags": [
+        "Consumable",
+        "Medicine"
+      ],
+      "Id": "Bandage",
+      "Grade": 1
+    },
+    {
+      "Name": "Bedroll",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure"
+      ],
+      "Id": "Bedroll",
+      "Grade": 2
+    },
+    {
+      "Name": "Berries",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant",
+        "Consumable",
+        "Food"
+      ],
+      "Id": "Berries",
+      "Grade": 1
+    },
+    {
+      "Name": "Berry Porridge",
+      "Tags": [
+        "Food",
+        "Consumable",
+        "Cooking"
+      ],
+      "Id": "BerryPorridge",
+      "Grade": 2
+    },
+    {
+      "Name": "Biome Predictor",
+      "Tags": [
+        "Utility",
+        "Intel"
+      ],
+      "Id": "BiomePredictor",
+      "Grade": 4
+    },
+    {
+      "Name": "Bitter Seed",
+      "Tags": [
+        "Resource",
+        "Plant",
+        "Seasoning"
+      ],
+      "Id": "BitterSeed",
+      "Grade": 1
+    },
+    {
+      "Name": "Black Glass",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "BlackGlass",
+      "Grade": 3
+    },
+    {
+      "Name": "Blacksteel Axe",
+      "Tags": [
+        "Tool",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "BlacksteelAxe",
+      "Grade": 3,
+      "Gear": {
+        "Family": "Axe",
+        "Kind": "Tool"
+      }
+    },
+    {
+      "Name": "Blacksteel Bar",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "BlacksteelBar",
+      "Grade": 3
+    },
+    {
+      "Name": "Blacksteel Pickaxe",
+      "Tags": [
+        "Tool",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "BlacksteelPickaxe",
+      "Grade": 3,
+      "Gear": {
+        "Family": "Pickaxe",
+        "Kind": "Tool"
+      }
+    },
+    {
+      "Name": "Blacksteel Sword",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "BlacksteelSword",
+      "Grade": 3,
+      "Gear": {
+        "Family": "Sword",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Bone",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Animal"
+      ],
+      "Id": "Bone",
+      "Grade": 1
+    },
+    {
+      "Name": "Bone Knife",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "BoneKnife",
+      "Grade": 1,
+      "Gear": {
+        "Family": "Dagger",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Bright Lantern",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "BrightLantern",
+      "Grade": 4,
+      "Gear": {
+        "Family": "BrightLantern",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Wooden Bucket",
+      "Tags": [
+        "Utility",
+        "Holdable",
+        "Container"
+      ],
+      "Id": "Bucket",
+      "Grade": 1
+    },
+    {
+      "Name": "Cactus",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Wood",
+        "Consumable",
+        "Food"
+      ],
+      "Id": "Cactus",
+      "Grade": 1
+    },
+    {
+      "Name": "Camp Marker",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure"
+      ],
+      "Id": "CampMarker",
+      "Grade": 1
+    },
+    {
+      "Name": "Campfire",
+      "Tags": [
+        "Placeable",
+        "Station",
+        "Holdable",
+        "CraftingStation"
+      ],
+      "Id": "Campfire",
+      "Grade": 1
+    },
+    {
+      "Name": "Candle Lantern",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure",
+        "Light"
+      ],
+      "Id": "CandleLantern",
+      "Grade": 1
+    },
+    {
+      "Name": "Canopy Boots",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "CanopyBoots",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Canopy",
+        "Kind": "Armor",
+        "Slot": "Boots"
+      }
+    },
+    {
+      "Name": "Canopy Coat",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "CanopyCoat",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Canopy",
+        "Kind": "Armor",
+        "Slot": "Chest"
+      }
+    },
+    {
+      "Name": "Canopy Hood",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "CanopyHood",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Canopy",
+        "Kind": "Armor",
+        "Slot": "Head"
+      }
+    },
+    {
+      "Name": "Canopy Trousers",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "CanopyTrousers",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Canopy",
+        "Kind": "Armor",
+        "Slot": "Legs"
+      }
+    },
+    {
+      "Name": "Cave Anise",
+      "Tags": [
+        "Resource",
+        "Plant",
+        "Seasoning"
+      ],
+      "Id": "CaveAnise",
+      "Grade": 1
+    },
+    {
+      "Name": "Chest",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure"
+      ],
+      "Id": "Chest",
+      "Grade": 1
+    },
+    {
+      "Name": "Citrus Peel",
+      "Tags": [
+        "Resource",
+        "Plant",
+        "Seasoning"
+      ],
+      "Id": "CitrusPeel",
+      "Grade": 1
+    },
+    {
+      "Name": "Clear Crystal",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "ClearCrystal",
+      "Grade": 3
+    },
+    {
+      "Name": "Climbing Gloves",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "ClimbingGloves",
+      "Grade": 2,
+      "Gear": {
+        "Family": "ClimbingGloves",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Cloth",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "Cloth",
+      "Grade": 1
+    },
+    {
+      "Name": "Cloud Wool",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant"
+      ],
+      "Id": "CloudWool",
+      "Grade": 4
+    },
+    {
+      "Name": "Coal",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "Coal",
+      "Grade": 1
+    },
+    {
+      "Name": "Coast Boots",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "CoastBoots",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Coast",
+        "Kind": "Armor",
+        "Slot": "Boots"
+      }
+    },
+    {
+      "Name": "Coast Coat",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "CoastCoat",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Coast",
+        "Kind": "Armor",
+        "Slot": "Chest"
+      }
+    },
+    {
+      "Name": "Coast Hood",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "CoastHood",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Coast",
+        "Kind": "Armor",
+        "Slot": "Head"
+      }
+    },
+    {
+      "Name": "Coast Trousers",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "CoastTrousers",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Coast",
+        "Kind": "Armor",
+        "Slot": "Legs"
+      }
+    },
+    {
+      "Name": "Cool Mint",
+      "Tags": [
+        "Resource",
+        "Plant",
+        "Seasoning"
+      ],
+      "Id": "CoolMint",
+      "Grade": 1
+    },
+    {
+      "Name": "Cooling Drink",
+      "Tags": [
+        "Food",
+        "Consumable",
+        "Cooking"
+      ],
+      "Id": "CoolingDrink",
+      "Grade": 2
+    },
+    {
+      "Name": "Cooling Ring",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "CoolingRing",
+      "Grade": 5,
+      "Gear": {
+        "Family": "CoolingRing",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Cord",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "Cord",
+      "Grade": 1
+    },
+    {
+      "Name": "Crater Hammer",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "CraterHammer",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Hammer",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Crystal Basil",
+      "Tags": [
+        "Resource",
+        "Plant",
+        "Seasoning"
+      ],
+      "Id": "CrystalBasil",
+      "Grade": 1
+    },
+    {
+      "Name": "Crystal Boots",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "CrystalBoots",
+      "Grade": 3,
+      "Gear": {
+        "Family": "Crystal",
+        "Kind": "Armor",
+        "Slot": "Boots"
+      }
+    },
+    {
+      "Name": "Crystal Coat",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "CrystalCoat",
+      "Grade": 3,
+      "Gear": {
+        "Family": "Crystal",
+        "Kind": "Armor",
+        "Slot": "Chest"
+      }
+    },
+    {
+      "Name": "Crystal Heart",
+      "Tags": [
+        "Resource",
+        "Trophy"
+      ],
+      "Id": "CrystalHeart",
+      "Grade": 8
+    },
+    {
+      "Name": "Crystal Hood",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "CrystalHood",
+      "Grade": 3,
+      "Gear": {
+        "Family": "Crystal",
+        "Kind": "Armor",
+        "Slot": "Head"
+      }
+    },
+    {
+      "Name": "Crystal Staff",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "CrystalStaff",
+      "Grade": 3,
+      "Gear": {
+        "Family": "Staff",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Crystal Thread",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant"
+      ],
+      "Id": "CrystalThread",
+      "Grade": 3
+    },
+    {
+      "Name": "Crystal Trousers",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "CrystalTrousers",
+      "Grade": 3,
+      "Gear": {
+        "Family": "Crystal",
+        "Kind": "Armor",
+        "Slot": "Legs"
+      }
+    },
+    {
+      "Name": "Dark Dust",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "DarkDust",
+      "Grade": 4
+    },
+    {
+      "Name": "Dark Moss",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant"
+      ],
+      "Id": "DarkMoss",
+      "Grade": 4
+    },
+    {
+      "Name": "Dawn Bow",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "DawnBow",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Bow",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Dawn Flower",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant",
+        "Seasoning"
+      ],
+      "Id": "DawnFlower",
+      "Grade": 4
+    },
+    {
+      "Name": "Dawn Heart",
+      "Tags": [
+        "Resource",
+        "Trophy"
+      ],
+      "Id": "DawnHeart",
+      "Grade": 8
+    },
+    {
+      "Name": "Deep Air Tank",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "DeepAirTank",
+      "Grade": 7,
+      "Gear": {
+        "Family": "AirTank",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Deep Axe",
+      "Tags": [
+        "Tool",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "DeepAxe",
+      "Grade": 7,
+      "Gear": {
+        "Family": "Axe",
+        "Kind": "Tool"
+      }
+    },
+    {
+      "Name": "Deep Metal",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "DeepMetal",
+      "Grade": 7
+    },
+    {
+      "Name": "Deep Pickaxe",
+      "Tags": [
+        "Tool",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "DeepPickaxe",
+      "Grade": 7,
+      "Gear": {
+        "Family": "Pickaxe",
+        "Kind": "Tool"
+      }
+    },
+    {
+      "Name": "Deep Resin",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Wood"
+      ],
+      "Id": "DeepResin",
+      "Grade": 5
+    },
+    {
+      "Name": "Deepsteel Sword",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "DeepsteelSword",
+      "Grade": 7,
+      "Gear": {
+        "Family": "Sword",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Desert Coat",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "DesertCoat",
+      "Grade": 2,
+      "Gear": {
+        "Kind": "Armor",
+        "Slot": "Chest"
+      }
+    },
+    {
+      "Name": "Different Trophies",
+      "Tags": [
+        "RecipeRequirement"
+      ],
+      "Id": "DifferentTrophies",
+      "Grade": 8
+    },
+    {
+      "Name": "Dirty Water",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Liquid"
+      ],
+      "Id": "DirtyWater",
+      "Grade": 1
+    },
+    {
+      "Name": "Diver Boots",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "DiverBoots",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Diver",
+        "Kind": "Armor",
+        "Slot": "Boots"
+      }
+    },
+    {
+      "Name": "Diver Coat",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "DiverCoat",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Diver",
+        "Kind": "Armor",
+        "Slot": "Chest"
+      }
+    },
+    {
+      "Name": "Diver Hood",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "DiverHood",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Diver",
+        "Kind": "Armor",
+        "Slot": "Head"
+      }
+    },
+    {
+      "Name": "Diver Trousers",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "DiverTrousers",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Diver",
+        "Kind": "Armor",
+        "Slot": "Legs"
+      }
+    },
+    {
+      "Name": "Door",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure"
+      ],
+      "Id": "Door",
+      "Grade": 1
+    },
+    {
+      "Name": "Dried Food",
+      "Tags": [
+        "Food",
+        "Consumable",
+        "Cooking"
+      ],
+      "Id": "DriedFood",
+      "Grade": 3
+    },
+    {
+      "Name": "Drying Salve",
+      "Tags": [
+        "Consumable",
+        "Medicine"
+      ],
+      "Id": "DryingSalve",
+      "Grade": 3
+    },
+    {
+      "Name": "Dune Boots",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "DuneBoots",
+      "Grade": 1,
+      "Gear": {
+        "Family": "Dune",
+        "Kind": "Armor",
+        "Slot": "Boots"
+      }
+    },
+    {
+      "Name": "Dune Coat",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "DuneCoat",
+      "Grade": 1,
+      "Gear": {
+        "Family": "Dune",
+        "Kind": "Armor",
+        "Slot": "Chest"
+      }
+    },
+    {
+      "Name": "Dune Hood",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "DuneHood",
+      "Grade": 1,
+      "Gear": {
+        "Family": "Dune",
+        "Kind": "Armor",
+        "Slot": "Head"
+      }
+    },
+    {
+      "Name": "Dune Trousers",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "DuneTrousers",
+      "Grade": 1,
+      "Gear": {
+        "Family": "Dune",
+        "Kind": "Armor",
+        "Slot": "Legs"
+      }
+    },
+    {
+      "Name": "Echo Charm",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "EchoCharm",
+      "Grade": 7,
+      "Gear": {
+        "Family": "EchoCharm",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Echo Shell",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "EchoShell",
+      "Grade": 4
+    },
+    {
+      "Name": "Ember Axe",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "EmberAxe",
+      "Grade": 3,
+      "Gear": {
+        "Family": "Axe",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Ember Brazier",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure",
+        "Light"
+      ],
+      "Id": "EmberBrazier",
+      "Grade": 3
+    },
+    {
+      "Name": "Ember Pepper",
+      "Tags": [
+        "Resource",
+        "Plant",
+        "Seasoning"
+      ],
+      "Id": "EmberPepper",
+      "Grade": 1
+    },
+    {
+      "Name": "Enchanting Dust",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "EnchantingDust",
+      "Grade": 3
+    },
+    {
+      "Name": "Enchanting Table",
+      "Tags": [
+        "Placeable",
+        "Station",
+        "Holdable",
+        "CraftingStation"
+      ],
+      "Id": "EnchantingTable",
+      "Grade": 3
+    },
+    {
+      "Name": "Event Detector",
+      "Tags": [
+        "Utility",
+        "Intel"
+      ],
+      "Id": "EventDetector",
+      "Grade": 5
+    },
+    {
+      "Name": "Expedition Meal",
+      "Tags": [
+        "Food",
+        "Consumable",
+        "Cooking"
+      ],
+      "Id": "ExpeditionMeal",
+      "Grade": 6
+    },
+    {
+      "Name": "Expedition Pack",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "ExpeditionPack",
+      "Grade": 7,
+      "Gear": {
+        "Family": "Pack",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Expedition Tool",
+      "Tags": [
+        "Tool",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "ExpeditionTool",
+      "Grade": 8,
+      "Gear": {
+        "Family": "Universal",
+        "Kind": "Tool"
+      }
+    },
+    {
+      "Name": "Fiber",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant"
+      ],
+      "Id": "Fiber",
+      "Grade": 1
+    },
+    {
+      "Name": "Field Clock",
+      "Tags": [
+        "Utility",
+        "Intel"
+      ],
+      "Id": "FieldClock",
+      "Grade": 1
+    },
+    {
+      "Name": "Field Journal",
+      "Tags": [
+        "Utility",
+        "Intel"
+      ],
+      "Id": "FieldJournal",
+      "Grade": 5
+    },
+    {
+      "Name": "Field Repair Kit",
+      "Tags": [
+        "Consumable",
+        "Repair"
+      ],
+      "Id": "FieldRepairKit",
+      "Grade": 1
+    },
+    {
+      "Name": "Field Repair Kit Grade 2",
+      "Tags": [
+        "Consumable",
+        "Repair"
+      ],
+      "Id": "FieldRepairKit2",
+      "Grade": 2
+    },
+    {
+      "Name": "Field Repair Kit Grade 3",
+      "Tags": [
+        "Consumable",
+        "Repair"
+      ],
+      "Id": "FieldRepairKit3",
+      "Grade": 3
+    },
+    {
+      "Name": "Field Repair Kit Grade 4",
+      "Tags": [
+        "Consumable",
+        "Repair"
+      ],
+      "Id": "FieldRepairKit4",
+      "Grade": 4
+    },
+    {
+      "Name": "Field Repair Kit Grade 5",
+      "Tags": [
+        "Consumable",
+        "Repair"
+      ],
+      "Id": "FieldRepairKit5",
+      "Grade": 5
+    },
+    {
+      "Name": "Field Repair Kit Grade 6",
+      "Tags": [
+        "Consumable",
+        "Repair"
+      ],
+      "Id": "FieldRepairKit6",
+      "Grade": 6
+    },
+    {
+      "Name": "Field Repair Kit Grade 7",
+      "Tags": [
+        "Consumable",
+        "Repair"
+      ],
+      "Id": "FieldRepairKit7",
+      "Grade": 7
+    },
+    {
+      "Name": "Field Repair Kit Grade 8",
+      "Tags": [
+        "Consumable",
+        "Repair"
+      ],
+      "Id": "FieldRepairKit8",
+      "Grade": 8
+    },
+    {
+      "Name": "Field Sickle",
+      "Tags": [
+        "Tool",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "FieldSickle",
+      "Grade": 5,
+      "Gear": {
+        "Family": "Sickle",
+        "Kind": "Tool"
+      }
+    },
+    {
+      "Name": "Filter Mask",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "FilterMask",
+      "Grade": 2,
+      "Gear": {
+        "Family": "FilterMask",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Fire Cloth",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "FireCloth",
+      "Grade": 3
+    },
+    {
+      "Name": "Fire Core",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "FireCore",
+      "Grade": 6
+    },
+    {
+      "Name": "First Aid Kit",
+      "Tags": [
+        "Consumable",
+        "Medicine"
+      ],
+      "Id": "FirstAidKit",
+      "Grade": 6
+    },
+    {
+      "Name": "Floor",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure"
+      ],
+      "Id": "Floor",
+      "Grade": 1
+    },
+    {
+      "Name": "Frost Bloom",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant"
+      ],
+      "Id": "FrostBloom",
+      "Grade": 4
+    },
+    {
+      "Name": "Frost Boots",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "FrostBoots",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Frost",
+        "Kind": "Armor",
+        "Slot": "Boots"
+      }
+    },
+    {
+      "Name": "Frost Coat",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "FrostCoat",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Frost",
+        "Kind": "Armor",
+        "Slot": "Chest"
+      }
+    },
+    {
+      "Name": "Frost Heart",
+      "Tags": [
+        "Resource",
+        "Trophy"
+      ],
+      "Id": "FrostHeart",
+      "Grade": 8
+    },
+    {
+      "Name": "Frost Hood",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "FrostHood",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Frost",
+        "Kind": "Armor",
+        "Slot": "Head"
+      }
+    },
+    {
+      "Name": "Frost Spear",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "FrostSpear",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Spear",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Frost Trousers",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "FrostTrousers",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Frost",
+        "Kind": "Armor",
+        "Slot": "Legs"
+      }
+    },
+    {
+      "Name": "Frostglass Lamp",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure",
+        "Light"
+      ],
+      "Id": "FrostglassLamp",
+      "Grade": 2
+    },
+    {
+      "Name": "Furnace",
+      "Tags": [
+        "Placeable",
+        "Station",
+        "Holdable",
+        "CraftingStation"
+      ],
+      "Id": "Furnace",
+      "Grade": 1
+    },
+    {
+      "Name": "Garden Boots",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "GardenBoots",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Garden",
+        "Kind": "Armor",
+        "Slot": "Boots"
+      }
+    },
+    {
+      "Name": "Garden Coat",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "GardenCoat",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Garden",
+        "Kind": "Armor",
+        "Slot": "Chest"
+      }
+    },
+    {
+      "Name": "Garden Hood",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "GardenHood",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Garden",
+        "Kind": "Armor",
+        "Slot": "Head"
+      }
+    },
+    {
+      "Name": "Garden Sickle",
+      "Tags": [
+        "Tool",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "GardenSickle",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Sickle",
+        "Kind": "Tool"
+      }
+    },
+    {
+      "Name": "Garden Trousers",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "GardenTrousers",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Garden",
+        "Kind": "Armor",
+        "Slot": "Legs"
+      }
+    },
+    {
+      "Name": "Gate",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure"
+      ],
+      "Id": "Gate",
+      "Grade": 1
+    },
+    {
+      "Name": "Gatherer's Pouch",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "GatherersPouch",
+      "Grade": 3,
+      "Gear": {
+        "Family": "GatherersPouch",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Gears",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "Gears",
+      "Grade": 2
+    },
+    {
+      "Name": "Glass",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "Glass",
+      "Grade": 1
+    },
+    {
+      "Name": "Glider",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "Glider",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Glider",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Glow Cloth",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "GlowCloth",
+      "Grade": 4
+    },
+    {
+      "Name": "Glow Fiber",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant"
+      ],
+      "Id": "GlowFiber",
+      "Grade": 4
+    },
+    {
+      "Name": "Glow Mushroom",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant"
+      ],
+      "Id": "GlowMushroom",
+      "Grade": 3
+    },
+    {
+      "Name": "Glow Spice",
+      "Tags": [
+        "Resource",
+        "Plant",
+        "Seasoning"
+      ],
+      "Id": "GlowSpice",
+      "Grade": 1
+    },
+    {
+      "Name": "Glowcap",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant"
+      ],
+      "Id": "Glowcap",
+      "Grade": 2
+    },
+    {
+      "Name": "Glowcap Stew",
+      "Tags": [
+        "Food",
+        "Consumable",
+        "Cooking"
+      ],
+      "Id": "GlowcapStew",
+      "Grade": 4
+    },
+    {
+      "Name": "Gravity Belt",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "GravityBelt",
+      "Grade": 8,
+      "Gear": {
+        "Family": "GravityBelt",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Gravity Hammer",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "GravityHammer",
+      "Grade": 8,
+      "Gear": {
+        "Family": "Hammer",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Gravity Shard",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "GravityShard",
+      "Grade": 8
+    },
+    {
+      "Name": "Greater Fire Core",
+      "Tags": [
+        "Resource",
+        "Trophy"
+      ],
+      "Id": "GreaterFireCore",
+      "Grade": 8
+    },
+    {
+      "Name": "Greater Star Core",
+      "Tags": [
+        "Resource",
+        "Trophy"
+      ],
+      "Id": "GreaterStarCore",
+      "Grade": 8
+    },
+    {
+      "Name": "Greater Storm Core",
+      "Tags": [
+        "Resource",
+        "Trophy"
+      ],
+      "Id": "GreaterStormCore",
+      "Grade": 8
+    },
+    {
+      "Name": "Grounding Belt",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "GroundingBelt",
+      "Grade": 5,
+      "Gear": {
+        "Family": "GroundingBelt",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Growth Heart",
+      "Tags": [
+        "Resource",
+        "Trophy"
+      ],
+      "Id": "GrowthHeart",
+      "Grade": 8
+    },
+    {
+      "Name": "Harvester",
+      "Tags": [
+        "Tool",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "Harvester",
+      "Grade": 1,
+      "Gear": {
+        "Family": "Universal",
+        "Kind": "Tool"
+      }
+    },
+    {
+      "Name": "Healing Herb",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant"
+      ],
+      "Id": "HealingHerb",
+      "Grade": 1
+    },
+    {
+      "Name": "Healing Wrap",
+      "Tags": [
+        "Consumable",
+        "Medicine"
+      ],
+      "Id": "HealingWrap",
+      "Grade": 2
+    },
+    {
+      "Name": "Heartwood",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Wood"
+      ],
+      "Id": "Heartwood",
+      "Grade": 6
+    },
+    {
+      "Name": "Heat Shield",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "HeatShield",
+      "Grade": 3,
+      "Gear": {
+        "Family": "HeatShield",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Herbal Paste",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "HerbalPaste",
+      "Grade": 1
+    },
+    {
+      "Name": "Hunter's Charm",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "HuntersCharm",
+      "Grade": 5,
+      "Gear": {
+        "Family": "HuntersCharm",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Hunter's Roast",
+      "Tags": [
+        "Food",
+        "Consumable",
+        "Cooking"
+      ],
+      "Id": "HuntersRoast",
+      "Grade": 4
+    },
+    {
+      "Name": "Hunting Bow",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "HuntingBow",
+      "Grade": 1,
+      "Gear": {
+        "Family": "Bow",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Ice Cleats",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "IceCleats",
+      "Grade": 2,
+      "Gear": {
+        "Family": "IceCleats",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Ice Crystal",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "IceCrystal",
+      "Grade": 2
+    },
+    {
+      "Name": "Impact Glass",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "ImpactGlass",
+      "Grade": 4
+    },
+    {
+      "Name": "Iron Bar",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "IronBar",
+      "Grade": 1
+    },
+    {
+      "Name": "Iron Boots",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "IronBoots",
+      "Grade": 3,
+      "Gear": {
+        "Family": "Iron",
+        "Kind": "Armor",
+        "Slot": "Boots"
+      }
+    },
+    {
+      "Name": "Iron Coat",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "IronCoat",
+      "Grade": 3,
+      "Gear": {
+        "Family": "Iron",
+        "Kind": "Armor",
+        "Slot": "Chest"
+      }
+    },
+    {
+      "Name": "Iron Heart",
+      "Tags": [
+        "Resource",
+        "Trophy"
+      ],
+      "Id": "IronHeart",
+      "Grade": 8
+    },
+    {
+      "Name": "Iron Hood",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "IronHood",
+      "Grade": 3,
+      "Gear": {
+        "Family": "Iron",
+        "Kind": "Armor",
+        "Slot": "Head"
+      }
+    },
+    {
+      "Name": "Iron Ore",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "IronOre",
+      "Grade": 2
+    },
+    {
+      "Name": "Iron Trousers",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "IronTrousers",
+      "Grade": 3,
+      "Gear": {
+        "Family": "Iron",
+        "Kind": "Armor",
+        "Slot": "Legs"
+      }
+    },
+    {
+      "Name": "Ironwood",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Wood"
+      ],
+      "Id": "Ironwood",
+      "Grade": 3
+    },
+    {
+      "Name": "Ironwood Axe",
+      "Tags": [
+        "Tool",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "IronwoodAxe",
+      "Grade": 6,
+      "Gear": {
+        "Family": "Axe",
+        "Kind": "Tool"
+      }
+    },
+    {
+      "Name": "Ironwood Bow",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "IronwoodBow",
+      "Grade": 6,
+      "Gear": {
+        "Family": "Bow",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Kelp",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant"
+      ],
+      "Id": "Kelp",
+      "Grade": 2
+    },
+    {
+      "Name": "Ladder",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure"
+      ],
+      "Id": "Ladder",
+      "Grade": 1
+    },
+    {
+      "Name": "Lantern Boots",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "LanternBoots",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Lantern",
+        "Kind": "Armor",
+        "Slot": "Boots"
+      }
+    },
+    {
+      "Name": "Lantern Coat",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "LanternCoat",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Lantern",
+        "Kind": "Armor",
+        "Slot": "Chest"
+      }
+    },
+    {
+      "Name": "Lantern Hood",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "LanternHood",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Lantern",
+        "Kind": "Armor",
+        "Slot": "Head"
+      }
+    },
+    {
+      "Name": "Lantern Staff",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "LanternStaff",
+      "Grade": 7,
+      "Gear": {
+        "Family": "Staff",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Lantern Trousers",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "LanternTrousers",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Lantern",
+        "Kind": "Armor",
+        "Slot": "Legs"
+      }
+    },
+    {
+      "Name": "Large Chest",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure"
+      ],
+      "Id": "LargeChest",
+      "Grade": 4
+    },
+    {
+      "Name": "Large Pack",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "LargePack",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Pack",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Lift Seed",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant"
+      ],
+      "Id": "LiftSeed",
+      "Grade": 4
+    },
+    {
+      "Name": "Light Ore",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "LightOre",
+      "Grade": 7
+    },
+    {
+      "Name": "Living Root",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant"
+      ],
+      "Id": "LivingRoot",
+      "Grade": 4
+    },
+    {
+      "Name": "Loom",
+      "Tags": [
+        "Placeable",
+        "Station",
+        "Holdable",
+        "CraftingStation"
+      ],
+      "Id": "Loom",
+      "Grade": 1
+    },
+    {
+      "Name": "Marsh Boots",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "MarshBoots",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Marsh",
+        "Kind": "Armor",
+        "Slot": "Boots"
+      }
+    },
+    {
+      "Name": "Marsh Bow",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "MarshBow",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Bow",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Marsh Coat",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "MarshCoat",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Marsh",
+        "Kind": "Armor",
+        "Slot": "Chest"
+      }
+    },
+    {
+      "Name": "Marsh Heart",
+      "Tags": [
+        "Resource",
+        "Trophy"
+      ],
+      "Id": "MarshHeart",
+      "Grade": 8
+    },
+    {
+      "Name": "Marsh Hood",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "MarshHood",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Marsh",
+        "Kind": "Armor",
+        "Slot": "Head"
+      }
+    },
+    {
+      "Name": "Marsh Trousers",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "MarshTrousers",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Marsh",
+        "Kind": "Armor",
+        "Slot": "Legs"
+      }
+    },
+    {
+      "Name": "Medicine Table",
+      "Tags": [
+        "Placeable",
+        "Station",
+        "Holdable",
+        "CraftingStation"
+      ],
+      "Id": "MedicineTable",
+      "Grade": 2
+    },
+    {
+      "Name": "Meteor Axe",
+      "Tags": [
+        "Tool",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "MeteorAxe",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Axe",
+        "Kind": "Tool"
+      }
+    },
+    {
+      "Name": "Meteor Bar",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "MeteorBar",
+      "Grade": 4
+    },
+    {
+      "Name": "Meteor Boots",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "MeteorBoots",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Meteor",
+        "Kind": "Armor",
+        "Slot": "Boots"
+      }
+    },
+    {
+      "Name": "Meteor Coat",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "MeteorCoat",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Meteor",
+        "Kind": "Armor",
+        "Slot": "Chest"
+      }
+    },
+    {
+      "Name": "Meteor Hood",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "MeteorHood",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Meteor",
+        "Kind": "Armor",
+        "Slot": "Head"
+      }
+    },
+    {
+      "Name": "Meteor Ore",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "MeteorOre",
+      "Grade": 4
+    },
+    {
+      "Name": "Meteor Pickaxe",
+      "Tags": [
+        "Tool",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "MeteorPickaxe",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Pickaxe",
+        "Kind": "Tool"
+      }
+    },
+    {
+      "Name": "Meteor Pike",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "MeteorPike",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Spear",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Meteor Trousers",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "MeteorTrousers",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Meteor",
+        "Kind": "Armor",
+        "Slot": "Legs"
+      }
+    },
+    {
+      "Name": "Mireglow Lantern",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure",
+        "Light"
+      ],
+      "Id": "MireGlowLantern",
+      "Grade": 2
+    },
+    {
+      "Name": "Moon Axe",
+      "Tags": [
+        "Tool",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "MoonAxe",
+      "Grade": 8,
+      "Gear": {
+        "Family": "Axe",
+        "Kind": "Tool"
+      }
+    },
+    {
+      "Name": "Moon Bar",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "MoonBar",
+      "Grade": 8
+    },
+    {
+      "Name": "Moon Boots",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "MoonBoots",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Moon",
+        "Kind": "Armor",
+        "Slot": "Boots"
+      }
+    },
+    {
+      "Name": "Moon Coat",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "MoonCoat",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Moon",
+        "Kind": "Armor",
+        "Slot": "Chest"
+      }
+    },
+    {
+      "Name": "Moon Hood",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "MoonHood",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Moon",
+        "Kind": "Armor",
+        "Slot": "Head"
+      }
+    },
+    {
+      "Name": "Moon Ore",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "MoonOre",
+      "Grade": 8
+    },
+    {
+      "Name": "Moon Pickaxe",
+      "Tags": [
+        "Tool",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "MoonPickaxe",
+      "Grade": 8,
+      "Gear": {
+        "Family": "Pickaxe",
+        "Kind": "Tool"
+      }
+    },
+    {
+      "Name": "Moon Poppy",
+      "Tags": [
+        "Resource",
+        "Plant",
+        "Seasoning"
+      ],
+      "Id": "MoonPoppy",
+      "Grade": 1
+    },
+    {
+      "Name": "Moon Rock",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "MoonRock",
+      "Grade": 4
+    },
+    {
+      "Name": "Moon Thread",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant"
+      ],
+      "Id": "MoonThread",
+      "Grade": 4
+    },
+    {
+      "Name": "Moon Trousers",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "MoonTrousers",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Moon",
+        "Kind": "Armor",
+        "Slot": "Legs"
+      }
+    },
+    {
+      "Name": "Moonblade",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "Moonblade",
+      "Grade": 8,
+      "Gear": {
+        "Family": "Sword",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Moonwell Beacon",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure",
+        "Light"
+      ],
+      "Id": "MoonwellBeacon",
+      "Grade": 8
+    },
+    {
+      "Name": "Mushroom",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant",
+        "Consumable",
+        "Food"
+      ],
+      "Id": "Mushroom",
+      "Grade": 1
+    },
+    {
+      "Name": "Mushroom Soup",
+      "Tags": [
+        "Food",
+        "Consumable",
+        "Cooking"
+      ],
+      "Id": "MushroomSoup",
+      "Grade": 2
+    },
+    {
+      "Name": "Night Cloth",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "NightCloth",
+      "Grade": 8
+    },
+    {
+      "Name": "Night Heart",
+      "Tags": [
+        "Resource",
+        "Trophy"
+      ],
+      "Id": "NightHeart",
+      "Grade": 8
+    },
+    {
+      "Name": "Old Gear",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "OldGear",
+      "Grade": 4
+    },
+    {
+      "Name": "Oven",
+      "Tags": [
+        "Placeable",
+        "Station",
+        "Holdable",
+        "CraftingStation"
+      ],
+      "Id": "Oven",
+      "Grade": 3
+    },
+    {
+      "Name": "Pearl",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "Pearl",
+      "Grade": 6
+    },
+    {
+      "Name": "Peat",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "Peat",
+      "Grade": 2
+    },
+    {
+      "Name": "Plank",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "Plank",
+      "Grade": 1
+    },
+    {
+      "Name": "Plant Oil",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "PlantOil",
+      "Grade": 3
+    },
+    {
+      "Name": "Pressure Glass",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "PressureGlass",
+      "Grade": 4
+    },
+    {
+      "Name": "Rain Cape",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "RainCape",
+      "Grade": 1,
+      "Gear": {
+        "Family": "RainCape",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Rain Collector",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure"
+      ],
+      "Id": "RainCollector",
+      "Grade": 2
+    },
+    {
+      "Name": "Ramp",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure"
+      ],
+      "Id": "Ramp",
+      "Grade": 1
+    },
+    {
+      "Name": "Raw Meat",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Animal"
+      ],
+      "Id": "RawMeat",
+      "Grade": 1
+    },
+    {
+      "Name": "Recovery Tonic",
+      "Tags": [
+        "Consumable",
+        "Medicine"
+      ],
+      "Id": "RecoveryTonic",
+      "Grade": 4
+    },
+    {
+      "Name": "Red Garlic",
+      "Tags": [
+        "Resource",
+        "Plant",
+        "Seasoning"
+      ],
+      "Id": "RedGarlic",
+      "Grade": 1
+    },
+    {
+      "Name": "Red Ore",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "RedOre",
+      "Grade": 6
+    },
+    {
+      "Name": "Reeds",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant"
+      ],
+      "Id": "Reeds",
+      "Grade": 1
+    },
+    {
+      "Name": "Reinforced Bar",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "ReinforcedBar",
+      "Grade": 6
+    },
+    {
+      "Name": "Reinforced Pickaxe",
+      "Tags": [
+        "Tool",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "ReinforcedPickaxe",
+      "Grade": 6,
+      "Gear": {
+        "Family": "Pickaxe",
+        "Kind": "Tool"
+      }
+    },
+    {
+      "Name": "Repair Bench",
+      "Tags": [
+        "Placeable",
+        "Station",
+        "Holdable",
+        "CraftingStation"
+      ],
+      "Id": "RepairBench",
+      "Grade": 4
+    },
+    {
+      "Name": "Repair Pouch",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "RepairPouch",
+      "Grade": 6,
+      "Gear": {
+        "Family": "RepairPouch",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Rescue Charm",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "RescueCharm",
+      "Grade": 6,
+      "Gear": {
+        "Family": "RescueCharm",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Resin",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Wood"
+      ],
+      "Id": "Resin",
+      "Grade": 1
+    },
+    {
+      "Name": "Resource Compass",
+      "Tags": [
+        "Utility",
+        "Intel"
+      ],
+      "Id": "ResourceCompass",
+      "Grade": 3
+    },
+    {
+      "Name": "Revival Kit",
+      "Tags": [
+        "Consumable",
+        "Medicine"
+      ],
+      "Id": "RevivalKit",
+      "Grade": 1
+    },
+    {
+      "Name": "River Dill",
+      "Tags": [
+        "Resource",
+        "Plant",
+        "Seasoning"
+      ],
+      "Id": "RiverDill",
+      "Grade": 1
+    },
+    {
+      "Name": "Roasted Meat",
+      "Tags": [
+        "Food",
+        "Consumable",
+        "Cooking"
+      ],
+      "Id": "RoastedMeat",
+      "Grade": 1
+    },
+    {
+      "Name": "Roasted Mushrooms",
+      "Tags": [
+        "Food",
+        "Consumable",
+        "Cooking"
+      ],
+      "Id": "RoastedMushrooms",
+      "Grade": 1
+    },
+    {
+      "Name": "Roof",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure"
+      ],
+      "Id": "Roof",
+      "Grade": 1
+    },
+    {
+      "Name": "Root Roast",
+      "Tags": [
+        "Food",
+        "Consumable",
+        "Cooking"
+      ],
+      "Id": "RootRoast",
+      "Grade": 3
+    },
+    {
+      "Name": "Root Staff",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "RootStaff",
+      "Grade": 6,
+      "Gear": {
+        "Family": "Staff",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Root Vegetable",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant",
+        "Consumable",
+        "Food"
+      ],
+      "Id": "RootVegetable",
+      "Grade": 1
+    },
+    {
+      "Name": "Sail Cloth",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "SailCloth",
+      "Grade": 7
+    },
+    {
+      "Name": "Salt",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral",
+        "Seasoning"
+      ],
+      "Id": "Salt",
+      "Grade": 2
+    },
+    {
+      "Name": "Sand",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "Sand",
+      "Grade": 1
+    },
+    {
+      "Name": "Shell Plate",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "ShellPlate",
+      "Grade": 2
+    },
+    {
+      "Name": "Shift Stabilizer",
+      "Tags": [
+        "Utility",
+        "WorldControl"
+      ],
+      "Id": "ShiftStabilizer",
+      "Grade": 2
+    },
+    {
+      "Name": "Shift Trigger",
+      "Tags": [
+        "Utility",
+        "WorldControl"
+      ],
+      "Id": "ShiftTrigger",
+      "Grade": 2
+    },
+    {
+      "Name": "Sky Heart",
+      "Tags": [
+        "Resource",
+        "Trophy"
+      ],
+      "Id": "SkyHeart",
+      "Grade": 8
+    },
+    {
+      "Name": "Sky Spear",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "SkySpear",
+      "Grade": 7,
+      "Gear": {
+        "Family": "Spear",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Small Pack",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "SmallPack",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Pack",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Spike Trap",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure"
+      ],
+      "Id": "SpikeTrap",
+      "Grade": 2
+    },
+    {
+      "Name": "Spring Boots Charm",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "SpringBootsCharm",
+      "Grade": 3,
+      "Gear": {
+        "Family": "SpringBootsCharm",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Stairs",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure"
+      ],
+      "Id": "Stairs",
+      "Grade": 1
+    },
+    {
+      "Name": "Stamina Ration",
+      "Tags": [
+        "Food",
+        "Consumable",
+        "Cooking"
+      ],
+      "Id": "StaminaRation",
+      "Grade": 2
+    },
+    {
+      "Name": "Standing Lamp",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure",
+        "Light"
+      ],
+      "Id": "StandingLamp",
+      "Grade": 3
+    },
+    {
+      "Name": "Star Bow",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "StarBow",
+      "Grade": 8,
+      "Gear": {
+        "Family": "Bow",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Star Core",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "StarCore",
+      "Grade": 4
+    },
+    {
+      "Name": "Star Seed",
+      "Tags": [
+        "Resource",
+        "Plant",
+        "Seasoning"
+      ],
+      "Id": "StarSeed",
+      "Grade": 1
+    },
+    {
+      "Name": "Starfall Orrery",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure",
+        "Light"
+      ],
+      "Id": "StarfallOrrery",
+      "Grade": 4
+    },
+    {
+      "Name": "Steady Grip",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "SteadyGrip",
+      "Grade": 3,
+      "Gear": {
+        "Family": "SteadyGrip",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Steel Axe",
+      "Tags": [
+        "Tool",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "SteelAxe",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Axe",
+        "Kind": "Tool"
+      }
+    },
+    {
+      "Name": "Steel Bar",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "SteelBar",
+      "Grade": 2
+    },
+    {
+      "Name": "Steel Pickaxe",
+      "Tags": [
+        "Tool",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "SteelPickaxe",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Pickaxe",
+        "Kind": "Tool"
+      }
+    },
+    {
+      "Name": "Steel Sword",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "SteelSword",
+      "Grade": 2,
+      "Gear": {
+        "Family": "Sword",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Stone",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "Stone",
+      "Grade": 1
+    },
+    {
+      "Name": "Stone Axe",
+      "Tags": [
+        "Tool",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "StoneAxe",
+      "Grade": 1,
+      "Gear": {
+        "Family": "Axe",
+        "Kind": "Tool"
+      }
+    },
+    {
+      "Name": "Stone Pickaxe",
+      "Tags": [
+        "Tool",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "StonePickaxe",
+      "Grade": 1,
+      "Gear": {
+        "Family": "Pickaxe",
+        "Kind": "Tool"
+      }
+    },
+    {
+      "Name": "Stone Spear",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "StoneSpear",
+      "Grade": 1,
+      "Gear": {
+        "Family": "Spear",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Storm Axe",
+      "Tags": [
+        "Tool",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "StormAxe",
+      "Grade": 5,
+      "Gear": {
+        "Family": "Axe",
+        "Kind": "Tool"
+      }
+    },
+    {
+      "Name": "Storm Bar",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "StormBar",
+      "Grade": 5
+    },
+    {
+      "Name": "Storm Boots",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "StormBoots",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Storm",
+        "Kind": "Armor",
+        "Slot": "Boots"
+      }
+    },
+    {
+      "Name": "Storm Bow",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "StormBow",
+      "Grade": 5,
+      "Gear": {
+        "Family": "Bow",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Storm Cloth",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "StormCloth",
+      "Grade": 5
+    },
+    {
+      "Name": "Storm Coat",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "StormCoat",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Storm",
+        "Kind": "Armor",
+        "Slot": "Chest"
+      }
+    },
+    {
+      "Name": "Storm Core",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "StormCore",
+      "Grade": 6
+    },
+    {
+      "Name": "Storm Hood",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "StormHood",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Storm",
+        "Kind": "Armor",
+        "Slot": "Head"
+      }
+    },
+    {
+      "Name": "Storm Ore",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "StormOre",
+      "Grade": 5
+    },
+    {
+      "Name": "Storm Pickaxe",
+      "Tags": [
+        "Tool",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "StormPickaxe",
+      "Grade": 5,
+      "Gear": {
+        "Family": "Pickaxe",
+        "Kind": "Tool"
+      }
+    },
+    {
+      "Name": "Storm Thyme",
+      "Tags": [
+        "Resource",
+        "Plant",
+        "Seasoning"
+      ],
+      "Id": "StormThyme",
+      "Grade": 1
+    },
+    {
+      "Name": "Storm Trousers",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "StormTrousers",
+      "Grade": 4,
+      "Gear": {
+        "Family": "Storm",
+        "Kind": "Armor",
+        "Slot": "Legs"
+      }
+    },
+    {
+      "Name": "Stormcoil Beacon",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure",
+        "Light"
+      ],
+      "Id": "StormcoilBeacon",
+      "Grade": 5
+    },
+    {
+      "Name": "Stove",
+      "Tags": [
+        "Placeable",
+        "Station",
+        "Holdable",
+        "CraftingStation"
+      ],
+      "Id": "Stove",
+      "Grade": 2
+    },
+    {
+      "Name": "Strong Glider",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "StrongGlider",
+      "Grade": 7,
+      "Gear": {
+        "Family": "Glider",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Strong Silk",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant"
+      ],
+      "Id": "StrongSilk",
+      "Grade": 2
+    },
+    {
+      "Name": "Stuffed Mushrooms",
+      "Tags": [
+        "Food",
+        "Consumable",
+        "Cooking"
+      ],
+      "Id": "StuffedMushrooms",
+      "Grade": 3
+    },
+    {
+      "Name": "Sulfur",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "Sulfur",
+      "Grade": 3
+    },
+    {
+      "Name": "Sun Heart",
+      "Tags": [
+        "Resource",
+        "Trophy"
+      ],
+      "Id": "SunHeart",
+      "Grade": 8
+    },
+    {
+      "Name": "Sun Vest",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "SunVest",
+      "Grade": 1,
+      "Gear": {
+        "Kind": "Armor",
+        "Slot": "Chest"
+      }
+    },
+    {
+      "Name": "Sunstone",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Mineral"
+      ],
+      "Id": "Sunstone",
+      "Grade": 4
+    },
+    {
+      "Name": "Survey Desk",
+      "Tags": [
+        "Placeable",
+        "Station",
+        "Holdable",
+        "CraftingStation"
+      ],
+      "Id": "SurveyDesk",
+      "Grade": 2
+    },
+    {
+      "Name": "Survivor's Charm",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "SurvivorsCharm",
+      "Grade": 8,
+      "Gear": {
+        "Family": "SurvivorsCharm",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Thick Spores",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Plant"
+      ],
+      "Id": "ThickSpores",
+      "Grade": 4
+    },
+    {
+      "Name": "Thorn Blade",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "ThornBlade",
+      "Grade": 6,
+      "Gear": {
+        "Family": "Sword",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Threat Gauge",
+      "Tags": [
+        "Utility",
+        "Intel"
+      ],
+      "Id": "ThreatGauge",
+      "Grade": 2
+    },
+    {
+      "Name": "Thunder Hammer",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "ThunderHammer",
+      "Grade": 5,
+      "Gear": {
+        "Family": "Hammer",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Tide Heart",
+      "Tags": [
+        "Resource",
+        "Trophy"
+      ],
+      "Id": "TideHeart",
+      "Grade": 8
+    },
+    {
+      "Name": "Tide Spear",
+      "Tags": [
+        "Weapon",
+        "Equipment",
+        "Holdable"
+      ],
+      "Id": "TideSpear",
+      "Grade": 5,
+      "Gear": {
+        "Family": "Spear",
+        "Kind": "Weapon"
+      }
+    },
+    {
+      "Name": "Torch",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure",
+        "Light"
+      ],
+      "Id": "Torch",
+      "Grade": 1
+    },
+    {
+      "Name": "Tough Cloth",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "ToughCloth",
+      "Grade": 6
+    },
+    {
+      "Name": "Tough Hide",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Animal"
+      ],
+      "Id": "ToughHide",
+      "Grade": 3
+    },
+    {
+      "Name": "Trail Beacon",
+      "Tags": [
+        "Utility",
+        "Intel",
+        "Placeable",
+        "Holdable",
+        "Light"
+      ],
+      "Id": "TrailBeacon",
+      "Grade": 3
+    },
+    {
+      "Name": "Trail Boots",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "TrailBoots",
+      "Grade": 1,
+      "Gear": {
+        "Family": "Trail",
+        "Kind": "Armor",
+        "Slot": "Boots"
+      }
+    },
+    {
+      "Name": "Trail Coat",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "TrailCoat",
+      "Grade": 1,
+      "Gear": {
+        "Family": "Trail",
+        "Kind": "Armor",
+        "Slot": "Chest"
+      }
+    },
+    {
+      "Name": "Trail Hood",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "TrailHood",
+      "Grade": 1,
+      "Gear": {
+        "Family": "Trail",
+        "Kind": "Armor",
+        "Slot": "Head"
+      }
+    },
+    {
+      "Name": "Trail Meal",
+      "Tags": [
+        "Food",
+        "Consumable",
+        "Cooking"
+      ],
+      "Id": "TrailMeal",
+      "Grade": 2
+    },
+    {
+      "Name": "Trail Trousers",
+      "Tags": [
+        "Armor",
+        "Equipment"
+      ],
+      "Id": "TrailTrousers",
+      "Grade": 1,
+      "Gear": {
+        "Family": "Trail",
+        "Kind": "Armor",
+        "Slot": "Legs"
+      }
+    },
+    {
+      "Name": "Vegetable Stew",
+      "Tags": [
+        "Food",
+        "Consumable",
+        "Cooking"
+      ],
+      "Id": "VegetableStew",
+      "Grade": 2
+    },
+    {
+      "Name": "Venom Gland",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Animal"
+      ],
+      "Id": "VenomGland",
+      "Grade": 2
+    },
+    {
+      "Name": "Wall",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure"
+      ],
+      "Id": "Wall",
+      "Grade": 1
+    },
+    {
+      "Name": "Warm Cloth",
+      "Tags": [
+        "Resource",
+        "Processed"
+      ],
+      "Id": "WarmCloth",
+      "Grade": 2
+    },
+    {
+      "Name": "Warm Fur",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Animal"
+      ],
+      "Id": "WarmFur",
+      "Grade": 1
+    },
+    {
+      "Name": "Warm Pepper",
+      "Tags": [
+        "Resource",
+        "Plant",
+        "Seasoning"
+      ],
+      "Id": "WarmPepper",
+      "Grade": 1
+    },
+    {
+      "Name": "Warm Scarf",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "WarmScarf",
+      "Grade": 1,
+      "Gear": {
+        "Family": "WarmScarf",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Warming Drink",
+      "Tags": [
+        "Food",
+        "Consumable",
+        "Cooking"
+      ],
+      "Id": "WarmingDrink",
+      "Grade": 2
+    },
+    {
+      "Name": "Warming Ring",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "WarmingRing",
+      "Grade": 5,
+      "Gear": {
+        "Family": "WarmingRing",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Watchtower",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure"
+      ],
+      "Id": "Watchtower",
+      "Grade": 1
+    },
+    {
+      "Name": "Water",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Liquid",
+        "Consumable",
+        "Food"
+      ],
+      "Id": "Water",
+      "Grade": 1
+    },
+    {
+      "Name": "Water Filter",
+      "Tags": [
+        "Placeable",
+        "Holdable",
+        "Structure"
+      ],
+      "Id": "WaterFilter",
+      "Grade": 4
+    },
+    {
+      "Name": "Water Flask",
+      "Tags": [
+        "Accessory",
+        "Equipment"
+      ],
+      "Id": "WaterFlask",
+      "Grade": 1,
+      "Gear": {
+        "Family": "WaterFlask",
+        "Kind": "Accessory"
+      }
+    },
+    {
+      "Name": "Weather Predictor",
+      "Tags": [
+        "Utility",
+        "Intel"
+      ],
+      "Id": "WeatherPredictor",
+      "Grade": 4
+    },
+    {
+      "Name": "Weather Scanner",
+      "Tags": [
+        "Utility",
+        "Intel"
+      ],
+      "Id": "WeatherScanner",
+      "Grade": 3
+    },
+    {
+      "Name": "Wild Herb",
+      "Tags": [
+        "Resource",
+        "Plant",
+        "Seasoning"
+      ],
+      "Id": "WildHerb",
+      "Grade": 1
+    },
+    {
+      "Name": "Wood",
+      "Tags": [
+        "Resource",
+        "Raw",
+        "Wood"
+      ],
+      "Id": "Wood",
+      "Grade": 1
+    },
+    {
+      "Name": "Workbench",
+      "Tags": [
+        "Placeable",
+        "Station",
+        "Holdable",
+        "CraftingStation"
+      ],
+      "Id": "Workbench",
+      "Grade": 1
+    },
+    {
+      "Name": "World Anchor",
+      "Tags": [
+        "Utility",
+        "WorldControl"
+      ],
+      "Id": "WorldAnchor",
+      "Grade": 8
+    },
+    {
+      "Name": "World Dial",
+      "Tags": [
+        "Utility",
+        "WorldControl"
+      ],
+      "Id": "WorldDial",
+      "Grade": 4
+    }
+  ],
+  "Count": 825,
+  "Seasoned": 224,
+  "Pages": 254,
+  "Enchantments": {
+    "ReturnShot": {
+      "Grades": [
+        4,
+        5,
+        7,
+        8
+      ],
+      "Theme": "StrongSilk",
+      "Name": "Return Shot"
+    },
+    "SharedCover": {
+      "Grades": [
+        5,
+        7
+      ],
+      "Theme": "ShellPlate",
+      "Name": "Shared Cover"
+    },
+    "CleanCut": {
+      "Grades": [
+        3,
+        5,
+        7
+      ],
+      "Theme": "Reeds",
+      "Name": "Clean Cut"
+    },
+    "PhaseReturn": {
+      "Grades": [
+        8
+      ],
+      "Theme": "MoonRock",
+      "Name": "Phase Return"
+    },
+    "StarfallTrace": {
+      "Grades": [
+        8
+      ],
+      "Theme": "MoonRock",
+      "Name": "Starfall Trace"
+    },
+    "LastThread": {
+      "Grades": [
+        7
+      ],
+      "Theme": "ToughHide",
+      "Name": "Last Thread"
+    },
+    "EchoCast": {
+      "Grades": [
+        3,
+        5,
+        7,
+        8
+      ],
+      "Theme": "ClearCrystal",
+      "Name": "Echo Cast"
+    },
+    "SplitFlight": {
+      "Grades": [
+        5,
+        7,
+        8
+      ],
+      "Theme": "ClearCrystal",
+      "Name": "Split Flight"
+    },
+    "GroundClaim": {
+      "Grades": [
+        5,
+        7
+      ],
+      "Theme": "LivingRoot",
+      "Name": "Ground Claim"
+    },
+    "DrawForce": {
+      "Grades": [
+        3,
+        4,
+        5,
+        7,
+        8
+      ],
+      "Theme": "Bone",
+      "Name": "Draw Force"
+    },
+    "SavedMeal": {
+      "Grades": [
+        5,
+        7
+      ],
+      "Theme": "GlowMushroom",
+      "Name": "Saved Meal"
+    },
+    "GuardReturn": {
+      "Grades": [
+        5,
+        7,
+        8
+      ],
+      "Theme": "ToughHide",
+      "Name": "Guard Return"
+    },
+    "DryStep": {
+      "Grades": [
+        3,
+        5,
+        7
+      ],
+      "Theme": "Kelp",
+      "Name": "Dry Step"
+    },
+    "TailwindLine": {
+      "Grades": [
+        7,
+        8
+      ],
+      "Theme": "EchoShell",
+      "Name": "Tailwind Line"
+    },
+    "StormLatch": {
+      "Grades": [
+        6,
+        8
+      ],
+      "Theme": "StormCore",
+      "Name": "Storm Latch"
+    },
+    "AirPocket": {
+      "Grades": [
+        4,
+        6,
+        8
+      ],
+      "Theme": "PressureGlass",
+      "Name": "Air Pocket"
+    },
+    "CampStitch": {
+      "Grades": [
+        3,
+        5,
+        7
+      ],
+      "Theme": "Resin",
+      "Name": "Camp Stitch"
+    },
+    "Brace": {
+      "Grades": [
+        5,
+        7
+      ],
+      "Theme": "ToughHide",
+      "Name": "Brace"
+    },
+    "BriarDebt": {
+      "Grades": [
+        6,
+        8
+      ],
+      "Theme": "ThickSpores",
+      "Name": "Briar Debt"
+    },
+    "Conduit": {
+      "Grades": [
+        4,
+        6,
+        8
+      ],
+      "Theme": "GlowFiber",
+      "Name": "Conduit"
+    },
+    "DrivingLine": {
+      "Grades": [
+        4,
+        6,
+        8
+      ],
+      "Theme": "StrongSilk",
+      "Name": "Driving Line"
+    },
+    "Undertow": {
+      "Grades": [
+        6,
+        8
+      ],
+      "Theme": "ShellPlate",
+      "Name": "Undertow"
+    },
+    "FocusLine": {
+      "Grades": [
+        5,
+        7
+      ],
+      "Theme": "ClearCrystal",
+      "Name": "Focus Line"
+    },
+    "QuickStow": {
+      "Grades": [
+        4,
+        6
+      ],
+      "Theme": "Resin",
+      "Name": "Quick Stow"
+    },
+    "SurveyLink": {
+      "Grades": [
+        5,
+        7
+      ],
+      "Theme": "ClearCrystal",
+      "Name": "Survey Link"
+    },
+    "FellThrough": {
+      "Grades": [
+        5,
+        7
+      ],
+      "Theme": "Resin",
+      "Name": "Fell Through"
+    },
+    "Crumple": {
+      "Grades": [
+        4,
+        6,
+        8
+      ],
+      "Theme": "ToughHide",
+      "Name": "Crumple"
+    },
+    "HeavyEcho": {
+      "Grades": [
+        3,
+        5,
+        7
+      ],
+      "Theme": "ImpactGlass",
+      "Name": "Heavy Echo"
+    },
+    "SplitArc": {
+      "Grades": [
+        3,
+        5,
+        7
+      ],
+      "Theme": "BlackGlass",
+      "Name": "Split Arc"
+    },
+    "SlipCut": {
+      "Grades": [
+        4,
+        6,
+        8
+      ],
+      "Theme": "StrongSilk",
+      "Name": "Slip Cut"
+    },
+    "OrbitBreak": {
+      "Grades": [
+        8
+      ],
+      "Theme": "MoonRock",
+      "Name": "Orbit Break"
+    },
+    "PackWarning": {
+      "Grades": [
+        4,
+        6
+      ],
+      "Theme": "EchoShell",
+      "Name": "Pack Warning"
+    },
+    "SetPoint": {
+      "Grades": [
+        3,
+        5,
+        7,
+        8
+      ],
+      "Theme": "Bone",
+      "Name": "Set Point"
+    },
+    "RootNetwork": {
+      "Grades": [
+        6,
+        8
+      ],
+      "Theme": "LivingRoot",
+      "Name": "Root Network"
+    },
+    "HeatStore": {
+      "Grades": [
+        4,
+        6
+      ],
+      "Theme": "IceCrystal",
+      "Name": "Heat Store"
+    },
+    "WeatherMemory": {
+      "Grades": [
+        4,
+        6,
+        8
+      ],
+      "Theme": "AuroraStone",
+      "Name": "Weather Memory"
+    },
+    "QuickExit": {
+      "Grades": [
+        5,
+        7
+      ],
+      "Theme": "EchoShell",
+      "Name": "Quick Exit"
+    },
+    "VentStrike": {
+      "Grades": [
+        4,
+        6,
+        8
+      ],
+      "Theme": "FrostBloom",
+      "Name": "Vent Strike"
+    },
+    "DeepBite": {
+      "Grades": [
+        4,
+        6,
+        8
+      ],
+      "Theme": "DeepMetal",
+      "Name": "Deep Bite"
+    },
+    "BeaconEcho": {
+      "Grades": [
+        7,
+        8
+      ],
+      "Theme": "EchoShell",
+      "Name": "Beacon Echo"
+    },
+    "Blindside": {
+      "Grades": [
+        3,
+        5,
+        7,
+        8
+      ],
+      "Theme": "Bone",
+      "Name": "Blindside"
+    },
+    "ForkedCurrent": {
+      "Grades": [
+        6,
+        8
+      ],
+      "Theme": "StormOre",
+      "Name": "Forked Current"
+    },
+    "RescueReserve": {
+      "Grades": [
+        5
+      ],
+      "Theme": "HealingHerb",
+      "Name": "Rescue Reserve"
+    },
+    "RollingCharge": {
+      "Grades": [
+        6,
+        8
+      ],
+      "Theme": "StormOre",
+      "Name": "Rolling Charge"
+    },
+    "RootPin": {
+      "Grades": [
+        6,
+        8
+      ],
+      "Theme": "LivingRoot",
+      "Name": "Root Pin"
+    },
+    "HeldBreath": {
+      "Grades": [
+        3,
+        5,
+        7
+      ],
+      "Theme": "StrongSilk",
+      "Name": "Held Breath"
+    },
+    "OpenSeam": {
+      "Grades": [
+        3,
+        5,
+        6,
+        8
+      ],
+      "Theme": "Resin",
+      "Name": "Open Seam"
+    },
+    "PressureCut": {
+      "Grades": [
+        7,
+        8
+      ],
+      "Theme": "DeepMetal",
+      "Name": "Pressure Cut"
+    },
+    "WideCut": {
+      "Grades": [
+        4,
+        6,
+        8
+      ],
+      "Theme": "DeepMetal",
+      "Name": "Wide Cut"
+    },
+    "MeasuredEdge": {
+      "Grades": [
+        3,
+        5,
+        7,
+        8
+      ],
+      "Theme": "BlackGlass",
+      "Name": "Measured Edge"
+    }
+  }
+}

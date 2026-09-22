@@ -16,6 +16,7 @@ InteractService._remote = nil
 InteractService._conns = {}
 
 local _lastInteract = setmetatable({}, { __mode = "k" })
+local HARVEST_COOLDOWN_EARLY_TOLERANCE = 0.1
 local _feedbackRemote = nil
 
 local HARVEST_MARKER_NAMES = {
@@ -447,10 +448,16 @@ local function handleHarvest(plr, payload)
 	local cfg = ToolConfig.Read(tool)
 	cfg.Range = math.max(cfg.Range or 0, 8)
 	cfg.Cooldown = math.max(0.05, tonumber(cfg.Cooldown) or 0.5)
-	local nextUse = (_lastInteract[plr] or 0) + cfg.Cooldown
-	if os.clock() < nextUse then
+	local now = os.clock()
+	local nextUse = (_lastInteract[tool] or 0) + cfg.Cooldown
+	local earlyTolerance = math.min(HARVEST_COOLDOWN_EARLY_TOLERANCE, cfg.Cooldown * 0.25)
+	if now + earlyTolerance < nextUse then
 		return
 	end
+	-- Held input is sent on the same nominal cadence as this server cooldown.
+	-- Accept small transport/scheduler jitter, but advance from the intended
+	-- boundary so early packets cannot increase the sustained harvesting rate.
+	local acceptedAt = math.max(now, nextUse)
 
 	if nodeDistance > (cfg.Range or 8) then
 		return
@@ -464,7 +471,7 @@ local function handleHarvest(plr, payload)
   or (entry.Grade or 1)<miningGrade or (node:GetAttribute("ResourceKind")=="Mineral" and miningGrade>1 and family~="Pickaxe" and family~="Universal") then
   local feedback=getFeedbackRemote()
   if feedback then feedback:FireClient(plr,{Node=node,Position=nodePos,Message="Requires a working grade "..miningGrade.." tool."}) end
-  _lastInteract[plr]=os.clock();return
+  _lastInteract[tool]=acceptedAt;return
  end
  local baseDamage=(definition.Power or 20)*2^((entry.Grade or 1)-(definition.Grade or 1))
  -- The universal starter is intentionally slower; specialized tools keep their listed power.
@@ -485,7 +492,7 @@ local function handleHarvest(plr, payload)
 	currentHealth = math.max(0, currentHealth - damage)
 	setNodeAttr(node, "CurrentHealth", currentHealth)
 	setNodeAttr(node, "Health", currentHealth)
-	_lastInteract[plr] = os.clock()
+	_lastInteract[tool] = acceptedAt
 	gear:WearHeld(plr,1)
 	require(script.Parent.ExpeditionRewardsService):RecordActivity(plr)
 

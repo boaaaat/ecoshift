@@ -23,6 +23,8 @@ local function createThenTake(plr, root, itemId, amount, take, entry)
 			PendingPickup = true,
 			Entry = entry,
 			InitialVelocity = forward * 8 + Vector3.new(0, 5, 0),
+			OwnerPickupBlockedUserId = plr.UserId,
+			OwnerPickupCooldown = 2,
 		})
 	end)
 	if not ok or not drop then return false end

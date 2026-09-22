@@ -475,8 +475,8 @@ function Service:_decorate(parent,resources,cx,cz)
      if itemId=="WaterFlask" then
       local stored=gear:StoreWater(player,5);success=stored>0;message=success and ("Filled "..stored.." flask use"..(stored==1 and "" or "s")..".") or "That flask is already full."
      elseif itemId=="Bucket" then
-      local stored=gear:StoreWater(player,3);local added=inventory:Give(player,"Water",3-stored,true)
-      success=stored+added>0;message=success and ("Collected "..(stored+added).." Water.") or "Your flasks and inventory are full."
+      local stored=gear:StoreWater(player,3);local added=inventory:GiveOrDrop(player,"Water",3-stored)
+      success=stored+added>0;message=success and ("Collected "..(stored+added).." Water.") or "Unable to collect water. Try again."
      end
      if success then require(script.Parent.ExpeditionRewardsService):RecordActivity(player) end
      if gear.Remote then gear.Remote:FireClient(player,"Result",{Success=success,Message=message}) end

@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 if require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("SessionConfig")).GetMode() ~= "Expedition" then return end
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
+local StationInteraction = require(ReplicatedStorage.Shared.StationInteraction)
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
@@ -70,8 +71,9 @@ end
 
 -- Tap gestures exclude camera drags, and UI-owned taps must not swing the tool.
 -- https://create.roblox.com/docs/reference/engine/classes/UserInputService#TouchTapInWorld
-UserInputService.TouchTapInWorld:Connect(function(_, processedByUI)
+UserInputService.TouchTapInWorld:Connect(function(positions, processedByUI)
 	if processedByUI or blocked() then return end
+	if StationInteraction.FromScreenPoint(player, positions and positions[1]) then return end
 	local tool = equippedTool()
 	if not tool or not tool.Enabled then return end
 	if string.lower(toolValue(tool,"WeaponType"))=="bow" then

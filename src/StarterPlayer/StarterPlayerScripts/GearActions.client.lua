@@ -8,7 +8,7 @@ local Settings=require(RS.Shared.ClientSettings)
 local Instances=require(RS.Shared.ItemInstance)
 local BowSpecials=require(RS.Shared.Weapons.BowSpecials)
 local BowVisuals=require(RS.Shared.Weapons.BowVisuals)
-local WeaponSpecialCooldown=require(RS.Shared.Weapons.WeaponSpecialCooldown)
+local ItemCooldownScope=require(RS.Shared.ItemCooldownScope)
 local player=Players.LocalPlayer;local playerGui=player:WaitForChild("PlayerGui")
 local remotes=RS:WaitForChild("Remotes");local remote=remotes:WaitForChild("GearAction")
 local combat=remotes:WaitForChild("CombatAction")
@@ -28,7 +28,7 @@ local function special()
  local camera=workspace.CurrentCamera;local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
  local tool=player.Character and player.Character:FindFirstChildOfClass("Tool")
  local itemId=tool and (tool:GetAttribute("InventoryItemId") or tool.Name)
- if WeaponSpecialCooldown.Remaining(player,itemId)>0 then return end
+ if ItemCooldownScope.Remaining(player,"WeaponSpecial",itemId)>0 then return end
  local def=itemId and Instances.Definition(itemId)
  if not camera or not root or not def or def.Kind~="Weapon" then return end
  local ray=camera:ViewportPointToRay(camera.ViewportSize.X/2,camera.ViewportSize.Y/2)
@@ -126,7 +126,7 @@ Run.RenderStepped:Connect(function(dt)
  for monster,cue in pairs(warnings) do if not seen[monster] then cue:Destroy();warnings[monster]=nil end end
  local dodgeRemaining=player:GetAttribute("DodgeCooldown") or 0
  rollLabel.Text=dodgeRemaining>0 and string.format("%.1f",dodgeRemaining) or ""
- local remaining=WeaponSpecialCooldown.Remaining(player,bowId)
+ local remaining=ItemCooldownScope.Remaining(player,"WeaponSpecial",bowId)
  burstLabel.Text=remaining>0 and tostring(math.ceil(remaining)) or ""
 end)
 Theme.TrackRoot(gui)

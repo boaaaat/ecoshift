@@ -22,7 +22,7 @@ local function disableDefaultUI()
 end
 disableDefaultUI()
 
--- Mouse lock uses Roblox's controller; MouseLockKeys moves its toggle to Control.
+-- MouseLockKeys leaves shift lock off at startup and keeps Control as its toggle.
 
 -- OPTIMIZED: Defer config loading to not block script start
 local Config, Util

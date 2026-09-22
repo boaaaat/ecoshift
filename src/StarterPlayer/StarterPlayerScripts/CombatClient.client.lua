@@ -11,6 +11,7 @@ local CombatRE = Remotes and Remotes:WaitForChild("CombatAction", 3)
 local WeaponFactory = require(ReplicatedStorage.Shared.Weapons.WeaponFactory)
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 local ItemCooldown = require(ReplicatedStorage.Shared.UI.ItemCooldown)
+local StationInteraction = require(ReplicatedStorage.Shared.StationInteraction)
 
 local player = Players.LocalPlayer
 local mouse = player:GetMouse()
@@ -18,7 +19,7 @@ local activeTool = nil
 local activeWeapon = nil
 local holdingPrimary = false
 local holdingSecondary = false
-local lastClientFire = 0
+local lastClientFire = setmetatable({}, { __mode = "k" })
 local bowCharging = false
 	player:SetAttribute("BowChargeStarted",nil)
 local boundTools = setmetatable({}, { __mode = "k" })
@@ -95,14 +96,14 @@ local function buildAimData(maxRange)
 end
 
 local function canUseTool(cooldown)
+	local tool = activeTool
+	if not tool then return false end
 	local now = os.clock()
-	if now - lastClientFire < cooldown then return false end
-	lastClientFire = now
-	if activeTool then ItemCooldown.StartTool(activeTool, cooldown) end
-	if activeTool then
-		activeTool:SetAttribute("LocalItemActionKind", "Attack")
-		activeTool:SetAttribute("LocalItemActionStarted", Workspace:GetServerTimeNow())
-	end
+	if now - (lastClientFire[tool] or 0) < cooldown then return false end
+	lastClientFire[tool] = now
+	ItemCooldown.StartTool(tool, cooldown)
+	tool:SetAttribute("LocalItemActionKind", "Attack")
+	tool:SetAttribute("LocalItemActionStarted", Workspace:GetServerTimeNow())
 	return true
 end
 
@@ -248,6 +249,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 			tryAttack()
 		end
 	elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
+		if StationInteraction.FromMouse(player) then return end
 		holdingSecondary = true
 		startBlock()
 	end

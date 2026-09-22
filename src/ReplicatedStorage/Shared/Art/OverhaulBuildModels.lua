@@ -80,7 +80,7 @@ local function bottle(m,x,z,color,height)
 end
 function Art.Create(id)
  if not Catalog.Placeables[id] then return nil end
- local m=Instance.new("Model");m.Name=id;m:SetAttribute("BuildType",id);m:SetAttribute("ArtVersion",4)
+ local m=Instance.new("Model");m.Name=id;m:SetAttribute("BuildType",id);m:SetAttribute("ArtVersion",5)
  local root=detail(m,"GroundAnchor",V(.1,.1,.1),V(0,.05,0),wood);root.Transparency=1;m.PrimaryPart=root
  if Lights[id] then LightModels.Build(m,id)
  elseif id=="Floor" or id=="Roof" then
@@ -93,8 +93,16 @@ function Art.Create(id)
   for x=-1,1,2 do for _,y in ipairs({2,6}) do detail(m,"BracePin",V(.15,.15,.04),V(x*3.6,y,-.34),metal) end end
  elseif id=="Door" or id=="Gate" then
   local w=id=="Door" and 4 or 8;m:SetAttribute("DoorWidth",w)
-  for x=-1,1,2 do part(m,"DoorPost",V(.35,8.3,.7),V(x*(w/2+.2),4.15,0),green,nil,false,Enum.Material.Wood) end
-  part(m,"Lintel",V(w+.8,.35,.7),V(0,8.15,0),green,nil,false,Enum.Material.Wood)
+  local postX=id=="Door" and 2.175 or 4
+  for x=-1,1,2 do part(m,"DoorPost",V(.35,8.3,.7),V(x*postX,4.15,0),green,nil,false,Enum.Material.Wood) end
+  part(m,"Lintel",V(8,.35,.7),V(0,8.15,0),green,nil,false,Enum.Material.Wood)
+  if id=="Door" then
+   for x=-1,1,2 do
+    part(m,"DoorWallPanel",V(1.65,7.8,.4),V(x*3.175,4,0),wood,nil,false,Enum.Material.Wood)
+    detail(m,"DoorWallBrace",V(1.5,.24,.08),V(x*3.175,2,-.25),endgrain)
+    detail(m,"DoorWallBrace",V(1.5,.24,.08),V(x*3.175,6,-.25),endgrain)
+   end
+  end
   local leaf=Instance.new("Model");leaf.Name="DoorLeaf";leaf.Parent=m
   -- UtilityBuildService expects this exact closed-leaf pivot and width.
   local face=part(leaf,"DoorPanel",V(w-.15,7.9,.4),V(0,4,0),wood,nil,false,Enum.Material.Wood);leaf.PrimaryPart=face

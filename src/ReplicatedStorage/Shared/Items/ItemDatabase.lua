@@ -1,18 +1,14 @@
 -- The expedition catalog is authoritative for all new-only game content.
-local RS=game:GetService("ReplicatedStorage")
 local Item=require(script.Parent.Item)
 local Catalog=require(script.Parent.Parent.OverhaulCatalog)
+local ItemIconConfig=require(script.Parent.Parent.UI.ItemIconConfig)
 local Database={}
 local cache={}
 local function build(def)
  local data=table.clone(def)
- local folder=RS:FindFirstChild("ItemIcons")
- local node=folder and folder:FindFirstChild(def.Id)
- if not data.Icon and node then
-  if node:IsA("StringValue") then data.Icon=node.Value
-  elseif node:IsA("Decal") then data.Icon=node.Texture
-  elseif node:IsA("ImageLabel") or node:IsA("ImageButton") then data.Icon=node.Image
-  else data.Icon=node:GetAttribute("Icon") or node:GetAttribute("Image") end
+ local iconStyle=ItemIconConfig.Resolve(data)
+ for key,value in pairs(iconStyle) do
+  data[key]=value
  end
  return Item.new(data)
 end

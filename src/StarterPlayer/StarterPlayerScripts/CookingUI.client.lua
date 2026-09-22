@@ -11,9 +11,12 @@ local Theme = require(Shared.UI.UITheme)
 local UIFactory = require(Shared.UI.UIFactory)
 local RemoteRequest = require(Shared.UI.RemoteRequest)
 local Catalog = require(Shared:WaitForChild("CookingConfig"))
+local Progression = require(Shared.OverhaulCatalog)
+local Crafting = require(Shared.WorkbenchConfig)
 local Biomes = require(Shared.BiomeConfig)
 local Items = require(Shared.Items.ItemDatabase)
 local Guide = require(Shared.UI.RecipeGuideUI)
+local RecipeHelper = require(Shared.UI.RecipeHelperUI)
 local SearchRank = require(Shared.UI.SearchRank)
 local Config = require(Shared.Config)
 local Util = require(Shared.Util)
@@ -72,8 +75,10 @@ make("UIListLayout",content,{Padding=UDim.new(0,8),SortOrder=Enum.SortOrder.Layo
 make("UIPadding",content,{PaddingRight=UDim.new(0,8),PaddingBottom=UDim.new(0,8)})
 local upgrade=button(panel,"",function()
  if not state then return end
+ local station=state.Station
+ hide()
  local stationRemote=remotes:FindFirstChild("Station")
- if stationRemote then stationRemote:FireServer("Open",{Station=state.Station,RequestId=HttpService:GenerateGUID(false)}) end
+ if stationRemote then stationRemote:FireServer("Open",{Station=station,RequestId=HttpService:GenerateGUID(false)}) end
 end,44)
 upgrade.Position=UDim2.new(1,-110,0,8);upgrade.Size=UDim2.fromOffset(44,44);Theme.Icon(upgrade,"Upgrade",22);upgrade:SetAttribute("ActionLabel","Upgrade station")
 title.Size=UDim2.new(1,-136,0,40)
@@ -133,7 +138,7 @@ local function badge(parent, spice)
  local mark=make("Frame",parent,{AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,-6,0,6),Size=UDim2.fromOffset(12,12),BackgroundColor3=spice.Color or colors.Sage,BorderSizePixel=0})
  Theme.Corner(mark,6);mark:SetAttribute("ThemeFixed",true)
 end
-local function recipeWork(recipe) return recipe.WorkSeconds or recipe.Work or 8 end
+local function recipeWork(recipe) return (recipe.WorkSeconds or recipe.Work or 8)/Crafting:GetClientCraftRate(player) end
 local function chosenRecipe() return recipeId and Catalog.Recipes[recipeId] end
 local function seasoningDescription(seasoning)
  return tostring(seasoning.Effect or seasoning.Description or "").." · 4 min"
@@ -164,6 +169,10 @@ end)
 local function renderDetails()
  local recipe=chosenRecipe();if not recipe then go("Meals");return end
  addText(recipe.Name or name(recipeId),36,22).Font=Enum.Font.GothamBold
+ addButton("Track recipe on HUD",function()
+  local outputId=Catalog.GetOutputId(recipeId,not recipe.Drink and seasoningId or nil)
+  RecipeHelper.TrackRecipe(outputId,recipeId,quantity)
+ end,44,"Search","Neutral")
  local stats=make("Frame",content,{Size=UDim2.new(1,0,0,64),BackgroundTransparency=1})
  for index,stat in ipairs({{"Food",recipe.Hunger or 0,"Fuel"},{"Energy",recipe.Stamina or 0,"Collect"},{"Clock",seconds(recipeWork(recipe)*quantity),"Neutral"}}) do
   local chip=button(stats,tostring(stat[2]),function()end,44,stat[1],stat[3])
@@ -202,7 +211,8 @@ render=function(resetScroll)
  local contentTop=(search.Visible or actions.Visible) and toolbarTop+52 or toolbarTop
  content.Position=UDim2.fromOffset(16,contentTop)
  content.Size=UDim2.new(1,-32,1,-contentTop-48)
- title.Text=state.StationType or "Kitchen"
+ title.Text=(state.StationType or "Kitchen").." · Grade "..tostring(state.Grade or 1)
+ upgrade.Visible=Progression.GetNextStationGrade(state.StationType,state.Grade or 1)~=nil
  if not quantityBox:IsFocused() then quantityBox.Text=tostring(quantity) end
  local enough=enoughForMeal(chosenRecipe())
  queue.Text=requests:IsPending() and "Sending…" or enough and "Cook" or "Can't cook"
@@ -233,7 +243,7 @@ render=function(resetScroll)
   local recipes={}
   for id,recipe in pairs(Catalog.Recipes) do
    local searchScore=recipeSearchScore(id,recipe)
-   if recipe.StationType==state.StationType and not recipe.Future and searchScore~=nil then table.insert(recipes,{Id=id,Recipe=recipe,SearchScore=searchScore}) end
+   if recipe.StationType==state.StationType and not recipe.Future and (recipe.Tier or 1)<=(state.Grade or 1) and (recipe.Tier or 1)<=(state.CampaignTier or 1) and searchScore~=nil then table.insert(recipes,{Id=id,Recipe=recipe,SearchScore=searchScore}) end
   end
   table.sort(recipes,function(a,b)
    return SearchRank.Less(a,b,searchQuery,function(entry)return entry.Recipe.Name end,function(left,right)
@@ -242,7 +252,7 @@ render=function(resetScroll)
    end)
   end)
   for _,entry in ipairs(recipes) do
-   addButton(entry.Recipe.Name..string.format("\n+%d food · +%d energy · %ss",entry.Recipe.Hunger or 0,entry.Recipe.Stamina or 0,recipeWork(entry.Recipe)),function()
+   addButton(entry.Recipe.Name..string.format("\n+%d food · +%d energy · %.1fs",entry.Recipe.Hunger or 0,entry.Recipe.Stamina or 0,recipeWork(entry.Recipe)),function()
     recipeId=entry.Id;seasoningId=nil;quantity=1;go("Detail")
    end,60,entry.Recipe.Drink and "Bottle" or "Pot",entry.Recipe.Drink and "Collect" or "Fuel")
   end
@@ -303,7 +313,7 @@ search:GetPropertyChangedSignal("Text"):Connect(function()
  if gui.Enabled and (page=="Meals" or page=="Seasoning") then render(true) end
 end)
 local function stateSignature(value)
- local pieces={tostring(value.Enabled),tostring(value.KeepWarm)}
+ local pieces={tostring(value.Enabled),tostring(value.KeepWarm),tostring(value.Grade),tostring(value.CampaignTier)}
  for _,job in ipairs(value.Jobs or {}) do table.insert(pieces,tostring(job.Id)..":"..tostring(job.Remaining)) end
  for index=1,12 do local stack=(value.Output or {})[index] or (value.Output or {})[tostring(index)];if type(stack)=="table" then table.insert(pieces,index..":"..tostring(stack.Id)..":"..tostring(stack.N)) end end
  return table.concat(pieces,"|")

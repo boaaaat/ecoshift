@@ -474,6 +474,64 @@ function Theme.Icon(parent, kind, size)
 	return root
 end
 
+-- Real generated item artwork. Atlases keep the catalog compact; source colors
+-- are never tinted by the UI theme. Reuse unchanged art during inventory refresh.
+function Theme.ItemIcon(parent, item, size, options)
+	options = options or {}
+	local name = options.Name or "ItemArt"
+	local pixels = size or 40
+	local z = options.ZIndex or ((parent:IsA("GuiObject") and parent.ZIndex or 0) + 2)
+	local signature = item and table.concat({item.Id or "", item.Icon or "", tostring(item.IconRectOffset),
+		tostring(item.IconOverlayRectOffset), item.IconOverlay or "", tostring(item.IconRank or "")}, "|") or ""
+	local old = parent:FindFirstChild(name)
+	if old and old:GetAttribute("ArtSignature") == signature then
+		old.Size = UDim2.fromOffset(pixels, pixels)
+		old.ZIndex = z
+		for _, child in ipairs(old:GetChildren()) do
+			if child:IsA("GuiObject") then child.ZIndex = z + (child.Name == "UploadedArt" and 0 or 1) end
+		end
+		return old
+	end
+	if old then old:Destroy() end
+	local root = Instance.new("Frame")
+	root.Name, root.Size = name, UDim2.fromOffset(pixels, pixels)
+	root.AnchorPoint, root.Position = Vector2.new(.5, .5), UDim2.fromScale(.5, .5)
+	root.BackgroundTransparency, root.BorderSizePixel, root.ZIndex = 1, 0, z
+	root:SetAttribute("ThemeFixed", true)
+	root:SetAttribute("ArtSignature", signature)
+	root.Parent = parent
+	if not item or not item.Icon then return root end
+
+	local function artwork(childName, asset, offset, rectSize)
+		local image = Instance.new("ImageLabel")
+		image.Name, image.Size = childName, UDim2.fromScale(1, 1)
+		image.BackgroundTransparency, image.Image = 1, asset
+		image.ImageRectOffset, image.ImageRectSize = offset, rectSize
+		image.ImageColor3 = Color3.new(1, 1, 1)
+		image.ScaleType, image.ZIndex = Enum.ScaleType.Fit, z
+		image:SetAttribute("ThemeFixed", true)
+		image.Parent = root
+		return image
+	end
+	artwork("UploadedArt", item.Icon, item.IconRectOffset, item.IconRectSize)
+	if item.IconOverlay then
+		local overlay = artwork("IngredientArt", item.IconOverlay, item.IconOverlayRectOffset, item.IconRectSize)
+		overlay.Size, overlay.Position = UDim2.fromScale(.44, .44), UDim2.fromScale(.6, .57)
+		overlay.ZIndex = z + 1
+	end
+	if item.IconRank then
+		local rank = Instance.new("TextLabel")
+		rank.Name, rank.Size = "Rank", UDim2.fromScale(.34, .32)
+		rank.Position, rank.BackgroundTransparency = UDim2.fromScale(0, .67), 1
+		rank.Text, rank.TextScaled, rank.Font = tostring(item.IconRank), true, Enum.Font.GothamBold
+		rank.TextColor3, rank.TextStrokeColor3 = Color3.fromRGB(255, 243, 210), Color3.fromRGB(27, 34, 30)
+		rank.TextStrokeTransparency, rank.ZIndex = .15, z + 1
+		rank:SetAttribute("ThemeFixed", true)
+		rank.Parent = root
+	end
+	return root
+end
+
 -- Station controls share readable paper glyphs and distinct action colors.
 function Theme.StationStyle(button, icon, role, iconOnly)
 	local tones = {Craft=Color3.fromRGB(61,100,66), Fuel=Color3.fromRGB(112,76,39), Collect=Color3.fromRGB(40,89,98), Special=Color3.fromRGB(88,67,110), Danger=Color3.fromRGB(126,59,48), Neutral=Color3.fromRGB(48,61,57)}

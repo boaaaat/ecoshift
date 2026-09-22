@@ -17,7 +17,7 @@ local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local Instances = require(ReplicatedStorage.Shared.ItemInstance)
 local Catalog = require(ReplicatedStorage.Shared.OverhaulCatalog)
 local ItemCooldown = require(ReplicatedStorage.Shared.UI.ItemCooldown)
-local WeaponSpecialCooldown = require(ReplicatedStorage.Shared.Weapons.WeaponSpecialCooldown)
+local ItemCooldownScope = require(ReplicatedStorage.Shared.ItemCooldownScope)
 local DEBUG = false
 local storageCapacity=18
 local arrangePack
@@ -337,7 +337,7 @@ local function createSlot(parent, x, y, slotType, index, slotSize)
 	cooldownTextLimit.MaxTextSize = math.max(14, math.floor(slotSize * 0.24))
 	cooldownTextLimit.Parent = cooldownText
 
-	-- Text label for items without icons
+	-- Retained for old layout consumers; catalog items now receive ItemArt.
 	local itemText = Instance.new("TextLabel")
 	itemText.Name = "ItemText"
 	itemText.Size = UDim2.new(1, -8, 0, 32)
@@ -611,14 +611,6 @@ gui:GetAttributeChangedSignal("ChestOpen"):Connect(function()
 end)
 
 -- Helper functions
-local function hashColor(id)
-	local hash = 0
-	for i = 1, #id do
-		hash = (hash * 33 + string.byte(id, i)) % 360
-	end
-	return COLORS.Text
-end
-
 local function getItemStackSize(itemId)
 	local item = ItemDatabase:Get(itemId)
 	return (item and tonumber(item.StackSize)) or 99
@@ -749,6 +741,8 @@ local function renderSlot(slot)
 		for _, segment in ipairs(slot.CooldownSegments) do segment.Visible = false end
 		slot.Icon.Image = ""
 		slot.Icon.Visible = false
+		local itemArt = slot.Frame:FindFirstChild("ItemArt")
+		if itemArt then itemArt:Destroy() end
 		slot.ItemText.Visible = false
 		slot.ItemText.Text = ""
 		slot.QtyBadge.Visible = false
@@ -760,31 +754,11 @@ local function renderSlot(slot)
 	end
 	
 	local item = ItemDatabase:Get(data.Id)
-	local icon = item and item.Icon
-	local iconColor = item and item.IconColor
-	local name = item and item.Name or data.Id
-	
-	if icon and icon ~= "" then
-		-- Has icon - show image, hide text
-		slot.Icon.Image = icon
-		slot.Icon.ImageColor3 = Color3.new(1, 1, 1)
-		slot.Icon.Visible = true
-		slot.ItemText.Visible = false
-	else
-		-- No icon - show text label instead
-		slot.Icon.Image = ""
-		slot.Icon.Visible = false
-		-- Break at a word boundary; long single words truncate instead of wrapping
-		-- their last letters into an unreadable second line on phone hotbars.
-		slot.ItemText.Text = name:gsub(" ", "\n", 1)
-		slot.ItemText.TextColor3 = iconColor or COLORS.Text
-		slot.ItemText.Visible = true
-		if Theme.IsMobile() and slot.Type == "Hotbar" and not mainContainer.Visible and data.Id == "Harvester" then
-			if not slot.HarvestGlyph then slot.HarvestGlyph = Theme.Icon(slot.Frame, "Harvest", 30) end
-			slot.HarvestGlyph.Visible = true
-			slot.ItemText.Visible = false
-		end
-	end
+	slot.Icon.Image = ""
+	slot.Icon.Visible = false
+	slot.ItemText.Visible = false
+	local art = Theme.ItemIcon(slot.Frame, item, math.floor(SLOT_SIZE * .82), {ZIndex = slot.Frame.ZIndex + 2})
+	art.Size = UDim2.fromScale(.82, .82)
 	
 	if data.N > 1 then
 		slot.QtyBadge.Visible = true
@@ -815,14 +789,14 @@ local function updateSlotCooldown(slot)
 	local remaining, duration = ItemCooldown.Get(data)
 	local definition = Instances.Definition(data.Id)
 	if definition and definition.Kind == "Weapon" then
-		local specialRemaining = WeaponSpecialCooldown.Remaining(player, data.Id)
+		local specialRemaining = ItemCooldownScope.Remaining(player, "WeaponSpecial", data.Id)
 		if specialRemaining > remaining and specialRemaining > 0.12 then
 			remaining = specialRemaining
 			duration = math.max(specialRemaining, (definition.SpecialCooldown or 8) * (1 - math.clamp(player:GetAttribute("Gear_SpecialCooldownReduction") or 0, 0, 0.9)))
 		end
 	end
 	local medical = Catalog.Consumables[data.Id]
-	local medicalRemaining = medical and not medical.Revive and (player:GetAttribute("MedicalItemCooldown") or 0) or 0
+	local medicalRemaining = medical and not medical.Revive and ItemCooldownScope.Remaining(player, "Medical", data.Id) or 0
 	if medicalRemaining > remaining then
 		remaining, duration = medicalRemaining, math.max(5, medicalRemaining)
 	end
@@ -1317,33 +1291,7 @@ local function createDragGhost(slot, data)
 	corner.Parent = ghost
 	
 	local item = ItemDatabase:Get(data.Id)
-	local itemIcon = item and item.Icon
-	local iconColor = item and item.IconColor
-	if itemIcon and itemIcon ~= "" then
-		local icon = Instance.new("ImageLabel")
-		icon.Size = UDim2.new(0, iconSize, 0, iconSize)
-		icon.Position = UDim2.new(0.5, 0, 0.5, 0)
-		icon.AnchorPoint = Vector2.new(0.5, 0.5)
-		icon.BackgroundTransparency = 1
-		icon.ZIndex = 501
-		icon.Parent = ghost
-		icon.Image = itemIcon
-		icon.ImageColor3 = Color3.new(1, 1, 1)
-	else
-		local nameText = item and item.Name or data.Id
-		local text = Instance.new("TextLabel")
-		text.Size = UDim2.new(1, -8, 1, -8)
-		text.Position = UDim2.new(0.5, 0, 0.5, 0)
-		text.AnchorPoint = Vector2.new(0.5, 0.5)
-		text.BackgroundTransparency = 1
-		text.TextWrapped = true
-		text.TextScaled = true
-		text.Font = Enum.Font.GothamBold
-		text.TextColor3 = iconColor or hashColor(data.Id)
-		text.Text = nameText
-		text.ZIndex = 501
-		text.Parent = ghost
-	end
+	Theme.ItemIcon(ghost, item, iconSize, {ZIndex = 501})
 
 	if data.N > 1 then
 		local qty = Instance.new("TextLabel")

@@ -357,6 +357,96 @@ function InventoryService:CanFit(plr, itemId, amount)
 	return remaining <= 0
 end
 
+-- Rewards/refunds are delivered in full: fill the pack, then drop the excess.
+-- Keep Give/GiveEntry inventory-only for ground pickups and explicit transfers.
+function InventoryService:GiveEntriesOrDrop(plr, entries, deferSync, position)
+	local Drops = require(script.Parent.ItemDropService)
+	local normalized = {}
+	for _, entry in ipairs(entries) do
+		if type(entry) ~= "table" or not ItemDatabase:Get(entry.Id)
+			or type(entry.N) ~= "number" or entry.N <= 0 or entry.N % 1 ~= 0 or entry.N > 1e8 then
+			return false, 0
+		end
+		local individual = ItemInstance.Definition(entry.Id) or entry.Id == "FieldJournal" or not ItemInstance.Stackable(entry, entry)
+		if individual then
+			for i = 1, entry.N do
+				local metadata = cloneSlot(entry)
+				if i > 1 and metadata.Uid then metadata.Uid = game:GetService("HttpService"):GenerateGUID(false) end
+				table.insert(normalized, ItemInstance.New(entry.Id, 1, metadata))
+			end
+		else
+			table.insert(normalized, ItemInstance.New(entry.Id, entry.N, entry))
+		end
+	end
+	local inv = getInv(plr)
+	local projected = {Hotbar = {}, Storage = {}}
+	for _, kind in ipairs({"Hotbar", "Storage"}) do
+		for i, slot in pairs(inv[kind]) do
+			-- Projection changes counts only; do not deep-copy packed station contents.
+			projected[kind][i] = table.clone(slot)
+		end
+	end
+	local overflow, dropped = {}, 0
+	for _, entry in ipairs(normalized) do
+		local remaining = entry.N
+		for _, existingOnly in ipairs({true, false}) do
+			for _, kind in ipairs({"Hotbar", "Storage"}) do
+				if remaining > 0 then
+					local copy = cloneSlot(entry)
+					copy.N = remaining
+					remaining = addEntryToSlots(projected[kind], kind == "Hotbar" and HOTBAR_SLOTS or (inv.StorageCapacity or STORAGE_SLOTS), copy, existingOnly)
+				end
+			end
+		end
+		if remaining > 0 then
+			local copy = cloneSlot(entry)
+			copy.N = remaining
+			table.insert(overflow, copy)
+			dropped += remaining
+		end
+	end
+	local prepared = {}
+	if #overflow > 0 then
+		local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+		local origin = root and root.Position or position
+		if typeof(origin) ~= "Vector3" then return false, 0 end
+		local ok, err = pcall(function()
+			for _, entry in ipairs(overflow) do
+				local drop = Drops:SpawnDrop(entry.Id, entry.N, origin + Vector3.new(0, 2, 0), {Entry = entry, PendingPickup = true})
+				assert(drop, "Unable to prepare overflow drop")
+				table.insert(prepared, drop)
+			end
+		end)
+		if not ok then
+			for _, drop in ipairs(prepared) do drop:Destroy() end
+			warn("[InventoryService] Item grant canceled: " .. tostring(err))
+			return false, 0
+		end
+	end
+	-- No yields between projection and commit. Preserve live entry references so
+	-- callers holding equipped gear can still finish their transaction safely.
+	for _, kind in ipairs({"Hotbar", "Storage"}) do
+		for i = 1, kind == "Hotbar" and HOTBAR_SLOTS or (inv.StorageCapacity or STORAGE_SLOTS) do
+			if inv[kind][i] then inv[kind][i].N = projected[kind][i].N
+			else inv[kind][i] = projected[kind][i] end
+		end
+	end
+	for _, drop in ipairs(prepared) do drop:SetAttribute("PickupPending", nil) end
+	if not deferSync then self:Sync(plr) end
+	return true, dropped
+end
+
+function InventoryService:GiveEntryOrDrop(plr, entry, deferSync, position)
+	if type(entry) ~= "table" then return 0, 0 end
+	local ok, dropped = self:GiveEntriesOrDrop(plr, {entry}, deferSync, position)
+	return ok and entry.N or 0, dropped
+end
+
+function InventoryService:GiveOrDrop(plr, itemId, amount, deferSync, position)
+	if amount == 0 then return 0, 0 end
+	return self:GiveEntryOrDrop(plr, {Id = itemId, N = amount}, deferSync, position)
+end
+
 function InventoryService:Give(plr, itemId, amount, requireFit, deferSync)
 	amount = math.floor(tonumber(amount) or 0)
 	if amount ~= amount or amount == math.huge or amount <= 0 or type(itemId) ~= "string" or not ItemDatabase:Get(itemId) then return 0 end

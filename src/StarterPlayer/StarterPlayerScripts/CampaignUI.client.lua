@@ -233,18 +233,6 @@ local function milestoneCopy(milestone)
 	return "Recover the missing parts, contribute materials, then defend the project site."
 end
 
-local function itemGlyph(item, id)
-	if item and item.HasTag then
-		if item:HasTag("Plant") or item:HasTag("Wood") then return "Leaf" end
-		if item:HasTag("Mineral") or item:HasTag("Ore") then return "Mineral" end
-		if item:HasTag("Food") then return "Food" end
-	end
-	local key = string.lower(id or "")
-	if key:find("wood") or key:find("plank") or key:find("fiber") then return "Leaf" end
-	if key:find("ore") or key:find("bar") or key:find("metal") or key:find("stone") or key:find("glass") or key:find("crystal") then return "Mineral" end
-	if key:find("cloth") then return "Armor" end
-	return "Craft"
-end
 local function materialRow(id, paid, required, order)
 	local item = Items:Get(id)
 	local row = make("TextButton", list, {
@@ -255,24 +243,12 @@ local function materialRow(id, paid, required, order)
 	Theme.Button(row)
 	local stroke = make("UIStroke", row, {Thickness = 1, Transparency = .56})
 	bind(stroke, "Color", paid >= required and "Success" or "Border")
-	local glyphKind = itemGlyph(item, id)
-	local tint = item and item.IconColor or (glyphKind == "Mineral" and colors.Cold or glyphKind == "Armor" and colors.Sage or colors.Moss)
 	local wellSize = mobile and 48 or 56
 	local well = make("Frame", row, {
 		Name = "MaterialIconWell", Size = UDim2.fromOffset(wellSize, wellSize),
-		Position = UDim2.fromOffset(10, mobile and 9 or 10), BackgroundColor3 = tint,
-		BackgroundTransparency = .12, BorderSizePixel = 0,
+		Position = UDim2.fromOffset(10, mobile and 9 or 10), BackgroundTransparency = 1, BorderSizePixel = 0,
 	})
-	well:SetAttribute("ThemeFixed", true)
-	Theme.Corner(well, 9)
-	-- ItemIcons/<item id> can supply this image later without changing this UI.
-	local iconAsset = item and type(item.Icon) == "string" and item.Icon or ""
-	local art = make("ImageLabel", well, {
-		Name = "MaterialArt", Size = UDim2.new(1, -8, 1, -8), Position = UDim2.fromOffset(4, 4),
-		BackgroundTransparency = 1, Image = iconAsset, ScaleType = Enum.ScaleType.Fit,
-		Visible = iconAsset ~= "", ZIndex = row.ZIndex + 2,
-	})
-	if not art.Visible then Theme.Icon(well, glyphKind, mobile and 25 or 29) end
+	Theme.ItemIcon(well, item, wellSize - 2, {ZIndex = row.ZIndex + 2})
 	local textX = 22 + wellSize
 	local name = label(row, item and item.Name or id, UDim2.new(1, -textX - 142, 0, 26),
 		UDim2.fromOffset(textX, mobile and 8 or 10), mobile and 15 or 17, "Text", true)

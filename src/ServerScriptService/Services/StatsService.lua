@@ -377,8 +377,7 @@ function StatsService:CaptureWorldState(plr)
 	if hum then state.Health = hum.Health end
 	local transientModifiers = {
 		Sprint = true,
-		ArmorEquip = true,
-		TempResEquip = true,
+		OverhaulArmor = true,
 		GearMovement = true,
 		GroundMovement = true,
 		LandingRecovery = true,

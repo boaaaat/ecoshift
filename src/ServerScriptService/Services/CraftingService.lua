@@ -111,7 +111,7 @@ function CraftingService:FindNearbyStation(plr, stationType, requiredGrade)
 	local buildType = station.BuildType
 	if not buildType then return nil end
 
-	local interactRadius = station.InteractRadius or 8
+	local interactRadius = station.InteractRadius or 15
 	local nearestStation = nil
 	local nearestDist = interactRadius
  local nearestQualified = false
@@ -219,9 +219,9 @@ function CraftingService:_completeCraft(plr, context)
 		end
 	end
 
-	local added = InventoryService:Give(plr, context.OutputId, outputCount, true, true)
+	local added = InventoryService:GiveOrDrop(plr, context.OutputId, outputCount, true, context.Position)
 	if added ~= outputCount then
-		self:_refundCraft(plr, context, "InventoryFull")
+		self:_refundCraft(plr, context, "DeliveryFailed")
 		return
 	end
 	self._activeCrafts[plr] = nil

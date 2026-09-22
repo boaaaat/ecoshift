@@ -114,7 +114,7 @@ function Guide.GetStations(recipeId, player)
 							local distance = (root.Position - position).Magnitude
 							local candidateGrade=structure:GetAttribute("StationGrade") or station.Grade or 1
        local candidateQualified=candidateGrade>=record.RequiredGrade
-       if distance <= (station.InteractRadius or 8) and (not record.Distance or (candidateQualified and not record.Nearby) or (candidateQualified==record.Nearby and distance<record.Distance)) then
+       if distance <= (station.InteractRadius or 15) and (not record.Distance or (candidateQualified and not record.Nearby) or (candidateQualified==record.Nearby and distance<record.Distance)) then
 								record.Grade=structure:GetAttribute("StationGrade") or station.Grade or 1
         record.Nearby, record.Distance = record.Grade>=record.RequiredGrade, distance
         record.UpgradeNeeded=record.Grade<record.RequiredGrade

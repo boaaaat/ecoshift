@@ -1,17 +1,34 @@
 local Players = game:GetService("Players")
 local Config = require(script.Parent.Config)
 local Placement = {}
+local EDGE_TYPES = {Wall = true, Door = true, Gate = true}
+
+local function snap(value, spacing, offset)
+	offset = offset or 0
+	return math.floor((value - offset) / spacing + .5) * spacing + offset
+end
+
+-- Full-size structures use tile centers. Thin wall modules use the nearest
+-- tile boundary so they can share a tile with its floor without intersecting it.
+function Placement.Snap(position, buildType, rotation)
+	local size = Config.GRID.Size
+	local xOffset, zOffset = 0, 0
+	if EDGE_TYPES[buildType] then
+		if (rotation or 0) % 180 == 0 then zOffset = size * .5 else xOffset = size * .5 end
+	end
+	return Vector3.new(snap(position.X, size, xOffset), position.Y, snap(position.Z, size, zOffset))
+end
 
 function Placement.WithinCamp(position)
 	local radius = Config.BUILD.CampRadius
 	return position.X * position.X + position.Z * position.Z <= radius * radius
 end
 
--- Positions represent the supporting surface, never a preview cube's center.
-function Placement.Surface(position, ignored)
+-- Positions represent the supporting surface, shared by previews and placed builds.
+function Placement.Surface(position, ignored, buildType, rotation)
 	local size = Config.GRID.Size
-	local x = math.floor(position.X / size + .5) * size
-	local z = math.floor(position.Z / size + .5) * size
+	local snapped = Placement.Snap(position, buildType, rotation)
+	local x, z = snapped.X, snapped.Z
 	local exclude = table.clone(ignored or {})
 	for _, player in ipairs(Players:GetPlayers()) do
 		if player.Character then table.insert(exclude, player.Character) end

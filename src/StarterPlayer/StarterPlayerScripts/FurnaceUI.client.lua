@@ -12,6 +12,7 @@ local Items=require(Shared.Items.ItemDatabase)
 local Ingredients=require(Shared.IngredientResolver)
 local Workbench=require(Shared.WorkbenchConfig)
 local Guide=require(Shared.UI.RecipeGuideUI)
+local RecipeHelper=require(Shared.UI.RecipeHelperUI)
 local SearchRank=require(Shared.UI.SearchRank)
 local player=Players.LocalPlayer
 local remote=RS:WaitForChild("Remotes"):WaitForChild("Station")
@@ -70,33 +71,17 @@ fuelQuick.Position=UDim2.new(1,-140,0,106);fuelQuick.Size=UDim2.fromOffset(124,3
 local function name(id)local item=Items:Get(id);return item and item.Name or id end
 local function owned(id)return Ingredients.Count(inventory,id) end
 local function affordable(recipe)return Ingredients.Max(recipe.Ingredients,inventory,player,20) end
-local function itemGlyph(item,id)
- if item then
-  if item:HasTag("Mineral") or item:HasTag("Ore") then return "Mineral" end
-  if item:HasTag("Food") then return "Food" end
-  if item:HasTag("Armor") then return "Armor" end
- end
- local key=string.lower(id or "")
- if key:find("wood") or key:find("plank") or key:find("fiber") or key:find("reeds") then return "Leaf" end
- if key:find("ore") or key:find("bar") or key:find("metal") or key:find("stone") or key:find("glass") or key:find("crystal") then return "Mineral" end
- if key:find("cloth") or key:find("hide") or key:find("wool") then return "Armor" end
- return "Craft"
-end
 local function iconWell(parent,itemId,size)
- local item=Items:Get(itemId);local glyph=itemGlyph(item,itemId)
- local tint=item and item.IconColor or (glyph=="Mineral" and colors.Cold or glyph=="Armor" and colors.Sage or colors.Moss)
- local well=make("Frame",parent,{Name="ItemIcon",Size=UDim2.fromOffset(size,size),BackgroundColor3=tint,BackgroundTransparency=.12,BorderSizePixel=0,ZIndex=(parent.ZIndex or 1)+1})
- well:SetAttribute("ThemeFixed",true);Theme.Corner(well,8)
- local asset=item and type(item.Icon)=="string" and item.Icon or ""
- if asset~="" then
-  make("ImageLabel",well,{Size=UDim2.new(1,-8,1,-8),Position=UDim2.fromOffset(4,4),BackgroundTransparency=1,Image=asset,ScaleType=Enum.ScaleType.Fit,ZIndex=well.ZIndex+1})
- else Theme.Icon(well,glyph,math.floor(size*.52)) end
+ local item=Items:Get(itemId)
+ local well=make("Frame",parent,{Name="ItemIcon",Size=UDim2.fromOffset(size,size),BackgroundTransparency=1,BorderSizePixel=0,ZIndex=(parent.ZIndex or 1)+1})
+ Theme.ItemIcon(well,item,size-2,{ZIndex=well.ZIndex+1})
  return well
 end
-local function stationUnlocks(stationType,nextGrade)
+local function stationUnlocks(stationType,currentGrade,nextGrade)
  local result,seen={},{ }
  for recipeId,recipe in pairs(Catalog.Recipes) do
-  if not recipe.Future and (recipe.RequiredGrade or recipe.Tier or 1)==nextGrade and table.find(recipe.AllowedStations or {},stationType) then
+  local required=recipe.RequiredGrade or recipe.Tier or 1
+  if not recipe.Future and required>currentGrade and required<=nextGrade and table.find(recipe.AllowedStations or {},stationType) then
    local output=recipe.Output or {Id=recipeId,N=1}
    local key=output.Id..":"..tostring(output.N or 1)
    if not seen[key] then
@@ -105,13 +90,24 @@ local function stationUnlocks(stationType,nextGrade)
    end
   end
  end
- table.sort(result,function(a,b)return name(a.Id)<name(b.Id) end)
+ if stationType=="EnchantingTable" then
+  for enchantmentId,definition in pairs(Catalog.Enchantments) do
+   if not definition.Hidden then
+    for rank,required in ipairs(definition.Grades or {}) do
+     if required>currentGrade and required<=nextGrade then
+      table.insert(result,{Id=enchantmentId.."_Rank"..rank,Name=definition.Name.." · Rank "..rank,N=1,Category="Enchantment",Icon="Upgrade"})
+     end
+    end
+   end
+  end
+ end
+ table.sort(result,function(a,b)return (a.Name or name(a.Id))<(b.Name or name(b.Id)) end)
  return result
 end
-local function upgradeDetail(stationType,nextGrade,unlockCount)
+local function upgradeDetail(stationType,currentGrade,nextGrade,unlockCount)
  local stationName=(Catalog.Stations[stationType] or {}).Name or stationType
  local lines={stationName.." becomes Grade "..nextGrade.."."}
- if unlockCount>0 then table.insert(lines,"Unlocks "..unlockCount.." Grade "..nextGrade.." recipe"..(unlockCount==1 and "" or "s").." shown below.")
+ if unlockCount>0 then table.insert(lines,"Unlocks "..unlockCount.." new recipe"..(unlockCount==1 and "" or "s").." or rank"..(unlockCount==1 and "" or "s").." across Grades "..(currentGrade+1).."–"..nextGrade.." shown below.")
  else table.insert(lines,"No new recipe is assigned to this exact grade; it advances the station toward later grade requirements.") end
  if stationType=="Anvil" then
   table.insert(lines,"Can repair Grade "..nextGrade.." weapons and tools, and reforge Grade "..nextGrade.." armor families assigned to an Anvil.")
@@ -144,8 +140,11 @@ local function upgradeMaterialRow(cost,order)
 end
 local function upgradeUnlockRow(unlock,order)
  local row=make("Frame",content,{Name="Unlock_"..unlock.Id,Size=UDim2.new(1,0,0,54),LayoutOrder=order,BackgroundColor3=colors.SlotEmpty,BackgroundTransparency=.12,BorderSizePixel=0});Theme.Corner(row,8)
- local well=iconWell(row,unlock.Id,38);well.Position=UDim2.fromOffset(8,8)
- local itemName=label(row,name(unlock.Id),24);itemName.Position=UDim2.fromOffset(58,5);itemName.Size=UDim2.new(1,-74,0,24);itemName.Font=Enum.Font.GothamBold;itemName.TextSize=15;itemName.TextWrapped=false;itemName.TextTruncate=Enum.TextTruncate.AtEnd
+ local well
+ if Items:Get(unlock.Id) then well=iconWell(row,unlock.Id,38)
+ else well=make("Frame",row,{Size=UDim2.fromOffset(38,38),BackgroundTransparency=1});Theme.Icon(well,unlock.Icon or "Upgrade",24) end
+ well.Position=UDim2.fromOffset(8,8)
+ local itemName=label(row,unlock.Name or name(unlock.Id),24);itemName.Position=UDim2.fromOffset(58,5);itemName.Size=UDim2.new(1,-74,0,24);itemName.Font=Enum.Font.GothamBold;itemName.TextSize=15;itemName.TextWrapped=false;itemName.TextTruncate=Enum.TextTruncate.AtEnd
  local detail=label(row,(unlock.N>1 and ("Makes ×"..unlock.N.." · ") or "")..unlock.Category,20);detail.Position=UDim2.fromOffset(58,28);detail.Size=UDim2.new(1,-74,0,20);detail.TextSize=12;detail.TextColor3=colors.TextMuted
 end
 local function lockReason(recipe)
@@ -205,7 +204,7 @@ render=function(reset)
  if page=="Recipes" then
   local recipes={};for id,r in pairs(Catalog.Recipes) do
    local searchScore=recipeSearchScore(id,r)
-   if table.find(r.AllowedStations or {},"Furnace") and searchScore~=nil then
+   if not r.Future and table.find(r.AllowedStations or {},"Furnace") and (r.RequiredGrade or 1)<=state.Grade and (r.CampaignTier or 1)<=state.CampaignTier and searchScore~=nil then
     local maximum=affordable(r);local locked=lockReason(r)
     table.insert(recipes,{Id=id,Recipe=r,Maximum=maximum,Locked=locked,Group=locked and 3 or maximum>0 and 1 or 2,SearchScore=searchScore})
    end
@@ -229,6 +228,7 @@ render=function(reset)
  elseif page=="Detail" then
   local r=Catalog.Recipes[recipeId]
   label(content,name(r.Output.Id).." ×"..r.Output.N*quantity,36).Font=Enum.Font.GothamBold
+  button(content,"Track recipe on HUD",function()RecipeHelper.TrackRecipe(r.Output.Id,recipeId,quantity) end,"Search","Neutral")
   local minus=button(actions,"−",function()quantity=math.max(1,quantity-1);render() end);minus.Size=UDim2.fromOffset(40,44)
   local count=label(actions,tostring(quantity),44);count.Position=UDim2.fromOffset(44,0);count.Size=UDim2.fromOffset(44,44);count.TextXAlignment=Enum.TextXAlignment.Center
   local plus=button(actions,"+",function()quantity=math.min(20,quantity+1);render() end);plus.Position=UDim2.fromOffset(92,0);plus.Size=UDim2.fromOffset(40,44)
@@ -275,18 +275,20 @@ render=function(reset)
     if event and event:IsA("BindableEvent") then event:Fire(state.Station);gui.Enabled=false;send("Close") end
    end,"Craft","Collect")
   end
-  if state.Grade<8 then
-   local nextGrade=state.Grade+1
-   local unlocks=stationUnlocks(state.StationType,nextGrade)
+  if state.NextGrade then
+   local nextGrade=state.NextGrade
+   local unlocks=stationUnlocks(state.StationType,state.Grade,nextGrade)
    local summary=make("Frame",content,{Name="UpgradeSummary",Size=UDim2.new(1,0,0,132),BackgroundColor3=colors.SlotFilled,BorderSizePixel=0});Theme.Corner(summary,10)
    local summaryStroke=make("UIStroke",summary,{Color=colors.Special,Transparency=.35,Thickness=1})
    local badge=make("Frame",summary,{Size=UDim2.fromOffset(94,38),Position=UDim2.fromOffset(12,12),BackgroundColor3=Color3.fromRGB(88,67,110),BorderSizePixel=0});badge:SetAttribute("ThemeFixed",true);Theme.Corner(badge,7)
    local badgeIcon=Theme.Icon(badge,"Upgrade",21);badgeIcon.Position=UDim2.new(0,22,.5,0)
    local badgeText=label(badge,"G"..state.Grade.."  ›  G"..nextGrade,38);badgeText.Position=UDim2.fromOffset(38,0);badgeText.Size=UDim2.new(1,-42,1,0);badgeText.Font=Enum.Font.GothamBold;badgeText.TextSize=13
    local heading=label(summary,"STATION UPGRADE",30);heading.Position=UDim2.fromOffset(118,10);heading.Size=UDim2.new(1,-132,0,30);heading.Font=Enum.Font.GothamBold;heading.TextSize=18;heading.TextColor3=colors.Special
-   local detailText=upgradeDetail(state.StationType,nextGrade,#unlocks)
+   local detailText=upgradeDetail(state.StationType,state.Grade,nextGrade,#unlocks)
    local detail=label(summary,detailText,72);detail.Position=UDim2.fromOffset(14,54);detail.Size=UDim2.new(1,-28,0,68);detail.TextSize=13;detail.TextColor3=colors.TextMuted;detail.TextYAlignment=Enum.TextYAlignment.Top
    label(content,"UPGRADE MATERIALS · OWNED / REQUIRED",26).TextColor3=colors.Amber
+   local trackUpgrade=button(content,"Track upgrade on HUD",function()RecipeHelper.TrackUpgrade(state.Station,state.StationType) end,"Search","Neutral")
+   trackUpgrade.LayoutOrder=19
    local materialsReady=true
    for index,cost in ipairs(state.UpgradeCost or {}) do if not upgradeMaterialRow(cost,20+index) then materialsReady=false end end
    if #unlocks>0 then
@@ -308,7 +310,7 @@ render=function(reset)
    local complete=make("Frame",content,{Size=UDim2.new(1,0,0,92),BackgroundColor3=colors.SlotFilled,BorderSizePixel=0});Theme.Corner(complete,10)
    local icon=iconWell(complete,state.StationType,54);icon.Position=UDim2.fromOffset(12,19)
    local done=label(complete,"STATION FULLY UPGRADED",30);done.Position=UDim2.fromOffset(78,16);done.Size=UDim2.new(1,-94,0,30);done.Font=Enum.Font.GothamBold;done.TextSize=18;done.TextColor3=colors.Success
-   local copy=label(complete,"Grade 8 · every available station-grade function is enabled.",28);copy.Position=UDim2.fromOffset(78,46);copy.Size=UDim2.new(1,-94,0,28);copy.TextColor3=colors.TextMuted
+   local copy=label(complete,"Grade "..tostring(state.MaxGrade or state.Grade).." · every available station-grade function is enabled.",28);copy.Position=UDim2.fromOffset(78,46);copy.Size=UDim2.new(1,-94,0,28);copy.TextColor3=colors.TextMuted
   end
  end
  content.CanvasPosition=reset and Vector2.zero or pos
@@ -339,7 +341,7 @@ remote.OnClientEvent:Connect(function(kind,payload)
   inventoryRemote:FireServer("RequestSnapshot")
  end
  if payload.Message then status.Text=payload.Message end
- local bits={tostring(state.Grade),tostring(state.CampaignTier),tostring(state.State.Enabled),tostring(state.Status)}
+ local bits={tostring(state.Grade),tostring(state.NextGrade),tostring(state.CampaignTier),tostring(state.State.Enabled),tostring(state.Status)}
  for _,job in ipairs(state.State.Jobs) do table.insert(bits,tostring(job.Id)..job.RecipeId..job.Remaining) end
  for i,slot in ipairs(state.State.Output) do if slot then table.insert(bits,i..slot.Id..slot.N) end end
  local nextSignature=table.concat(bits,"|")

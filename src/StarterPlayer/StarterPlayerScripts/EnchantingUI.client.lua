@@ -1,5 +1,6 @@
 local Players=game:GetService("Players")
 local RS=game:GetService("ReplicatedStorage")
+local HttpService=game:GetService("HttpService")
 local Shared=RS:WaitForChild("Shared")
 if require(Shared.SessionConfig).GetMode()~="Expedition" then return end
 local Theme=require(Shared.UI.UITheme)
@@ -17,8 +18,18 @@ local make=UIFactory.Create
 local gui=make("ScreenGui",player:WaitForChild("PlayerGui"),{Name="EnchantingUI",ResetOnSpawn=false,Enabled=false,DisplayOrder=68})
 local panel=make("CanvasGroup",gui,{Size=UDim2.new(.95,0,.92,0),Position=UDim2.fromScale(.5,.5),AnchorPoint=Vector2.new(.5,.5),BackgroundColor3=colors.Panel,BorderSizePixel=0})
 make("UISizeConstraint",panel,{MaxSize=Vector2.new(900,820)});Theme.Panel(panel);Theme.CaptureCursor(panel);Theme.TrackRoot(gui)
+local state
 local title=make("TextLabel",panel,{Position=UDim2.fromOffset(18,8),Size=UDim2.new(1,-90,0,48),Text="Gear workshop",Font=Enum.Font.GothamBold,TextSize=24,TextColor3=colors.Text,BackgroundTransparency=1,TextXAlignment=Enum.TextXAlignment.Left})
 local close=make("TextButton",panel,{Position=UDim2.new(1,-60,0,10),Size=UDim2.fromOffset(44,44),Text="",TextSize=28});Theme.StationStyle(close);Theme.Icon(close,"Close",22);close.Activated:Connect(function()gui.Enabled=false end)
+local upgrade=make("TextButton",panel,{Position=UDim2.new(1,-112,0,10),Size=UDim2.fromOffset(44,44),Text=""});Theme.StationStyle(upgrade,nil,"Special");Theme.Icon(upgrade,"Upgrade",22);upgrade:SetAttribute("ActionLabel","Upgrade station")
+title.Size=UDim2.new(1,-144,0,48)
+upgrade.Activated:Connect(function()
+ if not state or not state.Station then return end
+ local station=state.Station
+ gui.Enabled=false
+ local stationRemote=remotes:FindFirstChild("Station")
+ if stationRemote then stationRemote:FireServer("Open",{Station=station,RequestId=HttpService:GenerateGUID(false)}) end
+end)
 local search=make("TextBox",panel,{Name="ItemSearch",Position=UDim2.fromOffset(18,65),Size=UDim2.new(1,-36,0,40),BackgroundColor3=colors.SlotEmpty,BorderSizePixel=0,Text="",PlaceholderText="Search gear, schematics, or enchantments",PlaceholderColor3=colors.TextMuted,TextColor3=colors.Text,TextSize=15,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left,ClearTextOnFocus=false,Visible=false})
 Theme.Corner(search,8)
 make("UIPadding",search,{PaddingLeft=UDim.new(0,12),PaddingRight=UDim.new(0,12)})
@@ -29,7 +40,7 @@ Theme.BindResponsive(gui,function(mobile,available)
  panel.Size=mobile and UDim2.fromOffset(math.min(840,available.X-16),math.min(760,available.Y-16)) or UDim2.new(.95,0,.92,0)
  title.TextSize=mobile and 20 or 24
 end)
-local state,selected,enchantment,page,inventory,workshop=nil,nil,nil,"Gear",nil,false
+local selected,enchantment,page,inventory,workshop=nil,nil,"Gear",nil,false
 local requests=RemoteRequest.new(remote)
 local searchQuery=""
 local pageSearch={}
@@ -86,13 +97,15 @@ local function go(nextPage)
 end
 render=function(reset)
  if not state or not gui.Enabled then return end
+ local stationGrade=state.Station and (state.Station:GetAttribute("StationGrade") or 3) or 3
+ upgrade.Visible=not workshop and Catalog.GetNextStationGrade("EnchantingTable",stationGrade)~=nil
  local y=reset and 0 or list.CanvasPosition.Y
  for _,child in ipairs(list:GetChildren()) do if child:IsA("GuiObject") then child:Destroy() end end
  search.Visible=page=="Gear" or page=="Enchantments"
  list.Position=search.Visible and UDim2.fromOffset(18,113) or UDim2.fromOffset(18,65)
  list.Size=search.Visible and UDim2.new(1,-36,1,-171) or UDim2.new(1,-36,1,-123)
  if page=="Gear" then
-  title.Text=workshop and "Gear maintenance" or "Enchanting workshop"
+  title.Text=workshop and "Gear maintenance" or "Enchanting workshop · Grade "..stationGrade
   if not workshop then
    if state.Creative then
     text("Creative mode · every compatible enchantment is unlocked, maximum rank, and free.",52,16)
@@ -165,7 +178,7 @@ render=function(reset)
     local gear=table.clone(Catalog.Gear[e.Id]);gear.Grade=e.Grade
     local score=searchScore({def.Name,id},{def.Description,def.Source})
     local compatible=Catalog.CanUseEnchantment(gear,id)
-    if score~=nil and compatible and (state.Creative or current>0 or Catalog.CanEnchant(gear,id,math.max(1,current))) then
+    if score~=nil and compatible and (state.Creative or current>0 or ((def.Grades or {})[1] or 99)<=stationGrade and Catalog.CanEnchant(gear,id,math.max(1,current))) then
      table.insert(entries,{Id=id,SearchScore=score})
     end
    end
@@ -192,10 +205,13 @@ render=function(reset)
     if current<def.MaxLevel then button("Apply maximum rank "..def.MaxLevel.." · FREE",function()send("Enchant") end,"Upgrade","Craft") end
     text("Creative mode ignores discoveries, gear grade, station upgrades, campaign tier, materials, trophies, conflicts, and enchantment slots. Item compatibility still applies.",82,15)
    elseif def.Grades[nextRank] then
-    local cost=Catalog.EnchantingCosts[def.Grades[nextRank]]
+    local requiredGrade=def.Grades[nextRank]
+    local cost=Catalog.EnchantingCosts[requiredGrade]
     local known=state.Known[enchantment] and state.Known[enchantment][tostring(nextRank)]
-    button(known and ("Apply rank "..nextRank) or "Discover schematic first",function()if known then send("Enchant") else status.Text="Find or choose this rank's schematic first." end end,"Upgrade",known and "Craft" or "Neutral")
-    text(string.format("Rank %d needs grade %d · %d Dust + %d %s + %d %s%s",nextRank,def.Grades[nextRank],cost.Dust,cost.Material,name(Catalog.GetMaterial(e.Grade)),cost.Theme,name(enchantment=="OpenSeam" and nextRank>=2 and "DeepResin" or def.Theme),nextRank==def.MaxLevel and def.Trophy~="" and (" + "..name(def.Trophy)) or ""),86)
+    local unlocked=requiredGrade<=stationGrade and requiredGrade<=(state.Tier or 1)
+    local actionText=not unlocked and ("Upgrade station and campaign to Grade "..requiredGrade) or known and ("Apply rank "..nextRank) or "Discover schematic first"
+    button(actionText,function()if not unlocked then status.Text="Upgrade the Enchanting Table and campaign to Grade "..requiredGrade.." first." elseif known then send("Enchant") else status.Text="Find or choose this rank's schematic first." end end,"Upgrade",known and unlocked and "Craft" or "Neutral")
+    text(string.format("Rank %d needs grade %d · %d Dust + %d %s + %d %s%s",nextRank,requiredGrade,cost.Dust,cost.Material,name(Catalog.GetMaterial(e.Grade)),cost.Theme,name(enchantment=="OpenSeam" and nextRank>=2 and "DeepResin" or def.Theme),nextRank==def.MaxLevel and def.Trophy~="" and (" + "..name(def.Trophy)) or ""),86)
    end
    if not state.Creative then
     for _,id in ipairs(state.Scrolls or {}) do
@@ -220,6 +236,10 @@ end
 search:GetPropertyChangedSignal("Text"):Connect(function()
  searchQuery=string.lower(search.Text):match("^%s*(.-)%s*$") or ""
  if gui.Enabled and (page=="Gear" or page=="Enchantments") then render(true) end
+end)
+workspace:GetAttributeChangedSignal("CampaignTier"):Connect(function()
+ if state then state.Tier=workspace:GetAttribute("CampaignTier") or state.Tier end
+ if gui.Enabled then render(false) end
 end)
 remote.OnClientEvent:Connect(function(action,a,b)
  if action=="Open" or action=="State" then

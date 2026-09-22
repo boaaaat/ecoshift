@@ -5,8 +5,6 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
-local CollectionService = game:GetService("CollectionService")
-local ProximityPromptService = game:GetService("ProximityPromptService")
 
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 local Config = require(ReplicatedStorage.Shared.Config)
@@ -35,8 +33,6 @@ local SLOT_GAP = 6
 local COLS = 5
 local MARGIN = 16
 local FIXED_SLOTS = 10
-
-local CHEST_TAGS = { "Common_Chest", "Rare_Chest", "Legendary_Chest", "Celestial_Chest" }
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "ChestUI"
@@ -131,7 +127,6 @@ local slots = {}
 local slotData = {}
 local slotCount = FIXED_SLOTS
 local currentChestId = nil
-local lastOpenRequestAt = 0
 local dragging = { Active = false, Source = nil, ChestIndex = nil, Inv = nil, Ghost = nil, InvFrames = nil, ChestFrames = nil, Input = nil, PendingIndex = nil, StartPos = nil }
 local arrangeChest
 local transferStatusToken = 0
@@ -139,14 +134,6 @@ local contextChestIndex = nil
 
 local function isShiftDown()
 	return UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
-end
-
-local function hashColor(id)
-	local hash = 0
-	for i = 1, #id do
-		hash = (hash * 33 + string.byte(id, i)) % 360
-	end
-	return COLORS.Text
 end
 
 local function getItemStackSize(itemId)
@@ -211,16 +198,6 @@ end
 local contextTake = makeContextButton("Take", 1)
 local contextToHotbar = makeContextButton("To Hotbar", 2)
 local contextToStorage = makeContextButton("To Storage", 3)
-
-local function isChestTagged(inst)
-	if typeof(inst) ~= "Instance" then return false end
-	for _, tag in ipairs(CHEST_TAGS) do
-		if CollectionService:HasTag(inst, tag) then
-			return true
-		end
-	end
-	return false
-end
 
 local function setInventoryChestState(open, chestId)
 	local invGui = playerGui:FindFirstChild("InventoryUI")
@@ -321,6 +298,8 @@ local function renderSlot(slot)
 	if not data then
 		slot.Icon.Image = ""
 		slot.Icon.Visible = false
+		local itemArt = slot.Frame:FindFirstChild("ItemArt")
+		if itemArt then itemArt:Destroy() end
 		slot.QtyBadge.Visible = false
 		slot.ItemText.Visible = false
 		slot.ItemText.Text = ""
@@ -332,24 +311,15 @@ local function renderSlot(slot)
 	end
 
 	local item = ItemDatabase:Get(data.Id)
-	local icon = item and item.Icon or nil
 	slot.Qty.Text = tostring(data.N)
 	slot.QtyBadge.Visible = data.N > 1
 	slot.Frame.BackgroundColor3 = COLORS.SlotFilled
 
-	if icon and icon ~= "" then
-		slot.Icon.Image = icon
-		slot.Icon.ImageColor3 = Color3.new(1, 1, 1)
-		slot.Icon.Visible = true
-		slot.ItemText.Visible = false
-		slot.ItemText.Text = ""
-	else
-		slot.Icon.Image = ""
-		slot.Icon.Visible = false
-		slot.ItemText.Text = (item and item.Name or data.Id):gsub(" ", "\n", 1)
-		slot.ItemText.TextColor3 = item and item.IconColor or hashColor(data.Id)
-		slot.ItemText.Visible = true
-	end
+	slot.Icon.Image = ""
+	slot.Icon.Visible = false
+	slot.ItemText.Visible = false
+	slot.ItemText.Text = ""
+	Theme.ItemIcon(slot.Frame, item, 38, {ZIndex = slot.Frame.ZIndex + 2})
 	slot.Frame:SetAttribute("HasItem", true)
 	slot.Frame:SetAttribute("ItemId", data.Id)
 	slot.Frame:SetAttribute("Count", data.N)
@@ -390,28 +360,7 @@ local function createGhost(itemId, count)
 	corner.Parent = ghost
 
 	local item = ItemDatabase:Get(itemId)
-	local icon = item and item.Icon or nil
-	if icon and icon ~= "" then
-		local image = Instance.new("ImageLabel")
-		image.Size = UDim2.new(0, 28, 0, 28)
-		image.Position = UDim2.new(0.5, 0, 0.5, 0)
-		image.AnchorPoint = Vector2.new(0.5, 0.5)
-		image.BackgroundTransparency = 1
-		image.Image = icon
-		image.ImageColor3 = Color3.new(1, 1, 1)
-		image.Parent = ghost
-	else
-		local text = Instance.new("TextLabel")
-		text.Size = UDim2.new(1, -4, 1, -4)
-		text.Position = UDim2.new(0, 2, 0, 2)
-		text.BackgroundTransparency = 1
-		text.Font = Enum.Font.GothamBold
-		text.TextSize = 10
-		text.TextWrapped = true
-		text.TextColor3 = item and item.IconColor or hashColor(itemId)
-		text.Text = itemId
-		text.Parent = ghost
-	end
+	Theme.ItemIcon(ghost, item, 30, {ZIndex = ghost.ZIndex + 1})
 
 	if count > 1 then
 		local qty = Instance.new("TextLabel")
@@ -643,6 +592,7 @@ local function createSlot(index, x, y)
 	qtyBadge.BackgroundTransparency = 0.2
 	qtyBadge.BorderSizePixel = 0
 	qtyBadge.Visible = false
+	qtyBadge.ZIndex = 6
 	qtyBadge.Parent = slot
 
 	local qtyCorner = Instance.new("UICorner")
@@ -656,12 +606,14 @@ local function createSlot(index, x, y)
 	qty.TextSize = 10
 	qty.TextColor3 = COLORS.Paper
 	qty.Text = "1"
+	qty.ZIndex = 7
 	qty.Parent = qtyBadge
 
 	local button = Instance.new("TextButton")
 	button.Size = UDim2.new(1, 0, 1, 0)
 	button.BackgroundTransparency = 1
 	button.Text = ""
+	button.ZIndex = 10
 	button.Parent = slot
 
 	button.MouseEnter:Connect(function()
@@ -815,22 +767,6 @@ UserInputService.InputBegan:Connect(function(input)
 	if currentChestId then
 		closeChest(true)
 	end
-end)
-
-ProximityPromptService.PromptTriggered:Connect(function(prompt, playerWhoTriggered)
-	if playerWhoTriggered ~= player then return end
-	if not chestRemote then return end
-	local parent = prompt and prompt.Parent
-	if not parent then return end
-
-	local chest = parent:FindFirstAncestorOfClass("Model") or parent
-	if not chest or not chest.Parent then return end
-	if not isChestTagged(chest) then return end
-
-	local now = os.clock()
-	if now - lastOpenRequestAt < 0.1 then return end
-	lastOpenRequestAt = now
-	chestRemote:FireServer("Open", { Chest = chest })
 end)
 
 Theme.Panel(panel)

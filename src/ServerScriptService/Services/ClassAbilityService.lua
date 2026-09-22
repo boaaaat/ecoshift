@@ -4,6 +4,7 @@ local RS = game:GetService("ReplicatedStorage")
 local Tags = game:GetService("CollectionService")
 local RunService = game:GetService("RunService")
 local Classes = require(RS.Shared.ClassConfig)
+local Catalog = require(RS.Shared.OverhaulCatalog)
 local ServerUtil = require(script.Parent.ServerUtil)
 local Stats = require(script.Parent.StatsService)
 local Service = { _states={}, _effects={}, _fields={}, _marks={}, _overclocks={} }
@@ -118,7 +119,7 @@ end
 function Service:GetCraftRate(player,station)
 	local bonus=0
 	for owner,effect in pairs(self._overclocks[station] or {}) do if living(owner) and effect.Until>os.clock() then bonus=math.max(bonus,effect.Rate) end end
-	return math.clamp(1+(player and player:GetAttribute("Class_CraftBonus") or 0)+bonus,1,2)
+	return (Catalog.CraftSpeedMultiplier or 1)*math.clamp(1+(player and player:GetAttribute("Class_CraftBonus") or 0)+bonus,1,2)
 end
 function Service:GetShelterEffect(player)
 	local reduction,recovery=0,0

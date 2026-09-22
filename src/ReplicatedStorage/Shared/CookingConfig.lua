@@ -7,9 +7,9 @@ C.OutputSlots = 12
 C.SeasoningDuration = 240
 C.Fuels = { Wood = 60, Peat = 120, Coal = 240 }
 C.Stations = {
- Campfire = {Name="Campfire",Tier=1,InteractRadius=8},
- Stove = {Name="Stove",Tier=2,InteractRadius=8},
- Oven = {Name="Oven",Tier=3,InteractRadius=8},
+ Campfire = {Name="Campfire",Tier=1,InteractRadius=15},
+ Stove = {Name="Stove",Tier=2,InteractRadius=15},
+ Oven = {Name="Oven",Tier=3,InteractRadius=15},
 }
 C.Recipes = {}
 C.RecipeOrder = {}

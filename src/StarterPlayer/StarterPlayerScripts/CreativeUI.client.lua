@@ -140,7 +140,6 @@ worldTab=button(panel,"WORLD CONTROLS",UDim2.new(.5,-20,0,40),UDim2.new(.5,4,0,5
 local category="All"
 local categories={"All","Resources","Tools","Weapons","Armor","Accessories","Food","Medical","Crafting tables","Lights","Builds","Other"}
 local categoryRules={Resources={"Resource"},Tools={"Tool"},Weapons={"Weapon"},Armor={"Armor"},Accessories={"Accessory"},Food={"Food"},Medical={"Medicine","Medical","Healing"},["Crafting tables"]={"CraftingStation"},Lights={"Light"},Builds={"Placeable"}}
-local categoryGlyph={All="Pack",Resources="Mineral",Tools="Harvest",Weapons="Attack",Armor="Shield",Accessories="Pack",Food="Food",Medical="Health",["Crafting tables"]="Craft",Lights="Flame",Builds="Build",Other="Survey"}
 local function matchesCategory(item, selected)
 	if selected=="All" then return true end
 	if selected=="Builds" then return item:HasTag("Placeable") and not item:HasTag("CraftingStation") and not item:HasTag("Light") end
@@ -390,13 +389,8 @@ renderItems=function()
 			end)
    card.MouseEnter:Connect(function() if not drag then itemTooltip:Show({Id=item.Id,N=1},"Click: 1 · Shift-click: full stack") end end)
    card.MouseLeave:Connect(function() itemTooltip:Hide() end)
-			if item.Icon and item.Icon~="" then
-				local image=Instance.new("ImageLabel");image.BackgroundTransparency=1;image.Size=UDim2.fromOffset(36,36);image.AnchorPoint=Vector2.new(.5,0);image.Position=UDim2.new(.5,0,0,9);image.Image=item.Icon;image.ScaleType=Enum.ScaleType.Fit;image.Parent=card
-			else
-				local glyph="Pack"
-				for _,name in ipairs(categories) do if name~="All" and matchesCategory(item,name) then glyph=categoryGlyph[name];break end end
-				local holder=Instance.new("Frame");holder.BackgroundTransparency=1;holder.Size=UDim2.fromOffset(36,36);holder.AnchorPoint=Vector2.new(.5,0);holder.Position=UDim2.new(.5,0,0,8);holder.Parent=card;Theme.Icon(holder,glyph,30)
-			end
+			local art=Theme.ItemIcon(card,item,40,{ZIndex=card.ZIndex+2})
+			art.AnchorPoint=Vector2.new(.5,0);art.Position=UDim2.new(.5,0,0,7)
 			local label=Theme.Label(card,item.Name,UDim2.new(1,-12,1,-48),UDim2.fromOffset(6,46),14,nil,true)
 			if item.IconColor then label.TextColor3=item.IconColor end
 			label.TextWrapped,label.TextTruncate,label.TextXAlignment=true,Enum.TextTruncate.None,Enum.TextXAlignment.Center

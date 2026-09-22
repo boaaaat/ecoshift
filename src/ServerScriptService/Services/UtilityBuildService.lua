@@ -24,8 +24,8 @@ local function paused()
 end
 local function output(p,id,n)
  if n<=0 then return false,"Nothing ready yet" end
- if Inventory:Give(p,id,n,true,true)~=n then return false,"Make room in your inventory" end
- Inventory:Sync(p);return true,"Collected "..n.." "..id
+ if Inventory:GiveOrDrop(p,id,n,true)~=n then return false,"Unable to collect items. Try again." end
+ return true,"Collected "..n.." "..id
 end
 function S:_door(m,state,open,instant)
  local leaf=m:FindFirstChild("DoorLeaf");local width=m:GetAttribute("DoorWidth") or 4
@@ -101,7 +101,7 @@ function S:Handle(p,action,data)
  self._viewers[p]=m
  if action=="Open" then return true,"Ready"
  elseif action=="Collect" and (state.Type=="RainCollector" or state.Type=="WaterFilter") then
-  local ok,why=output(p,"Water",state.Water);if ok then state.Water=0 end;return ok,why
+  local ok,why=output(p,"Water",state.Water);if ok then state.Water=0;Inventory:Sync(p) end;return ok,why
  elseif action=="Input" and state.Type=="WaterFilter" then
   local n=data.Quantity or 1
   if type(n)~="number" or n%1~=0 or n<1 or n>20 or state.Input+n>20 then return false,"Filter holds 20 dirty water" end
@@ -111,7 +111,7 @@ function S:Handle(p,action,data)
   -- A partly filtered serving returns dirty water; spent fuel stays spent.
   local n=state.Input+(state.Started and 1 or 0)
   local ok,why=output(p,"DirtyWater",n)
-  if ok then state.Input=0;state.Work=0;state.Started=false end;return ok,why
+  if ok then state.Input=0;state.Work=0;state.Started=false;Inventory:Sync(p) end;return ok,why
  elseif action=="Fuel" and state.Type=="WaterFilter" then
   if state.FuelUses>190 then return false,"Filter fuel is full" end
   if not Inventory:PayCost(p,{{Id="Coal",N=1}},true) then return false,"Need Coal ×1" end
@@ -122,10 +122,11 @@ function S:Handle(p,action,data)
   state.Ammo+=10;Inventory:Sync(p);return true,"Bone loaded: 10 triggers"
  elseif action=="Upgrade" and state.Type=="SpikeTrap" then
   local g=m:GetAttribute("StationGrade") or Catalog.Placeables.SpikeTrap.Grade
-  if g>=8 then return false,"Trap fully upgraded" end
-  if g>=(workspace:GetAttribute("CampaignTier") or 1) then return false,"Next campaign certification required" end
-  if not Inventory:PayCost(p,Catalog.GetStationUpgradeCost(g+1),true) then return false,"Missing upgrade materials" end
-  m:SetAttribute("StationGrade",g+1);Inventory:Sync(p);return true,"Trap upgraded"
+  local costs,nextGrade=Catalog.GetPlaceableUpgradeCost("SpikeTrap",g)
+  if not nextGrade then return false,"Trap fully upgraded" end
+  if nextGrade>(workspace:GetAttribute("CampaignTier") or 1) then return false,"Next campaign certification required" end
+  if not Inventory:PayCost(p,costs,true) then return false,"Missing upgrade materials" end
+  m:SetAttribute("StationGrade",nextGrade);Inventory:Sync(p);return true,"Trap upgraded"
  elseif action=="Rest" and state.Type=="Bedroll" then
   p:SetAttribute("RestingAtBedroll",p:GetAttribute("RestingAtBedroll")~=m:GetAttribute("UtilityId") and m:GetAttribute("UtilityId") or nil)
   return true,"Stand near the bedroll to recover stamina and exposure. Moving ends rest."

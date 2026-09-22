@@ -18,12 +18,14 @@ local ItemDropService = { _worldActive = false }
 local entries = {}
 local lifetimes = {}
 local claiming = {}
+local ownerPickupLocks = {}
 local shiftAnchors = {}
 local DROP_LIFETIME_SECONDS = 10 * 60
-local AUTO_PICKUP_RADIUS = 4
+local DROP_VISUAL_SCALE = 1.5
+local AUTO_PICKUP_RADIUS = 8
 
 local function forgetDrop(model)
-	entries[model], lifetimes[model], claiming[model], shiftAnchors[model] = nil, nil, nil, nil
+	entries[model], lifetimes[model], claiming[model], ownerPickupLocks[model], shiftAnchors[model] = nil, nil, nil, nil, nil
 end
 
 local function withinPickupRange(root, collider)
@@ -146,6 +148,14 @@ end
 
 local function tryAutoPickup(model, plr)
 	if not model or not model.Parent or claiming[model] then return false end
+	local ownerLock = ownerPickupLocks[model]
+	if ownerLock then
+		if os.clock() >= ownerLock.ExpiresAt then
+			ownerPickupLocks[model] = nil
+		elseif plr.UserId == ownerLock.UserId then
+			return false
+		end
+	end
 	local part = model.PrimaryPart or getPrimary(model)
 	if not part then return false end
 	model.PrimaryPart = part
@@ -271,6 +281,9 @@ function ItemDropService:SpawnDrop(itemId, count, position, options)
 		part.Parent = model
 		model.PrimaryPart = part
 	end
+	-- Enlarge the finished drop rather than replacing prefab-specific sizing.
+	-- Fallback resource scales therefore retain their intended proportions.
+	model:ScaleTo(model:GetScale() * DROP_VISUAL_SCALE)
 	-- Held tools/armor intentionally have no collisions, and small resource art
 	-- has very thin pieces. Every pickup needs its own solid physics body.
 	local pivot = model:GetPivot()
@@ -302,6 +315,11 @@ function ItemDropService:SpawnDrop(itemId, count, position, options)
 	model.Destroying:Connect(function() forgetDrop(model) end)
 	entries[model] = ItemInstance.New(itemId,count,options and options.Entry)
 	lifetimes[model] = math.clamp(tonumber(options and options.LifetimeRemaining) or DROP_LIFETIME_SECONDS, 0, DROP_LIFETIME_SECONDS)
+	local blockedUserId = tonumber(options and options.OwnerPickupBlockedUserId)
+	local ownerCooldown = tonumber(options and options.OwnerPickupCooldown)
+	if blockedUserId and blockedUserId > 0 and blockedUserId % 1 == 0 and ownerCooldown and ownerCooldown > 0 then
+		ownerPickupLocks[model] = {UserId = blockedUserId, ExpiresAt = os.clock() + math.min(ownerCooldown, 60)}
+	end
 	if options and options.PendingPickup then model:SetAttribute("PickupPending", true) end
 	model:PivotTo(CFrame.new(position))
 	model.Parent = ensureFolder()

@@ -41,7 +41,7 @@ Config.DATASTORE = {
 }
 
 Config.GRID = {
-	Size = 6,
+	Size = 8,
 	BuildMaxDistance = 45,
 }
 
@@ -75,7 +75,7 @@ end
 
 -- CampaignConfig and EventsConfig own progression and event cadence.
 
-Config.BUILD = {SalvageSeconds=3,CampRadius=200,AllowedTypes={},PlaceableItems={},Costs={}}
+Config.BUILD = {SalvageSeconds=3,SalvageMaxDistance=15,CampRadius=200,AllowedTypes={},PlaceableItems={},Costs={}}
 local Catalog=require(script.Parent.OverhaulCatalog)
 for id in pairs(Catalog.Placeables) do Config.BUILD.AllowedTypes[id]=true;Config.BUILD.PlaceableItems[id]=true end
 

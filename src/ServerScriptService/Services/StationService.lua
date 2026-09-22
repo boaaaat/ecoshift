@@ -35,14 +35,16 @@ end
 function S:Validate(p,model,grade)
  local id=kind(model);local root=p.Character and p.Character:FindFirstChild("HumanoidRootPart")
  if not id or not alive(p) or not root or GameState:IsGameOver() or RS:GetAttribute("WorldRestoring") then return false,"Station unavailable" end
- if (root.Position-model:GetPivot().Position).Magnitude>10 then return false,"Move closer to the station" end
+ local radius=Catalog.Stations[id].InteractRadius or 15
+ if (root.Position-model:GetPivot().Position).Magnitude>radius then return false,"Move closer to the station" end
  if (tonumber(model:GetAttribute("StationGrade")) or Catalog.Stations[id].Grade)<(grade or 1) then return false,"Station grade "..tostring(grade).." required" end
  return true
 end
 function S:Bind(model,stationType,grade)
  if not Catalog.Stations[stationType] or stationType=="Hand" then return end
  model:SetAttribute("StationType",stationType)
- model:SetAttribute("StationGrade",math.clamp(math.floor(tonumber(grade) or tonumber(model:GetAttribute("StationGrade")) or Catalog.Stations[stationType].Grade),1,8))
+ local definition=Catalog.Stations[stationType]
+ model:SetAttribute("StationGrade",math.clamp(math.floor(tonumber(grade) or tonumber(model:GetAttribute("StationGrade")) or definition.Grade),definition.Grade,Catalog.GetStationMaxGrade(stationType) or definition.Grade))
  if not self._states[model] then
   local output={};for i=1,12 do output[i]=false end
   self._states[model]={Version=1,FuelWork=0,Jobs={},Output=output,Enabled=true}
@@ -81,8 +83,9 @@ function S:_status(state)
  return "Smelting"
 end
 function S:_view(model)
- local state=self._states[model];local grade=model:GetAttribute("StationGrade") or 1
- return {Station=model,StationType=kind(model),Grade=grade,CampaignTier=workspace:GetAttribute("CampaignTier") or 1,UpgradeCost=Catalog.GetStationUpgradeCost(grade+1),State=state and Codec.Copy(state),Status=state and self:_status(state)}
+ local state=self._states[model];local stationType=kind(model);local grade=model:GetAttribute("StationGrade") or 1
+ local upgradeCost,nextGrade=Catalog.GetStationUpgradeCost(stationType,grade)
+ return {Station=model,StationType=stationType,Grade=grade,NextGrade=nextGrade,MaxGrade=Catalog.GetStationMaxGrade(stationType),CampaignTier=workspace:GetAttribute("CampaignTier") or 1,UpgradeCost=upgradeCost,State=state and Codec.Copy(state),Status=state and self:_status(state)}
 end
 function S:_send(p,model,message)
  if self._remote and model and model.Parent then local view=self:_view(model);view.Message=message;self._remote:FireClient(p,"Snapshot",view) end
@@ -97,21 +100,22 @@ function S:Handle(p,action,payload)
  local state=self._states[model]
  if action=="Open" then self._viewers[p]=model;return true,"Station ready" end
  if action=="Upgrade" then
-  local grade=model:GetAttribute("StationGrade") or 1;local nextGrade=grade+1
-  if nextGrade>8 then return false,"Station is fully upgraded" end
+  local grade=model:GetAttribute("StationGrade") or Catalog.Stations[id].Grade
+  local upgradeCost,nextGrade=Catalog.GetStationUpgradeCost(id,grade)
+  if not nextGrade then return false,"Station is fully upgraded" end
   if nextGrade>(workspace:GetAttribute("CampaignTier") or 1) then return false,"Complete the next campaign certification first" end
   if #state.Jobs>0 then return false,"Finish or cancel furnace work first" end
   local cooking=require(script.Parent.CookingService)
   local cookingState=cooking._stations and cooking._stations[model]
   if cookingState and #cookingState.Jobs>0 then return false,"Finish or cancel cooking work first" end
   for _,job in pairs(require(script.Parent.CraftingService)._activeCrafts) do if job.Station==model then return false,"Finish accepted station crafts first" end end
-  if not Inventory:PayCost(p,Catalog.GetStationUpgradeCost(nextGrade),true) then return false,"Missing upgrade materials" end
+  if not Inventory:PayCost(p,upgradeCost,true) then return false,"Missing upgrade materials" end
   model:SetAttribute("StationGrade",nextGrade);Inventory:Sync(p);return true,"Upgraded to grade "..nextGrade
  end
  if id~="Furnace" then return false,"This action requires a furnace" end
  if action=="Queue" then
   local recipe=Catalog.Recipes[payload.RecipeId];local quantity=payload.Quantity or 1
-  if not recipe or not table.find(recipe.AllowedStations or {},"Furnace") or not integer(quantity,1,20) then return false,"Choose a furnace recipe and 1–20 batches" end
+  if not recipe or recipe.Future or not table.find(recipe.AllowedStations or {},"Furnace") or not integer(quantity,1,20) then return false,"Choose a furnace recipe and 1–20 batches" end
   if #state.Jobs>=3 then return false,"The three-job queue is full" end
   if recipe.CampaignTier>(workspace:GetAttribute("CampaignTier") or 1) then return false,"Campaign tier "..recipe.CampaignTier.." required" end
   local valid,why=self:Validate(p,model,recipe.RequiredGrade);if not valid then return false,why end
@@ -141,16 +145,14 @@ function S:Handle(p,action,payload)
    local amount=job.Paid and math.floor(entry.N*job.Remaining/job.Total+.00001) or entry.N*job.Remaining
    if amount>0 then table.insert(refund,{Id=entry.Id,N=amount}) end
   end
-  local projected,overflow=Inventory:ProjectRefund(Inventory:CaptureWorldState(p),refund,false)
-  if #overflow>0 then return false,"Make room for the refunded materials" end
-  table.remove(state.Jobs,index);Inventory:RestoreWorldState(p,projected,true);Inventory:Sync(p);return true,"Unfinished ingredients refunded; used fuel stays spent"
+  if not Inventory:GiveEntriesOrDrop(p,refund,true) then return false,"Unable to refund materials. Try again." end
+  table.remove(state.Jobs,index);Inventory:Sync(p);return true,"Unfinished ingredients refunded; used fuel stays spent"
  elseif action=="Collect" then
   local index=payload.Index
   if not integer(index,1,12) or not state.Output[index] then return false,"That output was already collected" end
   local output=state.Output[index]
   if payload.ExpectedId and payload.ExpectedId~=output.Id then return false,"Output changed; choose the item again" end
-  if not Inventory:CanFit(p,output.Id,output.N) then return false,"Inventory is full" end
-  if Inventory:Give(p,output.Id,output.N,true,true)~=output.N then return false,"Inventory is full" end
+  if Inventory:GiveOrDrop(p,output.Id,output.N,true)~=output.N then return false,"Unable to collect output. Try again." end
   state.Output[index]=false;Inventory:Sync(p);return true,"Output collected"
  end
  return false,"Unknown station action"
@@ -194,7 +196,7 @@ function S:Init()
     if output then
      local owner=Players:GetPlayerByUserId(job.OwnerUserId)
      local rate=require(script.Parent.ClassAbilityService):GetCraftRate(owner and alive(owner) and owner or nil,model)
-     local work=math.min(dt*math.clamp(rate,1,2),state.FuelWork,job.WorkRequired-job.Work)
+     local work=math.min(dt*rate,state.FuelWork,job.WorkRequired-job.Work)
      job.Work+=work;state.FuelWork-=work
      if job.Work>=job.WorkRequired then
       state.Output=output;job.Remaining-=1;job.Work=0

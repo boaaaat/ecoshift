@@ -8,11 +8,14 @@ local CollectionService = game:GetService("CollectionService")
 local Theme = require(RS.Shared.UI.UITheme)
 local Config = require(RS.Shared.Config)
 local Placement = require(RS.Shared.BuildPlacement)
+local BuildPreview = require(RS.Shared.UI.BuildPreview)
 local LightConfig = require(RS.Shared.LightConfig)
+local Catalog = require(RS.Shared.OverhaulCatalog)
 local Items = require(RS.Shared.Items.ItemDatabase)
 local Settings = require(RS.Shared.ClientSettings)
 local SettingsSchema = require(RS.Shared.SettingsConfig)
 local Messages = require(RS.Shared.ResultMessages).Build
+local StationInteraction = require(RS.Shared.StationInteraction)
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local remote = RS:WaitForChild("Remotes"):WaitForChild(Config.RemoteNames.Build)
@@ -22,7 +25,6 @@ local selected, preview, position, target, heldTarget
 local rotation, placementRotation, lastPulse, startedAt, statusUntil = 0, 0, 0, 0, 0
 local holding, latched = false, false
 local holdInput
-local duration = Config.BUILD.SalvageSeconds or 3
 local gui = Instance.new("ScreenGui")
 gui.Name, gui.ResetOnSpawn, gui.DisplayOrder, gui.Parent = "BuildingUI", false, 24, playerGui
 local status = Theme.Label(gui,"",UDim2.fromOffset(430,48),UDim2.new(.5,0,1,-220),16,Theme.Colors.Paper,true)
@@ -36,7 +38,18 @@ Theme.Corner(progress,3)
 local highlight = Instance.new("Highlight")
 highlight.Name, highlight.FillTransparency, highlight.DepthMode = "SalvageTarget", .82, Enum.HighlightDepthMode.Occluded
 highlight.FillColor, highlight.OutlineColor = Theme.Colors.Amber, Theme.Colors.Amber
-highlight.Enabled, highlight.Parent = false, workspace
+highlight.Enabled = false
+-- An untargeted Highlight inherits its parent. Keep it outside world geometry,
+-- and never enable it before its explicit structure target has been assigned.
+highlight.Parent = gui
+local highlightedTarget
+local function updateHighlight(nextTarget)
+ if nextTarget == highlightedTarget then return end
+ highlight.Enabled = false
+ highlight.Adornee = nextTarget
+ highlightedTarget = nextTarget
+ if nextTarget then highlight.Enabled = true end
+end
 local toolbar = Instance.new("Frame")
 toolbar.Name, toolbar.Size, toolbar.Position = "TouchPlacement", UDim2.fromOffset(152,48), UDim2.new(1,-100,1,-168)
 toolbar.AnchorPoint, toolbar.BackgroundTransparency, toolbar.Parent = Vector2.new(1,1), 1, gui
@@ -65,30 +78,40 @@ local function currentItem()
  local tool=char and char:FindFirstChildOfClass("Tool")
  return tool and Config.BUILD.PlaceableItems[tool.Name] and tool.Name or nil
 end
+local aimParams = RaycastParams.new()
+aimParams.FilterType = Enum.RaycastFilterType.Exclude
+local aimCharacter, aimPreview
 local function aimRay()
  local camera=workspace.CurrentCamera
  if not camera then return nil end
  local centered=Theme.IsMobile() or UIS.PreferredInput==Enum.PreferredInput.Gamepad or UIS.MouseBehavior==Enum.MouseBehavior.LockCenter
  local aim=centered and camera.ViewportSize*.5 or Vector2.new(mouse.X,mouse.Y)
  local ray=camera:ViewportPointToRay(aim.X,aim.Y)
- local params=RaycastParams.new()
- params.FilterType=Enum.RaycastFilterType.Exclude
- local ignore={}
- if player.Character then table.insert(ignore,player.Character) end
- if preview then table.insert(ignore,preview) end
- params.FilterDescendantsInstances=ignore
- return workspace:Raycast(ray.Origin,ray.Direction*120,params)
+ local character=player.Character
+ if character~=aimCharacter or preview~=aimPreview then
+  aimCharacter,aimPreview=character,preview
+  local ignore={}
+  if character then table.insert(ignore,character) end
+  if preview then table.insert(ignore,preview.Root) end
+  aimParams.FilterDescendantsInstances=ignore
+ end
+ return workspace:Raycast(ray.Origin,ray.Direction*120,aimParams)
 end
 local function salvageTarget(hit)
  local node=hit and hit.Instance
  while node and node~=workspace do
   if CollectionService:HasTag(node,"Structure") and node:GetAttribute("BuildType") then
    local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-   if node:GetAttribute("OwnerUserId")==player.UserId and root and (node:GetPivot().Position-root.Position).Magnitude<= (Config.GRID.BuildMaxDistance or 45) then return node end
+   if node:GetAttribute("OwnerUserId")==player.UserId and root and (node:GetPivot().Position-root.Position).Magnitude<= (Config.BUILD.SalvageMaxDistance or 15) then return node end
    return nil
   end
   node=node.Parent
  end
+end
+local function salvageDuration(structure)
+ local buildType=structure and structure:GetAttribute("BuildType")
+ local definition=buildType and Catalog.Placeables[buildType]
+ return math.max(.1,tonumber(definition and definition.HoldSalvageSeconds) or Config.BUILD.SalvageSeconds or 3)
 end
 local function showStatus(text)
  status.Text=text;statusUntil=os.clock()+2;status.Visible=true
@@ -144,7 +167,9 @@ UIS.InputBegan:Connect(function(input,processed)
   local structure=aimedStructure(aimRay())
   if structure then remote:FireServer("PickBlock",{Target=structure}) end
  elseif input.UserInputType==Enum.UserInputType.MouseButton1 or input.KeyCode==Enum.KeyCode.ButtonL2 then place()
- elseif input.UserInputType==Enum.UserInputType.MouseButton2 or input.KeyCode==Enum.KeyCode.ButtonR2 then beginHold(input)
+ elseif input.UserInputType==Enum.UserInputType.MouseButton2 then
+  if not StationInteraction.FromMouse(player) then beginHold(input) end
+ elseif input.KeyCode==Enum.KeyCode.ButtonR2 then beginHold(input)
  elseif input.KeyCode==rotateKey() and selected then rotation=(rotation+90)%360 end
 end)
 UIS.InputEnded:Connect(function(input)
@@ -165,45 +190,39 @@ remote.OnClientEvent:Connect(function(kind,data)
    return
   end
   if data.Action~="Place" then resetHold();latched=true end
-  showStatus(data.Success and (data.Action=="Place" and (data.Reason=="TemporaryLight" and Messages.TemporaryLight or "Placed.") or data.Refunded and "Salvaged into your inventory." or "Build removed.") or Messages[data.Reason] or "Unable to complete that build action.")
+  showStatus(data.Success and (data.Action=="Place" and (data.Reason=="TemporaryLight" and Messages.TemporaryLight or "Placed.") or data.Refunded and "Build recovered; any overflow was dropped nearby." or "Build removed.") or Messages[data.Reason] or "Unable to complete that build action.")
  end
 end)
 RunService.RenderStepped:Connect(function()
  local now=os.clock()
  local nextItem=currentItem()
- if nextItem~=selected then selected=nextItem;rotation=0;endHold() end
+ if nextItem~=selected then
+  selected=nextItem;rotation=0;position=nil;endHold()
+  if preview then
+   if selected then preview:SetItem(selected) else preview:Destroy();preview=nil end
+  end
+ end
  local isBlocked=blocked()
  playerGui:SetAttribute("BuildPlacementActive",selected~=nil and not isBlocked)
  local hit=not isBlocked and aimRay() or nil
  target=salvageTarget(hit)
  if isBlocked then endHold() end
- highlight.Adornee,highlight.Enabled=target,target~=nil
+ updateHighlight(target)
  if selected and hit and not isBlocked then
-  position=Placement.Surface(hit.Position,preview and {preview} or {})
-  if not preview then
-   preview=Instance.new("Part")
-   preview.Name,preview.Size="PlacementPreview",Vector3.new(Config.GRID.Size-.5,Config.GRID.Size-.5,Config.GRID.Size-.5)
-   preview.Anchored,preview.CanCollide,preview.CanTouch,preview.CanQuery=true,false,false,false
-   preview.Material,preview.Transparency,preview.Parent=Enum.Material.SmoothPlastic,.6,workspace
-   local facing=Instance.new("WedgePart")
-   facing.Name,facing.Size,facing.Anchored,facing.CanCollide,facing.CanQuery="Facing",Vector3.new(1.8,.6,2),true,false,false
-   facing.Color,facing.Parent=Theme.Colors.Amber,preview
-  end
-  preview.Transparency=position and .6 or 1
-  preview.Facing.Transparency=position and 0 or 1
+  placementRotation=(rotationFromPlayerFacing()+rotation)%360
+  position=Placement.Surface(hit.Position,preview and {preview.Root} or {},selected,placementRotation)
   if position then
-    placementRotation=(rotationFromPlayerFacing()+rotation)%360
-   preview.CFrame=CFrame.new(position+Vector3.new(0,preview.Size.Y/2,0))*CFrame.Angles(0,math.rad(placementRotation),0)
-   preview.Facing.CFrame=preview.CFrame*CFrame.new(0,preview.Size.Y/2+.1,-1.1)*CFrame.Angles(0,math.pi,0)
+   if not preview then preview=BuildPreview.new(gui,selected) end
    local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
    local valid=root and (Placement.WithinCamp(position) or LightConfig.Definitions[selected]~=nil)
     and (position-root.Position).Magnitude<=(Config.GRID.BuildMaxDistance or 45)
-   preview.Color=valid and Theme.Colors.ValidPlacement or Theme.Colors.InvalidPlacement
+   preview:Show(CFrame.new(position)*CFrame.Angles(0,math.rad(placementRotation),0),
+    valid and Theme.Colors.ValidPlacement or Theme.Colors.InvalidPlacement)
    if not valid then position=nil end
-  end
+  elseif preview then preview:Hide() end
  else
   position=nil
-  if preview then preview:Destroy();preview=nil end
+  if preview then preview:Hide() end
  end
  if holding and not latched then
   if heldTarget and target~=heldTarget then resetHold();latched=true end
@@ -214,6 +233,7 @@ RunService.RenderStepped:Connect(function()
    end
    playerGui:SetAttribute("BuildSalvageActive",true)
    if now-lastPulse>=.2 then lastPulse=now;remote:FireServer("ContinueSalvage",{Target=target}) end
+   local duration=salvageDuration(target)
    local fraction=math.clamp((now-startedAt)/duration,0,1)
    progress.Size=UDim2.new(fraction,0,0,5)
    status.Text=string.format("Salvaging %s · %.1fs",tostring(target:GetAttribute("BuildType")),math.max(0,duration-(now-startedAt)))
@@ -230,7 +250,10 @@ RunService.RenderStepped:Connect(function()
     else
      status.Text=Theme.IsMobile() and "Tap place · Hold salvage to recover a build" or ((Items:Get(selected) and Items:Get(selected).Name or selected) .. " · Left-click place · " .. (rotateKey() and rotateKey().Name or "") .. " rotate · Hold right-click salvage")
     end
-   elseif target then status.Text=Theme.IsMobile() and "Hold the salvage icon to recover this build" or "Hold right-click for 3 seconds to salvage" end
+   elseif target then
+    local targetDuration=salvageDuration(target)
+    status.Text=Theme.IsMobile() and "Hold the salvage icon to recover this build" or string.format("Hold right-click for %g seconds to salvage",targetDuration)
+   end
  end
  toolbar.Visible=Theme.IsMobile() and not isBlocked and (selected~=nil or target~=nil)
  placeButton.Visible,rotateButton.Visible=selected~=nil,selected~=nil
@@ -248,6 +271,12 @@ Theme.BindResponsive(gui,function(mobile,size)
   status.Position=UDim2.new(.5,0,1,-metrics.HotbarTop-116)
  end
 end)
-player.CharacterRemoving:Connect(endHold)
+player.CharacterRemoving:Connect(function()
+ endHold()
+ target=nil
+ updateHighlight(nil)
+ position=nil
+ if preview then preview:Destroy();preview=nil end
+end)
 gui.Destroying:Connect(function() if preview then preview:Destroy() end;highlight:Destroy() end)
 Theme.TrackRoot(gui)

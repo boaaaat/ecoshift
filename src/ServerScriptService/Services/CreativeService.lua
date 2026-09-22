@@ -131,7 +131,7 @@ function CreativeService:_act(player, action, payload)
 			return false, "Choose either one item or one full stack."
 		end
 		local inventory = require(script.Parent.InventoryService)
-		if inventory:Give(player, payload.Id, payload.Quantity, true) ~= payload.Quantity then return false, "Make more space in your inventory first." end
+		if inventory:GiveOrDrop(player, payload.Id, payload.Quantity) ~= payload.Quantity then return false, "Unable to deliver items. Try again." end
 		return true, "Added " .. payload.Quantity .. " × " .. (item.Name or payload.Id) .. "."
 	elseif action == "SetInvincible" then
 		if not player:GetAttribute("CreativeMode") then return false, "Switch to Creative mode to enable invincibility." end

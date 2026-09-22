@@ -1,0 +1,6776 @@
+{
+  "AbyssalPrism": {
+    "atlas": "expedition-06",
+    "x": 256,
+    "y": 256
+  },
+  "AirTank": {
+    "atlas": "accessory-01",
+    "x": 0,
+    "y": 0
+  },
+  "AmethystObelisk": {
+    "atlas": "expedition-06",
+    "x": 512,
+    "y": 256
+  },
+  "AncientSeed": {
+    "atlas": "expedition-02",
+    "x": 256,
+    "y": 256
+  },
+  "Antidote": {
+    "atlas": "medicine-01",
+    "x": 0,
+    "y": 0
+  },
+  "Anvil": {
+    "atlas": "builds-01",
+    "x": 0,
+    "y": 0
+  },
+  "ArchiveHeart": {
+    "atlas": "expedition-02",
+    "x": 512,
+    "y": 256
+  },
+  "ArmorPatch": {
+    "atlas": "medicine-01",
+    "x": 256,
+    "y": 0
+  },
+  "ArmorPatch2": {
+    "atlas": "medicine-01",
+    "x": 512,
+    "y": 0
+  },
+  "ArmorPatch3": {
+    "atlas": "medicine-01",
+    "x": 768,
+    "y": 0
+  },
+  "ArmorPatch4": {
+    "atlas": "medicine-01",
+    "x": 0,
+    "y": 256
+  },
+  "ArmorPatch5": {
+    "atlas": "medicine-01",
+    "x": 256,
+    "y": 256
+  },
+  "ArmorPatch6": {
+    "atlas": "medicine-01",
+    "x": 512,
+    "y": 256
+  },
+  "ArmorPatch7": {
+    "atlas": "medicine-01",
+    "x": 768,
+    "y": 256
+  },
+  "ArmorPatch8": {
+    "atlas": "medicine-01",
+    "x": 0,
+    "y": 512
+  },
+  "Arrow": {
+    "atlas": "expedition-05",
+    "x": 0,
+    "y": 512
+  },
+  "AshBoots": {
+    "atlas": "armor-01",
+    "x": 768,
+    "y": 0
+  },
+  "AshCoat": {
+    "atlas": "armor-01",
+    "x": 256,
+    "y": 0
+  },
+  "AshFiber": {
+    "atlas": "resources-02",
+    "x": 0,
+    "y": 0
+  },
+  "AshHood": {
+    "atlas": "armor-01",
+    "x": 0,
+    "y": 0
+  },
+  "AshTrousers": {
+    "atlas": "armor-01",
+    "x": 512,
+    "y": 0
+  },
+  "AuroraBoots": {
+    "atlas": "armor-01",
+    "x": 768,
+    "y": 256
+  },
+  "AuroraCoat": {
+    "atlas": "armor-01",
+    "x": 256,
+    "y": 256
+  },
+  "AuroraHood": {
+    "atlas": "armor-01",
+    "x": 0,
+    "y": 256
+  },
+  "AuroraLantern": {
+    "atlas": "expedition-06",
+    "x": 768,
+    "y": 256
+  },
+  "AuroraStone": {
+    "atlas": "resources-02",
+    "x": 256,
+    "y": 0
+  },
+  "AuroraTrousers": {
+    "atlas": "armor-01",
+    "x": 512,
+    "y": 256
+  },
+  "BakedRoots": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 0
+  },
+  "Bandage": {
+    "atlas": "medicine-01",
+    "x": 256,
+    "y": 512
+  },
+  "Bedroll": {
+    "atlas": "builds-01",
+    "x": 256,
+    "y": 0
+  },
+  "Berries": {
+    "atlas": "resources-01",
+    "x": 256,
+    "y": 768
+  },
+  "BerryPorridge": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 0
+  },
+  "BiomePredictor": {
+    "atlas": "expedition-05",
+    "x": 256,
+    "y": 512
+  },
+  "BitterSeed": {
+    "atlas": "spices-01",
+    "x": 0,
+    "y": 0
+  },
+  "BlackGlass": {
+    "atlas": "resources-02",
+    "x": 512,
+    "y": 0
+  },
+  "BlacksteelAxe": {
+    "atlas": "tool-01",
+    "x": 0,
+    "y": 0
+  },
+  "BlacksteelBar": {
+    "atlas": "materials-01",
+    "x": 0,
+    "y": 0
+  },
+  "BlacksteelPickaxe": {
+    "atlas": "tool-01",
+    "x": 256,
+    "y": 0
+  },
+  "BlacksteelSword": {
+    "atlas": "weapon-01",
+    "x": 0,
+    "y": 0
+  },
+  "Bone": {
+    "atlas": "resources-01",
+    "x": 768,
+    "y": 512
+  },
+  "BoneKnife": {
+    "atlas": "weapon-01",
+    "x": 256,
+    "y": 0
+  },
+  "BrightLantern": {
+    "atlas": "accessory-01",
+    "x": 256,
+    "y": 0
+  },
+  "Bucket": {
+    "atlas": "resources-01",
+    "x": 0,
+    "y": 512
+  },
+  "Cactus": {
+    "atlas": "resources-02",
+    "x": 768,
+    "y": 0
+  },
+  "CampMarker": {
+    "atlas": "builds-01",
+    "x": 512,
+    "y": 0
+  },
+  "Campfire": {
+    "atlas": "builds-01",
+    "x": 768,
+    "y": 0
+  },
+  "CandleLantern": {
+    "atlas": "expedition-06",
+    "x": 0,
+    "y": 512
+  },
+  "CanopyBoots": {
+    "atlas": "armor-01",
+    "x": 768,
+    "y": 512
+  },
+  "CanopyCoat": {
+    "atlas": "armor-01",
+    "x": 256,
+    "y": 512
+  },
+  "CanopyHood": {
+    "atlas": "armor-01",
+    "x": 0,
+    "y": 512
+  },
+  "CanopyTrousers": {
+    "atlas": "armor-01",
+    "x": 512,
+    "y": 512
+  },
+  "CaveAnise": {
+    "atlas": "spices-01",
+    "x": 256,
+    "y": 0
+  },
+  "Chest": {
+    "atlas": "builds-01",
+    "x": 0,
+    "y": 256
+  },
+  "CitrusPeel": {
+    "atlas": "spices-01",
+    "x": 512,
+    "y": 0
+  },
+  "ClearCrystal": {
+    "atlas": "resources-02",
+    "x": 0,
+    "y": 256
+  },
+  "ClimbingGloves": {
+    "atlas": "accessory-01",
+    "x": 512,
+    "y": 0
+  },
+  "Cloth": {
+    "atlas": "materials-01",
+    "x": 256,
+    "y": 0
+  },
+  "CloudWool": {
+    "atlas": "resources-02",
+    "x": 256,
+    "y": 256
+  },
+  "Coal": {
+    "atlas": "resources-01",
+    "x": 256,
+    "y": 512
+  },
+  "CoastBoots": {
+    "atlas": "armor-01",
+    "x": 768,
+    "y": 768
+  },
+  "CoastCoat": {
+    "atlas": "armor-01",
+    "x": 256,
+    "y": 768
+  },
+  "CoastHood": {
+    "atlas": "armor-01",
+    "x": 0,
+    "y": 768
+  },
+  "CoastTrousers": {
+    "atlas": "armor-01",
+    "x": 512,
+    "y": 768
+  },
+  "CoolMint": {
+    "atlas": "spices-01",
+    "x": 768,
+    "y": 0
+  },
+  "CoolingDrink": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 0
+  },
+  "CoolingRing": {
+    "atlas": "accessory-01",
+    "x": 768,
+    "y": 0
+  },
+  "Cord": {
+    "atlas": "materials-01",
+    "x": 512,
+    "y": 0
+  },
+  "CraterHammer": {
+    "atlas": "weapon-01",
+    "x": 512,
+    "y": 0
+  },
+  "CrystalBasil": {
+    "atlas": "spices-01",
+    "x": 0,
+    "y": 256
+  },
+  "CrystalBoots": {
+    "atlas": "armor-02",
+    "x": 768,
+    "y": 0
+  },
+  "CrystalCoat": {
+    "atlas": "armor-02",
+    "x": 256,
+    "y": 0
+  },
+  "CrystalHeart": {
+    "atlas": "expedition-02",
+    "x": 768,
+    "y": 256
+  },
+  "CrystalHood": {
+    "atlas": "armor-02",
+    "x": 0,
+    "y": 0
+  },
+  "CrystalStaff": {
+    "atlas": "weapon-01",
+    "x": 768,
+    "y": 0
+  },
+  "CrystalThread": {
+    "atlas": "resources-02",
+    "x": 512,
+    "y": 256
+  },
+  "CrystalTrousers": {
+    "atlas": "armor-02",
+    "x": 512,
+    "y": 0
+  },
+  "DarkDust": {
+    "atlas": "resources-02",
+    "x": 768,
+    "y": 256
+  },
+  "DarkMoss": {
+    "atlas": "resources-02",
+    "x": 0,
+    "y": 512
+  },
+  "DawnBow": {
+    "atlas": "weapon-01",
+    "x": 0,
+    "y": 256
+  },
+  "DawnFlower": {
+    "atlas": "spices-01",
+    "x": 256,
+    "y": 256
+  },
+  "DawnHeart": {
+    "atlas": "expedition-02",
+    "x": 0,
+    "y": 512
+  },
+  "DeepAirTank": {
+    "atlas": "accessory-01",
+    "x": 0,
+    "y": 256
+  },
+  "DeepAxe": {
+    "atlas": "tool-01",
+    "x": 512,
+    "y": 0
+  },
+  "DeepMetal": {
+    "atlas": "materials-01",
+    "x": 768,
+    "y": 0
+  },
+  "DeepPickaxe": {
+    "atlas": "tool-01",
+    "x": 768,
+    "y": 0
+  },
+  "DeepResin": {
+    "atlas": "resources-01",
+    "x": 768,
+    "y": 768
+  },
+  "DeepsteelSword": {
+    "atlas": "weapon-01",
+    "x": 256,
+    "y": 256
+  },
+  "DesertCoat": {
+    "atlas": "expedition-04",
+    "x": 256,
+    "y": 0
+  },
+  "DirtyWater": {
+    "atlas": "resources-01",
+    "x": 768,
+    "y": 256
+  },
+  "DiverBoots": {
+    "atlas": "armor-02",
+    "x": 768,
+    "y": 256
+  },
+  "DiverCoat": {
+    "atlas": "armor-02",
+    "x": 256,
+    "y": 256
+  },
+  "DiverHood": {
+    "atlas": "armor-02",
+    "x": 0,
+    "y": 256
+  },
+  "DiverTrousers": {
+    "atlas": "armor-02",
+    "x": 512,
+    "y": 256
+  },
+  "Door": {
+    "atlas": "builds-01",
+    "x": 256,
+    "y": 256
+  },
+  "DriedFood": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 0
+  },
+  "DryingSalve": {
+    "atlas": "medicine-01",
+    "x": 512,
+    "y": 512
+  },
+  "DuneBoots": {
+    "atlas": "armor-02",
+    "x": 768,
+    "y": 512
+  },
+  "DuneCoat": {
+    "atlas": "armor-02",
+    "x": 256,
+    "y": 512
+  },
+  "DuneHood": {
+    "atlas": "armor-02",
+    "x": 0,
+    "y": 512
+  },
+  "DuneTrousers": {
+    "atlas": "armor-02",
+    "x": 512,
+    "y": 512
+  },
+  "EchoCharm": {
+    "atlas": "accessory-01",
+    "x": 256,
+    "y": 256
+  },
+  "EchoShell": {
+    "atlas": "resources-02",
+    "x": 256,
+    "y": 512
+  },
+  "EmberAxe": {
+    "atlas": "weapon-01",
+    "x": 512,
+    "y": 256
+  },
+  "EmberBrazier": {
+    "atlas": "expedition-06",
+    "x": 256,
+    "y": 512
+  },
+  "EmberPepper": {
+    "atlas": "spices-01",
+    "x": 512,
+    "y": 256
+  },
+  "EnchantingDust": {
+    "atlas": "materials-01",
+    "x": 0,
+    "y": 256
+  },
+  "EnchantingTable": {
+    "atlas": "builds-01",
+    "x": 512,
+    "y": 256
+  },
+  "EventDetector": {
+    "atlas": "expedition-05",
+    "x": 512,
+    "y": 512
+  },
+  "ExpeditionMeal": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 256
+  },
+  "ExpeditionPack": {
+    "atlas": "accessory-01",
+    "x": 512,
+    "y": 256
+  },
+  "ExpeditionTool": {
+    "atlas": "tool-01",
+    "x": 0,
+    "y": 256
+  },
+  "Fiber": {
+    "atlas": "resources-01",
+    "x": 512,
+    "y": 0
+  },
+  "FieldClock": {
+    "atlas": "expedition-05",
+    "x": 768,
+    "y": 512
+  },
+  "FieldJournal": {
+    "atlas": "expedition-05",
+    "x": 0,
+    "y": 768
+  },
+  "FieldRepairKit": {
+    "atlas": "medicine-01",
+    "x": 768,
+    "y": 512
+  },
+  "FieldRepairKit2": {
+    "atlas": "medicine-01",
+    "x": 0,
+    "y": 768
+  },
+  "FieldRepairKit3": {
+    "atlas": "medicine-01",
+    "x": 256,
+    "y": 768
+  },
+  "FieldRepairKit4": {
+    "atlas": "medicine-01",
+    "x": 512,
+    "y": 768
+  },
+  "FieldRepairKit5": {
+    "atlas": "medicine-01",
+    "x": 768,
+    "y": 768
+  },
+  "FieldRepairKit6": {
+    "atlas": "expedition-07",
+    "x": 512,
+    "y": 0
+  },
+  "FieldRepairKit7": {
+    "atlas": "expedition-07",
+    "x": 768,
+    "y": 0
+  },
+  "FieldRepairKit8": {
+    "atlas": "expedition-07",
+    "x": 0,
+    "y": 256
+  },
+  "FieldSickle": {
+    "atlas": "tool-01",
+    "x": 256,
+    "y": 256
+  },
+  "FilterMask": {
+    "atlas": "accessory-01",
+    "x": 768,
+    "y": 256
+  },
+  "FireCloth": {
+    "atlas": "materials-01",
+    "x": 256,
+    "y": 256
+  },
+  "FireCore": {
+    "atlas": "resources-02",
+    "x": 512,
+    "y": 512
+  },
+  "FirstAidKit": {
+    "atlas": "expedition-07",
+    "x": 256,
+    "y": 256
+  },
+  "Floor": {
+    "atlas": "builds-01",
+    "x": 768,
+    "y": 256
+  },
+  "FrostBloom": {
+    "atlas": "resources-02",
+    "x": 768,
+    "y": 512
+  },
+  "FrostBoots": {
+    "atlas": "armor-02",
+    "x": 768,
+    "y": 768
+  },
+  "FrostCoat": {
+    "atlas": "armor-02",
+    "x": 256,
+    "y": 768
+  },
+  "FrostHeart": {
+    "atlas": "expedition-02",
+    "x": 256,
+    "y": 512
+  },
+  "FrostHood": {
+    "atlas": "armor-02",
+    "x": 0,
+    "y": 768
+  },
+  "FrostSpear": {
+    "atlas": "weapon-01",
+    "x": 768,
+    "y": 256
+  },
+  "FrostTrousers": {
+    "atlas": "armor-02",
+    "x": 512,
+    "y": 768
+  },
+  "FrostglassLamp": {
+    "atlas": "expedition-06",
+    "x": 512,
+    "y": 512
+  },
+  "Furnace": {
+    "atlas": "builds-01",
+    "x": 0,
+    "y": 512
+  },
+  "GardenBoots": {
+    "atlas": "armor-03",
+    "x": 768,
+    "y": 0
+  },
+  "GardenCoat": {
+    "atlas": "armor-03",
+    "x": 256,
+    "y": 0
+  },
+  "GardenHood": {
+    "atlas": "armor-03",
+    "x": 0,
+    "y": 0
+  },
+  "GardenSickle": {
+    "atlas": "tool-01",
+    "x": 512,
+    "y": 256
+  },
+  "GardenTrousers": {
+    "atlas": "armor-03",
+    "x": 512,
+    "y": 0
+  },
+  "Gate": {
+    "atlas": "builds-01",
+    "x": 256,
+    "y": 512
+  },
+  "GatherersPouch": {
+    "atlas": "accessory-01",
+    "x": 0,
+    "y": 512
+  },
+  "Gears": {
+    "atlas": "materials-01",
+    "x": 512,
+    "y": 256
+  },
+  "Glass": {
+    "atlas": "materials-01",
+    "x": 768,
+    "y": 256
+  },
+  "Glider": {
+    "atlas": "accessory-01",
+    "x": 256,
+    "y": 512
+  },
+  "GlowCloth": {
+    "atlas": "materials-01",
+    "x": 0,
+    "y": 512
+  },
+  "GlowFiber": {
+    "atlas": "resources-02",
+    "x": 0,
+    "y": 768
+  },
+  "GlowMushroom": {
+    "atlas": "resources-02",
+    "x": 256,
+    "y": 768
+  },
+  "GlowSpice": {
+    "atlas": "spices-01",
+    "x": 768,
+    "y": 256
+  },
+  "Glowcap": {
+    "atlas": "resources-02",
+    "x": 512,
+    "y": 768
+  },
+  "GlowcapStew": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 256
+  },
+  "GravityBelt": {
+    "atlas": "accessory-01",
+    "x": 512,
+    "y": 512
+  },
+  "GravityHammer": {
+    "atlas": "weapon-01",
+    "x": 0,
+    "y": 512
+  },
+  "GravityShard": {
+    "atlas": "resources-02",
+    "x": 768,
+    "y": 768
+  },
+  "GreaterFireCore": {
+    "atlas": "expedition-02",
+    "x": 512,
+    "y": 512
+  },
+  "GreaterStarCore": {
+    "atlas": "expedition-02",
+    "x": 768,
+    "y": 512
+  },
+  "GreaterStormCore": {
+    "atlas": "expedition-02",
+    "x": 0,
+    "y": 768
+  },
+  "GroundingBelt": {
+    "atlas": "accessory-01",
+    "x": 768,
+    "y": 512
+  },
+  "GrowthHeart": {
+    "atlas": "expedition-02",
+    "x": 256,
+    "y": 768
+  },
+  "Harvester": {
+    "atlas": "tool-01",
+    "x": 768,
+    "y": 256
+  },
+  "HealingHerb": {
+    "atlas": "resources-01",
+    "x": 0,
+    "y": 256
+  },
+  "HealingWrap": {
+    "atlas": "expedition-07",
+    "x": 512,
+    "y": 256
+  },
+  "Heartwood": {
+    "atlas": "resources-03",
+    "x": 0,
+    "y": 0
+  },
+  "HeatShield": {
+    "atlas": "accessory-01",
+    "x": 0,
+    "y": 768
+  },
+  "HerbalPaste": {
+    "atlas": "materials-01",
+    "x": 256,
+    "y": 512
+  },
+  "HuntersCharm": {
+    "atlas": "accessory-01",
+    "x": 256,
+    "y": 768
+  },
+  "HuntersRoast": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 256
+  },
+  "HuntingBow": {
+    "atlas": "weapon-01",
+    "x": 256,
+    "y": 512
+  },
+  "IceCleats": {
+    "atlas": "accessory-01",
+    "x": 512,
+    "y": 768
+  },
+  "IceCrystal": {
+    "atlas": "resources-03",
+    "x": 256,
+    "y": 0
+  },
+  "ImpactGlass": {
+    "atlas": "resources-03",
+    "x": 512,
+    "y": 0
+  },
+  "IronBar": {
+    "atlas": "materials-01",
+    "x": 512,
+    "y": 512
+  },
+  "IronBoots": {
+    "atlas": "armor-03",
+    "x": 768,
+    "y": 256
+  },
+  "IronCoat": {
+    "atlas": "armor-03",
+    "x": 256,
+    "y": 256
+  },
+  "IronHeart": {
+    "atlas": "expedition-02",
+    "x": 512,
+    "y": 768
+  },
+  "IronHood": {
+    "atlas": "armor-03",
+    "x": 0,
+    "y": 256
+  },
+  "IronOre": {
+    "atlas": "resources-03",
+    "x": 768,
+    "y": 0
+  },
+  "IronTrousers": {
+    "atlas": "armor-03",
+    "x": 512,
+    "y": 256
+  },
+  "Ironwood": {
+    "atlas": "resources-03",
+    "x": 0,
+    "y": 256
+  },
+  "IronwoodAxe": {
+    "atlas": "tool-01",
+    "x": 0,
+    "y": 512
+  },
+  "IronwoodBow": {
+    "atlas": "weapon-01",
+    "x": 512,
+    "y": 512
+  },
+  "Kelp": {
+    "atlas": "resources-03",
+    "x": 256,
+    "y": 256
+  },
+  "Ladder": {
+    "atlas": "builds-01",
+    "x": 512,
+    "y": 512
+  },
+  "LanternBoots": {
+    "atlas": "armor-03",
+    "x": 768,
+    "y": 512
+  },
+  "LanternCoat": {
+    "atlas": "armor-03",
+    "x": 256,
+    "y": 512
+  },
+  "LanternHood": {
+    "atlas": "armor-03",
+    "x": 0,
+    "y": 512
+  },
+  "LanternStaff": {
+    "atlas": "weapon-01",
+    "x": 768,
+    "y": 512
+  },
+  "LanternTrousers": {
+    "atlas": "armor-03",
+    "x": 512,
+    "y": 512
+  },
+  "LargeChest": {
+    "atlas": "builds-01",
+    "x": 768,
+    "y": 512
+  },
+  "LargePack": {
+    "atlas": "accessory-01",
+    "x": 768,
+    "y": 768
+  },
+  "LiftSeed": {
+    "atlas": "resources-03",
+    "x": 512,
+    "y": 256
+  },
+  "LightOre": {
+    "atlas": "resources-03",
+    "x": 768,
+    "y": 256
+  },
+  "LivingRoot": {
+    "atlas": "resources-03",
+    "x": 0,
+    "y": 512
+  },
+  "Loom": {
+    "atlas": "builds-01",
+    "x": 0,
+    "y": 768
+  },
+  "MarshBoots": {
+    "atlas": "armor-03",
+    "x": 768,
+    "y": 768
+  },
+  "MarshBow": {
+    "atlas": "weapon-01",
+    "x": 0,
+    "y": 768
+  },
+  "MarshCoat": {
+    "atlas": "armor-03",
+    "x": 256,
+    "y": 768
+  },
+  "MarshHeart": {
+    "atlas": "expedition-02",
+    "x": 768,
+    "y": 768
+  },
+  "MarshHood": {
+    "atlas": "armor-03",
+    "x": 0,
+    "y": 768
+  },
+  "MarshTrousers": {
+    "atlas": "armor-03",
+    "x": 512,
+    "y": 768
+  },
+  "MedicineTable": {
+    "atlas": "builds-01",
+    "x": 256,
+    "y": 768
+  },
+  "MeteorAxe": {
+    "atlas": "tool-01",
+    "x": 256,
+    "y": 512
+  },
+  "MeteorBar": {
+    "atlas": "materials-01",
+    "x": 768,
+    "y": 512
+  },
+  "MeteorBoots": {
+    "atlas": "armor-04",
+    "x": 768,
+    "y": 0
+  },
+  "MeteorCoat": {
+    "atlas": "armor-04",
+    "x": 256,
+    "y": 0
+  },
+  "MeteorHood": {
+    "atlas": "armor-04",
+    "x": 0,
+    "y": 0
+  },
+  "MeteorOre": {
+    "atlas": "resources-03",
+    "x": 256,
+    "y": 512
+  },
+  "MeteorPickaxe": {
+    "atlas": "tool-01",
+    "x": 512,
+    "y": 512
+  },
+  "MeteorPike": {
+    "atlas": "weapon-01",
+    "x": 256,
+    "y": 768
+  },
+  "MeteorTrousers": {
+    "atlas": "armor-04",
+    "x": 512,
+    "y": 0
+  },
+  "MireGlowLantern": {
+    "atlas": "expedition-06",
+    "x": 768,
+    "y": 512
+  },
+  "MoonAxe": {
+    "atlas": "tool-01",
+    "x": 768,
+    "y": 512
+  },
+  "MoonBar": {
+    "atlas": "materials-01",
+    "x": 0,
+    "y": 768
+  },
+  "MoonBoots": {
+    "atlas": "armor-04",
+    "x": 768,
+    "y": 256
+  },
+  "MoonCoat": {
+    "atlas": "armor-04",
+    "x": 256,
+    "y": 256
+  },
+  "MoonHood": {
+    "atlas": "armor-04",
+    "x": 0,
+    "y": 256
+  },
+  "MoonOre": {
+    "atlas": "resources-03",
+    "x": 512,
+    "y": 512
+  },
+  "MoonPickaxe": {
+    "atlas": "tool-01",
+    "x": 0,
+    "y": 768
+  },
+  "MoonPoppy": {
+    "atlas": "spices-01",
+    "x": 0,
+    "y": 512
+  },
+  "MoonRock": {
+    "atlas": "resources-03",
+    "x": 768,
+    "y": 512
+  },
+  "MoonThread": {
+    "atlas": "resources-03",
+    "x": 0,
+    "y": 768
+  },
+  "MoonTrousers": {
+    "atlas": "armor-04",
+    "x": 512,
+    "y": 256
+  },
+  "Moonblade": {
+    "atlas": "weapon-01",
+    "x": 512,
+    "y": 768
+  },
+  "MoonwellBeacon": {
+    "atlas": "expedition-06",
+    "x": 0,
+    "y": 768
+  },
+  "Mushroom": {
+    "atlas": "resources-01",
+    "x": 256,
+    "y": 256
+  },
+  "MushroomSoup": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 256
+  },
+  "NightCloth": {
+    "atlas": "materials-01",
+    "x": 256,
+    "y": 768
+  },
+  "NightHeart": {
+    "atlas": "expedition-03",
+    "x": 0,
+    "y": 0
+  },
+  "OldGear": {
+    "atlas": "resources-03",
+    "x": 256,
+    "y": 768
+  },
+  "Oven": {
+    "atlas": "builds-01",
+    "x": 512,
+    "y": 768
+  },
+  "Pearl": {
+    "atlas": "resources-03",
+    "x": 512,
+    "y": 768
+  },
+  "Peat": {
+    "atlas": "resources-03",
+    "x": 768,
+    "y": 768
+  },
+  "Plank": {
+    "atlas": "materials-01",
+    "x": 512,
+    "y": 768
+  },
+  "PlantOil": {
+    "atlas": "materials-01",
+    "x": 768,
+    "y": 768
+  },
+  "PressureGlass": {
+    "atlas": "expedition-01",
+    "x": 0,
+    "y": 0
+  },
+  "RainCape": {
+    "atlas": "expedition-04",
+    "x": 512,
+    "y": 0
+  },
+  "RainCollector": {
+    "atlas": "builds-01",
+    "x": 768,
+    "y": 768
+  },
+  "Ramp": {
+    "atlas": "expedition-04",
+    "x": 256,
+    "y": 768
+  },
+  "RawMeat": {
+    "atlas": "resources-01",
+    "x": 512,
+    "y": 512
+  },
+  "RecoveryTonic": {
+    "atlas": "expedition-07",
+    "x": 768,
+    "y": 256
+  },
+  "RedGarlic": {
+    "atlas": "spices-01",
+    "x": 256,
+    "y": 512
+  },
+  "RedOre": {
+    "atlas": "expedition-01",
+    "x": 256,
+    "y": 0
+  },
+  "Reeds": {
+    "atlas": "expedition-01",
+    "x": 512,
+    "y": 0
+  },
+  "ReinforcedBar": {
+    "atlas": "expedition-01",
+    "x": 512,
+    "y": 768
+  },
+  "ReinforcedPickaxe": {
+    "atlas": "tool-01",
+    "x": 256,
+    "y": 768
+  },
+  "RepairBench": {
+    "atlas": "expedition-04",
+    "x": 512,
+    "y": 768
+  },
+  "RepairPouch": {
+    "atlas": "expedition-04",
+    "x": 768,
+    "y": 0
+  },
+  "RescueCharm": {
+    "atlas": "expedition-04",
+    "x": 0,
+    "y": 256
+  },
+  "Resin": {
+    "atlas": "resources-01",
+    "x": 768,
+    "y": 0
+  },
+  "ResourceCompass": {
+    "atlas": "expedition-05",
+    "x": 256,
+    "y": 768
+  },
+  "RevivalKit": {
+    "atlas": "expedition-07",
+    "x": 0,
+    "y": 512
+  },
+  "RiverDill": {
+    "atlas": "spices-01",
+    "x": 512,
+    "y": 512
+  },
+  "RoastedMeat": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 512
+  },
+  "RoastedMushrooms": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 512
+  },
+  "Roof": {
+    "atlas": "expedition-04",
+    "x": 768,
+    "y": 768
+  },
+  "RootRoast": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 512
+  },
+  "RootStaff": {
+    "atlas": "weapon-01",
+    "x": 768,
+    "y": 768
+  },
+  "RootVegetable": {
+    "atlas": "resources-01",
+    "x": 512,
+    "y": 768
+  },
+  "SailCloth": {
+    "atlas": "expedition-01",
+    "x": 768,
+    "y": 768
+  },
+  "Salt": {
+    "atlas": "spices-01",
+    "x": 768,
+    "y": 512
+  },
+  "Sand": {
+    "atlas": "expedition-01",
+    "x": 768,
+    "y": 0
+  },
+  "ShellPlate": {
+    "atlas": "expedition-01",
+    "x": 0,
+    "y": 256
+  },
+  "ShiftStabilizer": {
+    "atlas": "expedition-05",
+    "x": 512,
+    "y": 768
+  },
+  "ShiftTrigger": {
+    "atlas": "expedition-05",
+    "x": 768,
+    "y": 768
+  },
+  "SkyHeart": {
+    "atlas": "expedition-03",
+    "x": 256,
+    "y": 0
+  },
+  "SkySpear": {
+    "atlas": "expedition-03",
+    "x": 0,
+    "y": 512
+  },
+  "SmallPack": {
+    "atlas": "expedition-04",
+    "x": 256,
+    "y": 256
+  },
+  "SpikeTrap": {
+    "atlas": "expedition-05",
+    "x": 0,
+    "y": 0
+  },
+  "SpringBootsCharm": {
+    "atlas": "expedition-04",
+    "x": 512,
+    "y": 256
+  },
+  "Stairs": {
+    "atlas": "expedition-05",
+    "x": 256,
+    "y": 0
+  },
+  "StaminaRation": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 512
+  },
+  "StandingLamp": {
+    "atlas": "expedition-06",
+    "x": 256,
+    "y": 768
+  },
+  "StarBow": {
+    "atlas": "expedition-03",
+    "x": 256,
+    "y": 512
+  },
+  "StarCore": {
+    "atlas": "expedition-01",
+    "x": 256,
+    "y": 256
+  },
+  "StarSeed": {
+    "atlas": "spices-01",
+    "x": 0,
+    "y": 768
+  },
+  "StarfallOrrery": {
+    "atlas": "expedition-06",
+    "x": 512,
+    "y": 768
+  },
+  "SteadyGrip": {
+    "atlas": "expedition-04",
+    "x": 768,
+    "y": 256
+  },
+  "SteelAxe": {
+    "atlas": "tool-01",
+    "x": 512,
+    "y": 768
+  },
+  "SteelBar": {
+    "atlas": "expedition-02",
+    "x": 0,
+    "y": 0
+  },
+  "SteelPickaxe": {
+    "atlas": "tool-01",
+    "x": 768,
+    "y": 768
+  },
+  "SteelSword": {
+    "atlas": "expedition-03",
+    "x": 512,
+    "y": 512
+  },
+  "Stone": {
+    "atlas": "resources-01",
+    "x": 256,
+    "y": 0
+  },
+  "StoneAxe": {
+    "atlas": "expedition-03",
+    "x": 0,
+    "y": 256
+  },
+  "StonePickaxe": {
+    "atlas": "expedition-03",
+    "x": 256,
+    "y": 256
+  },
+  "StoneSpear": {
+    "atlas": "expedition-03",
+    "x": 768,
+    "y": 512
+  },
+  "StormAxe": {
+    "atlas": "expedition-03",
+    "x": 512,
+    "y": 256
+  },
+  "StormBar": {
+    "atlas": "expedition-02",
+    "x": 256,
+    "y": 0
+  },
+  "StormBoots": {
+    "atlas": "armor-04",
+    "x": 768,
+    "y": 512
+  },
+  "StormBow": {
+    "atlas": "expedition-03",
+    "x": 0,
+    "y": 768
+  },
+  "StormCloth": {
+    "atlas": "expedition-02",
+    "x": 512,
+    "y": 0
+  },
+  "StormCoat": {
+    "atlas": "armor-04",
+    "x": 256,
+    "y": 512
+  },
+  "StormCore": {
+    "atlas": "expedition-01",
+    "x": 512,
+    "y": 256
+  },
+  "StormHood": {
+    "atlas": "armor-04",
+    "x": 0,
+    "y": 512
+  },
+  "StormOre": {
+    "atlas": "expedition-01",
+    "x": 768,
+    "y": 256
+  },
+  "StormPickaxe": {
+    "atlas": "expedition-03",
+    "x": 768,
+    "y": 256
+  },
+  "StormThyme": {
+    "atlas": "spices-01",
+    "x": 256,
+    "y": 768
+  },
+  "StormTrousers": {
+    "atlas": "armor-04",
+    "x": 512,
+    "y": 512
+  },
+  "StormcoilBeacon": {
+    "atlas": "expedition-06",
+    "x": 768,
+    "y": 768
+  },
+  "Stove": {
+    "atlas": "expedition-05",
+    "x": 512,
+    "y": 0
+  },
+  "StrongGlider": {
+    "atlas": "expedition-04",
+    "x": 0,
+    "y": 512
+  },
+  "StrongSilk": {
+    "atlas": "expedition-01",
+    "x": 0,
+    "y": 512
+  },
+  "StuffedMushrooms": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 768
+  },
+  "Sulfur": {
+    "atlas": "expedition-01",
+    "x": 256,
+    "y": 512
+  },
+  "SunHeart": {
+    "atlas": "expedition-03",
+    "x": 512,
+    "y": 0
+  },
+  "SunVest": {
+    "atlas": "expedition-04",
+    "x": 0,
+    "y": 0
+  },
+  "Sunstone": {
+    "atlas": "expedition-01",
+    "x": 512,
+    "y": 512
+  },
+  "SurveyDesk": {
+    "atlas": "expedition-05",
+    "x": 768,
+    "y": 0
+  },
+  "SurvivorsCharm": {
+    "atlas": "expedition-04",
+    "x": 256,
+    "y": 512
+  },
+  "ThickSpores": {
+    "atlas": "expedition-01",
+    "x": 768,
+    "y": 512
+  },
+  "ThornBlade": {
+    "atlas": "expedition-03",
+    "x": 256,
+    "y": 768
+  },
+  "ThreatGauge": {
+    "atlas": "expedition-06",
+    "x": 0,
+    "y": 0
+  },
+  "ThunderHammer": {
+    "atlas": "expedition-03",
+    "x": 512,
+    "y": 768
+  },
+  "TideHeart": {
+    "atlas": "expedition-03",
+    "x": 768,
+    "y": 0
+  },
+  "TideSpear": {
+    "atlas": "expedition-03",
+    "x": 768,
+    "y": 768
+  },
+  "Torch": {
+    "atlas": "expedition-07",
+    "x": 0,
+    "y": 0
+  },
+  "ToughCloth": {
+    "atlas": "expedition-02",
+    "x": 768,
+    "y": 0
+  },
+  "ToughHide": {
+    "atlas": "expedition-01",
+    "x": 0,
+    "y": 768
+  },
+  "TrailBeacon": {
+    "atlas": "expedition-07",
+    "x": 256,
+    "y": 0
+  },
+  "TrailBoots": {
+    "atlas": "armor-04",
+    "x": 768,
+    "y": 768
+  },
+  "TrailCoat": {
+    "atlas": "armor-04",
+    "x": 256,
+    "y": 768
+  },
+  "TrailHood": {
+    "atlas": "armor-04",
+    "x": 0,
+    "y": 768
+  },
+  "TrailMeal": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 768
+  },
+  "TrailTrousers": {
+    "atlas": "armor-04",
+    "x": 512,
+    "y": 768
+  },
+  "VegetableStew": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 768
+  },
+  "VenomGland": {
+    "atlas": "expedition-01",
+    "x": 256,
+    "y": 768
+  },
+  "Wall": {
+    "atlas": "expedition-05",
+    "x": 0,
+    "y": 256
+  },
+  "WarmCloth": {
+    "atlas": "expedition-02",
+    "x": 0,
+    "y": 256
+  },
+  "WarmFur": {
+    "atlas": "resources-01",
+    "x": 0,
+    "y": 768
+  },
+  "WarmPepper": {
+    "atlas": "spices-01",
+    "x": 512,
+    "y": 768
+  },
+  "WarmScarf": {
+    "atlas": "expedition-04",
+    "x": 512,
+    "y": 512
+  },
+  "WarmingDrink": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 768
+  },
+  "WarmingRing": {
+    "atlas": "expedition-04",
+    "x": 768,
+    "y": 512
+  },
+  "Watchtower": {
+    "atlas": "expedition-05",
+    "x": 256,
+    "y": 256
+  },
+  "Water": {
+    "atlas": "resources-01",
+    "x": 512,
+    "y": 256
+  },
+  "WaterFilter": {
+    "atlas": "expedition-05",
+    "x": 512,
+    "y": 256
+  },
+  "WaterFlask": {
+    "atlas": "expedition-04",
+    "x": 0,
+    "y": 768
+  },
+  "WeatherPredictor": {
+    "atlas": "expedition-06",
+    "x": 256,
+    "y": 0
+  },
+  "WeatherScanner": {
+    "atlas": "expedition-06",
+    "x": 512,
+    "y": 0
+  },
+  "WildHerb": {
+    "atlas": "spices-01",
+    "x": 768,
+    "y": 768
+  },
+  "Wood": {
+    "atlas": "resources-01",
+    "x": 0,
+    "y": 0
+  },
+  "Workbench": {
+    "atlas": "expedition-05",
+    "x": 768,
+    "y": 256
+  },
+  "WorldAnchor": {
+    "atlas": "expedition-06",
+    "x": 768,
+    "y": 0
+  },
+  "WorldDial": {
+    "atlas": "expedition-06",
+    "x": 0,
+    "y": 256
+  },
+  "AnyTrophy": {
+    "atlas": "expedition-02",
+    "x": 256,
+    "y": 256
+  },
+  "DifferentTrophies": {
+    "atlas": "expedition-02",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-03",
+      "x": 512,
+      "y": 0
+    }
+  },
+  "BakedRoots__BitterSeed": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 0
+    }
+  },
+  "BakedRoots__CaveAnise": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 0
+    }
+  },
+  "BakedRoots__CitrusPeel": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 0
+    }
+  },
+  "BakedRoots__CoolMint": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 0
+    }
+  },
+  "BakedRoots__CrystalBasil": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 256
+    }
+  },
+  "BakedRoots__DawnFlower": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 256
+    }
+  },
+  "BakedRoots__EmberPepper": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 256
+    }
+  },
+  "BakedRoots__GlowSpice": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 256
+    }
+  },
+  "BakedRoots__MoonPoppy": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 512
+    }
+  },
+  "BakedRoots__RedGarlic": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 512
+    }
+  },
+  "BakedRoots__RiverDill": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 512
+    }
+  },
+  "BakedRoots__Salt": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 512
+    }
+  },
+  "BakedRoots__StarSeed": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 768
+    }
+  },
+  "BakedRoots__StormThyme": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 768
+    }
+  },
+  "BakedRoots__WarmPepper": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 768
+    }
+  },
+  "BakedRoots__WildHerb": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 768
+    }
+  },
+  "BerryPorridge__BitterSeed": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 0
+    }
+  },
+  "BerryPorridge__CaveAnise": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 0
+    }
+  },
+  "BerryPorridge__CitrusPeel": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 0
+    }
+  },
+  "BerryPorridge__CoolMint": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 0
+    }
+  },
+  "BerryPorridge__CrystalBasil": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 256
+    }
+  },
+  "BerryPorridge__DawnFlower": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 256
+    }
+  },
+  "BerryPorridge__EmberPepper": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 256
+    }
+  },
+  "BerryPorridge__GlowSpice": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 256
+    }
+  },
+  "BerryPorridge__MoonPoppy": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 512
+    }
+  },
+  "BerryPorridge__RedGarlic": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 512
+    }
+  },
+  "BerryPorridge__RiverDill": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 512
+    }
+  },
+  "BerryPorridge__Salt": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 512
+    }
+  },
+  "BerryPorridge__StarSeed": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 768
+    }
+  },
+  "BerryPorridge__StormThyme": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 768
+    }
+  },
+  "BerryPorridge__WarmPepper": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 768
+    }
+  },
+  "BerryPorridge__WildHerb": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 768
+    }
+  },
+  "DriedFood__BitterSeed": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 0
+    }
+  },
+  "DriedFood__CaveAnise": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 0
+    }
+  },
+  "DriedFood__CitrusPeel": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 0
+    }
+  },
+  "DriedFood__CoolMint": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 0
+    }
+  },
+  "DriedFood__CrystalBasil": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 256
+    }
+  },
+  "DriedFood__DawnFlower": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 256
+    }
+  },
+  "DriedFood__EmberPepper": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 256
+    }
+  },
+  "DriedFood__GlowSpice": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 256
+    }
+  },
+  "DriedFood__MoonPoppy": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 512
+    }
+  },
+  "DriedFood__RedGarlic": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 512
+    }
+  },
+  "DriedFood__RiverDill": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 512
+    }
+  },
+  "DriedFood__Salt": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 512
+    }
+  },
+  "DriedFood__StarSeed": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 768
+    }
+  },
+  "DriedFood__StormThyme": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 768
+    }
+  },
+  "DriedFood__WarmPepper": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 768
+    }
+  },
+  "DriedFood__WildHerb": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 768
+    }
+  },
+  "ExpeditionMeal__BitterSeed": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 0
+    }
+  },
+  "ExpeditionMeal__CaveAnise": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 0
+    }
+  },
+  "ExpeditionMeal__CitrusPeel": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 0
+    }
+  },
+  "ExpeditionMeal__CoolMint": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 0
+    }
+  },
+  "ExpeditionMeal__CrystalBasil": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 256
+    }
+  },
+  "ExpeditionMeal__DawnFlower": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 256
+    }
+  },
+  "ExpeditionMeal__EmberPepper": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 256
+    }
+  },
+  "ExpeditionMeal__GlowSpice": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 256
+    }
+  },
+  "ExpeditionMeal__MoonPoppy": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 512
+    }
+  },
+  "ExpeditionMeal__RedGarlic": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 512
+    }
+  },
+  "ExpeditionMeal__RiverDill": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 512
+    }
+  },
+  "ExpeditionMeal__Salt": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 512
+    }
+  },
+  "ExpeditionMeal__StarSeed": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 768
+    }
+  },
+  "ExpeditionMeal__StormThyme": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 768
+    }
+  },
+  "ExpeditionMeal__WarmPepper": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 768
+    }
+  },
+  "ExpeditionMeal__WildHerb": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 768
+    }
+  },
+  "GlowcapStew__BitterSeed": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 0
+    }
+  },
+  "GlowcapStew__CaveAnise": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 0
+    }
+  },
+  "GlowcapStew__CitrusPeel": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 0
+    }
+  },
+  "GlowcapStew__CoolMint": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 0
+    }
+  },
+  "GlowcapStew__CrystalBasil": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 256
+    }
+  },
+  "GlowcapStew__DawnFlower": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 256
+    }
+  },
+  "GlowcapStew__EmberPepper": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 256
+    }
+  },
+  "GlowcapStew__GlowSpice": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 256
+    }
+  },
+  "GlowcapStew__MoonPoppy": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 512
+    }
+  },
+  "GlowcapStew__RedGarlic": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 512
+    }
+  },
+  "GlowcapStew__RiverDill": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 512
+    }
+  },
+  "GlowcapStew__Salt": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 512
+    }
+  },
+  "GlowcapStew__StarSeed": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 768
+    }
+  },
+  "GlowcapStew__StormThyme": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 768
+    }
+  },
+  "GlowcapStew__WarmPepper": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 768
+    }
+  },
+  "GlowcapStew__WildHerb": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 768
+    }
+  },
+  "HuntersRoast__BitterSeed": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 0
+    }
+  },
+  "HuntersRoast__CaveAnise": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 0
+    }
+  },
+  "HuntersRoast__CitrusPeel": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 0
+    }
+  },
+  "HuntersRoast__CoolMint": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 0
+    }
+  },
+  "HuntersRoast__CrystalBasil": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 256
+    }
+  },
+  "HuntersRoast__DawnFlower": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 256
+    }
+  },
+  "HuntersRoast__EmberPepper": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 256
+    }
+  },
+  "HuntersRoast__GlowSpice": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 256
+    }
+  },
+  "HuntersRoast__MoonPoppy": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 512
+    }
+  },
+  "HuntersRoast__RedGarlic": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 512
+    }
+  },
+  "HuntersRoast__RiverDill": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 512
+    }
+  },
+  "HuntersRoast__Salt": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 512
+    }
+  },
+  "HuntersRoast__StarSeed": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 768
+    }
+  },
+  "HuntersRoast__StormThyme": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 768
+    }
+  },
+  "HuntersRoast__WarmPepper": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 768
+    }
+  },
+  "HuntersRoast__WildHerb": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 768
+    }
+  },
+  "MushroomSoup__BitterSeed": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 0
+    }
+  },
+  "MushroomSoup__CaveAnise": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 0
+    }
+  },
+  "MushroomSoup__CitrusPeel": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 0
+    }
+  },
+  "MushroomSoup__CoolMint": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 0
+    }
+  },
+  "MushroomSoup__CrystalBasil": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 256
+    }
+  },
+  "MushroomSoup__DawnFlower": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 256
+    }
+  },
+  "MushroomSoup__EmberPepper": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 256
+    }
+  },
+  "MushroomSoup__GlowSpice": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 256
+    }
+  },
+  "MushroomSoup__MoonPoppy": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 512
+    }
+  },
+  "MushroomSoup__RedGarlic": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 512
+    }
+  },
+  "MushroomSoup__RiverDill": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 512
+    }
+  },
+  "MushroomSoup__Salt": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 512
+    }
+  },
+  "MushroomSoup__StarSeed": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 768
+    }
+  },
+  "MushroomSoup__StormThyme": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 768
+    }
+  },
+  "MushroomSoup__WarmPepper": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 768
+    }
+  },
+  "MushroomSoup__WildHerb": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 768
+    }
+  },
+  "RoastedMeat__BitterSeed": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 0
+    }
+  },
+  "RoastedMeat__CaveAnise": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 0
+    }
+  },
+  "RoastedMeat__CitrusPeel": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 0
+    }
+  },
+  "RoastedMeat__CoolMint": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 0
+    }
+  },
+  "RoastedMeat__CrystalBasil": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 256
+    }
+  },
+  "RoastedMeat__DawnFlower": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 256
+    }
+  },
+  "RoastedMeat__EmberPepper": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 256
+    }
+  },
+  "RoastedMeat__GlowSpice": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 256
+    }
+  },
+  "RoastedMeat__MoonPoppy": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 512
+    }
+  },
+  "RoastedMeat__RedGarlic": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 512
+    }
+  },
+  "RoastedMeat__RiverDill": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 512
+    }
+  },
+  "RoastedMeat__Salt": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 512
+    }
+  },
+  "RoastedMeat__StarSeed": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 768
+    }
+  },
+  "RoastedMeat__StormThyme": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 768
+    }
+  },
+  "RoastedMeat__WarmPepper": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 768
+    }
+  },
+  "RoastedMeat__WildHerb": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 768
+    }
+  },
+  "RoastedMushrooms__BitterSeed": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 0
+    }
+  },
+  "RoastedMushrooms__CaveAnise": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 0
+    }
+  },
+  "RoastedMushrooms__CitrusPeel": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 0
+    }
+  },
+  "RoastedMushrooms__CoolMint": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 0
+    }
+  },
+  "RoastedMushrooms__CrystalBasil": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 256
+    }
+  },
+  "RoastedMushrooms__DawnFlower": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 256
+    }
+  },
+  "RoastedMushrooms__EmberPepper": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 256
+    }
+  },
+  "RoastedMushrooms__GlowSpice": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 256
+    }
+  },
+  "RoastedMushrooms__MoonPoppy": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 512
+    }
+  },
+  "RoastedMushrooms__RedGarlic": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 512
+    }
+  },
+  "RoastedMushrooms__RiverDill": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 512
+    }
+  },
+  "RoastedMushrooms__Salt": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 512
+    }
+  },
+  "RoastedMushrooms__StarSeed": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 768
+    }
+  },
+  "RoastedMushrooms__StormThyme": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 768
+    }
+  },
+  "RoastedMushrooms__WarmPepper": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 768
+    }
+  },
+  "RoastedMushrooms__WildHerb": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 768
+    }
+  },
+  "RootRoast__BitterSeed": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 0
+    }
+  },
+  "RootRoast__CaveAnise": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 0
+    }
+  },
+  "RootRoast__CitrusPeel": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 0
+    }
+  },
+  "RootRoast__CoolMint": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 0
+    }
+  },
+  "RootRoast__CrystalBasil": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 256
+    }
+  },
+  "RootRoast__DawnFlower": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 256
+    }
+  },
+  "RootRoast__EmberPepper": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 256
+    }
+  },
+  "RootRoast__GlowSpice": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 256
+    }
+  },
+  "RootRoast__MoonPoppy": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 512
+    }
+  },
+  "RootRoast__RedGarlic": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 512
+    }
+  },
+  "RootRoast__RiverDill": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 512
+    }
+  },
+  "RootRoast__Salt": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 512
+    }
+  },
+  "RootRoast__StarSeed": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 768
+    }
+  },
+  "RootRoast__StormThyme": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 768
+    }
+  },
+  "RootRoast__WarmPepper": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 768
+    }
+  },
+  "RootRoast__WildHerb": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 768
+    }
+  },
+  "StaminaRation__BitterSeed": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 0
+    }
+  },
+  "StaminaRation__CaveAnise": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 0
+    }
+  },
+  "StaminaRation__CitrusPeel": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 0
+    }
+  },
+  "StaminaRation__CoolMint": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 0
+    }
+  },
+  "StaminaRation__CrystalBasil": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 256
+    }
+  },
+  "StaminaRation__DawnFlower": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 256
+    }
+  },
+  "StaminaRation__EmberPepper": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 256
+    }
+  },
+  "StaminaRation__GlowSpice": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 256
+    }
+  },
+  "StaminaRation__MoonPoppy": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 512
+    }
+  },
+  "StaminaRation__RedGarlic": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 512
+    }
+  },
+  "StaminaRation__RiverDill": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 512
+    }
+  },
+  "StaminaRation__Salt": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 512
+    }
+  },
+  "StaminaRation__StarSeed": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 768
+    }
+  },
+  "StaminaRation__StormThyme": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 768
+    }
+  },
+  "StaminaRation__WarmPepper": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 768
+    }
+  },
+  "StaminaRation__WildHerb": {
+    "atlas": "meals-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 768
+    }
+  },
+  "StuffedMushrooms__BitterSeed": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 0
+    }
+  },
+  "StuffedMushrooms__CaveAnise": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 0
+    }
+  },
+  "StuffedMushrooms__CitrusPeel": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 0
+    }
+  },
+  "StuffedMushrooms__CoolMint": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 0
+    }
+  },
+  "StuffedMushrooms__CrystalBasil": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 256
+    }
+  },
+  "StuffedMushrooms__DawnFlower": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 256
+    }
+  },
+  "StuffedMushrooms__EmberPepper": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 256
+    }
+  },
+  "StuffedMushrooms__GlowSpice": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 256
+    }
+  },
+  "StuffedMushrooms__MoonPoppy": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 512
+    }
+  },
+  "StuffedMushrooms__RedGarlic": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 512
+    }
+  },
+  "StuffedMushrooms__RiverDill": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 512
+    }
+  },
+  "StuffedMushrooms__Salt": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 512
+    }
+  },
+  "StuffedMushrooms__StarSeed": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 768
+    }
+  },
+  "StuffedMushrooms__StormThyme": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 768
+    }
+  },
+  "StuffedMushrooms__WarmPepper": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 768
+    }
+  },
+  "StuffedMushrooms__WildHerb": {
+    "atlas": "meals-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 768
+    }
+  },
+  "TrailMeal__BitterSeed": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 0
+    }
+  },
+  "TrailMeal__CaveAnise": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 0
+    }
+  },
+  "TrailMeal__CitrusPeel": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 0
+    }
+  },
+  "TrailMeal__CoolMint": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 0
+    }
+  },
+  "TrailMeal__CrystalBasil": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 256
+    }
+  },
+  "TrailMeal__DawnFlower": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 256
+    }
+  },
+  "TrailMeal__EmberPepper": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 256
+    }
+  },
+  "TrailMeal__GlowSpice": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 256
+    }
+  },
+  "TrailMeal__MoonPoppy": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 512
+    }
+  },
+  "TrailMeal__RedGarlic": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 512
+    }
+  },
+  "TrailMeal__RiverDill": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 512
+    }
+  },
+  "TrailMeal__Salt": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 512
+    }
+  },
+  "TrailMeal__StarSeed": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 768
+    }
+  },
+  "TrailMeal__StormThyme": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 768
+    }
+  },
+  "TrailMeal__WarmPepper": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 768
+    }
+  },
+  "TrailMeal__WildHerb": {
+    "atlas": "meals-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 768
+    }
+  },
+  "VegetableStew__BitterSeed": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 0
+    }
+  },
+  "VegetableStew__CaveAnise": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 0
+    }
+  },
+  "VegetableStew__CitrusPeel": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 0
+    }
+  },
+  "VegetableStew__CoolMint": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 0
+    }
+  },
+  "VegetableStew__CrystalBasil": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 256
+    }
+  },
+  "VegetableStew__DawnFlower": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 256
+    }
+  },
+  "VegetableStew__EmberPepper": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 256
+    }
+  },
+  "VegetableStew__GlowSpice": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 256
+    }
+  },
+  "VegetableStew__MoonPoppy": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 512
+    }
+  },
+  "VegetableStew__RedGarlic": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 512
+    }
+  },
+  "VegetableStew__RiverDill": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 512
+    }
+  },
+  "VegetableStew__Salt": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 512
+    }
+  },
+  "VegetableStew__StarSeed": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 0,
+      "y": 768
+    }
+  },
+  "VegetableStew__StormThyme": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 256,
+      "y": 768
+    }
+  },
+  "VegetableStew__WarmPepper": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 512,
+      "y": 768
+    }
+  },
+  "VegetableStew__WildHerb": {
+    "atlas": "meals-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "spices-01",
+      "x": 768,
+      "y": 768
+    }
+  },
+  "ReturnShotSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "ReturnShotScroll1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "ReturnShotSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "ReturnShotScroll2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "ReturnShotSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 3
+  },
+  "ReturnShotScroll3": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 3
+  },
+  "ReturnShotSchematic4": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 4
+  },
+  "ReturnShotScroll4": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 4
+  },
+  "SharedCoverSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "SharedCoverScroll1": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "SharedCoverSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 2
+  },
+  "SharedCoverScroll2": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 2
+  },
+  "CleanCutSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "CleanCutScroll1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "CleanCutSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "CleanCutScroll2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "CleanCutSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 3
+  },
+  "CleanCutScroll3": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 3
+  },
+  "PhaseReturnSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "PhaseReturnScroll1": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "StarfallTraceSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "StarfallTraceScroll1": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "LastThreadSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 1
+  },
+  "LastThreadScroll1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 1
+  },
+  "EchoCastSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "EchoCastScroll1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "EchoCastSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 2
+  },
+  "EchoCastScroll2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 2
+  },
+  "EchoCastSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 3
+  },
+  "EchoCastScroll3": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 3
+  },
+  "EchoCastSchematic4": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 4
+  },
+  "EchoCastScroll4": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 4
+  },
+  "SplitFlightSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "SplitFlightScroll1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "SplitFlightSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 2
+  },
+  "SplitFlightScroll2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 2
+  },
+  "SplitFlightSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 3
+  },
+  "SplitFlightScroll3": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 3
+  },
+  "GroundClaimSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "GroundClaimScroll1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "GroundClaimSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "GroundClaimScroll2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "DrawForceSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "DrawForceScroll1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "DrawForceSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "DrawForceScroll2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "DrawForceSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 3
+  },
+  "DrawForceScroll3": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 3
+  },
+  "DrawForceSchematic4": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 4
+  },
+  "DrawForceScroll4": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 4
+  },
+  "DrawForceSchematic5": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 5
+  },
+  "DrawForceScroll5": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 5
+  },
+  "SavedMealSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 768
+    },
+    "rank": 1
+  },
+  "SavedMealScroll1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 768
+    },
+    "rank": 1
+  },
+  "SavedMealSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 768
+    },
+    "rank": 2
+  },
+  "SavedMealScroll2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 768
+    },
+    "rank": 2
+  },
+  "GuardReturnSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 1
+  },
+  "GuardReturnScroll1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 1
+  },
+  "GuardReturnSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 2
+  },
+  "GuardReturnScroll2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 2
+  },
+  "GuardReturnSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 3
+  },
+  "GuardReturnScroll3": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 3
+  },
+  "DryStepSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 256,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "DryStepScroll1": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 256,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "DryStepSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 256,
+      "y": 256
+    },
+    "rank": 2
+  },
+  "DryStepScroll2": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 256,
+      "y": 256
+    },
+    "rank": 2
+  },
+  "DryStepSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 256,
+      "y": 256
+    },
+    "rank": 3
+  },
+  "DryStepScroll3": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 256,
+      "y": 256
+    },
+    "rank": 3
+  },
+  "TailwindLineSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "TailwindLineScroll1": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "TailwindLineSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "TailwindLineScroll2": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "StormLatchSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 512,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "StormLatchScroll1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 512,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "StormLatchSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 512,
+      "y": 256
+    },
+    "rank": 2
+  },
+  "StormLatchScroll2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 512,
+      "y": 256
+    },
+    "rank": 2
+  },
+  "AirPocketSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "AirPocketScroll1": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "AirPocketSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "AirPocketScroll2": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "AirPocketSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 0
+    },
+    "rank": 3
+  },
+  "AirPocketScroll3": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 0
+    },
+    "rank": 3
+  },
+  "CampStitchSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "CampStitchScroll1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "CampStitchSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "CampStitchScroll2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "CampStitchSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 3
+  },
+  "CampStitchScroll3": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 3
+  },
+  "BraceSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 1
+  },
+  "BraceScroll1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 1
+  },
+  "BraceSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 2
+  },
+  "BraceScroll2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 2
+  },
+  "BriarDebtSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "BriarDebtScroll1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "BriarDebtSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "BriarDebtScroll2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "ConduitSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 1
+  },
+  "ConduitScroll1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 1
+  },
+  "ConduitSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 2
+  },
+  "ConduitScroll2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 2
+  },
+  "ConduitSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 3
+  },
+  "ConduitScroll3": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 3
+  },
+  "DrivingLineSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "DrivingLineScroll1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "DrivingLineSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "DrivingLineScroll2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "DrivingLineSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 3
+  },
+  "DrivingLineScroll3": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 3
+  },
+  "UndertowSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "UndertowScroll1": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "UndertowSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 2
+  },
+  "UndertowScroll2": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 2
+  },
+  "FocusLineSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "FocusLineScroll1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "FocusLineSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 2
+  },
+  "FocusLineScroll2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 2
+  },
+  "QuickStowSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "QuickStowScroll1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "QuickStowSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "QuickStowScroll2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "SurveyLinkSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "SurveyLinkScroll1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "SurveyLinkSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 2
+  },
+  "SurveyLinkScroll2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 2
+  },
+  "FellThroughSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "FellThroughScroll1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "FellThroughSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "FellThroughScroll2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "CrumpleSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 1
+  },
+  "CrumpleScroll1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 1
+  },
+  "CrumpleSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 2
+  },
+  "CrumpleScroll2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 2
+  },
+  "CrumpleSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 3
+  },
+  "CrumpleScroll3": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 768
+    },
+    "rank": 3
+  },
+  "HeavyEchoSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "HeavyEchoScroll1": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "HeavyEchoSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "HeavyEchoScroll2": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "HeavyEchoSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 3
+  },
+  "HeavyEchoScroll3": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 3
+  },
+  "SplitArcSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "SplitArcScroll1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "SplitArcSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "SplitArcScroll2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "SplitArcSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 3
+  },
+  "SplitArcScroll3": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 3
+  },
+  "SlipCutSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "SlipCutScroll1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "SlipCutSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "SlipCutScroll2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "SlipCutSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 3
+  },
+  "SlipCutScroll3": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 3
+  },
+  "OrbitBreakSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "OrbitBreakScroll1": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "PackWarningSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "PackWarningScroll1": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "PackWarningSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "PackWarningScroll2": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "SetPointSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "SetPointScroll1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "SetPointSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "SetPointScroll2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "SetPointSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 3
+  },
+  "SetPointScroll3": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 3
+  },
+  "SetPointSchematic4": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 4
+  },
+  "SetPointScroll4": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 4
+  },
+  "RootNetworkSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "RootNetworkScroll1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "RootNetworkSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "RootNetworkScroll2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "HeatStoreSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 256,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "HeatStoreScroll1": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 256,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "HeatStoreSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 256,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "HeatStoreScroll2": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 256,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "WeatherMemorySchematic1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "WeatherMemoryScroll1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "WeatherMemorySchematic2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "WeatherMemoryScroll2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "WeatherMemorySchematic3": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 0
+    },
+    "rank": 3
+  },
+  "WeatherMemoryScroll3": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 0
+    },
+    "rank": 3
+  },
+  "QuickExitSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "QuickExitScroll1": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "QuickExitSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "QuickExitScroll2": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "VentStrikeSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "VentStrikeScroll1": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "VentStrikeSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "VentStrikeScroll2": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "VentStrikeSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 3
+  },
+  "VentStrikeScroll3": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 3
+  },
+  "DeepBiteSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "materials-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "DeepBiteScroll1": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "materials-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "DeepBiteSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "materials-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "DeepBiteScroll2": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "materials-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "DeepBiteSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "materials-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 3
+  },
+  "DeepBiteScroll3": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "materials-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 3
+  },
+  "BeaconEchoSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "BeaconEchoScroll1": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "BeaconEchoSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "BeaconEchoScroll2": {
+    "atlas": "enchantments-01",
+    "x": 256,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 256,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "BlindsideSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "BlindsideScroll1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "BlindsideSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "BlindsideScroll2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "BlindsideSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 3
+  },
+  "BlindsideScroll3": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 3
+  },
+  "BlindsideSchematic4": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 256,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 4
+  },
+  "BlindsideScroll4": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 768,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 512
+    },
+    "rank": 4
+  },
+  "ForkedCurrentSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 768,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "ForkedCurrentScroll1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 768,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "ForkedCurrentSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 768,
+      "y": 256
+    },
+    "rank": 2
+  },
+  "ForkedCurrentScroll2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 768,
+      "y": 256
+    },
+    "rank": 2
+  },
+  "RescueReserveSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "RescueReserveScroll1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 0,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "RollingChargeSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 768,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "RollingChargeScroll1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 768,
+      "y": 256
+    },
+    "rank": 1
+  },
+  "RollingChargeSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 256,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 768,
+      "y": 256
+    },
+    "rank": 2
+  },
+  "RollingChargeScroll2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 768,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 768,
+      "y": 256
+    },
+    "rank": 2
+  },
+  "RootPinSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "RootPinScroll1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "RootPinSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "RootPinScroll2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-03",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "HeldBreathSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "HeldBreathScroll1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 1
+  },
+  "HeldBreathSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "HeldBreathScroll2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 2
+  },
+  "HeldBreathSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 3
+  },
+  "HeldBreathScroll3": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "expedition-01",
+      "x": 0,
+      "y": 512
+    },
+    "rank": 3
+  },
+  "OpenSeamSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "OpenSeamScroll1": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "OpenSeamSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "OpenSeamScroll2": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "OpenSeamSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 3
+  },
+  "OpenSeamScroll3": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 3
+  },
+  "OpenSeamSchematic4": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 4
+  },
+  "OpenSeamScroll4": {
+    "atlas": "enchantments-01",
+    "x": 0,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 4
+  },
+  "PressureCutSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "materials-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "PressureCutScroll1": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "materials-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "PressureCutSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "materials-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "PressureCutScroll2": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "materials-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "WideCutSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "materials-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "WideCutScroll1": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "materials-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "WideCutSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "materials-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "WideCutScroll2": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "materials-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "WideCutSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 256,
+    "overlay": {
+      "atlas": "materials-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 3
+  },
+  "WideCutScroll3": {
+    "atlas": "enchantments-01",
+    "x": 512,
+    "y": 768,
+    "overlay": {
+      "atlas": "materials-01",
+      "x": 768,
+      "y": 0
+    },
+    "rank": 3
+  },
+  "MeasuredEdgeSchematic1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "MeasuredEdgeScroll1": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 1
+  },
+  "MeasuredEdgeSchematic2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "MeasuredEdgeScroll2": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 2
+  },
+  "MeasuredEdgeSchematic3": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 3
+  },
+  "MeasuredEdgeScroll3": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 3
+  },
+  "MeasuredEdgeSchematic4": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 0,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 4
+  },
+  "MeasuredEdgeScroll4": {
+    "atlas": "enchantments-01",
+    "x": 768,
+    "y": 512,
+    "overlay": {
+      "atlas": "resources-02",
+      "x": 512,
+      "y": 0
+    },
+    "rank": 4
+  }
+}

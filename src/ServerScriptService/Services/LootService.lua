@@ -11,11 +11,11 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local InventoryService = require(script.Parent.InventoryService)
 local ItemDropService = require(script.Parent.ItemDropService)
-local PromptQueueService = require(script.Parent.PromptQueueService)
 local LootTableService = require(script.Parent.LootTableService)
 local GameStateService = require(script.Parent.GameStateService)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
 local MonsterDropConfig = require(ReplicatedStorage.Shared.MonsterDropConfig)
+local Catalog = require(ReplicatedStorage.Shared.OverhaulCatalog)
 
 local ItemInstance = require(ReplicatedStorage.Shared.ItemInstance)
 local LootService = {}
@@ -24,7 +24,6 @@ LootService._chestById = {}
 LootService._openByPlayer = {} -- [player] = chestId
 LootService._monsterConns = setmetatable({}, { __mode = "k" })
 LootService._chestCleanupConns = setmetatable({}, { __mode = "k" })
-LootService._chestPromptConns = setmetatable({}, { __mode = "k" })
 LootService._remote = nil
 LootService._missingTableWarnAt = {}
 
@@ -42,7 +41,6 @@ local MONSTER_TAGS = {
 	Celestial_Monster = 4,
 }
 
-local PROMPT_BOUND_ATTR = "LootServiceBound"
 local DROP_RNG = Random.new()
 local DEFAULT_CHEST_SLOT_COUNT = 10
 local MISSING_TABLE_WARN_WINDOW = 30
@@ -115,7 +113,8 @@ end
 
 local function getChestSlotCount(chest)
 	local id=chest and (chest:GetAttribute("BuildType") or chest.Name)
-	if id=="LargeChest" then return 48 elseif id=="Chest" then return 24 end
+	local placeable = id and Catalog.Placeables[id]
+	if placeable and positiveInteger(placeable.Slots) then return placeable.Slots end
 	local saved = chest and chest:GetAttribute("SlotCount")
 	return type(saved) == "number" and saved % 1 == 0 and saved >= 1 and saved <= 100 and saved or DEFAULT_CHEST_SLOT_COUNT
 end
@@ -159,9 +158,6 @@ local function resolveChestFromPayload(payload)
 	if type(payload) ~= "table" then return nil end
 	local inst = payload.Chest or payload.Target or payload.Instance
 	if typeof(inst) ~= "Instance" then return nil end
-	if inst:IsA("ProximityPrompt") then
-		inst = inst.Parent
-	end
 	if inst and inst:IsA("BasePart") then
 		inst = inst:FindFirstAncestorOfClass("Model") or inst
 	end
@@ -177,8 +173,7 @@ local function canPlayerOpenChest(plr, chest)
 	local root = char and char:FindFirstChild("HumanoidRootPart")
 	local primary = getPrimary(chest)
 	if not hum or hum.Health <= 0 or not root or not primary then return false end
-	-- The prompt is bound to this same primary part; allow only half a stud of latency drift.
-	return (root.Position - primary.Position).Magnitude <= 8.5
+	return (root.Position - primary.Position).Magnitude <= 15
 end
 
 function LootService:_warnMissingChestTable(chest, tableName)
@@ -331,13 +326,6 @@ function LootService:_clearChestData(chest)
 		conn:Disconnect()
 		self._chestCleanupConns[chest] = nil
 	end
-	local primary = getPrimary(chest)
-	local prompt = primary and primary:FindFirstChildOfClass("ProximityPrompt")
-	local promptConn = prompt and self._chestPromptConns[prompt]
-	if promptConn then
-		promptConn:Disconnect()
-		self._chestPromptConns[prompt] = nil
-	end
 end
 
 function LootService:_sendChest(plr, chest)
@@ -378,32 +366,11 @@ function LootService:_updateChest(data)
 	end
 end
 
-local function attachChestPrompt(chest)
-	local part = getPrimary(chest)
-	if not part then return end
-	local prompt = chest:FindFirstChildWhichIsA("ProximityPrompt", true)
-	if not prompt then
-		prompt = Instance.new("ProximityPrompt")
-	end
-	prompt.Parent = part
-	prompt.ActionText = "Open"
-	prompt.KeyboardKeyCode = Enum.KeyCode.F
-	prompt.ObjectText = chest.Name
-	prompt.HoldDuration = 0.2
-	prompt.MaxActivationDistance = 8
-	prompt.RequiresLineOfSight = false
-	prompt:SetAttribute(PROMPT_BOUND_ATTR, true)
-	if LootService._chestPromptConns[prompt] then
-		return
-	end
-	LootService._chestPromptConns[prompt] = prompt.Triggered:Connect(function(plr)
-		print(string.format("[LootService] Prompt triggered on %s by %s", chest.Name, plr.Name))
-		LootService:_sendChest(plr, chest)
-	end)
-end
-
 function LootService:_bindChest(chest)
 	if not chest or not chest.Parent then return end
+	for _, descendant in ipairs(chest:GetDescendants()) do
+		if descendant:IsA("ProximityPrompt") then descendant:Destroy() end
+	end
 	if not self._chestCleanupConns[chest] then
 		local ok, conn = pcall(function()
 			return chest.Destroying:Connect(function()
@@ -414,9 +381,6 @@ function LootService:_bindChest(chest)
 			self._chestCleanupConns[chest] = conn
 		end
 	end
-	PromptQueueService:Enqueue(function()
-		attachChestPrompt(chest)
-	end)
 end
 
 local function dropLoot(model, tier, tableName, destroyModel)
@@ -725,7 +689,7 @@ function LootService:Init()
 				if toType and toIndex then
 					added = InventoryService:TryAddEntryToSlot(plr, toType, toIndex, takenEntry)
 				else
-					added = InventoryService:GiveEntry(plr, takenEntry, true)
+					added = InventoryService:GiveEntryOrDrop(plr, takenEntry, true)
 				end
 				if added <= 0 then
 					print("[LootService] Take failed (inventory full or invalid)")
@@ -736,6 +700,7 @@ function LootService:Init()
 					data.Slots[fromIndex] = nil
 				end
 				print(string.format("[LootService] Took %s x%d (remaining %d)", slot.Id, added, #data.Slots))
+				if not toType then InventoryService:Sync(plr) end
 				self:_updateChest(data)
 				return
 			end

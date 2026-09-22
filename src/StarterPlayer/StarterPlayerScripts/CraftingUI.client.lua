@@ -9,9 +9,9 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
-local ItemDescriptionUI = require(ReplicatedStorage.Shared.UI.ItemDescriptionUI)
 local RecipeGuideUI = require(ReplicatedStorage.Shared.UI:WaitForChild("RecipeGuideUI"))
 local RecipeCardUI = require(ReplicatedStorage.Shared.UI.RecipeCardUI)
+local RecipeHelperUI = require(ReplicatedStorage.Shared.UI.RecipeHelperUI)
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
@@ -407,7 +407,7 @@ local function craftDuration(recipeId, quantity)
 	local recipe = recipeId and WorkbenchConfig.RECIPES[recipeId]
 	if not recipe then return 0 end
 	local multiplier = WorkbenchConfig:GetEffectiveStationModifiers(recipe, "Hand")
-	return math.max(0.05, (tonumber(recipe.BaseCraftTime) or 0) * multiplier) * quantity / math.min(2,1+(player:GetAttribute("Class_CraftBonus") or 0))
+	return math.max(0.05, (tonumber(recipe.BaseCraftTime) or 0) * multiplier) * quantity / WorkbenchConfig:GetClientCraftRate(player)
 end
 
 local function formatDuration(seconds)
@@ -429,12 +429,15 @@ local function createRecipeCard(recipeId, recipeData)
 	local card = RecipeCardUI.Create(recipeContainer, recipeId, recipeData, {
 		Theme=Theme, Colors=COLORS, Items=ItemDatabase, IngredientCost=ingredientCost,
 		GetItemCount=getItemCount, CanCraft=canCraftRecipe,
+		TrackRecipe=function(id)
+			RecipeHelperUI.TrackRecipe(WorkbenchConfig.RECIPES[id].Output.Id,id,selectedRecipe==id and craftQuantity or 1)
+		end,
 		OpenIngredient=function(itemId, rootRecipeId)
 			RecipeGuideUI.Open(itemId,{PreferredStationType="Hand",RootRecipeId=rootRecipeId,RootQuantity=selectedRecipe==rootRecipeId and craftQuantity or 1})
 		end,
 		IsSelected=function(id)return selectedRecipe==id end,
 		IsBusy=function()return isCraftPending end,
-		MountDescription=function(root,item,ingredients)ItemDescriptionUI.Mount(root,item,ingredients,32,10)end,
+		ShowDescription=true,
 		OnSelect=function(id, selectedCard, selectedStroke)
 		if selectedRecipe and recipeCards[selectedRecipe] then
 			local prevCard = recipeCards[selectedRecipe]
@@ -446,7 +449,7 @@ local function createRecipeCard(recipeId, recipeData)
 			craftQuantity = 1
 			quantityBox.Text = "1"
 		end
-		selectedRecipe = id
+		selectedRecipe = selectedRecipe ~= id and id or nil
 		selectedStroke.Color = COLORS.SlotSelected
 		selectedStroke.Thickness = 2
 		selectedCard.BackgroundColor3 = COLORS.SlotSelected
@@ -480,6 +483,7 @@ local function updateRecipeCard(card, recipeId)
 		end
 	end
 	local selected = selectedRecipe == recipeId
+	RecipeCardUI.SetExpanded(card, selected)
 	card.Stroke.Color = selected and COLORS.SlotSelected or COLORS.Border
 	card.Stroke.Thickness = selected and 2 or 1
 	card.BackgroundColor3 = selected and COLORS.SlotSelected or COLORS.SlotFilled

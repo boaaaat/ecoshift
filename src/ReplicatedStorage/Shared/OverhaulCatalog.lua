@@ -120,13 +120,13 @@ C.Items = {
  ["Wall"] = {["Id"]="Wall",["Name"]="Wall",["Grade"]=1,["Tier"]=1,["StackSize"]=99,["Tags"]={"Placeable","Holdable","Structure"},["Description"]="8 studs wide, 8 tall; blocks ordinary physical movement"},
  ["Roof"] = {["Id"]="Roof",["Name"]="Roof",["Grade"]=1,["Tier"]=1,["StackSize"]=99,["Tags"]={"Placeable","Holdable","Structure"},["Description"]="8×8 panel; contributes shade/rain shelter"},
  ["Ramp"] = {["Id"]="Ramp",["Name"]="Ramp",["Grade"]=1,["Tier"]=1,["StackSize"]=99,["Tags"]={"Placeable","Holdable","Structure"},["Description"]="8×8 run/rise connection"},
- ["Door"] = {["Id"]="Door",["Name"]="Door",["Grade"]=1,["Tier"]=1,["StackSize"]=99,["Tags"]={"Placeable","Holdable","Structure"},["Description"]="Player-operated 4-stud opening; F/touch toggle"},
+ ["Door"] = {["Id"]="Door",["Name"]="Door",["Grade"]=1,["Tier"]=1,["StackSize"]=99,["Tags"]={"Placeable","Holdable","Structure"},["Description"]="Buildable 8-stud wall module with a player-operated 4-stud opening"},
  ["Gate"] = {["Id"]="Gate",["Name"]="Gate",["Grade"]=1,["Tier"]=1,["StackSize"]=99,["Tags"]={"Placeable","Holdable","Structure"},["Description"]="Player-operated 8-stud opening"},
  ["Stairs"] = {["Id"]="Stairs",["Name"]="Stairs",["Grade"]=1,["Tier"]=1,["StackSize"]=99,["Tags"]={"Placeable","Holdable","Structure"},["Description"]="8-stud story connection"},
  ["Ladder"] = {["Id"]="Ladder",["Name"]="Ladder",["Grade"]=1,["Tier"]=1,["StackSize"]=99,["Tags"]={"Placeable","Holdable","Structure"},["Description"]="8-stud vertical connection"},
  ["Watchtower"] = {["Id"]="Watchtower",["Name"]="Watchtower",["Grade"]=1,["Tier"]=1,["StackSize"]=99,["Tags"]={"Placeable","Holdable","Structure"},["Description"]="8×8, approximately 16 high, accessible ladder"},
- ["Chest"] = {["Id"]="Chest",["Name"]="Chest",["Grade"]=1,["Tier"]=1,["StackSize"]=1,["Tags"]={"Placeable","Holdable","Structure"},["Description"]="24 shared item slots"},
- ["LargeChest"] = {["Id"]="LargeChest",["Name"]="Large Chest",["Grade"]=4,["Tier"]=4,["StackSize"]=1,["Tags"]={"Placeable","Holdable","Structure"},["Description"]="48 shared slots"},
+ ["Chest"] = {["Id"]="Chest",["Name"]="Chest",["Grade"]=1,["Tier"]=1,["StackSize"]=1,["Tags"]={"Placeable","Holdable","Structure"},["Description"]="18 shared item slots"},
+ ["LargeChest"] = {["Id"]="LargeChest",["Name"]="Large Chest",["Grade"]=4,["Tier"]=4,["StackSize"]=1,["Tags"]={"Placeable","Holdable","Structure"},["Description"]="36 shared slots"},
  ["Torch"] = {["Id"]="Torch",["Name"]="Torch",["Grade"]=1,["Tier"]=1,["StackSize"]=99,["Tags"]={"Placeable","Holdable","Structure"},["Description"]="Placeable light; no heat protection"},
  ["StandingLamp"] = {["Id"]="StandingLamp",["Name"]="Standing Lamp",["Grade"]=3,["Tier"]=3,["StackSize"]=99,["Tags"]={"Placeable","Holdable","Structure"},["Description"]="Larger camp light, no ongoing fuel"},
  ["RainCollector"] = {["Id"]="RainCollector",["Name"]="Rain Collector",["Grade"]=2,["Tier"]=2,["StackSize"]=99,["Tags"]={"Placeable","Holdable","Structure"},["Description"]="Produces one Water/minute during rain, stores up to 10; no offline production"},
@@ -780,17 +780,17 @@ for itemId,gear in pairs(C.Gear) do
  C.EnchantmentCompatibility[itemId]=allowed
 end
 C.Stations = {
- ["Workbench"] = {["Name"]="Workbench",["Tier"]=1,["Grade"]=1,["BuildType"]="Workbench",["InteractRadius"]=8,["Description"]="Tools, utility, structural items, assembly; inherits hand recipes"},
- ["Campfire"] = {["Name"]="Campfire",["Tier"]=1,["Grade"]=1,["BuildType"]="Campfire",["InteractRadius"]=8,["Description"]="Simple roasting and actual warmth"},
- ["Furnace"] = {["Name"]="Furnace",["Tier"]=1,["Grade"]=1,["BuildType"]="Furnace",["InteractRadius"]=8,["Description"]="Ore, glass, and higher-grade metal batches"},
- ["Loom"] = {["Name"]="Loom",["Tier"]=1,["Grade"]=1,["BuildType"]="Loom",["InteractRadius"]=8,["Description"]="Cloth, wearable pieces, packs, patches"},
- ["Stove"] = {["Name"]="Stove",["Tier"]=2,["Grade"]=2,["BuildType"]="Stove",["InteractRadius"]=8,["Description"]="Soups, drinks, rations, and mixed meals"},
- ["Oven"] = {["Name"]="Oven",["Tier"]=3,["Grade"]=3,["BuildType"]="Oven",["InteractRadius"]=8,["Description"]="Baked meals, dried food, and later expedition meals"},
- ["Anvil"] = {["Name"]="Anvil",["Tier"]=2,["Grade"]=2,["BuildType"]="Anvil",["InteractRadius"]=8,["Description"]="Metal equipment, full weapon/tool repairs"},
- ["MedicineTable"] = {["Name"]="Medicine Table",["Tier"]=2,["Grade"]=2,["BuildType"]="MedicineTable",["InteractRadius"]=8,["Description"]="Advanced medical items and brewing"},
- ["SurveyDesk"] = {["Name"]="Survey Desk",["Tier"]=2,["Grade"]=2,["BuildType"]="SurveyDesk",["InteractRadius"]=8,["Description"]="Instruments, maps, and world-control devices"},
- ["EnchantingTable"] = {["Name"]="Enchanting Table",["Tier"]=3,["Grade"]=3,["BuildType"]="EnchantingTable",["InteractRadius"]=8,["Description"]="Apply, upgrade, extract, and transfer enchantments"},
- ["RepairBench"] = {["Name"]="Repair Bench",["Tier"]=4,["Grade"]=4,["BuildType"]="RepairBench",["InteractRadius"]=8,["Description"]="Crew repair queue and consolidated gear-maintenance page; uses normal Anvil/Loom repair costs"},
+ ["Workbench"] = {["Name"]="Workbench",["Tier"]=1,["Grade"]=1,["BuildType"]="Workbench",["InteractRadius"]=15,["Description"]="Tools, utility, structural items, assembly; inherits hand recipes"},
+ ["Campfire"] = {["Name"]="Campfire",["Tier"]=1,["Grade"]=1,["BuildType"]="Campfire",["InteractRadius"]=15,["Description"]="Simple roasting and actual warmth"},
+ ["Furnace"] = {["Name"]="Furnace",["Tier"]=1,["Grade"]=1,["BuildType"]="Furnace",["InteractRadius"]=15,["Description"]="Ore, glass, and higher-grade metal batches"},
+ ["Loom"] = {["Name"]="Loom",["Tier"]=1,["Grade"]=1,["BuildType"]="Loom",["InteractRadius"]=15,["Description"]="Cloth, wearable pieces, packs, patches"},
+ ["Stove"] = {["Name"]="Stove",["Tier"]=2,["Grade"]=2,["BuildType"]="Stove",["InteractRadius"]=15,["Description"]="Soups, drinks, rations, and mixed meals"},
+ ["Oven"] = {["Name"]="Oven",["Tier"]=3,["Grade"]=3,["BuildType"]="Oven",["InteractRadius"]=15,["Description"]="Baked meals, dried food, and later expedition meals"},
+ ["Anvil"] = {["Name"]="Anvil",["Tier"]=2,["Grade"]=2,["BuildType"]="Anvil",["InteractRadius"]=15,["Description"]="Metal equipment, full weapon/tool repairs"},
+ ["MedicineTable"] = {["Name"]="Medicine Table",["Tier"]=2,["Grade"]=2,["BuildType"]="MedicineTable",["InteractRadius"]=15,["Description"]="Advanced medical items and brewing"},
+ ["SurveyDesk"] = {["Name"]="Survey Desk",["Tier"]=2,["Grade"]=2,["BuildType"]="SurveyDesk",["InteractRadius"]=15,["Description"]="Instruments, maps, and world-control devices"},
+ ["EnchantingTable"] = {["Name"]="Enchanting Table",["Tier"]=3,["Grade"]=3,["BuildType"]="EnchantingTable",["InteractRadius"]=15,["Description"]="Apply, upgrade, extract, and transfer enchantments"},
+ ["RepairBench"] = {["Name"]="Repair Bench",["Tier"]=4,["Grade"]=4,["BuildType"]="RepairBench",["InteractRadius"]=15,["Description"]="Crew repair queue and consolidated gear-maintenance page; uses normal Anvil/Loom repair costs"},
  ["Hand"] = {["Name"]="Hand Crafting",["Tier"]=0,["Grade"]=0,["InteractRadius"]=0},
 }
 C.Placeables = {
@@ -809,13 +809,13 @@ C.Placeables = {
  ["Wall"] = {["BuildType"]="Wall",["Grade"]=1,["Kind"]="Structure",["Description"]="8 studs wide, 8 tall; blocks ordinary physical movement"},
  ["Roof"] = {["BuildType"]="Roof",["Grade"]=1,["Kind"]="Structure",["Description"]="8×8 panel; contributes shade/rain shelter"},
  ["Ramp"] = {["BuildType"]="Ramp",["Grade"]=1,["Kind"]="Structure",["Description"]="8×8 run/rise connection"},
- ["Door"] = {["BuildType"]="Door",["Grade"]=1,["Kind"]="Structure",["Description"]="Player-operated 4-stud opening; F/touch toggle"},
+ ["Door"] = {["BuildType"]="Door",["Grade"]=1,["Kind"]="Structure",["Description"]="Buildable 8-stud wall module with a player-operated 4-stud opening"},
  ["Gate"] = {["BuildType"]="Gate",["Grade"]=1,["Kind"]="Structure",["Description"]="Player-operated 8-stud opening"},
  ["Stairs"] = {["BuildType"]="Stairs",["Grade"]=1,["Kind"]="Structure",["Description"]="8-stud story connection"},
  ["Ladder"] = {["BuildType"]="Ladder",["Grade"]=1,["Kind"]="Structure",["Description"]="8-stud vertical connection"},
  ["Watchtower"] = {["BuildType"]="Watchtower",["Grade"]=1,["Kind"]="Structure",["Description"]="8×8, approximately 16 high, accessible ladder"},
- ["Chest"] = {["BuildType"]="Chest",["Grade"]=1,["Kind"]="Structure",["Description"]="24 shared item slots",["Slots"]=24},
- ["LargeChest"] = {["BuildType"]="LargeChest",["Grade"]=4,["Kind"]="Structure",["Description"]="48 shared slots",["Slots"]=48},
+ ["Chest"] = {["BuildType"]="Chest",["Grade"]=1,["Kind"]="Structure",["Description"]="18 shared item slots",["Slots"]=18},
+ ["LargeChest"] = {["BuildType"]="LargeChest",["Grade"]=4,["Kind"]="Structure",["Description"]="36 shared slots",["Slots"]=36},
  ["Torch"] = {["BuildType"]="Torch",["Grade"]=1,["Kind"]="Structure",["Description"]="Placeable light; no heat protection"},
  ["StandingLamp"] = {["BuildType"]="StandingLamp",["Grade"]=3,["Kind"]="Structure",["Description"]="Larger camp light, no ongoing fuel"},
  ["RainCollector"] = {["BuildType"]="RainCollector",["Grade"]=2,["Kind"]="Structure",["Description"]="Produces one Water/minute during rain, stores up to 10; no offline production"},
@@ -844,6 +844,25 @@ C.WorldDevices = {
 }
 C.MaterialByTier = {"Stone","SteelBar","BlacksteelBar","MeteorBar","StormBar","ReinforcedBar","DeepMetal","MoonBar"}
 C.ClothByTier = {"Cloth","WarmCloth","FireCloth","GlowCloth","StormCloth","ToughCloth","SailCloth","NightCloth"}
+C.CraftSpeedMultiplier = 1.75
+C.StationUpgradePaths = {
+ ["Workbench"]={1,2,3,4,5,6,7,8},
+ ["Furnace"]={1,2,3,4,5,6,7,8},
+ ["Loom"]={1,2,3,4,5,6,7,8},
+ ["Anvil"]={2,3,4,5,6,7,8},
+ ["Campfire"]={1},
+ ["Stove"]={2,4},
+ ["Oven"]={3,4,6},
+ ["MedicineTable"]={2,3,4,6},
+ ["SurveyDesk"]={2,3,4,5,8},
+ ["EnchantingTable"]={3,4,5,6,7,8},
+ ["RepairBench"]={4,5,6,7,8},
+ ["Hand"]={0},
+}
+for stationType,path in pairs(C.StationUpgradePaths) do
+ local station=C.Stations[stationType]
+ if station then station.UpgradePath=path;station.MaxGrade=path[#path] end
+end
 C.StandardDamage = {18,36,72,144,288,576,1152,2304}
 C.PhysicalByTier = {0.08,0.18,0.3,0.42,0.54,0.64,0.73,0.8}
 C.Trophies = {"AncientSeed","SunHeart","MarshHeart","FrostHeart","GreaterFireCore","CrystalHeart","DawnHeart","GreaterStarCore","TideHeart","GreaterStormCore","GrowthHeart","IronHeart","SkyHeart","ArchiveHeart","NightHeart","GravityShard"}
@@ -979,18 +998,66 @@ for id, light in pairs(Lights) do
  end
  C.Items[id].LightRange=light.Range
 end
-local footprints={Floor={8,.5,8},Wall={8,8,.5},Roof={8,.5,8},Ramp={8,8,8},Door={4,8,.5},Gate={8,8,.5},Stairs={8,8,8},Ladder={3,8,1},Watchtower={8,16,8},Chest={4,3,3},LargeChest={6,3,3},Torch={1,4,1},StandingLamp={2,7,2},RainCollector={5,4,5},WaterFilter={4,5,4},Bedroll={3,.5,6},SpikeTrap={5,1,5},CampMarker={1,5,1},TrailBeacon={2,5,2}}
+local footprints={Floor={8,.5,8},Wall={8,8,.5},Roof={8,.5,8},Ramp={8,8,8},Door={8,8,.5},Gate={8,8,.5},Stairs={8,8,8},Ladder={3,8,1},Watchtower={8,16,8},Chest={4,3,3},LargeChest={6,3,3},Torch={1,4,1},StandingLamp={2,7,2},RainCollector={5,4,5},WaterFilter={4,5,4},Bedroll={3,.5,6},SpikeTrap={5,1,5},CampMarker={1,5,1},TrailBeacon={2,5,2}}
 for id,placeable in pairs(C.Placeables) do
  local dims=footprints[id] or {5,4,4}
  placeable.Size=Lights[id] and Lights[id].Size or Vector3.new(dims[1],dims[2],dims[3])
  placeable.Recipe=C.Recipes[id]
- placeable.HoldSalvageSeconds=3
+ placeable.HoldSalvageSeconds=Lights[id] and .75 or 3
 end
 C.ResourceDefinitions = C.Resources
 function C.Get(id) return C.Items[id] end
-function C.GetStationUpgradeCost(nextGrade)
- if type(nextGrade)~="number" or nextGrade%1~=0 or nextGrade<2 or nextGrade>8 then return nil end
- return {{Id=C.MaterialByTier[nextGrade-1],N=6},{Id=C.ClothByTier[nextGrade-1],N=4},{Id="Plank",N=4}}
+function C.GetNextStationGrade(stationType,currentGrade)
+ local path=C.StationUpgradePaths[stationType]
+ if not path then return nil end
+ currentGrade=math.floor(tonumber(currentGrade) or 0)
+ for _,grade in ipairs(path) do if grade>currentGrade then return grade end end
+ return nil
+end
+function C.GetStationMaxGrade(stationType)
+ local path=C.StationUpgradePaths[stationType]
+ return path and path[#path] or nil
+end
+local stationUpgradeAmounts={
+ Workbench={Frame=4,Cloth=4,Plank=8},
+ Furnace={Frame=8,Coal=4,Plank=2},
+ Loom={Frame=2,Cloth=8,Fiber=4},
+ Anvil={Frame=10,Cloth=2,Plank=2},
+ Stove={Frame=4,Cloth=2,Stone=4,Resin=2},
+ Oven={Frame=6,Cloth=2,Stone=4,Coal=2},
+ MedicineTable={Frame=2,Cloth=4,HerbalPaste=4,Glass=2},
+ SurveyDesk={Frame=4,Cloth=2,Glass=4,Gears=2},
+ EnchantingTable={Frame=4,Cloth=2,EnchantingDust=6},
+ RepairBench={Frame=6,Cloth=6,Resin=2},
+}
+function C.GetStationUpgradeCost(stationType,currentGrade)
+ local amounts=stationUpgradeAmounts[stationType]
+ local nextGrade=C.GetNextStationGrade(stationType,currentGrade)
+ if not amounts or not nextGrade then return nil,nil end
+ local totals,order={},{}
+ local function add(id,amount)
+  if not id or not amount or amount<=0 then return end
+  if totals[id]==nil then totals[id]=0;table.insert(order,id) end
+  totals[id]+=amount
+ end
+ for grade=math.floor(tonumber(currentGrade) or 0)+1,nextGrade do
+  local frame=C.MaterialByTier[math.clamp(grade-1,1,#C.MaterialByTier)]
+  local cloth=C.ClothByTier[math.clamp(grade-1,1,#C.ClothByTier)]
+  add(frame,amounts.Frame);add(cloth,amounts.Cloth)
+  add("Plank",amounts.Plank);add("Coal",amounts.Coal);add("Fiber",amounts.Fiber)
+  add("Stone",amounts.Stone);add("Resin",amounts.Resin);add("HerbalPaste",amounts.HerbalPaste)
+  add("Glass",amounts.Glass);add("Gears",amounts.Gears);add("EnchantingDust",amounts.EnchantingDust)
+ end
+ local result={}
+ for _,id in ipairs(order) do table.insert(result,{Id=id,N=totals[id]}) end
+ return result,nextGrade
+end
+function C.GetPlaceableUpgradeCost(placeableType,currentGrade)
+ if placeableType~="SpikeTrap" then return nil,nil end
+ currentGrade=math.floor(tonumber(currentGrade) or 1)
+ local nextGrade=currentGrade+1
+ if nextGrade<2 or nextGrade>8 then return nil,nil end
+ return {{Id=C.MaterialByTier[nextGrade-1],N=6},{Id=C.ClothByTier[nextGrade-1],N=4},{Id="Plank",N=4}},nextGrade
 end
 function C.GetRefineCost(gear,nextGrade)
  if not gear or gear.Kind~="Armor" or not gear.Set or type(nextGrade)~="number" or nextGrade%1~=0 or nextGrade<2 or nextGrade>8 or nextGrade<=(gear.Grade or 1) then return nil end

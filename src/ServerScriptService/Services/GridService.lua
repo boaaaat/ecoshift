@@ -13,15 +13,17 @@ local function key(x, z)
 end
 
 function GridService:WorldToGrid(pos)
-	local size = Config.GRID.Size
-	local gx = math.floor((pos.X / size) + 0.5)
-	local gz = math.floor((pos.Z / size) + 0.5)
+	-- Occupancy uses half-cell coordinates. Tile centers are even/even while
+	-- wall, door, and gate edges use one odd coordinate.
+	local spacing = Config.GRID.Size * 0.5
+	local gx = math.floor((pos.X / spacing) + 0.5)
+	local gz = math.floor((pos.Z / spacing) + 0.5)
 	return gx, gz
 end
 
 function GridService:GridToWorld(gx, gz, y)
-	local size = Config.GRID.Size
-	return Vector3.new(gx * size, y or BiomeConfig.WORLD.BaseY, gz * size)
+	local spacing = Config.GRID.Size * 0.5
+	return Vector3.new(gx * spacing, y or BiomeConfig.WORLD.BaseY, gz * spacing)
 end
 
 function GridService:IsOccupied(gx, gz)

@@ -148,10 +148,9 @@ function Service:Request(player,action,payload)
   local output=id.."Scroll"..rank;local budget=Catalog.EnchantingCosts[enchant.Grades[rank]]
   local cost={{Id="EnchantingDust",N=math.ceil(budget.Dust/2)},{Id="Glass",N=1}}
   if not stationOK(player,station,enchant.Grades[rank]) then return false,"Upgrade this station first." end
-  if not Inventory:CanFit(player,output,1) then return false,"Make room for the scroll first." end
   if not Inventory:CanAfford(player,cost) then return false,"Need half the dust cost, rounded up, and 1 Glass." end
   local scroll={Id=output,N=1,Uid=Http:GenerateGUID(false),Scroll={Id=id,Rank=rank}}
-  if Inventory:GiveEntry(player,scroll,true,true)~=1 then return false,"Make room for the scroll." end
+  if Inventory:GiveEntryOrDrop(player,scroll,true)~=1 then return false,"Unable to deliver the scroll. Try again." end
   assert(Inventory:PayCost(player,cost,true),"Validated extraction debit changed")
   entry.Enchantments[id]=nil;Gear:Touch(player);return true,"Extracted a shareable scroll. Stored effect charges are not transferred."
  elseif action=="ApplyScroll" or action=="Enchant" then

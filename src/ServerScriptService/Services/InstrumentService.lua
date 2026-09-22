@@ -141,7 +141,7 @@ function S:_install(player,payload)
  if type(payload)~="table" or not table.find(modules,payload.Module) or type(payload.Uid)~="string" then return false,"Choose a carried instrument module." end
  local root=rootOf(player);if not root then return false,"You must be alive to install a module." end
  local nearby=false
- for _,station in ipairs(Collection:GetTagged("Structure")) do if station:GetAttribute("BuildType")=="SurveyDesk" and (station:GetAttribute("StationGrade") or 1)>=5 and (station:GetPivot().Position-root.Position).Magnitude<=12 then nearby=true;break end end
+ for _,station in ipairs(Collection:GetTagged("Structure")) do if station:GetAttribute("BuildType")=="SurveyDesk" and (station:GetAttribute("StationGrade") or 1)>=5 and (station:GetPivot().Position-root.Position).Magnitude<=15 then nearby=true;break end end
  if not nearby then return false,"Requires a nearby grade 5 Survey Desk." end
  local journal
  for _,slot in ipairs(contents(player)) do if slot.Entry.Id=="FieldJournal" and slot.Entry.Uid==payload.Uid then journal=slot.Entry;break end end

@@ -197,7 +197,7 @@ function Service:_rewardChest(id)
  local chest=part(live.Folder,"EncounterReward",Vector3.new(5,3,3),live.Origin+Vector3.new(0,4,-40),Color3.fromRGB(184,145,63));live.RewardChest=chest
  prompt(chest,"Collect shared trophies",function(player)
   if player:GetAttribute("InteriorId")~=id or s.RewardRemaining<=0 then return end
-  local added=service("InventoryService"):Give(player,Config.Bosses[id].Trophy,s.RewardRemaining,false,true)
+  local added=service("InventoryService"):GiveOrDrop(player,Config.Bosses[id].Trophy,s.RewardRemaining,true)
   s.RewardRemaining-=added;s.LootClaimed=s.RewardRemaining<=0
   service("InventoryService"):Sync(player)
   if s.LootClaimed then chest:Destroy() end

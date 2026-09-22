@@ -19,7 +19,7 @@ function Adapter.Provider(plr)
 	return {
 		Has = function(id, n) return InventoryService:Has(plr, id, n) end,
 		Consume = function(id, n) return InventoryService:Consume(plr, id, n) end,
-		Give = function(id, n) InventoryService:Give(plr, id, n) end,
+		Give = function(id, n) return InventoryService:GiveOrDrop(plr, id, n) end,
 	}
 end
 

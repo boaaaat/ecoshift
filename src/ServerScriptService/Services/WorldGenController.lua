@@ -44,16 +44,37 @@ function WorldGenController:_generateOverhaul(biomeName)
     end
    end
    local ok,err=pcall(function()
-    if self._hasGenerated then require(script.Parent.EventService):EndAll("BiomeShift") end
-    local enemies=workspace:FindFirstChild("Enemies")
-    if enemies then for _,model in ipairs(enemies:GetChildren()) do if not model:GetAttribute("InteriorId") then model:Destroy() end end end
-    local world=require(script.Parent.OverhaulWorldService);world:Generate(name)
-    dropService:CompleteBiomeShift(world)
-    if self._hasGenerated then require(script.Parent.BuildService):RemoveBiomeShiftLights() end
+    local world=require(script.Parent.OverhaulWorldService)
     local ordered={};for player,entry in pairs(frozen) do table.insert(ordered,{Player=player,Entry=entry}) end
     table.sort(ordered,function(a,b)return a.Player.UserId<b.Player.UserId end)
     local ignored={};for _,record in ipairs(ordered) do if record.Entry.Corpse then table.insert(ignored,record.Entry.Corpse) end end
     local arrivals=self._hasGenerated and world:GetCampArrivalPositions(#ordered,ignored) or nil
+    -- Move everyone to the existing camp before any event, enemy, terrain or
+    -- generated-world mutation becomes visible. Roots stay anchored while the
+    -- replacement camp terrain is produced underneath them.
+    if arrivals then
+     for index,record in ipairs(ordered) do
+      local player,entry=record.Player,record.Entry
+      if entry.WasInterior then
+       local root=entry.Root;local force=root and root:FindFirstChild("MoonGravity");if force then force:Destroy() end
+       player:SetAttribute("InteriorId",nil);player:SetAttribute("MapLayer","Surface")
+      end
+      local arrival=arrivals[index]
+      if entry.Root and entry.Root.Parent and player.Character then
+       player.Character:PivotTo(CFrame.new(arrival)*player.Character:GetPivot().Rotation)
+       entry.Root.AssemblyLinearVelocity=Vector3.zero
+      elseif entry.Corpse and entry.Corpse.Parent then
+       entry.Corpse:PivotTo(CFrame.new(arrival)*entry.Corpse:GetPivot().Rotation)
+       entry.Record.deathPosition=arrival
+      end
+     end
+    end
+    if self._hasGenerated then require(script.Parent.EventService):EndAll("BiomeShift") end
+    local enemies=workspace:FindFirstChild("Enemies")
+    if enemies then for _,model in ipairs(enemies:GetChildren()) do if not model:GetAttribute("InteriorId") then model:Destroy() end end end
+    world:Generate(name)
+    dropService:CompleteBiomeShift(world)
+    if self._hasGenerated then require(script.Parent.BuildService):RemoveBiomeShiftLights() end
     local function aboveLand(position)
      local minimumY=world:GetHeight(position.X,position.Z)+3.2
      if position.Y>=minimumY then return position end
@@ -61,7 +82,7 @@ function WorldGenController:_generateOverhaul(biomeName)
     end
     for index,record in ipairs(ordered) do
      local player,entry=record.Player,record.Entry
-     if entry.WasInterior then
+     if entry.WasInterior and not arrivals then
       local root=entry.Root;local force=root and root:FindFirstChild("MoonGravity");if force then force:Destroy() end
       player:SetAttribute("InteriorId",nil);player:SetAttribute("MapLayer","Surface")
      end

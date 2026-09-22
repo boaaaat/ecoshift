@@ -108,7 +108,10 @@ function WorldControlService:_commit(ballot)
  if not paid then self:_finish(false,"Fuel is no longer available.");return end
  local ran,applied,errorMessage=pcall(BiomeService.ApplyControl,BiomeService,ballot.Action,ballot.Biome,ballot.Version)
  if not ran or not applied then
-  for _,entry in ipairs(paid) do InventoryService:GiveEntry(ballot.Proposer,entry,false,true) end
+  local key=tostring(ballot.Proposer.UserId)
+  self._refunds[key]=self._refunds[key] or {}
+  for _,entry in ipairs(paid) do table.insert(self._refunds[key],entry) end
+  self:_deliverRefund(ballot.Proposer)
   InventoryService:Sync(ballot.Proposer)
   self:_finish(false,ran and errorMessage or "The control failed; fuel was returned.");return
  end
@@ -235,12 +238,7 @@ function WorldControlService:_deliverRefund(player)
  local key=tostring(player.UserId);local pending=self._refunds[key]
  if self._delivering or not pending or ReplicatedStorage:GetAttribute("WorldRestoring") or player:GetAttribute("WorldPlayerLoading") or player:GetAttribute("WorldPlayerRestoring") then return end
  self._delivering=true;self._refunds[key]=nil
- local remainder={}
- for _,entry in ipairs(pending) do
-  local count=InventoryService:GiveEntry(player,entry,false,true)
-  if count<entry.N then local rest=Copy(entry);rest.N-=count;table.insert(remainder,rest) end
- end
- if #remainder>0 then self._refunds[key]=remainder end
+ if not InventoryService:GiveEntriesOrDrop(player,pending,true) then self._refunds[key]=pending end
  InventoryService:Sync(player);self._delivering=false
 end
 function WorldControlService:ResolveGeneration(success)

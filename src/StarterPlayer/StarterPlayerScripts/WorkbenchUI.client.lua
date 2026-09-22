@@ -5,12 +5,11 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
-local ProximityPromptService = game:GetService("ProximityPromptService")
-local CollectionService = game:GetService("CollectionService")
 
 local Theme = require(ReplicatedStorage.Shared.UI.UITheme)
 local RecipeGuideUI = require(ReplicatedStorage.Shared.UI:WaitForChild("RecipeGuideUI"))
 local RecipeCardUI = require(ReplicatedStorage.Shared.UI.RecipeCardUI)
+local RecipeHelperUI = require(ReplicatedStorage.Shared.UI.RecipeHelperUI)
 local Config = require(ReplicatedStorage.Shared.Config)
 local Util = require(ReplicatedStorage.Shared.Util)
 local ItemDatabase = require(ReplicatedStorage.Shared.Items.ItemDatabase)
@@ -18,6 +17,7 @@ local WorkbenchConfig = require(ReplicatedStorage.Shared.WorkbenchConfig)
 local IngredientResolver=require(ReplicatedStorage.Shared.IngredientResolver)
 local ResultMessages = require(ReplicatedStorage.Shared.ResultMessages)
 local SearchRank = require(ReplicatedStorage.Shared.UI.SearchRank)
+local StationInteraction = require(ReplicatedStorage.Shared.StationInteraction)
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -25,6 +25,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 local remotesFolder = Util.WaitForDescendant(Config.Paths.Remotes, 5)
 local rCraft = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.Craft)
 local rInventory = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.InventoryUpdate)
+local chestRemote = remotesFolder and Util.GetRemote(remotesFolder, Config.RemoteNames.ChestEvent)
 if not remotesFolder then
 	warn("[WorkbenchUI] Missing remotes folder:", Config.Paths.Remotes)
 elseif not rCraft then
@@ -58,6 +59,7 @@ local pendingRecipeId = nil
 local pendingStationType = nil
 local recipeSearch = ""
 local layoutWorkbench
+local closeWorkbench
 
 -- Create main GUI
 local gui = Instance.new("ScreenGui")
@@ -179,7 +181,11 @@ recipeBookBtn.Parent = header
 Theme.Button(recipeBookBtn)
 recipeBookBtn.Activated:Connect(function()
 	local stationRemote=remotesFolder and remotesFolder:FindFirstChild("Station")
- if stationRemote and currentStation then stationRemote:FireServer("Open",{Station=currentStation,RequestId=game:GetService("HttpService"):GenerateGUID(false)}) end
+ if stationRemote and currentStation then
+  local station=currentStation
+  if closeWorkbench then closeWorkbench() end
+  stationRemote:FireServer("Open",{Station=station,RequestId=game:GetService("HttpService"):GenerateGUID(false)})
+ end
 end)
 
 -- Close button
@@ -486,7 +492,7 @@ local function craftDuration(recipeId, quantity)
 	local recipe = recipeId and WorkbenchConfig.RECIPES[recipeId]
 	if not recipe then return 0 end
 	local multiplier = WorkbenchConfig:GetEffectiveStationModifiers(recipe, currentStationType or "Hand")
-	return math.max(0.05, (tonumber(recipe.BaseCraftTime) or 0) * multiplier) * quantity / math.min(2,1+(player:GetAttribute("Class_CraftBonus") or 0))
+	return math.max(0.05, (tonumber(recipe.BaseCraftTime) or 0) * multiplier) * quantity / WorkbenchConfig:GetClientCraftRate(player)
 end
 
 local function formatDuration(seconds)
@@ -520,6 +526,9 @@ local function createRecipeCard(recipeId, recipe, layoutOrder)
 		Theme=Theme, Colors=COLORS, Items=ItemDatabase, IngredientCost=ingredientCost,
 		GetItemCount=getItemCount, CanCraft=canCraftRecipe, Station=true, LayoutOrder=layoutOrder,
 		CategoryIcons=categoryIcons, GetTierColor=getTierColor,
+		TrackRecipe=function(id)
+			RecipeHelperUI.TrackRecipe(WorkbenchConfig.RECIPES[id].Output.Id,id,selectedRecipe==id and craftQuantity or 1)
+		end,
 		OpenIngredient=function(itemId, rootRecipeId)
 			RecipeGuideUI.Open(itemId,{PreferredStationType=currentStationType,RootRecipeId=rootRecipeId,RootQuantity=selectedRecipe==rootRecipeId and craftQuantity or 1})
 		end,
@@ -537,7 +546,7 @@ local function createRecipeCard(recipeId, recipe, layoutOrder)
 			craftQuantity = 1
 			quantityBox.Text = "1"
 		end
-		selectedRecipe = id
+		selectedRecipe = selectedRecipe ~= id and id or nil
 		selectedStroke.Color = COLORS.SlotSelected
 		selectedStroke.Thickness = 2
 		selectedCard.BackgroundColor3 = COLORS.SlotSelected
@@ -620,8 +629,7 @@ local function updateRecipeCard(card, recipeId)
 		end
 	end
 	local selected = selectedRecipe == recipeId
-	card.Ingredients.Visible = selected
-	card.Size = UDim2.new(1,-12,0,selected and (52 + card.Ingredients.Size.Y.Offset) or 52)
+	RecipeCardUI.SetExpanded(card, selected)
 	card.Stroke.Color = selected and COLORS.SlotSelected or COLORS.Border
 	card.Stroke.Thickness = selected and 2 or 1
 	card.BackgroundColor3 = selected and COLORS.SlotSelected or COLORS.SlotFilled
@@ -734,7 +742,11 @@ quantityBox.FocusLost:Connect(function()
 	if craftQuantity then quantityBox.Text = tostring(craftQuantity) end
 end)
 player:GetAttributeChangedSignal("Class_CraftBonus"):Connect(updateCraftButton)
-workspace:GetAttributeChangedSignal("CampaignTier"):Connect(updateCraftButton)
+local refreshStationCatalog
+workspace:GetAttributeChangedSignal("CampaignTier"):Connect(function()
+	updateCraftButton()
+	if isOpen and refreshStationCatalog then refreshStationCatalog() end
+end)
 ReplicatedStorage.AttributeChanged:Connect(function(name) if name:sub(1,18)=="CampaignCompleted_" then updateCraftButton() end end)
 local progressTick = 0
 game:GetService("RunService").Heartbeat:Connect(function(delta)
@@ -756,7 +768,8 @@ function refreshRecipes(preserveScroll)
 	if not currentStationType then return end
 	
 	-- Get recipes for this station
-	local recipes = WorkbenchConfig:GetRecipesForStation(currentStationType)
+	local stationGrade = currentStation and (currentStation:GetAttribute("StationGrade") or 1) or 1
+	local recipes = WorkbenchConfig:GetRecipesForStation(currentStationType, stationGrade, workspace:GetAttribute("CampaignTier") or 1)
 	
 	-- Filter and rank by the output first. Ingredient matches remain useful but
 	-- cannot bury an exact output-name match such as "Plank".
@@ -801,7 +814,8 @@ local function setupCategories()
 	categoryButtons = {}
 	
 	local availableCategories = {}
-	for _, recipe in pairs(WorkbenchConfig:GetRecipesForStation(currentStationType)) do
+	local stationGrade = currentStation and (currentStation:GetAttribute("StationGrade") or 1) or 1
+	for _, recipe in pairs(WorkbenchConfig:GetRecipesForStation(currentStationType, stationGrade, workspace:GetAttribute("CampaignTier") or 1)) do
 		if type(recipe.Category) == "string" then availableCategories[recipe.Category] = true end
 	end
 
@@ -839,7 +853,8 @@ local function openWorkbench(station, stationType)
  gradeConnection=station:GetAttributeChangedSignal("StationGrade"):Connect(function()
   local grade=station:GetAttribute("StationGrade") or 1
   titleLabel.Text=(stationType=="Workbench" and (grade>=7 and "Master Workbench" or grade>=4 and "Advanced Workbench" or "Workbench") or WorkbenchConfig.STATIONS[stationType].Name).." · "..grade
-  updateCraftButton()
+  recipeBookBtn.Visible=grade<(WorkbenchConfig.STATIONS[stationType].MaxGrade or grade)
+  if refreshStationCatalog then refreshStationCatalog() else updateCraftButton() end
  end)
 	currentStationType = stationType
 	
@@ -850,6 +865,7 @@ local function openWorkbench(station, stationType)
   titleLabel.Text = (stationType=="Workbench" and (grade>=7 and "Master Workbench" or grade>=4 and "Advanced Workbench" or "Workbench") or stationDef.Name or stationType).." · "..grade
 		subtitleLabel.Text = stationDef.Description or "Craft items"
 		mainStroke.Color = getTierColor({ StationTier = stationDef.Tier, StationType = stationDef.Tier >= 10 and stationType or nil })
+		recipeBookBtn.Visible=grade<(stationDef.MaxGrade or grade)
 	end
 	
 	isOpen = true
@@ -881,7 +897,7 @@ local function openWorkbench(station, stationType)
 	end
 end
 
-local function closeWorkbench()
+closeWorkbench = function()
 	if not isOpen then return end
 	isOpen = false
  if gradeConnection then gradeConnection:Disconnect();gradeConnection=nil end
@@ -943,28 +959,42 @@ craftBtn.MouseButton1Click:Connect(function()
 	end)
 end)
 
--- Escape to close
+local function canOpenStation()
+	return not isOpen
+		and player:GetAttribute("IsDead") ~= true
+		and playerGui:GetAttribute("MenuCursorOpen") ~= true
+		and playerGui:GetAttribute("ClassPlacementActive") ~= true
+		and UserInputService:GetFocusedTextBox() == nil
+end
+
+refreshStationCatalog = function()
+	setupCategories()
+	refreshRecipes(false)
+end
+
+local function openTarget(target, stationType, interactionType)
+	if interactionType == "Chest" then
+		if chestRemote then chestRemote:FireServer("Open", { Chest = target }) end
+	elseif target then
+		openWorkbench(target, stationType)
+	end
+end
+
+-- Escape closes the panel; right-click opens the station or chest under the cursor.
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 	if input.KeyCode == Enum.KeyCode.Escape and isOpen then
 		closeWorkbench()
+	elseif input.UserInputType == Enum.UserInputType.MouseButton2 and canOpenStation() then
+		local target, stationType, interactionType = StationInteraction.FromMouse(player)
+		openTarget(target, stationType, interactionType)
 	end
 end)
 
--- Handle proximity prompts for workbenches
-ProximityPromptService.PromptTriggered:Connect(function(prompt, playerWhoTriggered)
-	if playerWhoTriggered ~= player then return end
-	
-	local parent = prompt.Parent
-	if not parent then return end
-	
-	-- Check if this is a crafting station
-	local model = parent:FindFirstAncestorOfClass("Model") or parent
-	local stationType = model:GetAttribute("StationType") or parent:GetAttribute("StationType")
-	
-	if stationType and WorkbenchConfig.STATIONS[stationType] then
-		openWorkbench(model, stationType)
-	end
+UserInputService.TouchTapInWorld:Connect(function(positions, processedByUI)
+	if processedByUI or not canOpenStation() then return end
+	local target, stationType, interactionType = StationInteraction.FromScreenPoint(player, positions and positions[1])
+	openTarget(target, stationType, interactionType)
 end)
 
 if rCraft then

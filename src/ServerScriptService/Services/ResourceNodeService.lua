@@ -205,6 +205,7 @@ local function attachDurationPrompt(instance)
 	prompt:SetAttribute("ResourceKind", require(script.Parent.ClassEffects).Kind(instance))
 	local holds = setmetatable({}, { __mode = "k" })
 	local claimed = false
+	local pendingCount
 	local function canHarvest(plr)
 		if claimed or ReplicatedStorage:GetAttribute("WorldRestoring") or not prompt.Enabled or not instance:IsDescendantOf(Workspace)
 			or not attachment:IsDescendantOf(instance) or plr.Parent ~= Players
@@ -267,15 +268,15 @@ local function attachDurationPrompt(instance)
 		prompt.Enabled = false
 		local itemId = getAttr(instance, "DropItemId") or getAttr(instance, "DropItemID") or getAttr(instance, "ItemId") or instance.Name
 		itemId = ResourceItemMap.Normalize(itemId)
-		local count = parseDropCount(instance)
-		count += require(script.Parent.ClassEffects).Extra(plr, instance)
+		local count = pendingCount or (parseDropCount(instance) + require(script.Parent.ClassEffects).Extra(plr, instance))
 		local stored=itemId=="Water" and require(script.Parent.GearService):StoreWater(plr,count) or 0
-		local added=stored+InventoryService:Give(plr,itemId,count-stored,true)
-		if added>0 and added<count then require(script.Parent.ItemDropService):SpawnDrop(itemId,count-added,instance:GetPivot().Position+Vector3.new(0,2,0)) end
-		if added > 0 then
+		local added=stored+InventoryService:GiveOrDrop(plr,itemId,count-stored,true,instance:GetPivot().Position)
+		pendingCount = count - added
+		if pendingCount == 0 then
 			require(script.Parent.ExpeditionRewardsService):RecordActivity(plr)
 			require(script.Parent.GearService):OnHarvestComplete(plr,instance)
 			instance:Destroy()
+			InventoryService:Sync(plr)
 		else
 			claimed = false
 			if prompt.Parent then prompt.Enabled = true end

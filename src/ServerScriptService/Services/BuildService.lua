@@ -3,7 +3,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 local CollectionService = game:GetService("CollectionService")
-local ProximityPromptService = game:GetService("ProximityPromptService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
@@ -116,47 +115,20 @@ local function applyDurability(inst)
 	inst:SetAttribute("DurabilityMax", 100)
 end
 
--- Create interaction prompt for workbenches
+-- Mark workbenches for direct right-click/tap interaction.
 local function setupWorkbenchInteraction(inst, stationType)
 	local station = WorkbenchConfig.STATIONS[stationType]
 	if not station then return end
-	
-	-- Find the part to attach prompt to
-	local promptParent = inst
-	if inst:IsA("Model") then
-		promptParent = inst.PrimaryPart or inst:FindFirstChildWhichIsA("BasePart")
-	end
-	if not promptParent then return end
-	
-	-- Reuse only this station's prompt, leaving unrelated authored interactions alone.
-	local prompt
+
+	-- Remove prompts authored by the replaced F-key interaction system.
 	for _, candidate in ipairs(inst:GetDescendants()) do
 		if candidate:IsA("ProximityPrompt") and (candidate.Name == "CraftingStationPrompt"
 			or (candidate.ObjectText == (station.Name or stationType) and candidate.ActionText == "Open")) then
-			prompt = candidate
-			break
+			candidate:Destroy()
+		elseif candidate:IsA("Attachment") and candidate.Name == "CraftingPromptAttachment" then
+			candidate:Destroy()
 		end
 	end
-	prompt = prompt or Instance.new("ProximityPrompt")
-	prompt.Name = "CraftingStationPrompt"
-	if inst:IsA("Model") then
-		-- CraftingService validates from the model pivot, which can differ from its primary part.
-		local anchor = promptParent:FindFirstChild("CraftingPromptAttachment")
-		if not anchor or not anchor:IsA("Attachment") then
-			anchor = Instance.new("Attachment")
-			anchor.Name = "CraftingPromptAttachment"
-			anchor.Parent = promptParent
-		end
-		anchor.WorldPosition = inst:GetPivot().Position
-		promptParent = anchor
-	end
-	prompt.ObjectText = station.Name or stationType
-	prompt.ActionText = "Open"
-	prompt.KeyboardKeyCode = Enum.KeyCode.F
-	prompt.HoldDuration = 0
-	prompt.MaxActivationDistance = station.InteractRadius or 8
-	prompt.RequiresLineOfSight = false
-	prompt.Parent = promptParent
 	
 	-- Store station type for client reference
 	inst:SetAttribute("StationType", stationType)
@@ -216,10 +188,10 @@ function BuildService:Place(plr, buildType, worldPos, rotation)
 	if not held or held.Name ~= buildType then return false, "EquipBuildItem" end
 	if not BuildPlacement.WithinCamp(worldPos) and not isLightType(buildType) then return false, "OutsideCamp" end
 
-	local gx, gz = GridService:WorldToGrid(worldPos)
-	if GridService:IsOccupied(gx, gz) then return false, "Occupied" end
-	local pos = BuildPlacement.Surface(worldPos)
+	local pos = BuildPlacement.Surface(worldPos, nil, buildType, rotation)
 	if not pos then return false, "NoSurface" end
+	local gx, gz = GridService:WorldToGrid(pos)
+	if GridService:IsOccupied(gx, gz) then return false, "Occupied" end
 	if not BuildPlacement.WithinCamp(pos) and not isLightType(buildType) then return false, "OutsideCamp" end
 	if not withinRange(plr, pos) then return false, "OutOfRange" end
 	local expiresOnBiomeShift = isLightType(buildType) and not BuildPlacement.WithinCamp(pos)
@@ -252,7 +224,7 @@ function BuildService:Place(plr, buildType, worldPos, rotation)
 
 		inst.Parent = workspace
 		require(script.Parent.ExpeditionRewardsService):RecordActivity(plr)
-		inst:SetAttribute("PlacementVersion", 1)
+		inst:SetAttribute("PlacementVersion", 2)
 		inst:SetAttribute("OwnerUserId", plr.UserId)
 		inst:SetAttribute("GridX", gx)
 		inst:SetAttribute("GridZ", gz)
@@ -278,7 +250,7 @@ function BuildService:Place(plr, buildType, worldPos, rotation)
 		end
 		if placedEntry.ChestState then LootService:RestoreChestState(inst,placedEntry.ChestState) end
 
-		-- Placed chests must be tagged so LootService binds prompts and UI events.
+		-- Placed chests must be tagged so direct targeting and LootService can find them.
 		if buildType == "Chest" or buildType == "LargeChest" then
 			setupChestInteraction(inst)
 		end
@@ -327,7 +299,8 @@ local function salvageTarget(plr, target)
 	if owner ~= plr.UserId then return false, "NotOwner" end
 
 	local pos = placed:IsA("Model") and placed:GetPivot().Position or placed.Position
-	if not withinRange(plr, pos) then return false, "RemoveOutOfRange" end
+	local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+	if not root or (root.Position - pos).Magnitude > (Config.BUILD.SalvageMaxDistance or 15) then return false, "RemoveOutOfRange" end
 	local origin = plr.Character:FindFirstChild("Head") or plr.Character:FindFirstChild("HumanoidRootPart")
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -340,12 +313,25 @@ local function salvageTarget(plr, target)
 	return placed, pos
 end
 
+local function salvageDuration(placed)
+	local buildType = placed and placed:GetAttribute("BuildType")
+	local definition = buildType and Catalog.Placeables[buildType]
+	return math.max(0.1, tonumber(definition and definition.HoldSalvageSeconds)
+		or Config.BUILD.SalvageSeconds or 3)
+end
+
 function BuildService:_beginSalvage(plr, target)
 	self._salvageHolds[plr] = nil
 	local placed, reason = salvageTarget(plr, target)
 	if not placed then return false, reason end
 	local now = os.clock()
-	self._salvageHolds[plr] = { Target = placed, Character = plr.Character, Started = now, LastPulse = now }
+	self._salvageHolds[plr] = {
+		Target = placed,
+		Character = plr.Character,
+		Started = now,
+		LastPulse = now,
+		Duration = salvageDuration(placed),
+	}
 	return true
 end
 
@@ -366,7 +352,7 @@ function BuildService:Remove(plr, target)
 	local placed, pos = salvageTarget(plr, target)
 	if not placed then return false, pos end
 	if not hold or hold.Target ~= placed or hold.Character ~= plr.Character
-		or os.clock() - hold.LastPulse > 0.6 or os.clock() - hold.Started < (Config.BUILD.SalvageSeconds or 3) then
+		or os.clock() - hold.LastPulse > 0.6 or os.clock() - hold.Started < hold.Duration then
 		return false, "HoldToSalvage"
 	end
 	
@@ -386,7 +372,7 @@ function BuildService:Remove(plr, target)
   entry.CookingState=require(script.Parent.CookingService):CaptureStation(placed)
   entry.UtilityState=require(script.Parent.UtilityBuildService):Capture(placed)
   if isChestStructure(placed,buildType) then entry.ChestState=LootService:CaptureChestState(placed) end
-   if InventoryService:GiveEntry(plr,entry,true)~=1 then return false,"InventoryFull" end
+   if InventoryService:GiveEntryOrDrop(plr,entry,true,pos)~=1 then return false,"DeliveryFailed" end
    refunded = true
   end
 	-- Runtime station state must be released in both modes. Creative simply skips
@@ -402,6 +388,7 @@ function BuildService:Remove(plr, target)
 		GridService:ReleaseByInstance(placed)
 	end
 	placed:Destroy()
+	if refunded then InventoryService:Sync(plr) end
 	require(script.Parent.ExpeditionRewardsService):RecordActivity(plr)
   return true, "Success", refunded
 end
@@ -452,6 +439,7 @@ function BuildService:RestoreWorldState(states)
 	local occupied, prepared = {}, {}
 	for _, state in ipairs(states) do
 		assert(isAllowedType(state.Type), "Saved build type unavailable: " .. tostring(state.Type))
+		assert(state.PlacementVersion == 2, "Unsupported structure placement version")
 		local gx, gz = SnapshotCodec.Number(state.GridX, -1e5, 1e5), SnapshotCodec.Number(state.GridZ, -1e5, 1e5)
 		assert(gx % 1 == 0 and gz % 1 == 0 and not occupied[gx .. ":" .. gz], "Invalid saved grid occupancy")
 		occupied[gx .. ":" .. gz] = true
@@ -467,7 +455,7 @@ function BuildService:RestoreWorldState(states)
 		local prefab = getPrefab(state.Type)
 		local inst = prefab and prefab:Clone() or createFallbackPart(state.Type, cf.Position)
 		inst:PivotTo(cf)
-		inst:SetAttribute("PlacementVersion", 1)
+		inst:SetAttribute("PlacementVersion", 2)
 		inst:SetAttribute("OwnerUserId", SnapshotCodec.Number(state.Owner))
 		inst:SetAttribute("GridX", gx); inst:SetAttribute("GridZ", gz)
 		inst:SetAttribute("BuildType", state.Type)
